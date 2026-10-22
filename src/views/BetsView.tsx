@@ -1,0 +1,241 @@
+import { Fragment, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Check, ChevronRight, Download, Layers, Pencil, Percent, Plus, Search, Target, Upload, Wallet, X } from 'lucide-react';
+import { useApp, useCurrency } from '@/lib/app-context';
+import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
+import type { Bet, BetStatus, LegStatus } from '@/lib/types';
+import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
+
+const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
+  pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'neutral', cashout: 'warning'
+};
+
+export default function BetsView() {
+  const { openBet, toast, settings } = useApp();
+  const cur = useCurrency();
+  const qc = useQueryClient();
+  const { data: bets = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const s = useMemo(() => summarize(bets), [bets]);
+  const bankroll = (settings?.initialBankroll || 0) + s.profit;
+
+  async function quickSettle(b: Bet, status: BetStatus) {
+    // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
+    const legs = b.legs && status === 'won' ? b.legs.map(l => l.status === 'pending' ? { ...l, status: 'won' as LegStatus } : l) : b.legs;
+    await window.api.bets.save({ ...b, status, legs });
+    qc.invalidateQueries({ queryKey: ['bets'] });
+  }
+
+  async function settleLeg(b: Bet, i: number, status: LegStatus) {
+    await window.api.bets.save({ ...b, legs: b.legs!.map((l, j) => j === i ? { ...l, status } : l) });
+    qc.invalidateQueries({ queryKey: ['bets'] });
+  }
+
+  if (isLoading) return <Loading />;
+
+  return (
+    <>
+      <PageHeader title="Mis apuestas" subtitle="Registro, beneficio y rendimiento">
+        <Button variant="secondary" onClick={async () => {
+          try { const n = await window.api.bets.import(); if (n) { toast(`${n} apuestas importadas`); qc.invalidateQueries({ queryKey: ['bets'] }); } }
+          catch (e) { toast('Error al importar: ' + (e as Error).message); }
+        }}><Upload size={15} />Importar</Button>
+        <Button variant="secondary" onClick={async () => { const p = await window.api.bets.export(); if (p) toast('Exportado a ' + p); }}><Download size={15} />Exportar</Button>
+        <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
+      </PageHeader>
+
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Beneficio total" icon={<Wallet size={15} />} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
+          sub={settings?.initialBankroll ? `Banca: ${money(bankroll, cur)}` : `${s.settled} apuestas resueltas`} />
+        <Stat label="ROI / Yield" icon={<Percent size={15} />} value={pct(s.roi)} valueClass={tone(s.roi)} sub={`Apostado ${money(s.staked, cur)}`} />
+        <Stat label="Acierto" icon={<Target size={15} />} value={pct(s.hit)} sub={`${s.won} de ${s.settled} · cuota media ${odd(s.avgOdds)}`} />
+        <Stat label="Pendientes" value={s.pendingCount} sub={`${money(s.pendingStake, cur)} en juego · retorno ${money(s.pendingReturn, cur)}`} />
+      </div>
+
+      <ProfitChart bets={bets} />
+
+      <div className="my-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Breakdown title="Por casa de apuestas" bets={bets} keyFn={b => b.bookmaker || 'Sin casa'} />
+        <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
+      </div>
+
+      <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onSettleLeg={settleLeg} />
+    </>
+  );
+}
+
+function ProfitChart({ bets }: { bets: Bet[] }) {
+  const cur = useCurrency();
+  const [range, setRange] = useState<'all' | '30' | '7'>('all');
+  const data = useMemo(() => {
+    const since = range === 'all' ? '' : new Date(Date.now() - Number(range) * 86400e3).toISOString().slice(0, 10);
+    const settled = bets.filter(b => b.status !== 'pending' && b.status !== 'void' && b.date >= since).sort((a, b) => a.date.localeCompare(b.date));
+    let acc = 0;
+    const points = settled.map(b => ({ date: fmtDate(b.date), event: b.event, profit: +(acc += betProfit(b)).toFixed(2) }));
+    return points.length ? [{ date: 'Inicio', event: '', profit: 0 }, ...points] : points;
+  }, [bets, range]);
+  const last = data.at(-1)?.profit ?? 0;
+  const color = last >= 0 ? '#34d399' : '#fb7185';
+
+  return (
+    <Card title="Evolución del beneficio" action={<Tabs value={range} onChange={setRange} items={[{ value: 'all', label: 'Todo' }, { value: '30', label: '30 días' }, { value: '7', label: '7 días' }]} />}>
+      {data.length < 3 ? <Empty>Registra y resuelve al menos 2 apuestas para ver la gráfica</Empty> : (
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#27272a" vertical={false} />
+              <XAxis dataKey="date" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
+              <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
+              <ReferenceLine y={0} stroke="#52525b" strokeDasharray="4 4" />
+              <Tooltip
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: '#a1a1aa' }}
+                formatter={v => [money(Number(v), cur, true), 'Beneficio acumulado']}
+                labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} · ${p[0].payload.event}` : ''} />
+              <Area type="monotone" dataKey="profit" stroke={color} strokeWidth={2} fill="url(#pg)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: (b: Bet) => string }) {
+  const cur = useCurrency();
+  const rows = useMemo(() => [...groupBy(bets, keyFn)].map(([k, l]) => ({ k, ...summarize(l) })).sort((a, b) => b.profit - a.profit), [bets, keyFn]);
+  return (
+    <Card title={title} className="overflow-hidden">
+      {!rows.length ? <Empty>Sin datos todavía</Empty> : (
+        <div className="-m-5">
+          <table className="w-full">
+            <thead className="bg-zinc-900/60"><tr>
+              <th className={th}></th><th className={th + ' text-right'}>Apuestas</th><th className={th + ' text-right'}>Apostado</th>
+              <th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
+            </tr></thead>
+            <tbody className="divide-y divide-zinc-800/70">
+              {rows.map(r => (
+                <tr key={r.k}>
+                  <td className={td + ' font-medium'}>{r.k}</td><td className={td + ' text-right tabular-nums'}>{r.count}</td>
+                  <td className={td + ' text-right tabular-nums'}>{money(r.staked, cur)}</td>
+                  <td className={td + ' text-right font-semibold tabular-nums ' + tone(r.profit)}>{money(r.profit, cur, true)}</td>
+                  <td className={td + ' text-right tabular-nums ' + tone(r.roi)}>{pct(r.roi)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function History({ bets, onEdit, onSettle, onSettleLeg }: {
+  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onSettleLeg: (b: Bet, i: number, s: LegStatus) => void;
+}) {
+  const cur = useCurrency();
+  const [q, setQ] = useState('');
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setOpenIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const [st, setSt] = useState('');
+  const list = useMemo(() => bets
+    .filter(b => !st || b.status === st)
+    .filter(b => !q || [b.event, b.selection, b.league, b.bookmaker, b.market, b.notes, ...(b.legs || []).map(l => l.market)].join(' ').toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => b.date.localeCompare(a.date)), [bets, q, st]);
+
+  return (
+    <Card className="overflow-hidden" title="Historial" action={
+      <div className="flex gap-2">
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <Input className="h-8 w-48 pl-8" placeholder="Buscar" value={q} onChange={e => setQ(e.target.value)} />
+        </div>
+        <Select className="h-8 w-44" value={st} onChange={e => setSt(e.target.value)}>
+          <option value="">Todos los estados</option>
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </Select>
+      </div>
+    }>
+      {!list.length ? <Empty>{bets.length ? 'Ninguna apuesta coincide con el filtro' : 'Aún no has registrado apuestas. Pulsa "Nueva apuesta".'}</Empty> : (
+        <div className="-m-5 overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-zinc-900/60"><tr>
+              {['Fecha', 'Liga', 'Partido', 'Mercado', 'Selección', 'Casa'].map(h => <th key={h} className={th}>{h}</th>)}
+              <th className={th + ' text-right'}>Cuota</th><th className={th + ' text-right'}>Stake</th><th className={th}>Estado</th>
+              <th className={th + ' text-right'}>Beneficio</th><th className={th}></th>
+            </tr></thead>
+            <tbody className="divide-y divide-zinc-800/70">
+              {list.map(b => {
+                const p = betProfit(b);
+                const combo = !!b.legs?.length, open = openIds.has(b.id);
+                return (
+                  <Fragment key={b.id}>
+                  <tr className={cn('group hover:bg-zinc-900/40', combo && 'cursor-pointer')} onClick={combo ? () => toggle(b.id) : undefined}>
+                    <td className={td + ' whitespace-nowrap text-zinc-400'}>{fmtDate(b.date)}</td>
+                    <td className={td}>{b.league}</td>
+                    {combo ? <>
+                      <td className={td + ' font-medium'} colSpan={3}>
+                        <span className="flex items-center gap-2">
+                          <ChevronRight size={14} className={cn('shrink-0 text-zinc-500 transition', open && 'rotate-90')} />
+                          <Badge tone="warning"><Layers size={11} className="mr-1 inline" />Combinada ×{b.legs!.length}</Badge>
+                          <span className="truncate text-zinc-400">{b.selection}</span>
+                        </span>
+                      </td>
+                    </> : <>
+                      <td className={td + ' font-medium'}>{b.event}</td>
+                      <td className={td + ' text-zinc-400'}>{b.market}</td>
+                      <td className={td + ' font-semibold'}>{b.selection}</td>
+                    </>}
+                    <td className={td + ' text-zinc-400'}>{b.bookmaker}</td>
+                    <td className={td + ' text-right tabular-nums'}>{odd(b.odds)}</td>
+                    <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{money(b.stake, cur)}</td>
+                    <td className={td}><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge></td>
+                    <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
+                      {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}
+                    </td>
+                    <td className={td} onClick={e => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1">
+                        {b.status === 'pending' && !combo && <>
+                          <Button size="icon" variant="success" className="h-7 w-7" title="Ganada" onClick={() => onSettle(b, 'won')}><Check size={14} /></Button>
+                          <Button size="icon" variant="danger" className="h-7 w-7" title="Perdida" onClick={() => onSettle(b, 'lost')}><X size={14} /></Button>
+                        </>}
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => onEdit(b)}><Pencil size={14} /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                  {combo && open && b.legs!.map((l, i) => (
+                    <tr key={i} className="bg-zinc-900/30 text-[13px]">
+                      <td className={td} colSpan={2}></td>
+                      <td className={td + ' text-zinc-300'}><span className="mr-2 text-zinc-600">{i + 1}.</span>{l.event}</td>
+                      <td className={td + ' text-zinc-500'}>{l.market}</td>
+                      <td className={td + ' font-semibold'}>{l.selection}</td>
+                      <td className={td}></td>
+                      <td className={td + ' text-right tabular-nums text-zinc-300'}>{odd(l.odds)}</td>
+                      <td className={td}></td>
+                      <td className={td}><Badge tone={STATUS_TONE[l.status]}>{STATUS_LABEL[l.status]}</Badge></td>
+                      <td className={td} colSpan={2}>
+                        <div className="flex justify-end gap-1">
+                          {(['won', 'lost', 'void', 'pending'] as LegStatus[]).filter(x => x !== l.status).map(x => (
+                            <button key={x} onClick={() => onSettleLeg(b, i, x)}
+                              className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200">{STATUS_LABEL[x]}</button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}

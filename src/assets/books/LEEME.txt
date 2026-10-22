@@ -1,0 +1,2 @@
+Pon aquí los iconos de las casas (bet365.png, winamax.png, betway.png; también vale .svg/.jpg/.webp).
+Si no hay imagen, la app dibuja un distintivo con los colores de la casa.

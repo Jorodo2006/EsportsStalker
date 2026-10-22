@@ -1,0 +1,24 @@
+# Dependencias y compilados
+node_modules/
+dist/
+release/
+
+# Generado por la app al arrancar (se copia desde electron/extension/)
+extension-chrome/
+
+# Datos locales de cada usuario: capturas de páginas de las casas y direcciones aprendidas
+captura-*.json
+diagnostico-*.json
+casas-urls.json
+data.json
+
+# Versión antigua guardada a mano
+_old_v1/
+
+# Entorno y editores
+.env
+.env.*
+*.log
+.claude/settings.local.json
+.DS_Store
+Thumbs.db

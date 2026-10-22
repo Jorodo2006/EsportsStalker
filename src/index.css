@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, Ubuntu, "Noto Sans", sans-serif;
+}
+
+html { color-scheme: dark; }
+html, body, #root { height: 100%; }
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgb(245 158 11 / 0.06), transparent);
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 99px; border: 2px solid #09090b; }
+::-webkit-scrollbar-track { background: transparent; }
+select option { background: #18181b; }
+input[type=number]::-webkit-inner-spin-button { opacity: .4; }
