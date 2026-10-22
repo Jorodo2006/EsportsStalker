@@ -18,6 +18,7 @@ _old_v1/
 # Entorno y editores
 .env
 .env.*
+!.env.example
 *.log
 .claude/settings.local.json
 .DS_Store

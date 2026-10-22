@@ -36,6 +36,8 @@ export interface Settings {
   lolesportsKey: string;
   refreshSeconds: number;
   favoriteLeagues: string[];
+  envKeys?: (keyof Settings)[]; // ajustes que vienen del fichero .env (sus valores no llegan a la interfaz)
+  envFile?: string | null;
 }
 
 export interface League { id: string; slug: string; name: string; region: string; image: string; priority: number }

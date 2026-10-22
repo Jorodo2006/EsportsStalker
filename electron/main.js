@@ -6,6 +6,7 @@ const lolesports = require('./services/lolesports');
 const leaguepedia = require('./services/leaguepedia');
 const odds = require('./services/odds');
 const bridge = require('./services/bridge');
+const env = require('./services/env');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 
@@ -63,10 +64,20 @@ function handle(channel, fn) {
 }
 
 function registerIpc() {
-  const s = () => store.getSettings();
+  // Ajustes efectivos: lo del .env manda sobre lo guardado
+  const s = () => ({ ...store.getSettings(), ...env.settings() });
+  // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos en data.json), sólo cuáles hay
+  const forUi = st => {
+    const fromEnv = Object.keys(env.settings());
+    return { ...st, ...Object.fromEntries(fromEnv.map(k => [k, ''])), envKeys: fromEnv, envFile: env.file() };
+  };
 
-  handle('settings:get', () => s());
-  handle('settings:set', patch => store.setSettings(patch));
+  handle('settings:get', () => forUi(store.getSettings()));
+  handle('settings:set', patch => {
+    const clean = { ...patch };
+    for (const k of ['envKeys', 'envFile', ...Object.keys(env.settings())]) delete clean[k];
+    return forUi(store.setSettings(clean));
+  });
 
   handle('bets:list', () => store.listBets());
   handle('bets:save', bet => store.saveBet(bet));
@@ -175,6 +186,7 @@ app.whenReady().then(() => {
       }
     }));
   }
+  env.load([app.isPackaged ? path.dirname(process.execPath) : app.getAppPath(), app.getPath('userData')]);
   store = new Store(app.getPath('userData'));
   leaguepedia.init(app.getPath('userData'));
   registerIpc();
