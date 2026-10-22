@@ -16,8 +16,9 @@ apuestas simples y combinadas con beneficio, ROI y gráficas.
    The Odds API… se quitaron a propósito; ver `OBSOLETE` en `electron/services/store.js`).
 2. **Casas soportadas: Bet365, Winamax y Betway.** William Hill y el resto se quitaron a petición del usuario.
 3. **La interfaz y los comentarios van en español.** Textos de la UI, mensajes de error y comentarios del código.
-4. **Ningún dato personal en el repo:** ni `data.json`, ni capturas `captura-*.json`, ni `casas-urls.json`, ni
-   contraseñas de bot de Fandom. Ya están en `.gitignore`; no los saques de ahí.
+4. **Ningún dato personal en el repo:** ni `data.json`, ni capturas `captura-*.json`, ni `casas-urls.json`, ni el
+   `.env` con las credenciales. Ya están en `.gitignore`; no los saques de ahí. Las credenciales nuevas van al `.env`
+   (mapeo en `electron/services/env.js`) y se documentan en `.env.example`.
 5. **Las peticiones a internet las hace el proceso principal** (`electron/`), nunca el renderer (`src/`).
 
 ## Comandos
@@ -48,7 +49,8 @@ src/ (React 19 + TS + Tailwind 4 + TanStack Query)        ← interfaz, sin acce
             ├─ services/leaguepedia.js  stats (API Cargo de lol.fandom.com, con caché y cola)
             ├─ services/odds.js         normaliza y compara cuotas recibidas
             ├─ services/bridge.js       servidor local 127.0.0.1:47365 (marcador + extensión)
-            └─ services/store.js        data.json (apuestas + ajustes)
+            ├─ services/store.js        data.json (apuestas + ajustes)
+            └─ services/env.js          credenciales del .env (mandan sobre los ajustes)
 Chrome del usuario
   ├─ marcador (bookmarklet)  electron/bookmarklet/marcador.js  → POST /odds
   └─ extensión MV3           electron/extension/               → abre las casas, inyecta el lector, POST /odds

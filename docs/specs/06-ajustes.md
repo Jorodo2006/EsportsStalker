@@ -12,6 +12,26 @@
 | `lolesportsKey` | clave pública de lolesports.com | Cabecera `x-api-key` |
 | `leaguepediaUser` / `leaguepediaPassword` | vacío | *Bot password* de Fandom (opcional). **Sólo en `data.json`, nunca en el repo** |
 
+### Fichero `.env`
+
+`electron/services/env.js` carga el primer `.env` que encuentre, en este orden:
+
+1. la carpeta del proyecto (en desarrollo) o la del `.exe` (empaquetada);
+2. la carpeta de datos de la app.
+
+Las variables de entorno ya definidas en el sistema no se pisan. Variables (plantilla en `.env.example`):
+
+| Variable | Ajuste |
+|---|---|
+| `LEAGUEPEDIA_USER` | `leaguepediaUser` |
+| `LEAGUEPEDIA_PASSWORD` | `leaguepediaPassword` |
+| `LOLESPORTS_KEY` | `lolesportsKey` |
+
+- Lo que venga del `.env` manda sobre lo guardado en `data.json`: los servicios reciben `{ ...ajustes, ...env }`.
+- `settings:get` no manda esos valores a la interfaz: los vacía y añade `envKeys` (cuáles vienen del `.env`) y `envFile`.
+  En Ajustes esos campos salen desactivados con el texto *Definido en .env*.
+- `settings:set` ignora esas claves, para que nunca acaben copiadas en `data.json`.
+
 Secciones de la pantalla:
 
 - **Preferencias.**

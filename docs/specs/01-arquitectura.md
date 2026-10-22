@@ -40,6 +40,7 @@ Los tipos de todo esto están en `src/lib/types.ts` (interfaz `Api`).
 
 | Qué | Dónde | En git |
 |---|---|---|
+| Credenciales (`.env`) | carpeta del proyecto en desarrollo; junto al `.exe` o en la carpeta de datos si está empaquetada | No (sí `.env.example`) |
 | Apuestas y ajustes | `%APPDATA%\LoL Esports Tracker\data.json` (Windows), `~/.config/LoL Esports Tracker/data.json` (Linux) | No |
 | Caché de Leaguepedia | carpeta de datos del usuario | No |
 | Extensión generada | `extension-chrome/` (en desarrollo, junto al proyecto; empaquetada, en la carpeta de datos) | No |

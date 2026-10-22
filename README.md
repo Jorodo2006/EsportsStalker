@@ -18,6 +18,11 @@ Electron + **React 19 + TypeScript + Vite + Tailwind CSS 4**, con TanStack Query
 
 - [Node.js](https://nodejs.org) 20 o superior (incluye `npm`).
 
+## Credenciales (.env)
+
+Copia `.env.example` como `.env` en esta carpeta y rellena lo que uses (por ejemplo la *bot password* de Leaguepedia).
+El `.env` no se sube a git y manda sobre lo que pongas en **Ajustes**.
+
 ## Ejecutar
 
 Abre una terminal en esta carpeta y:

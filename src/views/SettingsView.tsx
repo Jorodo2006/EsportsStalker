@@ -11,6 +11,8 @@ export default function SettingsView() {
   const [f, setF] = useState<Partial<Settings>>({});
   const [checks, setChecks] = useState<Check[]>([]);
   useEffect(() => { if (settings) setF(settings); }, [settings]);
+  const env = (k: keyof Settings) => !!settings?.envKeys?.includes(k);
+  const envPh = 'Definido en .env';
   const set = <K extends keyof Settings>(k: K) => (e: { target: { value: string } }) => setF(p => ({ ...p, [k]: e.target.value }));
 
   async function submit(e: FormEvent) {
@@ -60,11 +62,13 @@ export default function SettingsView() {
                   <button type="button" className="cursor-pointer text-amber-400 hover:underline" onClick={() => window.api.openExternal('https://lol.fandom.com/wiki/Special:BotPasswords')}>
                     lol.fandom.com/wiki/Special:BotPasswords
                   </button>{' '}
-                  (sólo con permiso de lectura). Copia aquí el usuario que te da (tipo <code>TuUsuario@app</code>) y la contraseña.
+                  (sólo con permiso de lectura). Copia aquí el usuario que te da (tipo <code>TuUsuario@app</code>) y la contraseña,
+                  o ponlos en el fichero <code>.env</code> (<code>LEAGUEPEDIA_USER</code> y <code>LEAGUEPEDIA_PASSWORD</code>).
                 </p>
+                {!!settings?.envKeys?.length && <p className="text-xs text-emerald-400/80">Usando el .env: {settings.envFile}</p>}
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Usuario del bot"><Input value={f.leaguepediaUser ?? ''} onChange={set('leaguepediaUser')} placeholder="TuUsuario@app" /></Field>
-                  <Field label="Contraseña del bot"><Input type="password" value={f.leaguepediaPassword ?? ''} onChange={set('leaguepediaPassword')} /></Field>
+                  <Field label="Usuario del bot"><Input value={f.leaguepediaUser ?? ''} onChange={set('leaguepediaUser')} disabled={env('leaguepediaUser')} placeholder={env('leaguepediaUser') ? envPh : 'TuUsuario@app'} /></Field>
+                  <Field label="Contraseña del bot"><Input type="password" value={f.leaguepediaPassword ?? ''} onChange={set('leaguepediaPassword')} disabled={env('leaguepediaPassword')} placeholder={env('leaguepediaPassword') ? envPh : ''} /></Field>
                 </div>
               </div>
               <Field label="Refresco automático (segundos)"><Input type="number" min={10} value={f.refreshSeconds ?? ''} onChange={set('refreshSeconds')} /></Field>
@@ -73,7 +77,7 @@ export default function SettingsView() {
                   Avanzado: claves públicas de las webs <ChevronDown size={16} className="transition group-open:rotate-180" />
                 </summary>
                 <div className="mt-4 space-y-3">
-                  <Field label="Clave lolesports"><Input value={f.lolesportsKey ?? ''} onChange={set('lolesportsKey')} /></Field>
+                  <Field label="Clave lolesports"><Input value={f.lolesportsKey ?? ''} onChange={set('lolesportsKey')} disabled={env('lolesportsKey')} placeholder={env('lolesportsKey') ? envPh : ''} /></Field>
                 </div>
               </details>
               <Button type="submit">Guardar</Button>
