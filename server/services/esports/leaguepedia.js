@@ -1,28 +1,27 @@
 // Leaguepedia (lol.fandom.com) expone su base de datos con la API "Cargo". Gratis y sin clave.
 // Tablas usadas: Players, ScoreboardPlayers, ScoreboardGames.
 // Ojo: tiene límite de peticiones; la caché evita repetir consultas.
-const fs = require('fs');
-const path = require('path');
 const { qs } = require('./http');
+const { query } = require('../../shared/db');
 
 const API = 'https://lol.fandom.com/api.php';
 const TTL = 6 * 3600e3; // los resultados profesionales no cambian a menudo
 const GAP = 3000; // ms mínimos entre peticiones: Fandom limita mucho a los anónimos
 
-// Caché en disco: sobrevive a reinicios y evita gastar el límite repitiendo consultas
-let cacheFile = null;
+// Caché en la base de datos (esports.cache): sobrevive a reinicios y evita gastar el límite repitiendo consultas.
+// En memoria se tiene una copia para no ir a la base de datos en cada búsqueda.
 let cache = {};
-function init(dir) {
-  cacheFile = path.join(dir, 'leaguepedia-cache.json');
-  try { cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch (_) { cache = {}; }
-  const now = Date.now();
-  for (const k of Object.keys(cache)) if (now - cache[k].t > TTL) delete cache[k];
+async function init() {
+  await query(`DELETE FROM esports.cache WHERE t < now() - interval '6 hours'`);
+  const { rows } = await query('SELECT key, value, t FROM esports.cache');
+  cache = Object.fromEntries(rows.map(r => [r.key, { t: new Date(r.t).getTime(), v: r.value }]));
 }
-let saveTimer = null;
-function persist() {
-  if (!cacheFile) return;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { try { fs.writeFileSync(cacheFile, JSON.stringify(cache)); } catch (_) {} }, 1000);
+function persist(key) {
+  const hit = cache[key];
+  if (!hit) return;
+  query(`INSERT INTO esports.cache (key, value, t) VALUES ($1, $2::jsonb, to_timestamp($3 / 1000.0))
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, t = EXCLUDED.t`, [key, JSON.stringify(hit.v), hit.t])
+    .catch(e => console.error('Caché de Leaguepedia:', e.message));
 }
 
 // ---------- Sesión opcional (contraseña de bot de Fandom) ----------
@@ -52,7 +51,7 @@ async function apiFetch(params, { method = 'GET', body } = {}) {
     const res = await fetch(url, {
       method,
       body: body ? new URLSearchParams(body) : undefined,
-      headers: { 'User-Agent': 'LoLEsportsTracker/0.2 (app de escritorio personal)', Accept: 'application/json', ...(cookies ? { Cookie: cookies } : {}) },
+      headers: { 'User-Agent': 'LoLEsportsTracker/0.3 (app de escritorio personal)', Accept: 'application/json', ...(cookies ? { Cookie: cookies } : {}) },
       signal: ctrl.signal
     });
     storeCookies(res);
@@ -104,7 +103,7 @@ function cargo(params) {
       if (!limited) {
         const v = (j?.cargoquery || []).map(r => r.title);
         cache[key] = { t: Date.now(), v };
-        persist();
+        persist(key);
         return v;
       }
       if (attempt >= 1) {

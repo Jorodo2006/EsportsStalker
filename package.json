@@ -1,7 +1,7 @@
 {
   "name": "lol-esports-tracker",
   "productName": "LoL Esports Tracker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cuotas, partidos, stats de jugadores y registro de apuestas de LoL esports",
   "main": "electron/main.js",
   "author": "Jordi",
@@ -12,6 +12,9 @@
     "build": "tsc --noEmit && vite build",
     "start": "vite build && electron .",
     "typecheck": "tsc --noEmit",
+    "backend": "docker compose up -d --build",
+    "backend:logs": "docker compose logs -f --tail 100",
+    "backend:stop": "docker compose down",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux"

@@ -1,41 +1,63 @@
 # 03 · Cuotas
 
 **Regla:** no se usa ninguna API de cuotas. Las cuotas se leen de las páginas de **Bet365, Winamax y Betway** en el
-Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan a la app por un servidor local.
+Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan al backend por el gateway (`127.0.0.1:47365`).
+Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos (lecturas programadas).
 
 ## Piezas
 
 | Pieza | Fichero | Papel |
 |---|---|---|
-| Servidor puente | `electron/services/bridge.js` | HTTP en `127.0.0.1:47365`; guarda las importaciones durante 3 h |
+| Servidor puente | `server/services/odds/bridge.js` (detrás del gateway en `127.0.0.1:47365`) | Guarda las importaciones durante 3 h en `odds.imports`, lleva los trabajos y las direcciones aprendidas |
+| Programador | `server/services/odds/scheduler.js` | Crea un trabajo por partido próximo cada X minutos |
 | Lector (marcador) | `electron/bookmarklet/marcador.js` | Lee la página de la casa abierta. Funciona como bookmarklet o inyectado por la extensión |
-| Extensión Chrome MV3 | `electron/extension/` (`manifest.json`, `background.js`, `pagina.js`) | Botón *Actualizar cuotas*: abre las casas en pestañas de fondo, busca el partido, lo lee y cierra |
-| Normalizador | `electron/services/odds.js` | Convierte lo recibido en filas comparables entre casas |
+| Extensión Chrome MV3 | `electron/extension/` (`manifest.json`, `background.js`, `pagina.js`) | Hace los trabajos: abre las casas en pestañas de fondo, busca el partido, lo lee y cierra |
+| Normalizador | `server/services/odds/odds.js` (+ `equipos.js`) | Convierte lo recibido en filas comparables entre casas, cuota de ganador e histórico |
+| Generador | `electron/services/extension.js` | Copia la extensión a `extension-chrome/` y genera el marcador |
 | Interfaz | `src/views/MatchDetail.tsx`, `src/components/BookIcon.tsx` | Comparador por columnas |
 
-## Servidor puente (`bridge.js`)
+## Servidor puente (`bridge.js`, servicio `odds`)
 
 | Ruta | Uso |
 |---|---|
 | `POST /odds` | Cuotas leídas (marcador o extensión). Se asignan a un partido por los equipos de la página; si no, al último partido abierto en la app |
-| `POST /snapshot` | Foto de la página, que se guarda como `captura-<casa>-<nombre>.json` para ajustar lectores |
+| `POST /snapshot` | Foto de la página, que se guarda como `capturas/captura-<casa>-<nombre>.json` para ajustar lectores |
 | `POST /auto/progress` | Progreso de la extensión por casa (`{ id, book, estado, msg }`) |
 | `GET /ping` | Comprobación |
 | `GET /auto?job=ID` | Página que abre la app en Chrome; la extensión la detecta (`pagina.js`) y empieza el trabajo |
 | `GET /auto/job?id=` | La extensión recoge el trabajo (lo marca como cogido) y las URLs conocidas |
 | `GET /auto/status?id=` | Estado del trabajo para la página `/auto` |
+| `GET /jobs/next` | La extensión pregunta si hay trabajo (cada 30 s); coge el más antiguo, primero los manuales. `204` si no hay |
 
-- **Trabajos.** Si en 15 s ninguna extensión coge el trabajo, se marca `sin extensión` y la app avisa de que hay que instalarla.
+- **Trabajos** (`odds.jobs`). `source` es `manual` (botón) o `auto` (programado). Si en 15 s ninguna extensión coge un
+  manual, se marca `sin extensión` y la app avisa de que hay que instalarla. Los programados esperan 10 min en cola;
+  uno cogido que no termina en 15 min se cierra con error.
 - **Importaciones.** Cada una se reemplaza por casa + partido + página (`payload.page`; si no viene, por mapa). Las
   importaciones de varias páginas de una misma casa se suman.
-- **Direcciones aprendidas.** La dirección de cada partido en cada casa se guarda en `casas-urls.json`, así la
+- **Direcciones aprendidas.** La dirección de cada partido en cada casa se guarda en `odds.book_urls`, así la
   próxima vez se va directo.
-- **Generación de la extensión.** La app copia la extensión al arrancar con `writeExtension`. Pone el puerto y genera
-  `lector.js` a partir de `marcador.js`.
+- **Tras cada importación** (`afterImport` en `odds.js`): se guarda la cuota de ganador en `odds.imports.ml` (para las
+  tarjetas del calendario) y las cuotas que han cambiado en `odds.price_history`.
+- **Generación de la extensión.** Electron copia la extensión al arrancar con `writeExtension` (`electron/services/extension.js`).
+  Pone el puerto y genera `lector.js` a partir de `marcador.js`.
+
+## Lecturas programadas (`scheduler.js`)
+
+- Cada minuto: limpia lo caducado y, si `oddsAutoEnabled`, pide el calendario a `esports` (y una página más si hace
+  falta) y se queda con los partidos **sin empezar que empiezan en las próximas `oddsAutoHours` horas** (6 por defecto),
+  con los dos equipos conocidos (sin TBD).
+- Crea un trabajo `auto` para cada uno que no tenga un trabajo abierto ni uno (manual o programado) de hace menos de
+  `oddsRefreshMinutes` minutos (5 por defecto, mínimo 2).
+- La extensión los hace **de uno en uno**. Hace falta que Chrome esté abierto con la extensión cargada.
+- `GET /api/odds/auto/status` da el estado para *Ajustes → Cuotas automáticas*: partidos que entran, cola, última
+  pasada y última vez que la extensión preguntó (`lastPoll`).
 
 ## Extensión (`background.js`)
 
-1. `pagina.js` corre en `http://127.0.0.1/*`, lee el id del trabajo y avisa al service worker.
+1. Los trabajos llegan de dos formas:
+   - **manual**: `pagina.js` corre en `http://127.0.0.1/*`, lee el id del trabajo de la página `/auto` y avisa al service worker;
+   - **programado**: una alarma (`chrome.alarms`, cada 30 s) llama a `poll()`, que pide `GET /jobs/next` si no hay otro
+     trabajo en marcha. Al acabar uno, vuelve a preguntar.
 2. `runJob` pide el trabajo y lanza las tres casas en paralelo. Cada una se abre en una pestaña de fondo (`openTab`).
 3. Cuando encuentra el partido, inyecta `lector.js` en el mundo `MAIN` con `window.__lolet_job`. El lector deja
    el resultado en `window.__lolet_fin = { ok, txt, payload }` y la foto en `window.__lolet_snap`; el service worker
@@ -56,7 +78,9 @@ Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan a la app por
 - **Bet365**:
   - entra por `#/AS/B151/` (eSports), pulsa la competición de LoL y luego el partido;
   - recorre todas las pestañas (`nav button[aria-selected]`) y guarda una foto de cada una (`pestana-N`);
-  - si sale *"No se puede mostrar este contenido"*, reintenta hasta 3 veces; la última pone la pestaña delante un momento.
+  - si sale *"No se puede mostrar este contenido"*, recarga la página entera (la dirección ya lleva la pestaña, `/I11/`,
+    `/I2/`…) hasta 2 veces; la última pone la pestaña delante un momento (sólo en las lecturas manuales: en las programadas
+    no se le quita la pestaña al usuario).
 
 ## Lector (`marcador.js`)
 
@@ -69,9 +93,14 @@ Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan a la app por
   - se excluyen los títulos con nombres de equipo (sacados de `[data-testid=event-name]`), para que "Total de kills - Gen G"
     no cuente como jugador;
   - alias de nombres de jugador, por ejemplo Gobernante → Ruler.
-- **Resto de mercados de Betway** (`markets`):
+- **Resto de mercados de Betway y Bet365** (`markets`):
   - formato `{ title, map, line, outcomes: [{ name, hcap, price }] }`;
-  - el mapa sale de `marketGroup=map-N`.
+  - Betway: el mapa sale de `marketGroup=map-N`.
+  - Bet365 (todas las pestañas menos *Jugador*): busca bloques cuyo título es su primera línea y que tienen cuotas.
+    Si el bloque es una rejilla (cabecera con los dos equipos y filas "Ganará", "Hándicap de víctimas",
+    "Total de víctimas") cada fila es un mercado y la selección es el equipo de la columna; si no, lee selecciones
+    sueltas "Nombre  cuota". El mapa sale del título o de la pestaña activa ("1º mapa"); sin mapa es del partido.
+  - En las líneas de jugador de Bet365 se saltan los títulos de equipo ("Hándicap…", "Total de víctimas" a secas).
 
 ## Normalización (`odds.js`)
 
@@ -84,7 +113,8 @@ Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan a la app por
 - **Entradas por casa**:
   - `winamaxInto`: estado del partido de Winamax;
   - `sectionsInto`: líneas de jugador de Bet365 y Betway;
-  - `marketsInto`: mercados genéricos de Betway.
+  - `marketsInto`: mercados genéricos de Betway y Bet365. "Ganará" cuenta como ganador y "Total de víctimas" como
+    total de kills, así caen en las mismas filas que Winamax y Betway.
 - **Salidas**:
   - `getMatchOdds(match)` devuelve `{ books, markets, sources }`;
   - `getBoardFor(events)` da la mejor cuota de ganador para las tarjetas del calendario.
@@ -103,6 +133,7 @@ Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan a la app por
 
 ## Pendiente conocido
 
-- Bet365 a veces no devuelve los mercados generales (ganador, hándicap) en pestañas de fondo: sale *"No se puede
-  mostrar este contenido"*. Ya hay reintentos. Falta escribir el lector de esas pestañas con una captura que tenga
-  contenido (`captura-bet365-pestana-N.json`).
+- Bet365 a veces dice *"No se puede mostrar este contenido"* en las pestañas *Jugador* y *1º mapa*. Ahora se recarga
+  la página; si sigue bloqueada, revisar `capturas/captura-bet365-pestana-N.json`.
+- El lector de mercados generales de bet365 se ha escrito sin captura delante: si algún mercado no sale o sale mal,
+  ajustarlo con `capturas/captura-bet365-pestana-1.json`.

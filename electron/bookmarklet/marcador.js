@@ -183,6 +183,8 @@
       if (!txt || txt.length > 90 || txt.length < 4 || txt.indexOf('\n') >= 0) continue;
       var lo = txt.toLowerCase();
       if (!STAT.test(lo)) continue;
+      // "Hándicap de víctimas" o "Total de víctimas" a secas son del partido, no de un jugador
+      if (/h[aá]ndicap|ganar/.test(lo) || /^(\d\s*º\s*mapa\s*[-·:]?\s*)?total de (v[ií]ctimas|kills|asesinatos)$/.test(lo)) continue;
       var h2h = /comparac|cara a cara|head to head|\s(v|vs)\s/.test(' ' + lo + ' '), mkt = statOf(lo);
       var c = el;
       for (var up = 0; up < 8 && c.parentElement; up++) { c = c.parentElement; if (nums(c.innerText || '').length >= 4) break; }
@@ -192,12 +194,13 @@
     return found;
   }
 
-  function rowsOf(container) {
+  // Textos de la sección agrupados por filas según su posición en pantalla (con su x, para las rejillas)
+  function leafRows(container) {
     var leaves = [];
     (function walk(n) {
       if (n.nodeType === 3) {
         var t = n.textContent.trim();
-        if (t && n.parentElement) { var r = n.parentElement.getBoundingClientRect(); if (r.width > 0 && r.height > 0) leaves.push({ text: t, y: r.top + r.height / 2, x: r.left }); }
+        if (t && n.parentElement) { var r = n.parentElement.getBoundingClientRect(); if (r.width > 0 && r.height > 0) leaves.push({ text: t, y: r.top + r.height / 2, x: r.left, cx: r.left + r.width / 2 }); }
         return;
       }
       if (n.id === '_lolet_ov' || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') return;
@@ -209,7 +212,10 @@
       rows.push({ y: l.y, items: [l] });
     });
     rows.sort(function (a, b) { return a.y - b.y; });
-    return rows.map(function (r) { return r.items.sort(function (a, b) { return a.x - b.x; }).map(function (i) { return i.text; }); });
+    return rows.map(function (r) { return r.items.sort(function (a, b) { return a.x - b.x; }); });
+  }
+  function rowsOf(container) {
+    return leafRows(container).map(function (r) { return r.map(function (i) { return i.text; }); });
   }
 
   // Nombre de jugador a partir del título ("Ruler - Total de kills" → Ruler), por si las filas no lo llevan
@@ -260,17 +266,128 @@
     return out;
   }
 
+  // ---------- Bet365: mercados generales (pestañas "Mercados principales", "1º mapa"…) ----------
+  // Cada bloque tiene un título y debajo, o una rejilla con los dos equipos de columnas y una fila por mercado
+  // ("Ganará", "Hándicap de víctimas", "Total de víctimas"), o selecciones sueltas "Nombre  cuota".
+  // Salen en `markets`, con el mismo formato que Betway, y odds.js los junta con las demás casas.
+  var ODDTXT = /^(\d{1,3}[.,]\d{1,3}|\d{1,3}|\d{1,3}\/\d{1,3}|evs|evens)$/i;
+  var isOdd = function (t) { return ODDTXT.test(String(t).trim()); };
+  var navTab = function () { var b = document.querySelector('nav button[aria-selected="true"]'); return b ? (b.innerText || '').trim() : ''; };
+  // "Gen.G -1.5" → { name: 'Gen.G', hcap: '-1.5' }; "M 24.5" / "Más de 24.5" → { name: 'Más de', hcap: '24.5' }
+  var splitSel = function (txt) {
+    var t = String(txt).replace(/\s+/g, ' ').trim(), m = t.match(/^(.*?)(?:\s+|(?=[+-])|^)([+-]?\d{1,3}(?:[.,]\d{1,2})?)$/);
+    var name = m ? m[1].trim() : t, hcap = m ? m[2] : '';
+    if (/^(o|over|m[aá]s( de)?)$/i.test(name)) name = 'Más de';
+    else if (/^(u|under|menos( de)?)$/i.test(name)) name = 'Menos de';
+    return { name: name, hcap: hcap };
+  };
+  // Parte una fila en selecciones: el texto acumulado hasta cada cuota es su nombre. Un número seguido de
+  // otro número es la línea ("24.5  1.83"), no la cuota.
+  var segments = function (items) {
+    var out = [], acc = [];
+    items.forEach(function (it, i) {
+      if (isOdd(it.text) && !(items[i + 1] && isOdd(items[i + 1].text))) { out.push({ text: acc.join(' '), price: nums(it.text)[0], cx: it.cx }); acc = []; }
+      else acc.push(it.text);
+    });
+    return out.filter(function (s) { return s.price > 1; });
+  };
+
+  function findMarketBlocks(skip) {
+    var found = [], tab = navTab(), all = document.querySelectorAll('div,span,h2,h3,h4,header,button');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el.children.length > 3 || (el.textContent || '').length > 70 || el.closest('nav') || el.closest('#_lolet_ov')) continue;
+      var txt = (el.innerText || '').trim();
+      if (txt.length < 3 || txt.indexOf('\n') >= 0 || !/[a-zA-Záéíóú]{2}/.test(txt) || isOdd(txt) || txt === tab) continue;
+      // El título es la primera línea de su bloque, y el bloque tiene cuotas pero no es media página
+      var c = el, ok = false;
+      for (var up = 0; up < 7 && c.parentElement; up++) {
+        c = c.parentElement;
+        var it = (c.innerText || '').trim();
+        if (it.split('\n')[0].trim() !== txt) break;
+        if (nums(it).length >= 2) { ok = it.length < 2500 && nums(it).length <= 40; break; }
+      }
+      if (!ok || found.some(function (f) { return f.container === c; })) continue;
+      if (skip.some(function (s) { return s.contains(c) || c.contains(s); })) continue;
+      found.push({ title: txt, container: c });
+    }
+    // Las cabeceras de columna y las etiquetas de fila también parecen títulos: se quedan los bloques de fuera
+    return found.filter(function (f) { return !found.some(function (g) { return g !== f && g.container.contains(f.container); }); });
+  }
+
+  function blockMarkets(blk, map) {
+    var out = [], rows = leafRows(blk.container).map(function (r) { return r.filter(function (i) { return i.text !== blk.title; }); }).filter(function (r) { return r.length; });
+    var named = function (label) {
+      var l = label.trim();
+      if (/^total$/i.test(l)) l = map ? 'Total de víctimas' : 'Total de mapas';
+      else if (/^h[aá]ndicap$/i.test(l)) l = map ? 'Hándicap de víctimas' : 'Hándicap de mapas';
+      return l ? blk.title + ' - ' + l : blk.title;
+    };
+    var push = function (title, sels) {
+      // En la rejilla la selección es el equipo de la columna, salvo en los totales (Más de / Menos de)
+      var outs = sels.map(function (s) {
+        var x = splitSel(s.text), ou = /^(m[aá]s|menos) de$/i.test(x.name);
+        return { name: ou ? x.name : s.col || x.name, hcap: x.hcap, price: s.price };
+      }).filter(function (o) { return o.name && o.price > 1; });
+      if (outs.length) out.push({ title: title, map: map, line: '', outcomes: outs });
+    };
+    // Rejilla: una fila de cabecera con 2-3 nombres sin cuotas (los equipos) y filas "Etiqueta  celda  celda"
+    var hi = -1;
+    for (var i = 0; i < rows.length - 1 && hi < 0; i++) {
+      var r = rows[i];
+      if (r.length >= 2 && r.length <= 3 && r.every(function (x) { return !isOdd(x.text) && !/^[+-]?\d/.test(x.text) && /[a-z]/i.test(x.text); }) && segments(rows[i + 1]).length) hi = i;
+    }
+    if (hi >= 0) {
+      var cols = rows[hi], left = cols[0].x - 10;
+      rows.slice(hi + 1).forEach(function (r) {
+        var label = r.filter(function (x) { return x.cx < left && !isOdd(x.text); }).map(function (x) { return x.text; }).join(' ');
+        var cells = cols.map(function () { return []; });
+        r.filter(function (x) { return x.cx >= left; }).forEach(function (x) {
+          var best = 0;
+          cols.forEach(function (c, k) { if (Math.abs(c.cx - x.cx) < Math.abs(cols[best].cx - x.cx)) best = k; });
+          cells[best].push(x);
+        });
+        var sels = [];
+        cells.forEach(function (cell, k) { segments(cell).forEach(function (s) { s.col = cols[k].text; sels.push(s); }); });
+        if (sels.length >= 2) push(named(label), sels);
+      });
+      return out;
+    }
+    // Lista: cada fila son una o varias selecciones "Nombre  cuota"; una fila con texto y sin cuotas abre submercado
+    var sub = '', acc = [];
+    rows.forEach(function (r) {
+      var segs = segments(r);
+      if (!segs.length) { if (acc.length) push(named(sub), acc); acc = []; sub = r.map(function (x) { return x.text; }).join(' '); return; }
+      acc = acc.concat(segs);
+    });
+    if (acc.length) push(named(sub), acc);
+    return out;
+  }
+
   var sections = findSections().map(function (s) {
-    return { mkt: s.mkt, h2h: s.h2h, map: s.map, title: s.title, entries: s.h2h ? h2hRows(s) : playerRows(s) };
+    return { mkt: s.mkt, h2h: s.h2h, map: s.map, title: s.title, entries: s.h2h ? h2hRows(s) : playerRows(s), container: s.container };
   }).filter(function (s) { return s.entries.length; });
+  var markets = [];
+  // bet365 a veces sirve la página en inglés ("Player", "Main Markets") aunque sea bet365.es
+  if (!/jugador|player/i.test(navTab())) {
+    var tabMap = mapOf(navTab()) || 0, seen = {};
+    findMarketBlocks(sections.map(function (s) { return s.container; })).forEach(function (b) {
+      blockMarkets(b, mapOf(b.title) || tabMap).forEach(function (m) {
+        var k = m.title + '|' + m.outcomes.map(function (o) { return o.name + o.hcap; }).join('|');
+        if (!seen[k]) { seen[k] = 1; markets.push(m); }
+      });
+    });
+  }
+  sections.forEach(function (s) { delete s.container; });
   var total = sections.reduce(function (a, s) { return a + s.entries.length; }, 0);
-  snapshot(total ? 'ok' : 'sin cuotas'); // la foto ayuda a mejorar el lector de cada casa
-  if (!total) {
-    say('No encuentro cuotas de jugador en esta página.<br>Abre el partido, ve a la sección de <b>jugadores</b> (kills, asistencias, muertes) y despliégala.<br><br>He mandado una foto de la página a la app para poder ajustar el lector.');
-    fin(false, 'sin cuotas de jugador en la página');
+  snapshot(total || markets.length ? 'ok' : 'sin cuotas'); // la foto ayuda a mejorar el lector de cada casa
+  if (!total && !markets.length) {
+    say('No encuentro cuotas en esta página.<br>Abre el partido en bet365 (mercados principales o la pestaña <b>Jugador</b>) y pulsa otra vez.<br><br>He mandado una foto de la página a la app para poder ajustar el lector.');
+    fin(false, 'sin cuotas en la página');
     return;
   }
-  var resumen = total + ' líneas (' + sections.map(function (s) { return (s.h2h ? 'comparación ' : '') + ({ k: 'kills', a: 'asistencias', d: 'muertes' })[s.mkt] + ' ' + s.entries.length; }).join(', ') + ')';
+  var resumen = [markets.length ? markets.length + ' mercados' : '',
+    total ? total + ' líneas de jugador (' + sections.map(function (s) { return (s.h2h ? 'comparación ' : '') + ({ k: 'kills', a: 'asistencias', d: 'muertes' })[s.mkt] + ' ' + s.entries.length; }).join(', ') + ')' : ''].filter(Boolean).join(' y ');
   deliver({ type: 'LOL_ET', book: BOOK, url: location.href, page: location.pathname + location.hash, title: document.title, map: pageMap, ts: Date.now(),
-    header: (document.body.innerText || '').slice(0, 800), sections: sections }, resumen);
+    header: (document.body.innerText || '').slice(0, 800), sections: sections, markets: markets }, resumen);
 })();

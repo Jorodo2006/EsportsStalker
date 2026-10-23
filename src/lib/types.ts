@@ -1,4 +1,4 @@
-// Tipos compartidos con el proceso principal (electron/preload.js expone window.api)
+// Tipos compartidos con el proceso principal (electron/preload.js expone window.api) y el backend (server/)
 
 export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfwon' | 'halflost';
 
@@ -36,6 +36,9 @@ export interface Settings {
   lolesportsKey: string;
   refreshSeconds: number;
   favoriteLeagues: string[];
+  oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace la extensión de Chrome)
+  oddsRefreshMinutes: number; // cada cuántos minutos se vuelve a leer cada partido
+  oddsAutoHours: number; // partidos que empiezan en las próximas N horas
   envKeys?: (keyof Settings)[]; // ajustes que vienen del fichero .env (sus valores no llegan a la interfaz)
   envFile?: string | null;
 }
@@ -120,12 +123,29 @@ export interface AutoJob {
   id: string;
   match: { a: TeamRef; b: TeamRef };
   books: string[];
+  source?: 'manual' | 'auto'; // botón "Actualizar cuotas" o lectura programada
   created: number;
   picked: boolean;
   done: boolean;
   error?: string;
   steps: Record<string, { estado: 'esperando' | 'buscando' | 'leyendo' | 'ok' | 'error'; msg: string }>;
 }
+
+// Estado de las lecturas programadas (pantalla de Ajustes)
+export interface AutoStatus {
+  enabled: boolean;
+  minutes: number;
+  hours: number;
+  lastRun: number | null; // última pasada del programador
+  error: string | null;
+  matches: { id: string; league: string; start: string; a: TeamRef; b: TeamRef }[]; // partidos que entran ahora
+  queued: number; // trabajos esperando a la extensión
+  running: number;
+  lastPoll: number | null; // última vez que la extensión preguntó si había trabajo (null: no la ha visto)
+}
+
+// true si responde cada pieza del backend
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean };
 
 export interface Api {
   settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings> };
@@ -152,11 +172,14 @@ export interface Api {
     match(m: { a: TeamRef; b: TeamRef; start?: string }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
     auto(m: { a: TeamRef; b: TeamRef }): Promise<AutoJob>;
+    autoStatus(): Promise<AutoStatus>;
   };
   extension: { folder(): Promise<string>; open(): Promise<void> };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;
   marcador: { url(): Promise<string>; paste(m?: { a: TeamRef; b: TeamRef }): Promise<{ ok: boolean; partido: string | null }> };
   onOddsImported(cb: () => void): () => void;
+  backend: { status(): Promise<BackendStatus> };
+  onBackendStatus(cb: (up: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;
 }
 

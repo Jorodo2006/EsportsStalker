@@ -1,12 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, session, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { Store } = require('./services/store');
-const lolesports = require('./services/lolesports');
-const leaguepedia = require('./services/leaguepedia');
-const odds = require('./services/odds');
-const bridge = require('./services/bridge');
-const env = require('./services/env');
+const backend = require('./services/backend');
+const extension = require('./services/extension');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 
@@ -26,7 +22,6 @@ function openInChrome(url) {
   } else if (tryRun('google-chrome', [url])) return;
   shell.openExternal(url);
 }
-let store;
 let win;
 
 function createWindow() {
@@ -63,25 +58,19 @@ function handle(channel, fn) {
   });
 }
 
+// Todo lo que antes hacían los servicios locales ahora lo hace el backend (gateway + microservicios en Docker).
+// Aquí sólo quedan los diálogos de fichero, el portapapeles, Chrome y la carpeta de la extensión.
 function registerIpc() {
-  // Ajustes efectivos: lo del .env manda sobre lo guardado
-  const s = () => ({ ...store.getSettings(), ...env.settings() });
-  // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos en data.json), sólo cuáles hay
-  const forUi = st => {
-    const fromEnv = Object.keys(env.settings());
-    return { ...st, ...Object.fromEntries(fromEnv.map(k => [k, ''])), envKeys: fromEnv, envFile: env.file() };
-  };
+  const { call, get } = backend;
+  const team = t => ({ name: t?.name, code: t?.code });
+  const matchOf = m => ({ a: team(m?.a), b: team(m?.b), start: m?.start });
 
-  handle('settings:get', () => forUi(store.getSettings()));
-  handle('settings:set', patch => {
-    const clean = { ...patch };
-    for (const k of ['envKeys', 'envFile', ...Object.keys(env.settings())]) delete clean[k];
-    return forUi(store.setSettings(clean));
-  });
+  handle('settings:get', () => get('/api/settings'));
+  handle('settings:set', patch => call('PUT', '/api/settings', patch));
 
-  handle('bets:list', () => store.listBets());
-  handle('bets:save', bet => store.saveBet(bet));
-  handle('bets:delete', id => store.deleteBet(id));
+  handle('bets:list', () => get('/api/bets'));
+  handle('bets:save', bet => call('POST', '/api/bets', bet));
+  handle('bets:delete', id => call('DELETE', `/api/bets/${encodeURIComponent(id)}`));
 
   handle('bets:export', async () => {
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -89,7 +78,7 @@ function registerIpc() {
       filters: [{ name: 'CSV', extensions: ['csv'] }, { name: 'JSON', extensions: ['json'] }]
     });
     if (canceled || !filePath) return null;
-    const bets = store.listBets();
+    const bets = await get('/api/bets');
     if (filePath.toLowerCase().endsWith('.json')) fs.writeFileSync(filePath, JSON.stringify(bets, null, 2));
     else fs.writeFileSync(filePath, toCsv(bets));
     return filePath;
@@ -103,44 +92,66 @@ function registerIpc() {
     if (canceled || !filePaths?.length) return 0;
     const raw = fs.readFileSync(filePaths[0], 'utf8');
     const list = filePaths[0].toLowerCase().endsWith('.json') ? JSON.parse(raw) : fromCsv(raw);
-    return store.importBets(list);
+    return call('POST', '/api/bets/import', { list });
   });
 
-  handle('esports:leagues', () => lolesports.getLeagues(s().lolesportsKey));
-  handle('esports:schedule', opts => lolesports.getSchedule(s().lolesportsKey, opts || {}));
-  handle('esports:live', () => lolesports.getLive(s().lolesportsKey));
-  handle('esports:eventDetails', id => lolesports.getEventDetails(s().lolesportsKey, id));
-  handle('esports:liveWindow', gameId => lolesports.getLiveWindow(gameId));
+  handle('esports:leagues', () => get('/api/esports/leagues'));
+  handle('esports:schedule', opts => get('/api/esports/schedule', { leagueIds: (opts?.leagueIds || []).join(','), pageToken: opts?.pageToken }));
+  handle('esports:live', () => get('/api/esports/live'));
+  handle('esports:eventDetails', id => get(`/api/esports/events/${encodeURIComponent(id)}`));
+  handle('esports:liveWindow', gameId => get(`/api/esports/live-window/${encodeURIComponent(gameId)}`));
 
-  handle('stats:searchPlayers', q => (leaguepedia.configure(s()), leaguepedia.searchPlayers(q)));
-  handle('stats:searchTeams', q => (leaguepedia.configure(s()), leaguepedia.searchTeams(q)));
-  handle('stats:resolveTeam', (name, code) => (leaguepedia.configure(s()), leaguepedia.resolveTeam(name, code)));
-  handle('stats:playerGames', page => (leaguepedia.configure(s()), leaguepedia.playerGames(page)));
-  handle('stats:teamGames', team => (leaguepedia.configure(s()), leaguepedia.teamGames(team)));
-  handle('stats:teamRoster', team => (leaguepedia.configure(s()), leaguepedia.teamRoster(team)));
+  handle('stats:searchPlayers', q => get('/api/stats/players', { q }));
+  handle('stats:searchTeams', q => get('/api/stats/teams', { q }));
+  handle('stats:resolveTeam', (name, code) => get('/api/stats/resolve-team', { name, code }));
+  handle('stats:playerGames', page => get('/api/stats/player-games', { page }));
+  handle('stats:teamGames', t => get('/api/stats/team-games', { team: t }));
+  handle('stats:teamRoster', t => get('/api/stats/team-roster', { team: t }));
 
-  handle('odds:match', match => (bridge.noteMatch(match), odds.getMatchOdds(s(), match)));
-  // Marcador de cuotas para tu Chrome y pegado manual si el envío directo falla
-  handle('marcador:url', () => bridge.bookmarkletUrl());
-  // Botón "Actualizar cuotas": abre en Chrome la página que activa la extensión
-  handle('odds:auto', match => {
-    bridge.noteMatch(match);
-    const job = bridge.newJob(match);
-    openInChrome(`http://127.0.0.1:${bridge.PORT}/auto?job=${job.id}`);
+  handle('odds:match', match => call('POST', '/api/odds/match', { match: matchOf(match) }));
+  // Recibe [{ id, a, b, start }] del calendario y devuelve { id: { a, b } } con la cuota de ganador
+  handle('odds:board', events => call('POST', '/api/odds/board', { events }));
+  // Botón "Actualizar cuotas": crea el trabajo y abre en Chrome la página que activa la extensión
+  handle('odds:auto', async match => {
+    const job = await call('POST', '/api/odds/jobs', { match: matchOf(match) });
+    openInChrome(`${backend.BASE}/auto?job=${job.id}`);
     return job;
+  });
+  handle('odds:autoStatus', () => get('/api/odds/auto/status'));
+  // Marcador de cuotas para tu Chrome y pegado manual si el envío directo falla
+  handle('marcador:url', () => extension.bookmarkletUrl());
+  handle('marcador:paste', match => {
+    let data;
+    try { data = JSON.parse(clipboard.readText()); } catch (_) { throw new Error('El portapapeles no tiene cuotas del marcador'); }
+    return call('POST', '/api/odds/paste', { match: match ? matchOf(match) : null, data });
   });
   handle('extension:folder', () => extensionDir());
   handle('extension:open', async () => { const err = await shell.openPath(extensionDir()); if (err) throw new Error(err); });
-  handle('marcador:paste', match => {
-    if (match) bridge.noteMatch(match);
-    let data;
-    try { data = JSON.parse(clipboard.readText()); } catch (_) { throw new Error('El portapapeles no tiene cuotas del marcador'); }
-    return bridge.add(data, odds.orient);
-  });
-  // Recibe [{ id, a, b, start }] del calendario y devuelve { id: { a, b } } con la cuota de ganador
-  handle('odds:board', events => odds.getBoardFor(events));
 
+  handle('backend:status', () => get('/api/health'));
   handle('open:external', url => { if (/^https?:\/\//.test(url)) shell.openExternal(url); });
+}
+
+// Primera vez con backend: lo que había en local (data.json y casas-urls.json) pasa a la base de datos.
+// Después el fichero se renombra para no volver a importarlo.
+async function migrateLegacy() {
+  const done = f => { try { fs.renameSync(f, `${f}.migrado-${new Date().toISOString().slice(0, 10)}`); } catch (_) {} };
+  const dataFile = path.join(app.getPath('userData'), 'data.json');
+  if (fs.existsSync(dataFile)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+      const r = await backend.call('POST', '/api/legacy/import', { bets: raw.bets || [], settings: raw.settings || null });
+      console.log(`data.json importado: ${r.bets} apuestas${r.settings ? ' y los ajustes' : ''}`);
+      done(dataFile);
+    } catch (e) { console.error('No se ha podido importar data.json:', e.message); }
+  }
+  const urlsFile = path.join(app.isPackaged ? app.getPath('userData') : app.getAppPath(), 'casas-urls.json');
+  if (fs.existsSync(urlsFile)) {
+    try {
+      await backend.call('POST', '/api/odds/legacy-urls', { urls: JSON.parse(fs.readFileSync(urlsFile, 'utf8')) });
+      done(urlsFile);
+    } catch (e) { console.error('No se ha podido importar casas-urls.json:', e.message); }
+  }
 }
 
 const CSV_COLS = ['id', 'date', 'league', 'event', 'market', 'selection', 'bookmaker', 'odds', 'stake', 'status', 'cashout', 'notes', 'legs'];
@@ -186,19 +197,23 @@ app.whenReady().then(() => {
       }
     }));
   }
-  env.load([app.isPackaged ? path.dirname(process.execPath) : app.getAppPath(), app.getPath('userData')]);
-  store = new Store(app.getPath('userData'));
-  leaguepedia.init(app.getPath('userData'));
   registerIpc();
   createWindow();
-  bridge.start({
-    orient: odds.orient,
-    onChange: () => win && !win.isDestroyed() && win.webContents.send('odds:imported'),
-    onJobChange: job => win && !win.isDestroyed() && win.webContents.send('odds:auto', job),
-    // Fotos de las páginas de las casas (para ajustar el lector): junto al proyecto en desarrollo
-    dir: app.isPackaged ? app.getPath('userData') : app.getAppPath()
+  // Avisos del backend → interfaz (cuotas nuevas, progreso de "Actualizar cuotas" y de las lecturas programadas)
+  const send = (ch, v) => win && !win.isDestroyed() && win.webContents.send(ch, v);
+  let migrated = false;
+  backend.events({
+    onEvent: ev => {
+      if (ev.type === 'odds:imported') send('odds:imported');
+      else if (ev.type === 'odds:auto') send('odds:auto', ev.data);
+    },
+    onConnect: () => {
+      send('backend:status', true);
+      if (!migrated) { migrated = true; migrateLegacy(); }
+    },
+    onDisconnect: () => send('backend:status', false)
   });
-  try { bridge.writeExtension(extensionDir()); } catch (e) { console.error('No se ha podido preparar la extensión', e); }
+  try { extension.writeExtension(extensionDir()); } catch (e) { console.error('No se ha podido preparar la extensión', e); }
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

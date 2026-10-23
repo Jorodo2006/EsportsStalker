@@ -119,7 +119,12 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
 }) {
   const { go, toast } = useApp();
   const [job, setJob] = useState<AutoJob | null>(null);
-  useEffect(() => window.api.onOddsAuto(j => setJob(cur => (cur && cur.id === j.id ? j : cur))), []);
+  // Progreso del trabajo propio y también de las lecturas programadas de este partido
+  useEffect(() => window.api.onOddsAuto(j => setJob(cur => {
+    if (cur && cur.id === j.id) return j;
+    const mine = j.match.a.name === a.name && j.match.b.name === b.name;
+    return mine && j.source === 'auto' && !(cur && !cur.done) ? j : cur;
+  })), [a.name, b.name]);
   const running = !!job && !job.done;
   async function start() {
     try { setJob(await window.api.odds.auto({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code } })); }

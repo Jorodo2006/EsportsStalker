@@ -6,7 +6,7 @@ ajustes (`lolesportsKey`).
 - `https://esports-api.lolesports.com/persisted/gw/*`: `getLeagues`, `getSchedule`, `getLive`, `getEventDetails`.
 - `https://feed.lolesports.com/livestats/v1/window/{gameId}`: estadísticas en vivo (van unos 60 s por detrás).
 
-Código: `electron/services/lolesports.js` (con caché por TTL en `http.js`).
+Código: `server/services/esports/lolesports.js` (con caché por TTL en memoria en `http.js`), servicio `esports`.
 
 ## Lista de partidos (`src/views/MatchesView.tsx`)
 

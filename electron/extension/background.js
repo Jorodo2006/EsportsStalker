@@ -1,17 +1,40 @@
-// Extensión de LoL Esports Tracker. Al pulsar "Actualizar cuotas" la app abre una página suya en Chrome;
-// esta extensión la ve, abre las casas en pestañas de fondo, busca el partido por el nombre de los equipos,
-// lee las cuotas con el mismo lector del marcador (lector.js) y se las manda a la app.
+// Extensión de LoL Esports Tracker. Hace los trabajos de lectura de cuotas del backend: abre las casas en
+// pestañas de fondo, busca el partido por el nombre de los equipos, lee las cuotas con el mismo lector del
+// marcador (lector.js) y se las manda al gateway. Los trabajos llegan de dos formas:
+//  - al pulsar "Actualizar cuotas", la app abre una página suya en Chrome (pagina.js la ve y avisa);
+//  - cada 30 s pregunta al backend si hay lecturas programadas (chrome.alarms), y las hace de una en una.
 const APP = 'http://127.0.0.1:__PORT__';
 const running = new Set();
+const pages = new Map(); // trabajo → pestaña de la página /auto, que se cierra al acabar
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg && msg.type === 'lolet-job' && msg.id) runJob(msg.id, sender.tab && sender.tab.id);
+  if (msg && msg.type === 'lolet-job' && msg.id) {
+    if (sender.tab) pages.set(msg.id, sender.tab.id);
+    runJob(msg.id);
+  }
 });
+
+// Programador: una alarma cada 30 s (lo mínimo que deja Chrome) que despierta al service worker
+const ALARM = 'lolet-poll';
+const ensureAlarm = () => chrome.alarms.get(ALARM, a => { if (!a) chrome.alarms.create(ALARM, { periodInMinutes: 0.5, delayInMinutes: 0.1 }); });
+chrome.runtime.onInstalled.addListener(ensureAlarm);
+chrome.runtime.onStartup.addListener(ensureAlarm);
+ensureAlarm();
+chrome.alarms.onAlarm.addListener(a => { if (a.name === ALARM) poll(); });
+
+async function poll() {
+  if (running.size) return; // de uno en uno: no se abren decenas de pestañas de las casas a la vez
+  let r = null;
+  try { r = await fetch(`${APP}/jobs/next`); } catch (_) { return; } // la app (Docker) no está encendida
+  if (r.status !== 200) return;
+  const job = await r.json().catch(() => null);
+  if (job && job.id) runJob(job.id);
+}
 
 const post = (p, body) => fetch(APP + p, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => null);
 
-async function runJob(id, pageTab) {
+async function runJob(id) {
   if (running.has(id)) return;
   running.add(id);
   let job = null;
@@ -31,7 +54,10 @@ async function runJob(id, pageTab) {
   }));
   await say(null, 'fin');
   running.delete(id);
+  const pageTab = pages.get(id);
+  pages.delete(id);
   if (pageTab) setTimeout(() => chrome.tabs.remove(pageTab).catch(() => {}), 4000);
+  poll(); // si hay más en cola, el siguiente
 }
 
 // ---------- utilidades de pestañas ----------
@@ -214,7 +240,10 @@ const BOOKS = {
     const known = job.urls.bet365 && /#\/AC\//.test(job.urls.bet365) ? job.urls.bet365.replace(/\?[^#]*/, '') : null;
     const tab = await openTab(known || 'https://www.bet365.es/#/AS/B151/', tabs);
     const teams = [job.match.a, job.match.b];
-    const onMatch = () => /#\/AC\/B151\/.*\/E\d+/.test(location.hash) && /jugador/i.test(document.body.innerText || '');
+    // Página del partido: dirección .../E<id>/ y ya pintadas sus pestañas. No se exige la pestaña "Jugador":
+    // muchos partidos (otras ligas, o con días de antelación) sólo traen "Mercados principales" y "1º mapa"
+    const onMatch = () => /#\/AC\/B151\/.*\/E\d+/.test(location.hash) &&
+      (document.querySelector('nav button[aria-selected]') !== null || /mercados principales|apuestas al encuentro|main markets/i.test(document.body.innerText || ''));
     if (!known || !(await until(tab, onMatch, [], 15000))) {
       await until(tab, () => /league of legends|\blol\b/i.test(document.body.innerText || ''), [], 20000);
       let ok = await until(tab, pageFind, [teams, {}], 5000);
@@ -227,7 +256,12 @@ const BOOKS = {
         if (!ok) { await run(tab, () => history.back()); await sleep(2500); }
       }
       if (!ok) throw new Error('No encuentro el partido en bet365');
-      if (!(await until(tab, onMatch, [], 15000))) throw new Error('bet365 no ha abierto el partido');
+      if (!(await until(tab, onMatch, [], 15000))) {
+        // Foto de dónde se ha quedado, para ver si el clic no llevó al partido o la página es otra
+        const snap = await run(tab, () => ({ url: location.href, title: document.title, texto: document.body.innerText.slice(0, 300000) }));
+        if (snap) await post('/snapshot', { ...snap, book: 'bet365', nombre: 'no-abre', motivo: 'auto: no ha abierto el partido' });
+        throw new Error('bet365 no ha abierto el partido');
+      }
     }
     // Pestañas del partido (Mercados principales, Jugador, 1º mapa…): se leen todas y se guarda una foto de cada
     // una para ir ampliando el lector de bet365
@@ -245,19 +279,21 @@ const BOOKS = {
       const blocked = () => run(tab, () => /no se puede mostrar este contenido/i.test(document.body.innerText || ''));
       await clickTab(names[i]);
       await sleep(3000);
-      // bet365 a veces dice "No se puede mostrar este contenido" en pestañas de fondo: se reintenta,
-      // la última vez con la pestaña delante un momento
-      for (let r = 0; r < 3 && await blocked(); r++) {
+      // bet365 dice "No se puede mostrar este contenido" cuando la pestaña se abre con un clic simulado,
+      // pero la primera carga de la página sí se pinta. Como la dirección ya lleva la pestaña (/I11/, /I2/…)
+      // se recarga la página entera; la última vez con la pestaña delante un momento
+      for (let r = 0; r < 2 && await blocked(); r++) {
         say('leyendo', `Reintentando ${names[i]}…`);
         let back = null;
-        if (r === 2) {
+        // En las lecturas programadas no se pone delante: no se le quita la pestaña al usuario cada pocos minutos
+        if (r === 1 && job.source !== 'auto') {
           const [cur] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
           back = cur && cur.id;
           await chrome.tabs.update(tab, { active: true });
         }
-        await clickTab(names[(i + 1) % names.length]);
-        await sleep(1500);
-        await clickTab(names[i]);
+        await chrome.tabs.reload(tab);
+        await sleep(300);
+        await waitLoad(tab);
         await sleep(4000);
         if (back) await chrome.tabs.update(back, { active: true }).catch(() => {});
       }
@@ -266,7 +302,7 @@ const BOOKS = {
       if (snap) await post('/snapshot', { ...snap, book: 'bet365', nombre: 'pestana-' + (i + 1), motivo: 'auto: ' + names[i] });
       try { hechos.push(await readPage(tab, job, 'bet365')); } catch (_) {}
     }
-    if (!hechos.length) throw new Error('bet365 no muestra cuotas de jugador en este partido');
+    if (!hechos.length) throw new Error('bet365 no muestra cuotas en este partido');
     return hechos.join(' · ');
   }
 };

@@ -10,7 +10,7 @@ async function getJson(url, { headers = {}, ttl = 0, timeout = 15000 } = {}) {
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'LoLEsportsTracker/0.1 (app de escritorio personal)', Accept: 'application/json', ...headers },
+      headers: { 'User-Agent': 'LoLEsportsTracker/0.3 (app de escritorio personal)', Accept: 'application/json', ...headers },
       signal: ctrl.signal
     });
     if (res.status === 204) return null;

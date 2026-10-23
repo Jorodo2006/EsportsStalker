@@ -1,6 +1,6 @@
 # 05 · Apuestas
 
-Código: `electron/services/store.js` (guardado y normalización), `src/components/BetForm.tsx` (formulario),
+Código: `server/services/bets/store.js` (guardado en `bets.bets` / `bets.bet_legs` y normalización), `src/components/BetForm.tsx` (formulario),
 `src/views/BetsView.tsx` (estadísticas e historial), `src/App.tsx` (boleto), `src/lib/format.ts` (`betProfit`, `summarize`).
 
 ## Modelo (`src/lib/types.ts`)
@@ -62,9 +62,19 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
   - El selector *Simple / Combinada* pasa los campos de una a otra: la simple se convierte en la primera selección.
   - Hay una fila por selección (partido, mercado, selección, cuota y estado), con *Añadir selección* y la cuota
     total calculada en directo.
+  - El campo *Partido* (simple y combinada) es `MatchPicker` (`src/components/MatchPicker.tsx`): vacío enseña todos los
+    partidos del día de la apuesta (todas las ligas, del calendario de lolesports); al escribir busca por equipo,
+    siglas o liga entre los partidos cargados, y *Buscar en más fechas* trae otra página hacia atrás y hacia delante.
+    Al elegir uno rellena `"COD1 vs COD2"` y la liga. También sugiere partidos de apuestas anteriores y admite texto libre.
+  - El campo *Mercado* es `OptionInput` (no `<datalist>`, que sólo enseñaba lo que coincidía con lo escrito): al abrirlo
+    salen todos los mercados agrupados (partido, mapa 1–5, jugadores, torneo), primero los que el comparador ya leyó
+    de ese partido y al final los usados en apuestas anteriores.
+- **Historial y resumen por casa / liga**: las selecciones de una combinada se marcan (pendiente, ganada, perdida, nula) con los botones de cada fila del formulario al editarla.
+  *Apostado* incluye lo pendiente y hay columna *En juego*; beneficio y ROI sólo cuentan las resueltas (sin
+  resueltas se ve "—").
   - El estado general es *Auto* (sale de las selecciones) o *Cash out*.
 - **Historial**:
-  - La combinada sale como una fila con la insignia *Combinada ×N*. Al pulsarla se despliegan sus selecciones.
+  - La combinada sale como una fila con la insignia *Combinada ×N*. Ya no se despliega: al pulsarla se abre el formulario para marcar sus selecciones; en Mercado pone cuántas hay resueltas.
   - Cada selección se marca como ganada, perdida, nula o pendiente desde ahí.
   - Las combinadas no tienen los botones rápidos de ganada/perdida.
 

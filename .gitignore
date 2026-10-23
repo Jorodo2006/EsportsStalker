@@ -8,9 +8,12 @@ extension-chrome/
 
 # Datos locales de cada usuario: capturas de páginas de las casas y direcciones aprendidas
 captura-*.json
+capturas/
 diagnostico-*.json
 casas-urls.json
 data.json
+# Ficheros locales ya pasados a la base de datos (se renombran al importarlos)
+*.migrado-*
 
 # Versión antigua guardada a mano
 _old_v1/

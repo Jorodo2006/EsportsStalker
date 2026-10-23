@@ -1,0 +1,17 @@
+{
+  "name": "lol-esports-tracker-server",
+  "version": "0.3.0",
+  "description": "Backend de LoL Esports Tracker: gateway, esports, cuotas y apuestas sobre PostgreSQL",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "gateway": "node services/gateway/index.js",
+    "bets": "node services/bets/index.js",
+    "esports": "node services/esports/index.js",
+    "odds": "node services/odds/index.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
+  }
+}

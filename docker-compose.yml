@@ -1,0 +1,76 @@
+# Backend de LoL Esports Tracker: PostgreSQL + gateway + tres servicios.
+#   docker compose up -d --build     (o npm run backend)
+# Sólo el gateway (127.0.0.1:47365) y, para depurar, PostgreSQL (127.0.0.1:55432) y Adminer (127.0.0.1:8080)
+# se abren al equipo, nunca a la red.
+# Las credenciales salen del .env de esta carpeta (no se sube a git; plantilla en .env.example).
+
+x-servicio: &servicio
+  build: ./server
+  image: lol-esports-tracker-server
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment: &entorno
+    DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:-lolet}@db:5432/${POSTGRES_DB:-lolet}
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lolet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lolet}
+      POSTGRES_DB: ${POSTGRES_DB:-lolet}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  bets:
+    <<: *servicio
+    command: ["node", "services/bets/index.js"]
+
+  esports:
+    <<: *servicio
+    command: ["node", "services/esports/index.js"]
+
+  odds:
+    <<: *servicio
+    command: ["node", "services/odds/index.js"]
+    environment:
+      <<: *entorno
+      CAPTURAS_DIR: /capturas
+    volumes:
+      # Fotos de las páginas de las casas (captura-*.json) para ajustar los lectores
+      - ./capturas:/capturas
+
+  gateway:
+    <<: *servicio
+    command: ["node", "services/gateway/index.js"]
+    ports:
+      - "127.0.0.1:47365:47365"
+
+  # Visor web de la base de datos: http://127.0.0.1:8080 (Sistema PostgreSQL, servidor db, usuario y clave del .env)
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DESIGN: dracula
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

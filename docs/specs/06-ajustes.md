@@ -1,6 +1,6 @@
 # 06 · Ajustes y pendientes
 
-## Ajustes (`src/views/SettingsView.tsx`, valores por defecto en `store.js`)
+## Ajustes (`src/views/SettingsView.tsx`, valores por defecto en `server/services/bets/store.js`, tabla `bets.settings`)
 
 | Ajuste | Por defecto | Uso |
 |---|---|---|
@@ -8,42 +8,45 @@
 | `initialBankroll` | 0 | Banca inicial, que se suma al beneficio |
 | `featuredBooks` | `Bet365,Winamax,Betway` | Columnas del comparador y su orden |
 | `refreshSeconds` | 30 | Refresco del calendario y del directo (mínimo 10) |
+| `oddsAutoEnabled` | `true` | Lecturas de cuotas programadas (las hace la extensión) |
+| `oddsRefreshMinutes` | 5 | Cada cuántos minutos se vuelve a leer cada partido (2–240) |
+| `oddsAutoHours` | 6 | Se leen los partidos que empiezan en las próximas N horas (1–48) |
 | `favoriteLeagues` | `[]` | Ligas que salen primero |
 | `lolesportsKey` | clave pública de lolesports.com | Cabecera `x-api-key` |
-| `leaguepediaUser` / `leaguepediaPassword` | vacío | *Bot password* de Fandom (opcional). **Sólo en `data.json`, nunca en el repo** |
+| `leaguepediaUser` / `leaguepediaPassword` | vacío | *Bot password* de Fandom (opcional). **Sólo en la base de datos o en el `.env`, nunca en el repo** |
 
 ### Fichero `.env`
 
-`electron/services/env.js` carga el primer `.env` que encuentre, en este orden:
-
-1. la carpeta del proyecto (en desarrollo) o la del `.exe` (empaquetada);
-2. la carpeta de datos de la app.
-
-Las variables de entorno ya definidas en el sistema no se pisan. Variables (plantilla en `.env.example`):
+Está en la raíz del proyecto, junto a `docker-compose.yml`. Docker Compose lo pasa a los servicios del backend
+(`env_file`, opcional) y `server/shared/env.js` traduce las variables a ajustes. Tras cambiarlo: `npm run backend`.
+Variables (plantilla en `.env.example`):
 
 | Variable | Ajuste |
 |---|---|
 | `LEAGUEPEDIA_USER` | `leaguepediaUser` |
 | `LEAGUEPEDIA_PASSWORD` | `leaguepediaPassword` |
 | `LOLESPORTS_KEY` | `lolesportsKey` |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Base de datos (por defecto `lolet`). Sólo cuentan antes del primer arranque |
 
-- Lo que venga del `.env` manda sobre lo guardado en `data.json`: los servicios reciben `{ ...ajustes, ...env }`.
-- `settings:get` no manda esos valores a la interfaz: los vacía y añade `envKeys` (cuáles vienen del `.env`) y `envFile`.
+- Lo que venga del `.env` manda sobre lo guardado: `GET /internal/settings` de `bets` devuelve `{ ...ajustes, ...env }`.
+- `GET /api/settings` no manda esos valores a la interfaz: los vacía y añade `envKeys` (cuáles vienen del `.env`) y `envFile`.
   En Ajustes esos campos salen desactivados con el texto *Definido en .env*.
-- `settings:set` ignora esas claves, para que nunca acaben copiadas en `data.json`.
+- `PUT /api/settings` ignora esas claves, para que nunca acaben copiadas en la base de datos.
 
 Secciones de la pantalla:
 
 - **Preferencias.**
 - **Fuentes de datos**: incluye *Probar conexiones* para comprobar lolesports y Leaguepedia.
-- **Cuotas automáticas**: carpeta de la extensión, con un botón para abrirla y los pasos para cargarla en
+- **Cuotas automáticas**: activar, cada cuántos minutos y qué horizonte, más el estado (extensión conectada, cola,
+  partidos que entran ahora).
+- **Extensión de Chrome**: carpeta de la extensión, con un botón para abrirla y los pasos para cargarla en
   `chrome://extensions` con *Cargar descomprimida*.
 - **Marcador de cuotas**: un enlace que se arrastra a la barra de favoritos.
 
 Al cargar los ajustes:
 
 - las listas antiguas de casas pasan a la nueva (`OLD_FEATURED`);
-- se borran los ajustes de las antiguas APIs de cuotas (`OBSOLETE`: Pinnacle, OddsPapi, Kambi).
+- se ignoran los ajustes de las antiguas APIs de cuotas (`OBSOLETE`: Pinnacle, OddsPapi, Kambi, `oddsProvider`).
 
 ## Historial de decisiones
 
@@ -54,6 +57,10 @@ Al cargar los ajustes:
   Chrome real del usuario, sin bloqueos anti-bot.
 - **Rediseño del comparador**: tres columnas fijas por casa con icono, mercados plegables y pestañas de sección.
 - **Combinadas** con boleto flotante, formulario por selecciones y historial desplegable.
+- **Backend con microservicios y PostgreSQL** (v0.3): gateway + `bets`, `esports` y `odds` en Docker Compose, en vez
+  de `data.json` y servicios dentro de Electron. Se eligió PostgreSQL + Docker frente a SQLite embebido.
+- **Cuotas automáticas**: cada 5 minutos, partidos que empiezan en las próximas 6 h. La extensión pregunta con
+  `chrome.alarms` y hace los trabajos de uno en uno.
 
 ## Pendientes
 

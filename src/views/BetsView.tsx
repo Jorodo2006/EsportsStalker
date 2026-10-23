@@ -1,7 +1,7 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, ChevronRight, Download, Layers, Pencil, Percent, Plus, Search, Target, Upload, Wallet, X } from 'lucide-react';
+import { Check, Download, Layers, Pencil, Percent, Plus, Search, Target, Upload, Wallet, X } from 'lucide-react';
 import { useApp, useCurrency } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
@@ -10,6 +10,7 @@ import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, T
 const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
   pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'neutral', cashout: 'warning'
 };
+
 
 export default function BetsView() {
   const { openBet, toast, settings } = useApp();
@@ -23,11 +24,6 @@ export default function BetsView() {
     // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
     const legs = b.legs && status === 'won' ? b.legs.map(l => l.status === 'pending' ? { ...l, status: 'won' as LegStatus } : l) : b.legs;
     await window.api.bets.save({ ...b, status, legs });
-    qc.invalidateQueries({ queryKey: ['bets'] });
-  }
-
-  async function settleLeg(b: Bet, i: number, status: LegStatus) {
-    await window.api.bets.save({ ...b, legs: b.legs!.map((l, j) => j === i ? { ...l, status } : l) });
     qc.invalidateQueries({ queryKey: ['bets'] });
   }
 
@@ -59,7 +55,7 @@ export default function BetsView() {
         <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
       </div>
 
-      <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onSettleLeg={settleLeg} />
+      <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} />
     </>
   );
 }
@@ -107,6 +103,7 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
   );
 }
 
+// Apostado cuenta también lo pendiente; beneficio y ROI sólo las resueltas (con todo pendiente se ve "—", no 0)
 function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: (b: Bet) => string }) {
   const cur = useCurrency();
   const rows = useMemo(() => [...groupBy(bets, keyFn)].map(([k, l]) => ({ k, ...summarize(l) })).sort((a, b) => b.profit - a.profit), [bets, keyFn]);
@@ -117,15 +114,16 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
           <table className="w-full">
             <thead className="bg-zinc-900/60"><tr>
               <th className={th}></th><th className={th + ' text-right'}>Apuestas</th><th className={th + ' text-right'}>Apostado</th>
-              <th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
+              <th className={th + ' text-right'}>En juego</th><th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
             </tr></thead>
             <tbody className="divide-y divide-zinc-800/70">
               {rows.map(r => (
                 <tr key={r.k}>
                   <td className={td + ' font-medium'}>{r.k}</td><td className={td + ' text-right tabular-nums'}>{r.count}</td>
-                  <td className={td + ' text-right tabular-nums'}>{money(r.staked, cur)}</td>
-                  <td className={td + ' text-right font-semibold tabular-nums ' + tone(r.profit)}>{money(r.profit, cur, true)}</td>
-                  <td className={td + ' text-right tabular-nums ' + tone(r.roi)}>{pct(r.roi)}</td>
+                  <td className={td + ' text-right tabular-nums'}>{money(r.staked + r.pendingStake, cur)}</td>
+                  <td className={td + ' text-right tabular-nums text-zinc-400'}>{r.pendingStake ? money(r.pendingStake, cur) : '—'}</td>
+                  <td className={td + ' text-right font-semibold tabular-nums ' + (r.settled ? tone(r.profit) : 'text-zinc-500')}>{r.settled ? money(r.profit, cur, true) : '—'}</td>
+                  <td className={td + ' text-right tabular-nums ' + (r.settled ? tone(r.roi) : 'text-zinc-500')}>{r.settled ? pct(r.roi) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,13 +134,11 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
   );
 }
 
-function History({ bets, onEdit, onSettle, onSettleLeg }: {
-  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onSettleLeg: (b: Bet, i: number, s: LegStatus) => void;
+function History({ bets, onEdit, onSettle }: {
+  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void;
 }) {
   const cur = useCurrency();
   const [q, setQ] = useState('');
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => setOpenIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [st, setSt] = useState('');
   const list = useMemo(() => bets
     .filter(b => !st || b.status === st)
@@ -173,29 +169,30 @@ function History({ bets, onEdit, onSettle, onSettleLeg }: {
             <tbody className="divide-y divide-zinc-800/70">
               {list.map(b => {
                 const p = betProfit(b);
-                const combo = !!b.legs?.length, open = openIds.has(b.id);
+                const combo = !!b.legs?.length;
+                const done = combo ? b.legs!.filter(l => l.status !== 'pending').length : 0;
                 return (
-                  <Fragment key={b.id}>
-                  <tr className={cn('group hover:bg-zinc-900/40', combo && 'cursor-pointer')} onClick={combo ? () => toggle(b.id) : undefined}>
+                  <tr key={b.id} className={cn('group hover:bg-zinc-900/40', combo && 'cursor-pointer')} onClick={combo ? () => onEdit(b) : undefined}
+                    title={combo ? 'Abrir la combinada para marcar sus selecciones' : undefined}>
                     <td className={td + ' whitespace-nowrap text-zinc-400'}>{fmtDate(b.date)}</td>
                     <td className={td}>{b.league}</td>
                     {combo ? <>
-                      <td className={td + ' font-medium'} colSpan={3}>
-                        <span className="flex items-center gap-2">
-                          <ChevronRight size={14} className={cn('shrink-0 text-zinc-500 transition', open && 'rotate-90')} />
+                      <td className={td + ' whitespace-nowrap'}>
+                        <span className="flex items-center gap-1.5">
                           <Badge tone="warning"><Layers size={11} className="mr-1 inline" />Combinada ×{b.legs!.length}</Badge>
-                          <span className="truncate text-zinc-400">{b.selection}</span>
                         </span>
                       </td>
+                      <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.legs!.length} selecciones{done > 0 && <span className="text-zinc-600"> · {done} resueltas</span>}</td>
+                      <td className={td + ' font-semibold'}><span className="block max-w-[14rem] truncate" title={b.selection}>{b.selection}</span></td>
                     </> : <>
                       <td className={td + ' font-medium'}>{b.event}</td>
                       <td className={td + ' text-zinc-400'}>{b.market}</td>
                       <td className={td + ' font-semibold'}>{b.selection}</td>
                     </>}
-                    <td className={td + ' text-zinc-400'}>{b.bookmaker}</td>
+                    <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.bookmaker}</td>
                     <td className={td + ' text-right tabular-nums'}>{odd(b.odds)}</td>
                     <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{money(b.stake, cur)}</td>
-                    <td className={td}><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge></td>
+                    <td className={td + ' whitespace-nowrap'}><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge></td>
                     <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
                       {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}
                     </td>
@@ -209,27 +206,6 @@ function History({ bets, onEdit, onSettle, onSettleLeg }: {
                       </div>
                     </td>
                   </tr>
-                  {combo && open && b.legs!.map((l, i) => (
-                    <tr key={i} className="bg-zinc-900/30 text-[13px]">
-                      <td className={td} colSpan={2}></td>
-                      <td className={td + ' text-zinc-300'}><span className="mr-2 text-zinc-600">{i + 1}.</span>{l.event}</td>
-                      <td className={td + ' text-zinc-500'}>{l.market}</td>
-                      <td className={td + ' font-semibold'}>{l.selection}</td>
-                      <td className={td}></td>
-                      <td className={td + ' text-right tabular-nums text-zinc-300'}>{odd(l.odds)}</td>
-                      <td className={td}></td>
-                      <td className={td}><Badge tone={STATUS_TONE[l.status]}>{STATUS_LABEL[l.status]}</Badge></td>
-                      <td className={td} colSpan={2}>
-                        <div className="flex justify-end gap-1">
-                          {(['won', 'lost', 'void', 'pending'] as LegStatus[]).filter(x => x !== l.status).map(x => (
-                            <button key={x} onClick={() => onSettleLeg(b, i, x)}
-                              className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200">{STATUS_LABEL[x]}</button>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  </Fragment>
                 );
               })}
             </tbody>

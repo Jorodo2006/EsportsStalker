@@ -5,31 +5,7 @@ const bridge = require('./bridge');
 
 const round2 = x => Math.round(x * 100) / 100;
 
-// ---------- Emparejar equipos por nombre ----------
-const STOP = /\b(esports?|e-sports|gaming|team|club|academy|challengers)\b/g;
-const norm = s => String(s || '').toLowerCase().replace(/\(.*?\)/g, '').replace(STOP, '').replace(/[^a-z0-9]/g, '');
-
-function teamScore(target, name) {
-  const n = norm(name);
-  if (!n) return 0;
-  let best = 0;
-  for (const t of [target.name, target.code].filter(Boolean)) {
-    const x = norm(t);
-    if (!x) continue;
-    if (x === n) return 1;
-    if (x.length >= 3 && n.length >= 3 && (x.includes(n) || n.includes(x))) best = Math.max(best, 0.8);
-  }
-  return best;
-}
-
-// Devuelve { swapped, score } si el par (home, away) corresponde a (a, b), o null si no coincide
-function orient(a, b, home, away) {
-  const direct = teamScore(a, home) + teamScore(b, away);
-  const swapped = teamScore(a, away) + teamScore(b, home);
-  if (Math.max(direct, swapped) < 1.5) return null;
-  return { swapped: swapped > direct, score: Math.max(direct, swapped) };
-}
-
+const { norm, teamScore, orient } = require('./equipos');
 
 // ---------- Nombres de mercado ----------
 function marketLabel(type, period, teamName) {
@@ -207,8 +183,8 @@ function sectionsInto(book, imp) {
   return n;
 }
 
-// Resto de mercados leídos de la página (Betway): ganador, hándicaps y totales van a las filas comunes
-// con Winamax; lo demás (primera sangre, dragones, resultado exacto…) sale como mercado propio de la casa
+// Resto de mercados leídos de la página (Betway y Bet365): ganador ("Ganará" en bet365), hándicaps y totales van a las filas comunes
+// con Winamax ("Total de víctimas" = total de kills); lo demás (primera sangre, dragones, resultado exacto…) sale como mercado propio de la casa
 const sentence = t => { const x = String(t).toLowerCase().trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
 function marketsInto(book, imp, match) {
   const BK = BOOK_LABEL[imp.book];
@@ -222,7 +198,7 @@ function marketsInto(book, imp, match) {
   let n = 0;
   for (const mk of imp.markets || []) {
     const period = mk.map || 0;
-    const rest = mk.title.replace(/^mapa\s*\d+\s*[-·:]\s*/i, '').trim();
+    const rest = mk.title.replace(/^(mapa\s*\d+|\d\s*º\s*mapa)\s*[-·:]\s*/i, '').trim(); // "Mapa 1 - " (Betway), "1º mapa - " (Bet365)
     const lo = rest.toLowerCase();
     const outs = (mk.outcomes || []).filter(o => o.price > 1);
     if (!outs.length) continue;
@@ -231,7 +207,7 @@ function marketsInto(book, imp, match) {
     const overOf = o => /^(m[aá]s|over)/i.test(o.name);
     const label = period ? `Mapa ${period} · ${sentence(rest)}` : sentence(rest);
     n++;
-    if (outs.length === 2 && sides[0] && sides[1] && sides[0] !== sides[1] && /ganador|vencedor|resultado del partido|moneyline/.test(lo) && !OBJ.test(lo)) {
+    if (outs.length === 2 && sides[0] && sides[1] && sides[0] !== sides[1] && /ganador|ganar[aá]|vencedor|resultado del partido|moneyline/.test(lo) && !OBJ.test(lo)) {
       book.addStd('moneyline', period, null, BK, { [sides[0]]: outs[0].price, [sides[1]]: outs[1].price }, true);
     } else if (/h[aá]ndicap/.test(lo) && sides.every(Boolean) && !OBJ.test(lo)) {
       // Pares (equipo A con línea h, equipo B con -h)
@@ -240,7 +216,7 @@ function marketsInto(book, imp, match) {
         const ob = outs.find((o, i) => sides[i] === 'b' && lineOf(o) === (h == null ? null : -h));
         if (h != null && ob) book.addStd('spread', period, h, BK, { a: oa.price, b: ob.price }, true);
       }
-    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos/.test(lo) && !OBJ.test(lo)) {
+    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos|v[ií]ctimas/.test(lo) && !OBJ.test(lo)) {
       const team = mentions(rest);
       const lines = [...new Set(outs.map(lineOf).filter(v => v != null).map(Math.abs))];
       for (const l of lines) {
@@ -269,18 +245,23 @@ function marketsInto(book, imp, match) {
   return n;
 }
 
+// Mete una importación (una casa, una página) en el acumulador; devuelve cuántos mercados ha leído
+function intoBook(book, match, imp) {
+  if (imp.book === 'winamax') {
+    const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
+    return winamaxInto(book, match, imp.state, { e: { id: imp.matchId }, o });
+  }
+  return sectionsInto(book, imp) + marketsInto(book, imp, match);
+}
+
 // match = { a: {name, code}, b: {name, code}, start }
-async function getMatchOdds(_s, match) {
+async function getMatchOdds(match) {
   const book = new Book(match.a, match.b);
   const sources = {}, counts = {};
-  for (const imp of bridge.forMatch(match)) {
+  for (const imp of await bridge.forMatch(match)) {
     const name = BOOK_LABEL[imp.book];
     try {
-      let n;
-      if (imp.book === 'winamax') {
-        const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
-        n = winamaxInto(book, match, imp.state, { e: { id: imp.matchId }, o });
-      } else n = sectionsInto(book, imp) + marketsInto(book, imp, match);
+      const n = intoBook(book, match, imp);
       // Una casa puede llegar en varias páginas (pestañas): se suman
       const prev = counts[name] || { n: 0, ts: 0 };
       counts[name] = { n: prev.n + n, ts: Math.max(prev.ts, imp.ts) };
@@ -291,25 +272,34 @@ async function getMatchOdds(_s, match) {
   return book.result(sources);
 }
 
+// Tras guardar una importación: cuota de ganador (para las tarjetas del calendario) e histórico de cuotas.
+// En el histórico sólo se apunta una cuota cuando cambia, para que la tabla no crezca sin control.
+async function afterImport(match, imp) {
+  const book = new Book(match.a, match.b);
+  intoBook(book, match, imp);
+  const ml = book.markets.get('moneyline|0||');
+  const price = id => ml?.outcomes.find(x => x.id === id)?.prices[BOOK_LABEL[imp.book]];
+  if (price('a') && price('b')) await bridge.setMoneyline(imp.id, { a: price('a'), b: price('b') });
+  const rows = [];
+  for (const m of book.markets.values()) {
+    for (const o of m.outcomes) {
+      const p = o.prices[BOOK_LABEL[imp.book]];
+      if (p) rows.push({ market_key: m.key, market: m.group, outcome_id: o.id, outcome: o.label, line: m.line, price: p });
+    }
+  }
+  await bridge.recordPrices(imp.matchKey, imp.book, rows);
+}
+
 // Cuota de ganador para las tarjetas del calendario: la mejor de las casas ya enviadas
-function getBoardFor(events) {
+async function getBoardFor(events) {
+  const list = (events || []).filter(ev => ev?.a && ev?.b);
+  const best = await bridge.moneylines(list);
   const out = {};
-  for (const ev of events || []) {
-    const ml = book => book.markets.get('moneyline|0||');
-    const b = new Book(ev.a, ev.b);
-    for (const imp of bridge.forMatch(ev)) {
-      if (imp.book === 'winamax') {
-        const o = orient(ev.a, ev.b, imp.home, imp.away) || { swapped: false };
-        winamaxInto(b, ev, imp.state, { e: { id: imp.matchId }, o });
-      } else marketsInto(b, imp, ev);
-    }
-    const m = ml(b);
-    if (m) {
-      const best = id => Math.max(0, ...Object.values(m.outcomes.find(x => x.id === id)?.prices || {}));
-      if (best('a') && best('b')) out[ev.id] = { a: best('a'), b: best('b') };
-    }
+  for (const ev of list) {
+    const m = best[bridge.keyOf(ev)];
+    if (m && m.a && m.b) out[ev.id] = m;
   }
   return out;
 }
 
-module.exports = { getMatchOdds, getBoardFor, orient, winamaxInto };
+module.exports = { getMatchOdds, getBoardFor, afterImport, orient, winamaxInto };

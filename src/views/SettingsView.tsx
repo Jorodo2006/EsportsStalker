@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, ChevronDown, Loader2, PlugZap, XCircle } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import type { Settings } from '@/lib/types';
+import { fmtTime } from '@/lib/format';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
 
 type Check = { name: string; ok?: boolean; msg?: string; ms?: number };
@@ -89,7 +91,8 @@ export default function SettingsView() {
           <ul className="space-y-3 text-sm text-zinc-300">
             <li><b>Calendario, resultados y directo:</b> API de lolesports.com (no oficial, gratis).</li>
             <li><b>Stats de jugadores y equipos:</b> Leaguepedia (lol.fandom.com), gratis.</li>
-            <li><b>Cuotas:</b> Bet365, Winamax y Betway, leídas de sus webs en tu Chrome con el marcador. No se usa ninguna API de cuotas.</li>
+            <li><b>Cuotas:</b> Bet365, Winamax y Betway, leídas de sus webs en tu Chrome con el marcador o la extensión. No se usa ninguna API de cuotas.</li>
+            <li><b>Datos guardados:</b> apuestas, ajustes, cuotas e histórico en PostgreSQL, en el backend de Docker (<code>npm run backend</code>).</li>
           </ul>
           {!!checks.length && (
             <div className="mt-5 space-y-2 border-t border-zinc-800 pt-4">
@@ -107,10 +110,68 @@ export default function SettingsView() {
           )}
         </Card>
 
+        <AutoOddsCard />
         <ExtensionCard />
         <MarcadorCard />
       </div>
     </>
+  );
+}
+
+// Lecturas programadas: el backend crea un trabajo por partido cada X minutos y la extensión lo recoge sola
+function AutoOddsCard() {
+  const { settings, saveSettings, toast } = useApp();
+  const [f, setF] = useState({ on: true, min: '5', hours: '6' });
+  useEffect(() => {
+    if (settings) setF({ on: settings.oddsAutoEnabled !== false, min: String(settings.oddsRefreshMinutes ?? 5), hours: String(settings.oddsAutoHours ?? 6) });
+  }, [settings]);
+  const { data: st } = useQuery({
+    queryKey: ['autoStatus'],
+    queryFn: () => window.api.odds.autoStatus?.() ?? Promise.resolve(null),
+    refetchInterval: 10_000
+  });
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    await saveSettings({
+      oddsAutoEnabled: f.on,
+      oddsRefreshMinutes: Math.min(240, Math.max(2, parseInt(f.min, 10) || 5)),
+      oddsAutoHours: Math.min(48, Math.max(1, parseInt(f.hours, 10) || 6))
+    });
+    toast('Lecturas automáticas guardadas');
+  }
+  // La extensión pregunta cada 30 s: si hace más de 2 min que no lo hace, Chrome está cerrado o no la tiene
+  const chromeOk = !!st?.lastPoll && Date.now() - st.lastPoll < 120e3;
+  return (
+    <Card className="xl:col-span-2" title="Cuotas automáticas">
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-4">
+        <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.on} onChange={e => setF(p => ({ ...p, on: e.target.checked }))} />
+          Actualizar solas
+        </label>
+        <div className="w-40"><Field label="Cada (minutos)"><Input type="number" min={2} max={240} value={f.min} onChange={e => setF(p => ({ ...p, min: e.target.value }))} /></Field></div>
+        <div className="w-56"><Field label="Partidos que empiezan en (horas)"><Input type="number" min={1} max={48} value={f.hours} onChange={e => setF(p => ({ ...p, hours: e.target.value }))} /></Field></div>
+        <Button type="submit" size="sm" className="h-9">Guardar</Button>
+      </form>
+      <p className="mt-3 text-xs text-zinc-500">
+        La extensión de Chrome lee los partidos de uno en uno en pestañas de fondo. Hace falta que <b>Chrome esté abierto</b> con la extensión cargada;
+        si no lo está, las lecturas esperan y se descartan a los 10 minutos.
+      </p>
+      {st && (
+        <div className="mt-4 space-y-2 border-t border-zinc-800 pt-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className={chromeOk ? 'h-2 w-2 rounded-full bg-emerald-400' : 'h-2 w-2 rounded-full bg-rose-400'} />
+            {chromeOk ? 'Extensión conectada' : st.lastPoll ? `La extensión no responde desde las ${fmtTime(st.lastPoll)}` : 'La extensión aún no ha conectado (¿Chrome abierto y extensión recargada?)'}
+            <span className="ml-auto text-xs text-zinc-500">{st.queued} en cola · {st.running} leyendo{st.lastRun ? ` · revisado a las ${fmtTime(st.lastRun)}` : ''}</span>
+          </div>
+          {st.error && <div className="text-rose-300">{st.error}</div>}
+          {st.enabled && (st.matches.length
+            ? <ul className="space-y-1 text-zinc-400">{st.matches.map(m => (
+              <li key={m.id} className="flex gap-2"><span className="w-12 shrink-0 tabular-nums text-zinc-500">{fmtTime(m.start)}</span>{m.a.name} vs {m.b.name}<span className="text-zinc-600">· {m.league}</span></li>
+            ))}</ul>
+            : <div className="text-zinc-500">Ningún partido empieza en las próximas {st.hours} h.</div>)}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -120,8 +181,8 @@ function ExtensionCard() {
   const [folder, setFolder] = useState('');
   useEffect(() => { window.api.extension.folder().then(setFolder).catch(() => {}); }, []);
   return (
-    <Card className="xl:col-span-2" title="Cuotas automáticas (extensión de Chrome)">
-      <p className="mb-2 text-sm text-zinc-400">Con la extensión, el botón <b>Actualizar cuotas</b> de cada partido abre Bet365, Winamax y Betway en pestañas de fondo de tu Chrome, busca el partido y trae las cuotas sin que hagas nada más.</p>
+    <Card className="xl:col-span-2" title="Extensión de Chrome">
+      <p className="mb-2 text-sm text-zinc-400">La extensión abre Bet365, Winamax y Betway en pestañas de fondo de tu Chrome, busca el partido y trae las cuotas sin que hagas nada más: cuando pulsas <b>Actualizar cuotas</b> en un partido y cada pocos minutos con las lecturas automáticas.</p>
       <ol className="list-decimal space-y-1.5 pl-5 text-sm text-zinc-400">
         <li>En Chrome abre <code>chrome://extensions</code> y activa el <b>Modo de desarrollador</b> (arriba a la derecha).</li>
         <li>Pulsa <b>Cargar descomprimida</b> y elige esta carpeta: <code className="break-all text-zinc-300">{folder || '…'}</code></li>

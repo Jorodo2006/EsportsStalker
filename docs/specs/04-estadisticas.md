@@ -1,7 +1,7 @@
 # 04 · Estadísticas de jugadores y equipos
 
 Fuente: **Leaguepedia** (`https://lol.fandom.com/api.php`, API *Cargo*). Es gratis y no necesita clave.
-Código: `electron/services/leaguepedia.js`, `src/views/PlayersView.tsx`, `src/components/SearchBox.tsx`.
+Código: `server/services/esports/leaguepedia.js` (servicio `esports`; caché en `esports.cache`), `src/views/PlayersView.tsx`, `src/components/SearchBox.tsx`.
 
 ## Límite de peticiones
 

@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { CalendarDays, ChevronDown, CircleDollarSign, Layers, Settings as Cog, Users, Wallet, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { CalendarDays, ChevronDown, CircleDollarSign, Layers, ServerCrash, Settings as Cog, Users, Wallet, X } from 'lucide-react';
 import { useApp, type View } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { BetFormDialog, comboOdds } from '@/components/BetForm';
 import { Button } from '@/components/ui';
+import type { BackendStatus } from '@/lib/types';
 import MatchesView from '@/views/MatchesView';
 import PlayersView from '@/views/PlayersView';
 import BetsView from '@/views/BetsView';
@@ -55,6 +56,7 @@ export default function App() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-7xl px-8 py-7">
+          <BackendBanner />
           {view === 'matches' && <MatchesView />}
           {view === 'players' && <PlayersView />}
           {view === 'bets' && <BetsView />}
@@ -67,6 +69,34 @@ export default function App() {
       {toastMsg && (
         <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm shadow-xl">{toastMsg}</div>
       )}
+    </div>
+  );
+}
+
+// Aviso si el backend (Docker) no responde. Cuando vuelve, se recargan todos los datos.
+function BackendBanner() {
+  const qc = useQueryClient();
+  const { data, refetch } = useQuery({
+    queryKey: ['backend'],
+    // null: no responde; false: el preload es anterior (recarga en caliente) y no se puede saber
+    queryFn: async (): Promise<BackendStatus | null | false> => {
+      if (!window.api.backend) return false;
+      try { return await window.api.backend.status(); } catch { return null; }
+    },
+    refetchInterval: 15_000,
+    retry: false
+  });
+  useEffect(() => window.api.onBackendStatus?.(up => { refetch(); if (up) qc.invalidateQueries(); }), [qc, refetch]);
+  const down = data === null || (!!data && Object.values(data).some(v => !v));
+  const failing = data ? Object.entries(data).filter(([, v]) => !v).map(([k]) => k) : [];
+  if (!down) return null;
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm">
+      <ServerCrash size={18} className="mt-0.5 shrink-0 text-rose-400" />
+      <div>
+        <div className="font-semibold text-rose-200">{failing.length ? `No responde: ${failing.join(', ')}` : 'El servidor de la app no responde'}</div>
+        <div className="text-zinc-400">Abre Docker Desktop y, en la carpeta del proyecto, ejecuta <code className="text-zinc-200">npm run backend</code>. Los datos vuelven solos en cuanto arranque.</div>
+      </div>
     </div>
   );
 }
