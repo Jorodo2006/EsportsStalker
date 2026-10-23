@@ -21,6 +21,7 @@ Código: `server/services/esports/leaguepedia.js` (servicio `esports`; caché en
 | `playerGames(page)` | ScoreboardPlayers + ScoreboardGames | Últimas partidas profesionales del jugador |
 | `teamGames(team)` | ScoreboardGames | Últimas partidas del equipo, % de victorias y racha |
 | `teamRoster(team)` | Players | Plantilla |
+| `teamForm(name, code)` | ScoreboardPlayers | Últimas 20 partidas de cada jugador con el equipo, para el valor de las líneas de jugador ([03-cuotas.md](03-cuotas.md)) |
 
 `resolveTeam` prueba en este orden, y para en la primera que encuentra:
 

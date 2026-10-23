@@ -33,6 +33,7 @@ const routes = [
   ['GET', '/api/stats/resolve-team', lp(({ query: q }) => leaguepedia.resolveTeam(need(q.name, 'el equipo'), q.code))],
   ['GET', '/api/stats/player-games', lp(({ query: q }) => leaguepedia.playerGames(need(q.page, 'el jugador')))],
   ['GET', '/api/stats/team-games', lp(({ query: q }) => leaguepedia.teamGames(need(q.team, 'el equipo')))],
+  ['GET', '/api/stats/team-form', lp(({ query: q }) => leaguepedia.teamForm(need(q.name, 'el equipo'), q.code))],
   ['GET', '/api/stats/team-roster', lp(({ query: q }) => leaguepedia.teamRoster(need(q.team, 'el equipo')))]
 ];
 

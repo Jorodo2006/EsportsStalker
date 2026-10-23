@@ -174,6 +174,28 @@ async function teamRoster(team) {
   });
 }
 
+// Forma reciente de los jugadores de un equipo (para estimar las líneas de jugador): una sola consulta con las
+// últimas partidas de todos, en vez de una por jugador, por el límite de Leaguepedia. Sólo cuentan las partidas
+// con este equipo. Devuelve { team, players: [{ name, link, role, games: [{ k, d, a, win, date }] }] }, lo más reciente primero.
+async function teamForm(name, code, perPlayer = 20) {
+  const team = await resolveTeam(name, code);
+  const rows = await cargo({
+    tables: 'ScoreboardPlayers=SP',
+    fields: 'SP.Link=link,SP.Name=name,SP.Role=role,SP.Kills=kills,SP.Deaths=deaths,SP.Assists=assists,SP.PlayerWin=win,SP.DateTime_UTC=date',
+    where: `SP.Team="${esc(team)}"`,
+    order_by: 'SP.DateTime_UTC DESC',
+    limit: 250
+  });
+  const byLink = new Map();
+  for (const r of rows) {
+    if (!r.link) continue;
+    if (!byLink.has(r.link)) byLink.set(r.link, { name: r.name || r.link, link: r.link, role: r.role, games: [] });
+    const p = byLink.get(r.link);
+    if (p.games.length < perPlayer) p.games.push({ k: Number(r.kills) || 0, d: Number(r.deaths) || 0, a: Number(r.assists) || 0, win: r.win === 'Yes', date: r.date });
+  }
+  return { team, players: [...byLink.values()] };
+}
+
 // Equipos por nombre o siglas (para las sugerencias del buscador)
 async function searchTeams(q) {
   q = String(q || '').trim();
@@ -216,4 +238,4 @@ async function resolveTeam(name, code) {
   return v;
 }
 
-module.exports = { init, configure, searchPlayers, searchTeams, resolveTeam, playerGames, teamGames, teamRoster };
+module.exports = { init, configure, searchPlayers, searchTeams, resolveTeam, playerGames, teamGames, teamRoster, teamForm };

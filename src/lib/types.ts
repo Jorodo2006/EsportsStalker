@@ -99,6 +99,10 @@ export interface TeamGame {
 export interface TeamHit { name: string; page: string; short: string; region: string; disbanded: boolean }
 export interface RosterPlayer { id: string; page: string; role: string; country: string }
 
+// Últimas partidas de cada jugador con su equipo actual (Leaguepedia), lo más reciente primero
+export interface FormGame { k: number; d: number; a: number; win: boolean; date: string }
+export interface TeamForm { team: string; players: { name: string; link: string; role: string; games: FormGame[] }[] }
+
 export interface MarketOutcome { id: string; label: string; prices: Record<string, number> }
 
 export interface MarketLine {
@@ -167,6 +171,7 @@ export interface Api {
     playerGames(page: string): Promise<PlayerGame[]>;
     teamGames(team: string): Promise<TeamGame[]>;
     teamRoster(team: string): Promise<RosterPlayer[]>;
+    teamForm(name: string, code?: string): Promise<TeamForm>;
   };
   odds: {
     match(m: { a: TeamRef; b: TeamRef; start?: string }): Promise<MatchOdds>;

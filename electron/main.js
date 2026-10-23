@@ -107,6 +107,7 @@ function registerIpc() {
   handle('stats:playerGames', page => get('/api/stats/player-games', { page }));
   handle('stats:teamGames', t => get('/api/stats/team-games', { team: t }));
   handle('stats:teamRoster', t => get('/api/stats/team-roster', { team: t }));
+  handle('stats:teamForm', (name, code) => get('/api/stats/team-form', { name, code }));
 
   handle('odds:match', match => call('POST', '/api/odds/match', { match: matchOf(match) }));
   // Recibe [{ id, a, b, start }] del calendario y devuelve { id: { a, b } } con la cuota de ganador

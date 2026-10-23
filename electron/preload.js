@@ -29,7 +29,8 @@ contextBridge.exposeInMainWorld('api', {
     resolveTeam: (name, code) => call('stats:resolveTeam', name, code),
     playerGames: p => call('stats:playerGames', p),
     teamGames: t => call('stats:teamGames', t),
-    teamRoster: t => call('stats:teamRoster', t)
+    teamRoster: t => call('stats:teamRoster', t),
+    teamForm: (name, code) => call('stats:teamForm', name, code)
   },
   odds: {
     match: m => call('odds:match', m), board: evs => call('odds:board', evs), auto: m => call('odds:auto', m),

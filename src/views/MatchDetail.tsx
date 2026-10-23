@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, BarChart3, ChevronDown, ChevronsDownUp, ChevronsUpDown, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useApp, useRefreshMs } from '@/lib/app-context';
 import { cn, fmtDay, fmtTime, groupBy, k, odd, pct } from '@/lib/format';
-import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamRef } from '@/lib/types';
+import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamForm, TeamRef } from '@/lib/types';
+import { MIN_GAMES, estimate, ev, findPlayer, mapWinA, parseStat } from '@/lib/edge';
 import { Badge, Button, Empty, ErrorBox, Loading, TeamLogo, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
 
@@ -188,6 +189,17 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
   });
   // Cuotas que llegan desde el marcador o la extensión
   useEffect(() => window.api.onOddsImported(() => { refetch(); }), [refetch]);
+  // Forma de los jugadores (Leaguepedia) para estimar el valor de las líneas de jugador; sólo si hay líneas
+  const hasLines = !!data?.markets.some(isPlayerLine);
+  const formOf = (t: TeamRef) => ({
+    queryKey: ['teamForm', t.name, t.code], enabled: hasLines, staleTime: 3600e3, retry: false,
+    queryFn: () => window.api.stats.teamForm ? window.api.stats.teamForm(t.name, t.code) : Promise.reject(new Error('Reinicia la app para cargar la forma de los jugadores'))
+  });
+  const formA = useQuery(formOf(a)), formB = useQuery(formOf(b));
+  const value: ValueCtx = {
+    forms: [formA.data, formB.data], markets: data?.markets ?? [], bestOf: match.bestOf,
+    loading: formA.isLoading || formB.isLoading, error: (formA.error || formB.error)?.message
+  };
   async function pasteMarcador() {
     try {
       const r = await window.api.marcador.paste({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code } });
@@ -270,7 +282,7 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
             return (
               <section key={s} className="space-y-3">
                 {section === 'all' && <h3 className="pt-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{SECTION_LABEL(s)}</h3>}
-                {s === 'players' && <PlayerLines markets={ms.filter(isPlayerLine)} books={books} onPick={pick} open={!closed.has('__jugadores')} onToggle={() => toggle('__jugadores')} />}
+                {s === 'players' && <PlayerLines markets={ms.filter(isPlayerLine)} books={books} value={value} onPick={pick} open={!closed.has('__jugadores')} onToggle={() => toggle('__jugadores')} />}
                 <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
                   {[...groupBy(ms.filter(m => !isPlayerLine(m)), m => m.group)].map(([group, lines]) => (
                     <MarketCard key={group} title={shortGroup(group)} group={group} lines={lines} books={books} onPick={pick}
@@ -361,17 +373,65 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
   );
 }
 
-// Líneas de jugador (kills, asistencias, muertes): una tabla por estadística con Más / Menos de cada casa
-function PlayerLines({ markets, books, onPick, open, onToggle }: { markets: MarketLine[]; books: string[]; onPick: Pick; open: boolean; onToggle: () => void }) {
+// Lo que hace falta para estimar el valor de las líneas de jugador
+type ValueCtx = { forms: (TeamForm | undefined)[]; markets: MarketLine[]; bestOf: number | null; loading: boolean; error?: string };
+type Value = { pOver: number; pUnder: number; side: 'over' | 'under'; edge: number; bk: string; title: string } | { reason: string };
+const VALUE_MIN = 0.03; // a partir de qué valor esperado se resalta una cuota
+
+// Probabilidad estimada de la línea y la mejor apuesta (lado y casa con más valor esperado)
+function lineValue(m: MarketLine, name: string, books: string[], ctx: ValueCtx): Value {
+  const st = parseStat(m.key.split('|')[1]);
+  if (!st || m.line == null) return { reason: 'Sólo se estiman líneas de un mapa' };
+  if (ctx.loading) return { reason: 'Cargando la forma de los jugadores…' };
+  if (ctx.error) return { reason: ctx.error };
+  const hit = findPlayer(name, ctx.forms);
+  if (!hit) return { reason: `${name} no aparece en las últimas partidas de Leaguepedia de estos equipos` };
+  const games = hit.player.games;
+  if (games.length < MIN_GAMES) return { reason: `Sólo ${games.length} partidas de ${name} con este equipo` };
+  const pA = mapWinA(ctx.markets, st.map, ctx.bestOf);
+  const pWin = pA == null ? null : hit.side === 0 ? pA : 1 - pA;
+  const e = estimate(games, st.stat, m.line, pWin);
+  let best = { side: 'over' as 'over' | 'under', edge: -Infinity, bk: '' };
+  const lines: string[] = [];
+  for (const side of ['over', 'under'] as const) {
+    const o = m.outcomes.find(x => x.id === side);
+    const p = side === 'over' ? e.over : e.under;
+    for (const bk of books) {
+      const price = o?.prices[bk];
+      if (!price) continue;
+      const v = ev(p, e.push, price);
+      if (v > best.edge) best = { side, edge: v, bk };
+      lines.push(`${bk} ${side === 'over' ? 'Más' : 'Menos'} ${odd(price)}: implícita ${pct(1 / price)} · valor ${v > 0 ? '+' : ''}${pct(v)}`);
+    }
+  }
+  if (!best.bk) return { reason: 'Sin cuotas' };
+  const title = [
+    `${hit.player.name}: media ${e.mean.toFixed(1)} en sus últimas ${e.n} partidas; superó ${m.line} en ${e.hits}`,
+    pWin == null ? 'Sin cuota de ganador: no se ajusta por la probabilidad de ganar el mapa'
+      : `Probabilidad de que su equipo gane el mapa ${st.map}: ${pct(pWin)} (cuotas sin margen)`,
+    `Estimado: Más ${pct(e.over)} · Menos ${pct(e.under)}${e.push > 0.001 ? ` · Nula ${pct(e.push)}` : ''}`,
+    ...lines
+  ].join('\n');
+  return { pOver: e.over, pUnder: e.under, ...best, title };
+}
+
+// Líneas de jugador (kills, asistencias, muertes): una tabla por estadística con Más / Menos de cada casa,
+// la probabilidad estimada con las stats de los jugadores y el valor de la mejor cuota
+function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
+  markets: MarketLine[]; books: string[]; value: ValueCtx; onPick: Pick; open: boolean; onToggle: () => void;
+}) {
   const stats = useMemo(() => [...new Set(markets.map(m => m.key.split('|')[1]))], [markets]);
   const [stat, setStat] = useState('');
   const [q, setQ] = useState('');
+  const [onlyValue, setOnlyValue] = useState(false);
   const cur = stats.includes(stat) ? stat : stats[0];
   const rows = useMemo(() => markets
     .filter(m => m.key.split('|')[1] === cur)
     .map(m => ({ m, name: (m.outcomes[0]?.label || '').split(' · ')[0] }))
     .filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase()))
-    .sort((x, y) => x.name.localeCompare(y.name) || (x.m.line ?? 0) - (y.m.line ?? 0)), [markets, cur, q]);
+    .map(r => ({ ...r, v: lineValue(r.m, r.name, books, value) }))
+    .filter(r => !onlyValue || ('edge' in r.v && r.v.edge >= VALUE_MIN))
+    .sort((x, y) => x.name.localeCompare(y.name) || (x.m.line ?? 0) - (y.m.line ?? 0)), [markets, cur, q, books, value, onlyValue]);
   const cols = books;
   if (!stats.length) return null;
   return (
@@ -388,38 +448,55 @@ function PlayerLines({ markets, books, onPick, open, onToggle }: { markets: Mark
                 s === cur ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200')}>{s}</button>
           ))}
         </div>
+        <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400" title={`Líneas con un valor esperado de al menos ${pct(VALUE_MIN)}`}>
+          <input type="checkbox" className="accent-amber-500" checked={onlyValue} onChange={e => setOnlyValue(e.target.checked)} />
+          Sólo con valor
+        </label>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar jugador…"
-          className="ml-auto h-7 w-44 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 text-xs outline-none placeholder:text-zinc-600 focus:border-amber-500/60" /></>}
+          className="h-7 w-44 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 text-xs outline-none placeholder:text-zinc-600 focus:border-amber-500/60" /></>}
       </div>
       {open && <div className="overflow-x-auto">
-        <table className="w-full table-fixed" style={{ minWidth: 300 + cols.length * 170 }}>
+        <table className="w-full table-fixed" style={{ minWidth: 520 + cols.length * 170 }}>
           <thead>
             <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               <th className="px-4 py-2 text-left">Jugador</th>
               <th className="w-20 px-2 py-2 text-center">Línea</th>
+              <th className="w-24 px-2 py-2 text-center" title="Probabilidad de Más / Menos estimada con sus últimas partidas (Leaguepedia)">Estimado</th>
+              <th className="w-28 px-2 py-2 text-center" title="Valor esperado de la mejor cuota: probabilidad estimada × cuota − 1">Valor</th>
               {cols.map(bk => <th key={bk} colSpan={2} className="w-[170px] border-l border-zinc-800/60 px-2 py-2 text-center normal-case tracking-normal"><BookHead name={bk} /></th>)}
             </tr>
             <tr className="border-b border-zinc-800/60 text-[10px] text-zinc-600">
-              <th /><th />
+              <th /><th /><th /><th />
               {cols.map(bk => [<th key={bk + 'o'} className="border-l border-zinc-800/60 pb-1.5 font-normal">Más</th>, <th key={bk + 'u'} className="pb-1.5 font-normal">Menos</th>])}
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ m, name }, i) => {
+            {rows.map(({ m, name, v }, i) => {
               const first = i === 0 || rows[i - 1].name !== name;
               const [over, under] = [m.outcomes.find(o => o.id === 'over'), m.outcomes.find(o => o.id === 'under')];
               const bo = over ? bestOf(over.prices, cols) : null, bu = under ? bestOf(under.prices, cols) : null;
+              const good = 'edge' in v && v.edge >= VALUE_MIN;
+              const ring = (side: 'over' | 'under', bk: string) => good && v.side === side && v.bk === bk ? 'ring-2 ring-amber-400/70' : '';
               return (
                 <tr key={m.key} className={cn('hover:bg-zinc-800/20', first && i > 0 && 'border-t border-zinc-800/60')}>
                   <td className="px-4 py-1 text-sm font-medium">{first ? name : ''}</td>
                   <td className="px-2 py-1 text-center text-sm tabular-nums text-zinc-400">{m.line}</td>
+                  {'edge' in v ? <>
+                    <td className="cursor-help px-2 py-1 text-center text-xs tabular-nums text-zinc-400" title={v.title}>{pct(v.pOver)} / {pct(v.pUnder)}</td>
+                    <td className="cursor-help px-2 py-1 text-center text-xs tabular-nums" title={v.title}>
+                      <span className={cn('font-semibold', good ? 'text-emerald-400' : v.edge > 0 ? 'text-zinc-300' : 'text-zinc-600')}>
+                        {v.edge > 0 ? '+' : ''}{pct(v.edge)}
+                      </span>
+                      <span className="ml-1 text-zinc-500">{v.side === 'over' ? 'Más' : 'Menos'}</span>
+                    </td>
+                  </> : <td colSpan={2} className="cursor-help px-2 py-1 text-center text-xs text-zinc-700" title={v.reason}>–</td>}
                   {cols.map(bk => [
                     <td key={bk + 'o'} className="border-l border-zinc-800/60 py-1 pl-2 pr-1">
-                      <OddButton className="w-16" price={over?.prices[bk]} best={!!bo && bo.n > 1 && over?.prices[bk] === bo.p}
+                      <OddButton className={cn('w-16', ring('over', bk))} price={over?.prices[bk]} best={!!bo && bo.n > 1 && over?.prices[bk] === bo.p}
                         title={`${bk}: ${over?.label}`} onClick={add => over && onPick(m.group, over.label, bk, over.prices[bk], add)} />
                     </td>,
                     <td key={bk + 'u'} className="py-1 pl-1 pr-2">
-                      <OddButton className="w-16" price={under?.prices[bk]} best={!!bu && bu.n > 1 && under?.prices[bk] === bu.p}
+                      <OddButton className={cn('w-16', ring('under', bk))} price={under?.prices[bk]} best={!!bu && bu.n > 1 && under?.prices[bk] === bu.p}
                         title={`${bk}: ${under?.label}`} onClick={add => under && onPick(m.group, under.label, bk, under.prices[bk], add)} />
                     </td>
                   ])}
@@ -428,7 +505,8 @@ function PlayerLines({ markets, books, onPick, open, onToggle }: { markets: Mark
             })}
           </tbody>
         </table>
-        {!rows.length && <p className="px-4 py-6 text-center text-sm text-zinc-500">Ningún jugador coincide</p>}
+        {!rows.length && <p className="px-4 py-6 text-center text-sm text-zinc-500">{onlyValue ? 'Ninguna línea con valor' : 'Ningún jugador coincide'}</p>}
+        {value.error && <p className="border-t border-zinc-800/60 px-4 py-2 text-xs text-rose-400">No se pudo estimar: {value.error}</p>}
       </div>}
     </div>
   );

@@ -128,6 +128,17 @@ Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos (lectu
   `bet365.png`, `winamax.png` y `betway.png` en `src/assets/books/`; si no están, se pinta una insignia con los colores de la marca.
 - **Mejor cuota**: va en verde sólo si hay al menos 2 casas con precio. Se enseña también la probabilidad sin margen.
 - **Líneas de jugador** (`PlayerLines`): tabla jugador × línea × casa (Más/Menos), con pestañas por estadística y buscador.
+- **Valor de las líneas de jugador** (`src/lib/edge.ts`): columnas *Estimado* (probabilidad de Más / Menos) y *Valor*
+  (valor esperado de la mejor cuota, `p × cuota − 1`). La cuota con valor de al menos un 3 % se marca en ámbar y hay un
+  filtro *Sólo con valor*. Al pasar el ratón se ve la media, cuántas veces superó la línea, la probabilidad implícita de
+  cada casa y la de ganar el mapa.
+  - Datos: `GET /api/stats/team-form` (una consulta a Leaguepedia por equipo, últimas 20 partidas de cada jugador con
+    ese equipo). El jugador de la casa se busca por nombre normalizado (sin acentos ni lo que va entre paréntesis).
+  - Modelo: binomial negativa con la media ponderada (las partidas recientes pesan más) y la dispersión de sus partidas.
+    Se mezcla la forma en victorias y en derrotas según la probabilidad sin margen de que su equipo gane el mapa (cuota
+    de ganador del mapa o, si no hay, la de la serie convertida a un mapa). Líneas enteras: la nula devuelve la apuesta.
+  - Sólo se estiman líneas de un mapa y jugadores con al menos 5 partidas. No tiene en cuenta rival, campeones ni parche:
+    es una referencia, no una garantía.
 - **Clic en una cuota**: abre la apuesta ya rellena.
 - **Clic derecho o Mayús+clic**: añade la cuota al boleto de combinada (ver [05-apuestas.md](05-apuestas.md)).
 
