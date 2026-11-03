@@ -8,12 +8,12 @@ Código: `server/services/bets/store.js` (guardado en `bets.bets` / `bets.bet_le
 ```ts
 type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfwon' | 'halflost';
 interface Bet {
-  id; date /* YYYY-MM-DD */; league; event; market; selection; bookmaker;
+  id; date /* YYYY-MM-DD */; sport? /* 'lol' | 'basket' | 'mix': cada app (LoL, baloncesto) ve las suyas y las mezcladas */; league; event; market; selection; bookmaker;
   odds; stake; status: BetStatus; cashout; notes;
   legs?: BetLeg[];            // combinada (2 o más selecciones)
 }
 type LegStatus = 'pending' | 'won' | 'lost' | 'void';
-interface BetLeg { event; league; market; selection; odds; status: LegStatus }
+interface BetLeg { event; league; market; selection; odds; status: LegStatus; sport? }
 type SlipLeg = BetLeg & { bookmaker? };              // selección en el boleto
 type BetDraft = Partial<Bet> & { fromSlip?: boolean };
 ```

@@ -22,7 +22,14 @@ const MARKETS: Option[] = [
   ...['Ganador del torneo', 'Ganador del grupo', 'Pasa de fase', 'Llega a la final', 'Región ganadora', 'Equipo con más kills del torneo']
     .map(value => ({ value, group: 'Torneo y especiales' }))
 ];
-const BOOKS = ['Bet365', 'Winamax', 'Betway'];
+// Mercados de baloncesto: los del analizador de jugadores y los de partido
+const BASKET_MARKETS: Option[] = [
+  ...['Ganador del partido', 'Hándicap', 'Total de puntos', 'Ganador del 1.er cuarto', 'Total de puntos de un equipo']
+    .map(value => ({ value, group: 'Partido' })),
+  ...['Puntos', 'Rebotes', 'Asistencias', 'Triples anotados', 'Pts + Reb + Ast', 'Pts + Reb', 'Pts + Ast', 'Reb + Ast', 'Robos',
+    'Tapones', 'Robos + Tapones', 'Pérdidas', 'Doble-doble'].map(m => ({ value: `Jugador · ${m}`, group: 'Jugadores' }))
+];
+const BOOKS = ['Winamax', 'Betway'];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const LEG_LABEL: Record<LegStatus, string> = { pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula' };
@@ -54,7 +61,7 @@ export function BetFormDialog() {
   useEffect(() => {
     if (!betDraft) return;
     const { legs: dl, fromSlip: _, ...rest } = betDraft;
-    const d: BetDraft = { date: today(), market: 'Ganador del partido', status: 'pending', ...rest };
+    const d: BetDraft = { date: today(), market: 'Ganador del partido', status: 'pending', sport: 'lol', ...rest };
     setF(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v == null || v === 0 && k === 'cashout' ? '' : String(v)])));
     setLegs(dl?.length ? dl.map(l => ({ ...emptyLeg(), ...l, status: l.status || 'pending' })) : null);
   }, [betDraft]);
@@ -66,7 +73,9 @@ export function BetFormDialog() {
   const usedMarkets = useMemo(() => [...new Set(bets.flatMap(b => b.legs ? b.legs.map(l => l.market) : [b.market]).filter(Boolean))]
     .map(value => ({ value, group: 'Usados antes' })), [bets]);
   // Mercados: primero los que el comparador ya leyó de ese partido (si se abrió su ficha), después la lista completa
-  const marketsFor = (event: string): Option[] => {
+  const nba = f.sport === 'basket';
+  const marketsFor = (event: string, sport = f.sport): Option[] => {
+    if (sport === 'basket') return [...BASKET_MARKETS, ...usedMarkets];
     const read: Option[] = [];
     for (const [, d] of qc.getQueriesData<Schedule>({ queryKey: ['schedule'] }))
       for (const ev of d?.events ?? []) if (ev.teams.length === 2 && event && matchName(ev) === event)
@@ -75,7 +84,7 @@ export function BetFormDialog() {
   };
 
   function toCombo() {
-    const first: BetLeg = { event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection || '', odds: parseFloat(f.odds) || 0, status: 'pending' };
+    const first: BetLeg = { event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection || '', odds: parseFloat(f.odds) || 0, status: 'pending', sport: nba ? 'basket' : 'lol' };
     setLegs(first.selection || first.event ? [first, emptyLeg()] : [emptyLeg(), emptyLeg()]);
   }
   function toSingle() {
@@ -120,16 +129,25 @@ export function BetFormDialog() {
   return (
     <Dialog open={!!betDraft} onClose={closeBet} title={title} wide={!!legs}>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm">
-          {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
-            <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
-              className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', !!legs === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
-          ))}
+        <div className="flex gap-2">
+          <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm">
+            {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
+              <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
+                className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', !!legs === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
+            ))}
+          </div>
+          <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm"
+            title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de LoL y de baloncesto'}>
+            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }].map(x => (
+              <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
+                className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', (f.sport || 'lol') === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
+            ))}
+          </div>
         </div>
         <div className={cn('grid gap-3', legs ? 'grid-cols-2' : 'grid-cols-3')}>
           <Field label="Fecha"><Input type="date" required value={f.date || ''} onChange={set('date')} /></Field>
-          {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder="LEC, LCK, Worlds…" value={f.league || ''} onChange={set('league')} /></Field>}
-          <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Bet365, Pinnacle…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
+          {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
+          <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Winamax, Betway…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
         </div>
         {legs ? (
           <div className="rounded-xl border border-zinc-800">
@@ -139,9 +157,11 @@ export function BetFormDialog() {
             <div className="flex flex-col gap-2 p-3">
               {legs.map((l, i) => (
                 <div key={i} className="grid grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] items-center gap-2">
-                  <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
-                    onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />
-                  <OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event)} onChange={v => setLeg(i, { market: v })} />
+                  {l.sport === 'basket'
+                    ? <Input list="dl-events" placeholder="LAL @ BOS" value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                    : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
+                      onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
+                  <OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} />
                   <Input placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
                   <Input type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
                   <div className="flex gap-1">
@@ -160,19 +180,21 @@ export function BetFormDialog() {
                 </div>
               ))}
               <div className="flex items-center justify-between pt-1">
-                <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, emptyLeg()])}><Plus size={14} />Añadir selección</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: nba ? 'basket' : 'lol' }])}><Plus size={14} />Añadir selección</Button>
                 <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
               </div>
             </div>
           </div>
         ) : <>
           <Field label="Partido">
-            <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
-              onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />
+            {nba
+              ? <Input required list="dl-events" placeholder="LAL @ BOS" value={f.event || ''} onChange={set('event')} />
+              : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
+                onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
-            <Field label="Selección"><Input required placeholder="G2" value={f.selection || ''} onChange={set('selection')} /></Field>
+            <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
           </div>
         </>}
         <div className="grid grid-cols-4 gap-3">
@@ -211,7 +233,7 @@ export function BetFormDialog() {
           <Button type="button" variant="ghost" onClick={closeBet}>Cancelar</Button>
           {canAdd && (
             <Button type="button" variant="secondary" className="ml-auto" title="Guarda la selección en el boleto para combinarla con otras"
-              onClick={() => { addToSlip({ event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection, odds: parseFloat(f.odds), status: 'pending', bookmaker: f.bookmaker }); closeBet(); }}>
+              onClick={() => { addToSlip({ event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection, odds: parseFloat(f.odds), status: 'pending', bookmaker: f.bookmaker, sport: nba ? 'basket' : 'lol' }); closeBet(); }}>
               <Layers size={15} />Añadir a combinada
             </Button>
           )}
@@ -219,6 +241,7 @@ export function BetFormDialog() {
         </div>
       </form>
       <datalist id="dl-leagues">{leagues.map(x => <option key={x} value={x} />)}</datalist>
+      <datalist id="dl-events">{events.map(x => <option key={x} value={x} />)}</datalist>
       <datalist id="dl-books">{books.map(x => <option key={x} value={x} />)}</datalist>
     </Dialog>
   );

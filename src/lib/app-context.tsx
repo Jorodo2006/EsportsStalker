@@ -1,13 +1,17 @@
 // Estado global: ajustes, navegación, formulario de apuesta y avisos
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BetDraft, MatchEvent, Settings, SlipLeg } from './types';
+import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 
 export type View = 'matches' | 'players' | 'bets' | 'settings';
+// Dos apps en una: LoL y baloncesto, cada una con sus partidos, sus jugadores y sus apuestas
+export type AppId = Sport;
 
 interface Ctx {
   settings: Settings | undefined;
   saveSettings(p: Partial<Settings>): Promise<void>;
+  app: AppId;
+  switchApp(a: AppId): void;
   view: View;
   go(v: View, param?: string): void;
   viewParam: string | undefined; // p. ej. el equipo a abrir en "Jugadores"
@@ -30,6 +34,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
+  const [app, setApp] = useState<AppId>(() => { try { return localStorage.getItem('app') === 'basket' ? 'basket' : 'lol'; } catch { return 'lol'; } });
   const [view, setView] = useState<View>('matches');
   const [viewParam, setViewParam] = useState<string>();
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);
@@ -59,6 +64,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       qc.invalidateQueries({ queryKey: ['odds'] });
       qc.invalidateQueries({ queryKey: ['board'] });
     },
+    app,
+    switchApp(a) {
+      setApp(a); setView(v => (v === 'settings' ? 'matches' : v)); setViewParam(undefined); setOpenMatch(null);
+      try { localStorage.setItem('app', a); } catch { /* sin almacenamiento */ }
+    },
     view,
     go(v, param) {
       // Pulsar "Partidos" estando ya en un partido vuelve a la lista; el resto de secciones lo conservan
@@ -69,7 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openMatch,
     setOpenMatch,
     betDraft,
-    openBet: d => setBetDraft(d ?? {}),
+    openBet: d => setBetDraft({ sport: app, ...(app === 'basket' ? { league: 'NBA' } : {}), ...d }),
     closeBet: () => setBetDraft(null),
     slip,
     addToSlip(l) {

@@ -1,4 +1,4 @@
-# Backend de LoL Esports Tracker: PostgreSQL + gateway + tres servicios.
+# Backend de LoL Esports Tracker: PostgreSQL + gateway + cuatro servicios.
 #   docker compose up -d --build     (o npm run backend)
 # Sólo el gateway (127.0.0.1:47365) y, para depurar, PostgreSQL (127.0.0.1:55432) y Adminer (127.0.0.1:8080)
 # se abren al equipo, nunca a la red.
@@ -52,6 +52,25 @@ services:
     volumes:
       # Fotos de las páginas de las casas (captura-*.json) para ajustar los lectores
       - ./capturas:/capturas
+
+  # Lector de cuotas: Chromium sin cabeza que lee Winamax y Betway (antes lo hacía la extensión de Chrome)
+  lector:
+    build: ./server/lector
+    image: lol-esports-tracker-lector
+    restart: unless-stopped
+    environment:
+      GATEWAY_URL: http://gateway:47365
+    volumes:
+      # El lector de cada casa es el mismo del marcador: se lee en cada trabajo, sin reconstruir
+      - ./electron/bookmarklet:/lector-src:ro
+    shm_size: 512m
+    depends_on:
+      - gateway
+
+  # Baloncesto: NBA y WNBA (ESPN), Euroliga y EuroCup (API de la Euroliga)
+  basket:
+    <<: *servicio
+    command: ["node", "services/basket/index.js"]
 
   gateway:
     <<: *servicio

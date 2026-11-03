@@ -13,10 +13,12 @@ const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning
 
 
 export default function BetsView() {
-  const { openBet, toast, settings } = useApp();
+  const { openBet, toast, settings, app } = useApp();
   const cur = useCurrency();
   const qc = useQueryClient();
-  const { data: bets = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: all = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  // Cada app ve sus apuestas; las combinadas que mezclan LoL y baloncesto salen en las dos
+  const bets = useMemo(() => all.filter(b => (b.sport || 'lol') === app || b.sport === 'mix'), [all, app]);
   const s = useMemo(() => summarize(bets), [bets]);
   const bankroll = (settings?.initialBankroll || 0) + s.profit;
 
@@ -31,7 +33,7 @@ export default function BetsView() {
 
   return (
     <>
-      <PageHeader title="Mis apuestas" subtitle="Registro, beneficio y rendimiento">
+      <PageHeader title="Mis apuestas" subtitle={app === 'basket' ? 'Baloncesto: registro, beneficio y rendimiento' : 'LoL: registro, beneficio y rendimiento'}>
         <Button variant="secondary" onClick={async () => {
           try { const n = await window.api.bets.import(); if (n) { toast(`${n} apuestas importadas`); qc.invalidateQueries({ queryKey: ['bets'] }); } }
           catch (e) { toast('Error al importar: ' + (e as Error).message); }
@@ -85,13 +87,13 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
                   <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#27272a" vertical={false} />
-              <XAxis dataKey="date" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
-              <YAxis stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
-              <ReferenceLine y={0} stroke="#52525b" strokeDasharray="4 4" />
+              <CartesianGrid stroke="#222a3b" vertical={false} />
+              <XAxis dataKey="date" stroke="#637089" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
+              <YAxis stroke="#637089" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
+              <ReferenceLine y={0} stroke="#47536b" strokeDasharray="4 4" />
               <Tooltip
-                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#a1a1aa' }}
+                contentStyle={{ background: '#161d2b', border: '1px solid #313b51', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: '#8590a8' }}
                 formatter={v => [money(Number(v), cur, true), 'Beneficio acumulado']}
                 labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} · ${p[0].payload.event}` : ''} />
               <Area type="monotone" dataKey="profit" stroke={color} strokeWidth={2} fill="url(#pg)" />

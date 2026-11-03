@@ -1,65 +1,76 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { CalendarDays, ChevronDown, CircleDollarSign, Layers, ServerCrash, Settings as Cog, Users, Wallet, X } from 'lucide-react';
-import { useApp, type View } from '@/lib/app-context';
+import { useEffect, useRef, useState } from 'react';
+import { CalendarDays, ChevronDown, Dribbble, Layers, ServerCrash, Settings as Cog, Swords, Users, Wallet, X } from 'lucide-react';
+import { useApp, type AppId, type View } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { BetFormDialog, comboOdds } from '@/components/BetForm';
 import { Button } from '@/components/ui';
 import type { BackendStatus } from '@/lib/types';
 import MatchesView from '@/views/MatchesView';
 import PlayersView from '@/views/PlayersView';
+import BasketMatches from '@/views/BasketMatches';
+import BasketPlayers from '@/views/BasketPlayers';
 import BetsView from '@/views/BetsView';
 import SettingsView from '@/views/SettingsView';
 
 const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'matches', label: 'Partidos', icon: CalendarDays },
   { view: 'players', label: 'Jugadores', icon: Users },
-  { view: 'bets', label: 'Apuestas', icon: Wallet },
-  { view: 'settings', label: 'Ajustes', icon: Cog }
+  { view: 'bets', label: 'Apuestas', icon: Wallet }
+];
+
+const APPS: { id: AppId; label: string; icon: typeof Users }[] = [
+  { id: 'lol', label: 'League of Legends', icon: Swords },
+  { id: 'basket', label: 'Baloncesto', icon: Dribbble }
 ];
 
 export default function App() {
-  const { view, go, toastMsg } = useApp();
-  const { data: live } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
+  const { app, switchApp, view, go, toastMsg } = useApp();
+  // Partidos en juego de cada app, para el aviso rojo del selector
+  const { data: lolLive } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
+  const { data: basketLive } = useQuery({ queryKey: ['basket', 'live'], queryFn: () => window.api.basket.live(), refetchInterval: 60_000, enabled: !!window.api.basket });
+  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0 };
+  // Cada sección empieza arriba (si no, se hereda el desplazamiento de la anterior)
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
 
   return (
-    <div className="flex h-full">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-950/80 px-3 py-5">
-        <div className="mb-8 flex items-center gap-2.5 px-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/20">
-            <CircleDollarSign size={20} strokeWidth={2.5} />
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-bold">LoL Esports</div>
-            <div className="text-xs text-zinc-500">Tracker</div>
-          </div>
+    <div data-app={app} className="flex h-full flex-col">
+      <header className="flex h-16 shrink-0 items-center gap-6 border-b border-zinc-800/70 bg-zinc-950/80 px-6 backdrop-blur">
+        <div className="font-score text-xl font-bold tracking-tight">Esports<span className="text-amber-400">Stalker</span></div>
+        <div className="flex rounded-2xl border border-zinc-800 bg-zinc-900/70 p-1" role="tablist" aria-label="App">
+          {APPS.map(({ id, label, icon: Icon }) => (
+            <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
+              className={cn('flex cursor-pointer items-center gap-2 rounded-xl px-4 py-1.5 text-sm font-semibold transition',
+                app === id ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-black/30' : 'text-zinc-400 hover:text-zinc-100')}>
+              <Icon size={16} />{label}
+              {!!live[id] && <span className={cn('flex items-center gap-1 rounded-full px-1.5 text-[11px] font-bold', app === id ? 'bg-zinc-950/20 text-zinc-950' : 'bg-rose-500/15 text-rose-300')}>
+                <span className={cn('h-1.5 w-1.5 animate-pulse rounded-full', app === id ? 'bg-zinc-950' : 'bg-rose-400')} />{live[id]}
+              </span>}
+            </button>
+          ))}
         </div>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex gap-1">
           {NAV.map(({ view: v, label, icon: Icon }) => (
-            <button key={v} onClick={() => go(v)}
-              className={cn('flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-                view === v ? 'bg-zinc-800/80 text-zinc-50 shadow-inner' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200')}>
-              <Icon size={17} className={view === v ? 'text-amber-400' : ''} />
-              {label}
-              {v === 'matches' && !!live?.length && (
-                <span className="ml-auto flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />{live.length}
-                </span>
-              )}
+            <button key={v} onClick={() => go(v)} aria-current={view === v}
+              className={cn('flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition',
+                view === v ? 'text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>
+              <Icon size={16} className={view === v ? 'text-amber-400' : ''} />{label}
             </button>
           ))}
         </nav>
-        <div className="mt-auto px-3 text-[11px] leading-relaxed text-zinc-600">
-          Datos: lolesports · Leaguepedia<br />Cuotas: Bet365 · Winamax · Betway
-        </div>
-      </aside>
+        <button onClick={() => go('settings')} title="Ajustes" aria-current={view === 'settings'}
+          className={cn('ml-auto grid h-9 w-9 cursor-pointer place-items-center rounded-lg transition', view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
+          <Cog size={17} />
+        </button>
+      </header>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-8 py-7">
+      <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[1500px] px-6 py-6">
           <BackendBanner />
-          {view === 'matches' && <MatchesView />}
-          {view === 'players' && <PlayersView />}
-          {view === 'bets' && <BetsView />}
+          {view === 'matches' && (app === 'lol' ? <MatchesView /> : <BasketMatches />)}
+          {view === 'players' && (app === 'lol' ? <PlayersView /> : <BasketPlayers />)}
+          {view === 'bets' && <BetsView key={app} />}
           {view === 'settings' && <SettingsView />}
         </div>
       </main>

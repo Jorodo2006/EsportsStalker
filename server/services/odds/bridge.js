@@ -1,5 +1,5 @@
-// Puente con tu navegador: recibe las cuotas que el marcador o la extensión leen de las páginas de Bet365,
-// Winamax y Betway en tu Chrome normal (donde no hay bloqueos anti-bot), y lleva los trabajos de lectura.
+// Puente de las cuotas: recibe lo que leen de las páginas de Winamax y Betway el lector de Docker (server/lector),
+// la extensión o el marcador de Chrome, y lleva los trabajos de lectura. Bet365 se quitó (no se deja leer desde Docker).
 // Todo se guarda en PostgreSQL (esquema odds); el gateway publica estas rutas en 127.0.0.1:47365.
 const fs = require('fs');
 const path = require('path');
@@ -7,9 +7,9 @@ const { query, tx, notify } = require('../../shared/db');
 const { orient } = require('./equipos');
 
 const TTL_SQL = `interval '3 hours'`; // una importación vale 3 horas
-const BOOKS = ['bet365', 'winamax', 'betway'];
-const MANUAL_WAIT = 15e3; // si la extensión no coge un trabajo manual en 15 s, se da por perdido
-const AUTO_WAIT_MIN = 10; // los programados esperan en cola hasta 10 min (Chrome puede estar cerrado)
+const BOOKS = ['winamax', 'betway'];
+const MANUAL_WAIT = 30e3; // si ningún lector coge un trabajo manual en 30 s, se da por perdido
+const AUTO_WAIT_MIN = 10; // los programados esperan en cola hasta 10 min (el lector puede estar ocupado)
 const CAPTURAS = process.env.CAPTURAS_DIR || null;
 
 const keyOf = m => `${m.a?.name}|${m.b?.name}`;
@@ -29,7 +29,7 @@ const recent = async () => (await query('SELECT key, a, b FROM odds.matches ORDE
 // ¿A qué partido de la app pertenece? Por el trabajo; si no, por los equipos de la página; si no, el último abierto
 async function assign(p) {
   const job = p.job && await getJob(p.job);
-  if (job) return { key: keyOf(job.match), a: job.match.a, b: job.match.b };
+  if (job) return { key: keyOf(job.match), a: job.match.a, b: job.match.b, sport: job.match.sport };
   const list = await recent();
   if (p.home && p.away) for (const r of list) if (orient(r.a, r.b, p.home, p.away)) return r;
   const parts = String(p.title || '').split(/\s+(?:v|vs|-)\s+/i);
@@ -45,11 +45,10 @@ async function assign(p) {
 // ---------- Importaciones ----------
 // Guarda lo leído. Devuelve la respuesta para el lector y, aparte, el partido y la entrada (para el normalizador)
 async function add(payload) {
-  // Compatibilidad con el primer marcador (sólo Bet365)
-  if (payload?.type === 'LOL_ET_BET365') payload = { ...payload, type: 'LOL_ET', book: 'bet365' };
   if (payload?.type !== 'LOL_ET' || !BOOKS.includes(payload.book)) throw Object.assign(new Error('No son cuotas del marcador'), { status: 400 });
   const m = await assign(payload);
   const matchKey = m?.key || null;
+  if (m?.sport) payload.sport = m.sport; // el normalizador de cuotas cambia según el deporte
   const map = Number(payload.map) || 1;
   const page = payload.page ? String(payload.page) : null;
   const id = await tx(async c => {
@@ -125,12 +124,14 @@ const getJob = async id => toJob((await query('SELECT * FROM odds.jobs WHERE id 
 async function newJob(match, source = 'manual') {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const steps = Object.fromEntries(BOOKS.map(b => [b, { estado: 'esperando', msg: '' }]));
-  const m = { a: { name: match.a.name, code: match.a.code || '' }, b: { name: match.b.name, code: match.b.code || '' } };
+  const team = t => ({ name: t.name, code: t.code || '', ...(Array.isArray(t.alt) && t.alt.length ? { alt: t.alt.map(String).slice(0, 4) } : {}) });
+  // sport: 'lol' (por defecto) o 'basket'; el lector busca el partido en esa sección de cada casa
+  const m = { a: team(match.a), b: team(match.b), ...(match.sport === 'basket' ? { sport: 'basket', league: String(match.league || '') } : {}) };
   const { rows } = await query(`INSERT INTO odds.jobs (id, match_key, match, source, books, steps) VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb) RETURNING *`,
     [id, keyOf(m), JSON.stringify(m), source, BOOKS, JSON.stringify(steps)]);
   const job = toJob(rows[0]);
   // Si la extensión no lo recoge, lo damos por perdido
-  if (source === 'manual') setTimeout(() => finish(id, 'sin extensión', true).catch(() => {}), MANUAL_WAIT);
+  if (source === 'manual') setTimeout(() => finish(id, 'ningún lector lo ha cogido (¿está en marcha el contenedor lector?)', true).catch(() => {}), MANUAL_WAIT);
   notify('odds:auto', job);
   return job;
 }
@@ -183,7 +184,7 @@ async function nextJob() {
 async function cleanup() {
   await query(`DELETE FROM odds.imports WHERE ts < now() - ${TTL_SQL}`);
   await query(`DELETE FROM odds.jobs WHERE created < now() - interval '2 days'`);
-  const { rows } = await query(`UPDATE odds.jobs SET done_at = now(), error = 'sin extensión'
+  const { rows } = await query(`UPDATE odds.jobs SET done_at = now(), error = 'ningún lector lo ha cogido'
     WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto' AND created < now() - interval '${AUTO_WAIT_MIN} minutes' RETURNING *`);
   // Un trabajo cogido que lleva más de 15 min sin acabar: la extensión se ha quedado a medias
   const stuck = await query(`UPDATE odds.jobs SET done_at = now(), error = 'la extensión no ha terminado'

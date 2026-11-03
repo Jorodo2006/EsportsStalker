@@ -13,7 +13,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 
 - `docker-compose.yml` está en la raíz y lee el `.env` de la raíz (credenciales y, opcional, `POSTGRES_*`).
 - **Si cambias algo en `server/` hay que volver a ejecutar `npm run backend`** (reconstruye la imagen).
-- Una sola imagen (`server/Dockerfile`, Node 24) para los cuatro servicios; cada contenedor arranca uno.
+- Una imagen (`server/Dockerfile`, Node 24) para los servicios Node; cada contenedor arranca uno. El `lector` tiene la suya (`server/lector/Dockerfile`, Playwright con Chromium).
 
 ## Piezas
 
@@ -22,7 +22,9 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `gateway` | `server/services/gateway/` | `127.0.0.1:47365` (único publicado) | — | Reparte por prefijo, CORS, `/ping`, `/api/health`, avisos en vivo por SSE (`/events`) |
 | `bets` | `server/services/bets/` | 4003 (interno) | `bets` | Apuestas, combinadas, ajustes, importación de `data.json` |
 | `esports` | `server/services/esports/` | 4001 (interno) | `esports` | lolesports (calendario, directo, detalle) y Leaguepedia (stats, con cola y caché) |
-| `odds` | `server/services/odds/` | 4002 (interno) | `odds` | Puente del marcador y la extensión, normalizador, trabajos, programador, histórico |
+| `odds` | `server/services/odds/` | 4002 (interno) | `odds` | Puente de los lectores, normalizador (LoL y baloncesto), trabajos, programador, histórico |
+| `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA y WNBA (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
+| `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `electron/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |
 | `db` | `postgres:17-alpine` | `127.0.0.1:55432` (para depurar) | — | Volumen `pgdata` |
 | `adminer` | `adminer` | `127.0.0.1:8080` (`ADMINER_PORT`) | — | Visor web de la base de datos (tema oscuro, servidor `db`) |
 
@@ -48,6 +50,7 @@ Reglas:
 | `/api/bets`, `/api/settings`, `/api/legacy` | bets |
 | `/api/esports`, `/api/stats` | esports |
 | `/api/odds`, `/odds`, `/bet365`, `/snapshot`, `/auto`, `/jobs` | odds |
+| `/api/basket` | basket |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
 
 API de la app (la usa `electron/main.js`):
@@ -79,10 +82,11 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 
 | Tabla | Contenido |
 |---|---|
-| `bets.bets` | Apuestas (simples y combinadas). `seq` guarda el orden de alta |
-| `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`) |
+| `bets.bets` | Apuestas (simples y combinadas). `seq` guarda el orden de alta; `sport`: `lol`, `basket` o `mix` (migraciones 002 y 003) |
+| `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |
 | `esports.cache` | Caché de Leaguepedia (6 h) |
+| `basket.cache` | Respuestas de ESPN y de la Euroliga; se usan si la fuente no responde. Los box scores terminados se guardan toda la temporada |
 | `odds.matches` | Partidos abiertos en la app o programados; sirven para asignar las cuotas recibidas |
 | `odds.imports` | Lo que manda el lector, tal cual, durante 3 h. `ml` = cuota de ganador para el calendario |
 | `odds.price_history` | Histórico: una fila cada vez que cambia una cuota de una casa |

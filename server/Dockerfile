@@ -1,4 +1,4 @@
-# Una sola imagen para los cuatro servicios; docker-compose.yml elige cuál arranca cada contenedor
+# Una sola imagen para los cinco servicios; docker-compose.yml elige cuál arranca cada contenedor
 FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production

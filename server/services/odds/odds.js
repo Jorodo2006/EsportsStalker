@@ -1,6 +1,6 @@
-// Cuotas de LoL por partido, comparando casas. Todas llegan desde el marcador de tu Chrome
-// (Bet365, Winamax y Betway): no se usa ninguna API de cuotas.
-// Se normalizan a cuotas decimales y se orientan según los equipos A/B del partido de lolesports.
+// Cuotas por partido (LoL y baloncesto), comparando casas. Llegan del lector de Docker o del marcador de Chrome
+// (Winamax y Betway): no se usa ninguna API de cuotas.
+// Se normalizan a cuotas decimales y se orientan según los equipos A/B del partido.
 const bridge = require('./bridge');
 
 const round2 = x => Math.round(x * 100) / 100;
@@ -8,7 +8,28 @@ const round2 = x => Math.round(x * 100) / 100;
 const { norm, teamScore, orient } = require('./equipos');
 
 // ---------- Nombres de mercado ----------
-function marketLabel(type, period, teamName) {
+// Baloncesto: periodo 0 = partido, 1-2 = mitades, 11-14 = cuartos
+const BASKET_PERIOD = { 1: '1.ª mitad', 2: '2.ª mitad', 11: '1.er cuarto', 12: '2.º cuarto', 13: '3.er cuarto', 14: '4.º cuarto' };
+function basketLabel(type, period, teamName) {
+  const pre = BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '';
+  switch (type) {
+    case 'moneyline': return `${pre}Ganador`;
+    case 'spread': return `${pre}Hándicap`;
+    case 'total': return `${pre}Total de puntos`;
+    case 'team_total': return `${pre}Puntos de ${teamName}`;
+    default: return type;
+  }
+}
+// "1ª mitad - Hándicap…" → { period: 1, rest: "Hándicap…" }
+function basketPeriod(title) {
+  const t = String(title || '');
+  const m = t.match(/^\s*(\d)\s*(?:ª|º|er|o|a)?\s*(mitad|cuarto|tiempo)\s*[-·:]\s*/i);
+  if (!m) return { period: 0, rest: t.trim() };
+  const n = Number(m[1]);
+  return { period: /cuarto/i.test(m[2]) ? 10 + n : n, rest: t.slice(m[0].length).trim() };
+}
+function marketLabel(type, period, teamName, sport) {
+  if (sport === 'basket') return basketLabel(type, period, teamName);
   const map = period ? `Mapa ${period} · ` : '';
   switch (type) {
     case 'moneyline': return period ? `${map}Ganador` : 'Ganador del partido';
@@ -34,7 +55,7 @@ const isUnder = n => /under|menos|-/i.test(n || '');
 // Acumula las cuotas de todas las fuentes. Las claves canónicas (tipo|periodo|lado|línea) hacen que
 // la misma línea de casas distintas acabe en la misma fila.
 class Book {
-  constructor(a, b) { this.a = a; this.b = b; this.markets = new Map(); this.books = new Set(); }
+  constructor(a, b, sport) { this.a = a; this.b = b; this.sport = sport; this.markets = new Map(); this.books = new Set(); }
 
   add({ key, group, period, line, main, outcomes }, bookmaker, prices) {
     if (!this.markets.has(key)) this.markets.set(key, { key, group, period, line, main: !!main, outcomes: outcomes.map(o => ({ ...o, prices: {} })) });
@@ -61,7 +82,7 @@ class Book {
     const team = side === 'a' ? a : side === 'b' ? b : null;
     this.add({
       key: `${type}|${period}|${side || ''}|${type === 'moneyline' ? '' : line}`,
-      group: marketLabel(type, period, team ? team.code || team.name : ''),
+      group: marketLabel(type, period, team ? team.code || team.name : '', this.sport),
       period, line: type === 'moneyline' ? null : line, main, outcomes
     }, bookmaker, prices);
   }
@@ -149,6 +170,70 @@ function winamaxInto(book, match, st, found) {
   return n;
 }
 
+// ---------- Winamax, baloncesto ----------
+// Ganador, hándicap y totales (del partido, de cada mitad y de cada cuarto) van a filas comunes con Betway;
+// las líneas de jugador van con la misma clave que usa el analizador (player|estadística|jugador|línea)
+const BASKET_STAT = [
+  [/puntos.*rebotes.*asistencias|pts.*reb.*ast/i, 'Pts + Reb + Ast'], [/puntos.*rebotes/i, 'Pts + Reb'], [/puntos.*asistencias/i, 'Pts + Ast'],
+  [/rebotes.*asistencias/i, 'Reb + Ast'], [/triples|3 puntos|tres puntos/i, 'Triples anotados'], [/rebotes/i, 'Rebotes'],
+  [/asistencias/i, 'Asistencias'], [/robos.*tapones|tapones.*robos/i, 'Robos + Tapones'], [/robos/i, 'Robos'], [/tapones/i, 'Tapones'],
+  [/p[eé]rdidas/i, 'Pérdidas'], [/puntos/i, 'Puntos']
+];
+const basketStat = t => (BASKET_STAT.find(([re]) => re.test(t)) || [null, null])[1];
+
+function winamaxBasketInto(book, match, st, found) {
+  const { e, o } = found;
+  const m = st.matches?.[e.id];
+  if (!m?.bets?.length) return 0;
+  const BK = 'Winamax';
+  const sideOf = code => ((code === '1') !== o.swapped ? 'a' : 'b');
+  const playerName = id => st.players?.[id]?.name || st.players?.[id]?.shortname;
+  const teamOf = t => { const sa = teamScore(match.a, t), sb = teamScore(match.b, t); return sa >= 0.6 && sa > sb ? 'a' : sb >= 0.6 && sb > sa ? 'b' : null; };
+  let n = 0;
+  for (const betId of m.bets) {
+    const bet = st.bets?.[betId];
+    if (!bet || bet.available === false) continue;
+    const outs = (bet.outcomes || []).map(id => ({ ...(st.outcomes?.[id] || {}), id: String(id), price: st.odds?.[id] }))
+      .filter(x => x.price > 1 && x.available !== false);
+    if (!outs.length) continue;
+    const sbv = parseSbv(bet.specialBetValue);
+    const title = bet.betTitle || bet.betTypeName || '';
+    const { period, rest } = basketPeriod(title);
+    const total = num(sbv.total);
+    const over = outs.find(x => /^más/i.test(x.label) || x.code === 'over');
+    const under = outs.find(x => /^menos/i.test(x.label) || x.code === 'under');
+    const pid = outs.find(x => x.playerId)?.playerId;
+    const who = pid ? playerName(pid) : null;
+    n++;
+    const teamPts = /puntos (por|de) (.+)$/i.exec(rest);
+    const ptsTeam = teamPts ? teamOf(teamPts[2]) : null;
+    if (bet.template === '2way' && /^ganador$/i.test(rest) && outs.length === 2) {
+      book.addStd('moneyline', period, null, BK, Object.fromEntries(outs.map(x => [sideOf(x.code), x.price])), true);
+    } else if (bet.template === 'asian_handicap' && outs.length === 2 && sbv.hcp != null) {
+      const h = num(sbv.hcp);
+      const [c1, c2] = outs;
+      book.addStd('spread', period, o.swapped ? -h : h, BK, o.swapped ? { a: c2.price, b: c1.price } : { a: c1.price, b: c2.price }, true);
+    } else if (bet.template === 'OverUnder' && who && total != null) {
+      const stat = basketStat(rest) || rest.replace(who, '').replace(/^\s*[-–]\s*|\s*[-–]\s*$/g, '').trim() || 'Jugador';
+      const outcomes = [over && { id: 'over', label: `${who} · Más de ${total}` }, under && { id: 'under', label: `${who} · Menos de ${total}` }].filter(Boolean);
+      book.add({ key: `player|${stat}|${who.toLowerCase()}|${total}`, group: `Jugadores · ${stat}`, period: PLAYER_PERIOD, line: total, main: true, outcomes },
+        BK, { over: over?.price, under: under?.price });
+    } else if (bet.template === 'OverUnder' && total != null && over && under && /^(n[uú]mero (total )?de puntos|total de puntos)$/i.test(rest)) {
+      book.addStd('total', period, total, BK, { over: over.price, under: under.price }, true);
+    } else if (bet.template === 'OverUnder' && total != null && over && under && ptsTeam) {
+      // "Número total de puntos por R. Madrid": puntos de un equipo
+      book.addStd('team_total', period, total, BK, { over: over.price, under: under.price }, true, ptsTeam);
+    } else {
+      const label = (BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '') + rest + (total != null && !/\d/.test(rest) ? ` (${total})` : '');
+      book.add({
+        key: `wmx|${title}|${bet.specialBetValue || ''}`, group: label, period: pid ? PLAYER_PERIOD : period || 50, line: total, main: true,
+        outcomes: outs.map(x => ({ id: x.id, label: who && bet.template === 'dynamic' ? `${who} · ${x.label}` : x.label }))
+      }, BK, Object.fromEntries(outs.map(x => [x.id, x.price])));
+    }
+  }
+  return n;
+}
+
 // ---------- Cuotas recibidas del marcador ----------
 const STAT_NAME = { k: 'Kills', a: 'Asistencias', d: 'Muertes' };
 const BOOK_LABEL = { bet365: 'Bet365', winamax: 'Winamax', betway: 'Betway' };
@@ -196,16 +281,24 @@ function marketsInto(book, imp, match) {
   const lineOf = o => { const x = String(o.hcap || '').match(/[-+]?\d+(?:[.,]\d+)?/); return x ? Number(x[0].replace(',', '.')) : null; };
   const OBJ = /sangre|primer|primera|torre|drag|bar[oó]n|inhib|heraldo|grub|larva|duraci/;
   let n = 0;
+  // Baloncesto: el periodo sale del título ("1ª mitad - …") o de la pestaña (marketGroup=1st-half, quarter…)
+  const basket = book.sport === 'basket';
+  const pagePeriod = basket ? (/marketGroup=(1st-half|half)\b/.test(imp.page || '') ? 1 : /marketGroup=(1st-quarter|quarter)\b/.test(imp.page || '') ? 11 : 0) : 0;
   for (const mk of imp.markets || []) {
-    const period = mk.map || 0;
-    const rest = mk.title.replace(/^(mapa\s*\d+|\d\s*º\s*mapa)\s*[-·:]\s*/i, '').trim(); // "Mapa 1 - " (Betway), "1º mapa - " (Bet365)
+    let period = mk.map || 0;
+    let rest = mk.title.replace(/^(mapa\s*\d+|\d\s*º\s*mapa)\s*[-·:]\s*/i, '').trim(); // "Mapa 1 - " (Betway), "1º mapa - " (Bet365)
+    if (basket) {
+      const bp = basketPeriod(mk.title.replace(/^1er tiempo\s*[-·:]\s*/i, '1ª mitad - '));
+      period = bp.period || pagePeriod;
+      rest = bp.rest.replace(/^otros\s+/i, '');
+    }
     const lo = rest.toLowerCase();
     const outs = (mk.outcomes || []).filter(o => o.price > 1);
     if (!outs.length) continue;
     const sides = outs.map(o => side(o.name));
     const ou = outs.every(o => /^(m[aá]s|menos|over|under)/i.test(o.name));
     const overOf = o => /^(m[aá]s|over)/i.test(o.name);
-    const label = period ? `Mapa ${period} · ${sentence(rest)}` : sentence(rest);
+    const label = basket ? (BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '') + sentence(rest) : period ? `Mapa ${period} · ${sentence(rest)}` : sentence(rest);
     n++;
     if (outs.length === 2 && sides[0] && sides[1] && sides[0] !== sides[1] && /ganador|ganar[aá]|vencedor|resultado del partido|moneyline/.test(lo) && !OBJ.test(lo)) {
       book.addStd('moneyline', period, null, BK, { [sides[0]]: outs[0].price, [sides[1]]: outs[1].price }, true);
@@ -216,7 +309,7 @@ function marketsInto(book, imp, match) {
         const ob = outs.find((o, i) => sides[i] === 'b' && lineOf(o) === (h == null ? null : -h));
         if (h != null && ob) book.addStd('spread', period, h, BK, { a: oa.price, b: ob.price }, true);
       }
-    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos|v[ií]ctimas/.test(lo) && !OBJ.test(lo)) {
+    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos|v[ií]ctimas|puntos/.test(lo) && !(basket ? /par|impar/.test(lo) : OBJ.test(lo))) {
       const team = mentions(rest);
       const lines = [...new Set(outs.map(lineOf).filter(v => v != null).map(Math.abs))];
       for (const l of lines) {
@@ -249,16 +342,17 @@ function marketsInto(book, imp, match) {
 function intoBook(book, match, imp) {
   if (imp.book === 'winamax') {
     const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
-    return winamaxInto(book, match, imp.state, { e: { id: imp.matchId }, o });
+    return (book.sport === 'basket' ? winamaxBasketInto : winamaxInto)(book, match, imp.state, { e: { id: imp.matchId }, o });
   }
   return sectionsInto(book, imp) + marketsInto(book, imp, match);
 }
 
 // match = { a: {name, code}, b: {name, code}, start }
 async function getMatchOdds(match) {
-  const book = new Book(match.a, match.b);
+  const imports = await bridge.forMatch(match);
+  const book = new Book(match.a, match.b, match.sport || imports.find(i => i.sport)?.sport);
   const sources = {}, counts = {};
-  for (const imp of await bridge.forMatch(match)) {
+  for (const imp of imports) {
     const name = BOOK_LABEL[imp.book];
     try {
       const n = intoBook(book, match, imp);
@@ -275,7 +369,7 @@ async function getMatchOdds(match) {
 // Tras guardar una importación: cuota de ganador (para las tarjetas del calendario) e histórico de cuotas.
 // En el histórico sólo se apunta una cuota cuando cambia, para que la tabla no crezca sin control.
 async function afterImport(match, imp) {
-  const book = new Book(match.a, match.b);
+  const book = new Book(match.a, match.b, imp.sport);
   intoBook(book, match, imp);
   const ml = book.markets.get('moneyline|0||');
   const price = id => ml?.outcomes.find(x => x.id === id)?.prices[BOOK_LABEL[imp.book]];

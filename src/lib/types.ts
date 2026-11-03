@@ -4,13 +4,15 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfw
 
 // Selección de una combinada
 export type LegStatus = 'pending' | 'won' | 'lost' | 'void';
-export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus }
+export type Sport = 'lol' | 'basket';
+export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport }
 // En el boleto se guarda también la casa de donde salió la cuota
 export type SlipLeg = BetLeg & { bookmaker?: string };
 
 export interface Bet {
   id: string;
   date: string; // YYYY-MM-DD
+  sport?: Sport | 'mix'; // sin deporte es LoL; 'mix' = combinada con selecciones de LoL y de baloncesto
   league: string;
   event: string;
   market: string;
@@ -120,7 +122,7 @@ export interface MatchOdds {
   sources: Record<string, { ok: boolean; msg: string }>;
 }
 
-export interface TeamRef { name: string; code: string }
+export interface TeamRef { name: string; code: string; alt?: string[] } // alt: otros nombres del equipo en las casas
 
 // Trabajo del botón "Actualizar cuotas" (lo hace la extensión de Chrome)
 export interface AutoJob {
@@ -149,7 +151,30 @@ export interface AutoStatus {
 }
 
 // true si responde cada pieza del backend
-export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean };
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean };
+
+// ---------- Baloncesto (servicio basket: ESPN para NBA/WNBA, API de la Euroliga para Euroliga/EuroCup) ----------
+export type BasketLeagueId = 'nba' | 'wnba' | 'euroleague' | 'eurocup';
+export interface BasketLeague { id: BasketLeagueId; name: string; country: string; logo: string }
+export interface BasketSide { id: string; abbr: string; name: string; logo: string; score: string | null; record: string; alt?: string[] }
+export interface BasketGame {
+  id: string; league: BasketLeagueId; date: string; state: 'pre' | 'in' | 'post'; status: string; clock: string; round?: string;
+  home: BasketSide; away: BasketSide;
+}
+export interface BasketRosterPlayer { id: string; name: string; pos: string; jersey: string; headshot: string; injury: string | null }
+export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null }
+export interface BasketPlayerHit { id: string; league: BasketLeagueId; name: string; team: string; teamId?: string; pos: string; headshot: string }
+// Un partido de un jugador (lo más reciente primero en BasketGamelog.games)
+export interface BasketLogGame {
+  id: string; date: string; season: number; type: 'reg' | 'post' | 'pre'; home: boolean | null; opp: string;
+  team: string | null; teamId: string | null; result: string; score: string;
+  min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number;
+}
+export interface BasketGamelog { currentSeason: number; games: BasketLogGame[] }
+// Estadísticas de un partido: por equipo, puntos por cuarto, jugadores y totales; series = enfrentamientos de la temporada
+export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string }
+export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
+export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
 export interface Api {
   settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings> };
@@ -174,10 +199,21 @@ export interface Api {
     teamForm(name: string, code?: string): Promise<TeamForm>;
   };
   odds: {
-    match(m: { a: TeamRef; b: TeamRef; start?: string }): Promise<MatchOdds>;
+    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
-    auto(m: { a: TeamRef; b: TeamRef }): Promise<AutoJob>;
+    auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
+  };
+  basket: {
+    leagues(): Promise<BasketLeague[]>;
+    games(date: string): Promise<BasketGame[]>;
+    days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
+    live(): Promise<BasketGame[]>;
+    roster(league: BasketLeagueId, teamId: string): Promise<BasketRosterPlayer[]>;
+    injuries(): Promise<BasketInjury[]>;
+    boxscore(gameId: string): Promise<BasketBox>;
+    search(q: string): Promise<BasketPlayerHit[]>;
+    gamelog(league: BasketLeagueId, playerId: string, teamId?: string): Promise<BasketGamelog>;
   };
   extension: { folder(): Promise<string>; open(): Promise<void> };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;

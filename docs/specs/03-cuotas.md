@@ -1,8 +1,14 @@
 # 03 · Cuotas
 
-**Regla:** no se usa ninguna API de cuotas. Las cuotas se leen de las páginas de **Bet365, Winamax y Betway** en el
-Chrome normal del usuario, donde no hay bloqueos anti-bot, y llegan al backend por el gateway (`127.0.0.1:47365`).
-Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos (lecturas programadas).
+**Regla:** no se usa ninguna API de cuotas. Las cuotas se leen de las páginas de **Winamax y Betway** y llegan al
+backend por el gateway (`127.0.0.1:47365`). Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos
+(lecturas programadas, de LoL y de baloncesto).
+
+> **Desde la 0.4** las lee el contenedor `lector` (`server/lector/runner.js`): un Chromium sin cabeza dentro de Docker
+> que hace lo mismo que la extensión (buscar el partido, abrir sus pestañas, pasar `marcador.js` y mandar el resultado),
+> sin abrir el Chrome del usuario. No usa trucos anti-bot. Bet365 se quitó porque no se deja leer así. El marcador y la
+> extensión de más abajo siguen funcionando como reserva. Cada trabajo lleva `match.sport` (`basket` o, sin él, LoL) y
+> `match.league`, que eligen dónde se busca el partido; el normalizador usa `winamaxBasketInto` para el baloncesto.
 
 ## Piezas
 
@@ -139,6 +145,13 @@ Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos (lectu
     de ganador del mapa o, si no hay, la de la serie convertida a un mapa). Líneas enteras: la nula devuelve la apuesta.
   - Sólo se estiman líneas de un mapa y jugadores con al menos 5 partidas. No tiene en cuenta rival, campeones ni parche:
     es una referencia, no una garantía.
+  - Columna *Fiabilidad* (0-100) y veredicto con las funciones comunes con la NBA (`src/lib/value.ts`, ver
+    [08-baloncesto.md](08-baloncesto.md)): partidas con su equipo (25), regularidad (20), margen sobre la línea (15), modelo frente a
+    histórico (10), ajuste por ganador (15, sólo si hay cuota de ganador) y forma reciente (15, días desde su última
+    partida). *Sólo con valor* deja las líneas con veredicto *Apostar* o *Valor ligero*.
+  - Al pulsar una fila se despliega el panel de valor (`ValuePanel`): veredicto, probabilidad y cuota justa de cada
+    lado, EV y ventaja de la mejor casa, margen, stake con ¼ de Kelly y desglose de la fiabilidad, con *Registrar* y
+    *Combinada*.
 - **Clic en una cuota**: abre la apuesta ya rellena.
 - **Clic derecho o Mayús+clic**: añade la cuota al boleto de combinada (ver [05-apuestas.md](05-apuestas.md)).
 

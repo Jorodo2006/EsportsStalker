@@ -1,17 +1,59 @@
 @import "tailwindcss";
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/500.css";
+@import "@fontsource/barlow/600.css";
+@import "@fontsource/barlow/700.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
 
+/* Tema: tinta azul de pabellón de noche en vez de gris. Toda la app usa las clases zinc, así que se cambia la escala
+   entera aquí. El acento (las clases amber) depende de la app: verde azulado hextech en LoL, naranja de balón en
+   baloncesto. Barlow para leer, Barlow Condensed para marcadores y cifras (como un videomarcador). */
 @theme {
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, Ubuntu, "Noto Sans", sans-serif;
+  --font-sans: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --font-score: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+
+  --color-zinc-50: #f3f5fa;
+  --color-zinc-100: #e6eaf2;
+  --color-zinc-200: #cbd2e0;
+  --color-zinc-300: #a9b3c7;
+  --color-zinc-400: #8590a8;
+  --color-zinc-500: #637089;
+  --color-zinc-600: #47536b;
+  --color-zinc-700: #313b51;
+  --color-zinc-800: #222a3b;
+  --color-zinc-900: #161d2b;
+  --color-zinc-950: #0c111c;
+
+  --color-amber-200: var(--acc-200);
+  --color-amber-300: var(--acc-300);
+  --color-amber-400: var(--acc-400);
+  --color-amber-500: var(--acc-500);
+  --color-amber-600: var(--acc-600);
+}
+
+:root, [data-app="lol"] {
+  --acc-200: #b4f3ec; --acc-300: #7be8de; --acc-400: #3fd9cb; --acc-500: #19c2b3; --acc-600: #0e9c90;
+}
+[data-app="basket"] {
+  --acc-200: #ffd2b0; --acc-300: #ffb079; --acc-400: #ff8f4d; --acc-500: #ff7a2f; --acc-600: #e05e14;
+}
+/* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
+[data-app] {
+  --color-amber-200: var(--acc-200); --color-amber-300: var(--acc-300); --color-amber-400: var(--acc-400);
+  --color-amber-500: var(--acc-500); --color-amber-600: var(--acc-600);
 }
 
 html { color-scheme: dark; }
 html, body, #root { height: 100%; }
-body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
-  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgb(245 158 11 / 0.06), transparent);
-}
+body { @apply bg-zinc-950 text-zinc-100 antialiased; }
+#root > div { background-image: radial-gradient(ellipse 70% 40% at 50% -10%, color-mix(in oklab, var(--acc-500) 9%, transparent), transparent); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 99px; border: 2px solid #09090b; }
+::-webkit-scrollbar-thumb { background: #313b51; border-radius: 99px; border: 2px solid #0c111c; }
 ::-webkit-scrollbar-track { background: transparent; }
-select option { background: #18181b; }
+select option { background: #161d2b; }
 input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+:focus-visible { outline: 2px solid var(--acc-400); outline-offset: 2px; }
+.tnum { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

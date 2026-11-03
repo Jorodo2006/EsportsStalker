@@ -3,6 +3,7 @@
 // más las últimas, y mezclando la forma en victoria y en derrota según la probabilidad de ganar el mapa que dan las
 // propias casas (un jugador hace muchos más kills cuando gana).
 import type { FormGame, MarketLine, TeamForm } from './types';
+import { devig, relCommon, reliability, sideValue, verdict, type SideValue, type ValueData } from './value';
 
 export type StatKey = 'k' | 'd' | 'a';
 export const MIN_GAMES = 5;
@@ -70,7 +71,43 @@ export function estimate(games: FormGame[], stat: StatKey, line: number, pWin: n
     if (Number.isInteger(line)) push += w * (cdf(line, m, phi) - below);
   }
   const hits = games.filter(g => g[stat] > line).length;
-  return { over: 1 - under - push, under, push, mean: all.mean, n: games.length, hits };
+  return { over: 1 - under - push, under, push, mean: all.mean, sd: Math.sqrt(all.variance), n: games.length, hits };
+}
+
+// Análisis completo de una línea con las piezas comunes a la NBA (value.ts): la mejor cuota de cada lado,
+// el margen de esa casa, la fiabilidad y el veredicto
+export function analyzeLine(games: FormGame[], stat: StatKey, line: number, pWin: number | null,
+  prices: { over: Record<string, number>; under: Record<string, number> }, books: string[]): ValueData {
+  const e = estimate(games, stat, line, pWin);
+  const sides: SideValue[] = [];
+  for (const side of ['over', 'under'] as const) {
+    let best: SideValue | null = null;
+    for (const bk of books) {
+      const price = prices[side][bk];
+      if (!price) continue;
+      const v = sideValue(side, side === 'over' ? e.over : e.under, e.push, price, devig(prices.over[bk], prices.under[bk])[side], bk);
+      if (!best || v.ev > best.ev) best = v;
+    }
+    if (best) sides.push(best);
+  }
+  const days = games[0]?.date ? (Date.now() - new Date(games[0].date).getTime()) / 864e5 : null;
+  const rel = reliability([
+    { label: 'Partidas con su equipo', value01: e.n / 20, max: 25, note: `${e.n} partidas recientes` },
+    relCommon.consistency(e.mean, e.sd),
+    relCommon.distance(e.mean, e.sd, line),
+    relCommon.agreement(e.over, e.n ? e.hits / e.n : 0),
+    pWin == null
+      ? { label: 'Ajuste por ganador', value01: 0, max: 15, note: 'sin cuota de ganador: no se ajusta por la probabilidad de ganar el mapa' }
+      : { label: 'Ajuste por ganador', value01: 1, max: 15, note: `su equipo gana el mapa un ${(pWin * 100).toFixed(0)} % (cuotas sin margen)` },
+    { label: 'Forma reciente', value01: days == null ? 0 : 1 - (days - 14) / 46, max: 15, note: days == null ? 'sin fecha' : `última partida hace ${Math.round(days)} días` }
+  ]);
+  const top = sides.slice().sort((a, b) => b.ev - a.ev)[0];
+  const mk = top?.book ? devig(prices.over[top.book], prices.under[top.book]) : { margin: null, exact: false };
+  const fair = (p: number) => (p > 0 ? (1 - e.push) / p : Infinity);
+  return {
+    line, pOver: e.over, pUnder: e.under, pPush: e.push, fairOver: fair(e.over), fairUnder: fair(e.under),
+    margin: mk.margin, exact: mk.exact, sides, rel, verdict: verdict(sides, rel.score, line, e.over >= e.under ? 'over' : 'under')
+  };
 }
 
 // Probabilidad sin margen de que gane el equipo A, con la mejor cuota de cada lado

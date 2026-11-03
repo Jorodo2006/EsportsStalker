@@ -1,0 +1,8 @@
+{
+  "name": "lolet-lector",
+  "private": true,
+  "description": "Lee las cuotas de Winamax y Betway con Chromium dentro de Docker",
+  "dependencies": {
+    "playwright": "1.49.0"
+  }
+}

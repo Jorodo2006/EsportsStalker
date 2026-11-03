@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, BarChart3, ChevronDown, ChevronsDownUp, ChevronsUpDown, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useApp, useRefreshMs } from '@/lib/app-context';
-import { cn, fmtDay, fmtTime, groupBy, k, odd, pct } from '@/lib/format';
+import { cn, fmtDay, fmtTime, groupBy, k, odd, pct, summarize } from '@/lib/format';
 import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamForm, TeamRef } from '@/lib/types';
-import { MIN_GAMES, estimate, ev, findPlayer, mapWinA, parseStat } from '@/lib/edge';
-import { Badge, Button, Empty, ErrorBox, Loading, TeamLogo, td, th } from '@/components/ui';
+import { MIN_GAMES, analyzeLine, estimate, findPlayer, mapWinA, parseStat } from '@/lib/edge';
+import { SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
+import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePanel';
+import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
+import { Scoreboard, SheetTabs } from '@/components/sport';
 
 const DRAGONS: Record<string, string> = {
   ocean: 'Océano', infernal: 'Infernal', cloud: 'Nube', mountain: 'Montaña', hextech: 'Hextech', chemtech: 'Quimtec', elder: 'Ancestral'
@@ -35,45 +38,22 @@ export default function MatchDetail({ match, onClose }: { match: MatchEvent; onC
       <button onClick={onClose} className="mb-4 flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100">
         <ArrowLeft size={16} />Volver a partidos
       </button>
-      <div className="mb-5 overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900 to-zinc-900/30">
-        <div className="flex items-center gap-2 px-6 pt-4 text-xs text-zinc-500">
-          <span className="font-medium text-zinc-400">{match.league}</span>
-          {match.blockName && <><span>·</span><span>{match.blockName}</span></>}
-          {match.bestOf && <><span>·</span><span>Bo{match.bestOf}</span></>}
-          <span>·</span><span className="capitalize">{fmtDay(match.startTime)}</span>
-          {match.state === 'inProgress' && <Badge tone="live" className="ml-auto">Directo</Badge>}
-        </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-6 py-5">
-          <div className="flex min-w-0 items-center justify-end gap-3 text-right">
-            <div className="min-w-0"><div className="truncate text-xl font-bold">{a.name}</div><div className="text-xs text-zinc-500">{a.code}</div></div>
-            <TeamLogo src={a.image} name={a.code} size={44} />
-          </div>
-          <div className="min-w-24 rounded-xl bg-zinc-950/70 px-4 py-2 text-center ring-1 ring-zinc-800">
-            <div className="text-2xl font-bold tabular-nums">
-              {match.state === 'unstarted' ? fmtTime(match.startTime) : `${ev?.teams[0]?.wins ?? a.wins ?? 0} : ${ev?.teams[1]?.wins ?? b.wins ?? 0}`}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-zinc-500">{match.state === 'unstarted' ? 'Empieza' : match.state === 'inProgress' ? 'En juego' : 'Final'}</div>
-          </div>
-          <div className="flex min-w-0 items-center gap-3">
-            <TeamLogo src={b.image} name={b.code} size={44} />
-            <div className="min-w-0"><div className="truncate text-xl font-bold">{b.name}</div><div className="text-xs text-zinc-500">{b.code}</div></div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-1 border-t border-zinc-800/70 px-4">
-          {([['odds', 'Cuotas'], ['game', 'Partida en vivo']] as const).map(([v, label]) => (
-            <button key={v} onClick={() => setTab(v)}
-              className={cn('-mb-px cursor-pointer border-b-2 px-3 py-3 text-sm font-medium transition',
-                tab === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-200')}>{label}</button>
-          ))}
-          <div className="ml-auto flex gap-2 py-2">
+      <div className="mb-5">
+        <Scoreboard competition={match.league} detail={[match.blockName, match.bestOf ? `al mejor de ${match.bestOf}` : ''].filter(Boolean).join(', ')}
+          state={match.state === 'inProgress' ? 'live' : match.state === 'completed' ? 'post' : 'pre'}
+          a={{ name: a.name, short: a.code, logo: a.image, score: ev?.teams[0]?.wins ?? a.wins ?? 0 }}
+          b={{ name: b.name, short: b.code, logo: b.image, score: ev?.teams[1]?.wins ?? b.wins ?? 0 }}
+          center={fmtTime(match.startTime)}
+          centerSub={match.state === 'unstarted' ? fmtDay(match.startTime) : match.state === 'inProgress' ? 'En juego' : 'Final'}>
+          <SheetTabs value={tab} onChange={setTab} items={[['odds', 'Cuotas'], ['game', 'Partida en vivo']]} right={<>
             {[a, b].map(t => (
               <Button key={t.name} variant="ghost" size="sm" onClick={() => go('players', `${t.name}|${t.code}`)}>
                 <BarChart3 size={14} />Stats {t.code}
               </Button>
             ))}
             <Button size="sm" onClick={() => openBet({ league: match.league, event: eventName })}><Plus size={14} />Apuesta</Button>
-          </div>
-        </div>
+          </>} />
+        </Scoreboard>
       </div>
 
       {tab === 'odds' ? <OddsPanel match={match} eventName={eventName} /> : (
@@ -107,7 +87,7 @@ const sectionOf = (m: MarketLine): Section =>
 const SECTION_LABEL = (s: Section) =>
   s === 'all' ? 'Todo' : s === 'match' ? 'Partido' : s === 'players' ? 'Jugadores' : s === 'special' ? 'Especiales' : s === 'other' ? 'Otros' : `Mapa ${s.slice(3)}`;
 
-const DEFAULT_FEATURED = 'Bet365,Winamax,Betway';
+const DEFAULT_FEATURED = 'Winamax,Betway';
 const normBook = (b: string) => b.toLowerCase().replace(/[^a-z0-9]/g, '');
 const SECTION_ORDER: Section[] = ['match', 'map1', 'map2', 'map3', 'map4', 'map5', 'players', 'other', 'special'];
 // add = true: va directa al boleto de combinada (clic derecho o Mayús+clic)
@@ -151,10 +131,10 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
           </span>
         );
       })}
-      {job?.error === 'sin extensión' && (
+      {!!job?.error && /lector/.test(job.error) && (
         <span className="text-xs text-rose-400">
-          Chrome no responde: ¿está la extensión instalada?{' '}
-          <button className="cursor-pointer text-amber-400 hover:underline" onClick={() => go('settings')}>Instalarla</button>
+          El lector de cuotas no responde: ejecuta <code>npm run backend</code>{' '}
+          <button className="cursor-pointer text-amber-400 hover:underline" onClick={() => go('settings')}>Ajustes</button>
         </span>
       )}
       <div className="ml-auto flex items-center gap-3">
@@ -248,7 +228,7 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
       {!visible.length ? (
         <Empty>
           Todavía no hay cuotas de este partido.<br />
-          Pulsa <b>Actualizar cuotas</b> (con la extensión de Chrome) o ábrelo en Bet365, Winamax o Betway y pulsa el marcador.
+          Pulsa <b>Actualizar cuotas</b>: el lector las trae de Winamax y Betway sin abrir Chrome. Si el partido empieza en las próximas horas, se leen solas cada pocos minutos.
         </Empty>
       ) : (
         <>
@@ -375,10 +355,10 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
 
 // Lo que hace falta para estimar el valor de las líneas de jugador
 type ValueCtx = { forms: (TeamForm | undefined)[]; markets: MarketLine[]; bestOf: number | null; loading: boolean; error?: string };
-type Value = { pOver: number; pUnder: number; side: 'over' | 'under'; edge: number; bk: string; title: string } | { reason: string };
+type Value = { data: ValueData; best: SideValue; title: string } | { reason: string };
 const VALUE_MIN = 0.03; // a partir de qué valor esperado se resalta una cuota
 
-// Probabilidad estimada de la línea y la mejor apuesta (lado y casa con más valor esperado)
+// Análisis de la línea con el mismo modelo de valor que la NBA (fiabilidad, margen, veredicto)
 function lineValue(m: MarketLine, name: string, books: string[], ctx: ValueCtx): Value {
   const st = parseStat(m.key.split('|')[1]);
   if (!st || m.line == null) return { reason: 'Sólo se estiman líneas de un mapa' };
@@ -390,50 +370,47 @@ function lineValue(m: MarketLine, name: string, books: string[], ctx: ValueCtx):
   if (games.length < MIN_GAMES) return { reason: `Sólo ${games.length} partidas de ${name} con este equipo` };
   const pA = mapWinA(ctx.markets, st.map, ctx.bestOf);
   const pWin = pA == null ? null : hit.side === 0 ? pA : 1 - pA;
+  const prices = { over: m.outcomes.find(x => x.id === 'over')?.prices ?? {}, under: m.outcomes.find(x => x.id === 'under')?.prices ?? {} };
+  const data = analyzeLine(games, st.stat, m.line, pWin, prices, books);
+  const best = data.sides.slice().sort((a, b) => b.ev - a.ev)[0];
+  if (!best) return { reason: 'Sin cuotas' };
   const e = estimate(games, st.stat, m.line, pWin);
-  let best = { side: 'over' as 'over' | 'under', edge: -Infinity, bk: '' };
-  const lines: string[] = [];
-  for (const side of ['over', 'under'] as const) {
-    const o = m.outcomes.find(x => x.id === side);
-    const p = side === 'over' ? e.over : e.under;
-    for (const bk of books) {
-      const price = o?.prices[bk];
-      if (!price) continue;
-      const v = ev(p, e.push, price);
-      if (v > best.edge) best = { side, edge: v, bk };
-      lines.push(`${bk} ${side === 'over' ? 'Más' : 'Menos'} ${odd(price)}: implícita ${pct(1 / price)} · valor ${v > 0 ? '+' : ''}${pct(v)}`);
-    }
-  }
-  if (!best.bk) return { reason: 'Sin cuotas' };
   const title = [
     `${hit.player.name}: media ${e.mean.toFixed(1)} en sus últimas ${e.n} partidas; superó ${m.line} en ${e.hits}`,
     pWin == null ? 'Sin cuota de ganador: no se ajusta por la probabilidad de ganar el mapa'
       : `Probabilidad de que su equipo gane el mapa ${st.map}: ${pct(pWin)} (cuotas sin margen)`,
-    `Estimado: Más ${pct(e.over)} · Menos ${pct(e.under)}${e.push > 0.001 ? ` · Nula ${pct(e.push)}` : ''}`,
-    ...lines
+    `Estimado: Más ${pct(data.pOver)} · Menos ${pct(data.pUnder)}${data.pPush > 0.001 ? ` · Nula ${pct(data.pPush)}` : ''}`,
+    `Fiabilidad ${data.rel.score}/100 · ${VERDICT_LABEL[data.verdict.code]}`,
+    'Pulsa la fila para ver el análisis completo'
   ].join('\n');
-  return { pOver: e.over, pUnder: e.under, ...best, title };
+  return { data, best, title };
 }
 
 // Líneas de jugador (kills, asistencias, muertes): una tabla por estadística con Más / Menos de cada casa,
-// la probabilidad estimada con las stats de los jugadores y el valor de la mejor cuota
+// la probabilidad estimada con las stats de los jugadores, el valor de la mejor cuota, la fiabilidad y el veredicto.
+// Al pulsar una fila se abre el mismo panel de valor que en la sección NBA.
 function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
   markets: MarketLine[]; books: string[]; value: ValueCtx; onPick: Pick; open: boolean; onToggle: () => void;
 }) {
+  const { settings } = useApp();
+  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
   const stats = useMemo(() => [...new Set(markets.map(m => m.key.split('|')[1]))], [markets]);
   const [stat, setStat] = useState('');
   const [q, setQ] = useState('');
   const [onlyValue, setOnlyValue] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const cur = stats.includes(stat) ? stat : stats[0];
   const rows = useMemo(() => markets
     .filter(m => m.key.split('|')[1] === cur)
     .map(m => ({ m, name: (m.outcomes[0]?.label || '').split(' · ')[0] }))
     .filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase()))
     .map(r => ({ ...r, v: lineValue(r.m, r.name, books, value) }))
-    .filter(r => !onlyValue || ('edge' in r.v && r.v.edge >= VALUE_MIN))
+    .filter(r => !onlyValue || ('data' in r.v && (r.v.data.verdict.code === 'BET' || r.v.data.verdict.code === 'LEAN')))
     .sort((x, y) => x.name.localeCompare(y.name) || (x.m.line ?? 0) - (y.m.line ?? 0)), [markets, cur, q, books, value, onlyValue]);
   const cols = books;
   if (!stats.length) return null;
+  const nCols = 5 + cols.length * 2;
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/40">
       <div className={cn('flex flex-wrap items-center gap-2 px-4 py-2.5', open && 'border-b border-zinc-800/60')}>
@@ -448,7 +425,7 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
                 s === cur ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200')}>{s}</button>
           ))}
         </div>
-        <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400" title={`Líneas con un valor esperado de al menos ${pct(VALUE_MIN)}`}>
+        <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400" title="Líneas con veredicto Apostar o Valor ligero">
           <input type="checkbox" className="accent-amber-500" checked={onlyValue} onChange={e => setOnlyValue(e.target.checked)} />
           Sólo con valor
         </label>
@@ -456,17 +433,18 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
           className="h-7 w-44 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 text-xs outline-none placeholder:text-zinc-600 focus:border-amber-500/60" /></>}
       </div>
       {open && <div className="overflow-x-auto">
-        <table className="w-full table-fixed" style={{ minWidth: 520 + cols.length * 170 }}>
+        <table className="w-full table-fixed" style={{ minWidth: 640 + cols.length * 170 }}>
           <thead>
             <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               <th className="px-4 py-2 text-left">Jugador</th>
               <th className="w-20 px-2 py-2 text-center">Línea</th>
               <th className="w-24 px-2 py-2 text-center" title="Probabilidad de Más / Menos estimada con sus últimas partidas (Leaguepedia)">Estimado</th>
               <th className="w-28 px-2 py-2 text-center" title="Valor esperado de la mejor cuota: probabilidad estimada × cuota − 1">Valor</th>
+              <th className="w-32 px-2 py-2 text-center" title="Fiabilidad 0-100 del pronóstico y veredicto">Fiabilidad</th>
               {cols.map(bk => <th key={bk} colSpan={2} className="w-[170px] border-l border-zinc-800/60 px-2 py-2 text-center normal-case tracking-normal"><BookHead name={bk} /></th>)}
             </tr>
             <tr className="border-b border-zinc-800/60 text-[10px] text-zinc-600">
-              <th /><th /><th /><th />
+              <th /><th /><th /><th /><th />
               {cols.map(bk => [<th key={bk + 'o'} className="border-l border-zinc-800/60 pb-1.5 font-normal">Más</th>, <th key={bk + 'u'} className="pb-1.5 font-normal">Menos</th>])}
             </tr>
           </thead>
@@ -475,33 +453,59 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
               const first = i === 0 || rows[i - 1].name !== name;
               const [over, under] = [m.outcomes.find(o => o.id === 'over'), m.outcomes.find(o => o.id === 'under')];
               const bo = over ? bestOf(over.prices, cols) : null, bu = under ? bestOf(under.prices, cols) : null;
-              const good = 'edge' in v && v.edge >= VALUE_MIN;
-              const ring = (side: 'over' | 'under', bk: string) => good && v.side === side && v.bk === bk ? 'ring-2 ring-amber-400/70' : '';
-              return (
-                <tr key={m.key} className={cn('hover:bg-zinc-800/20', first && i > 0 && 'border-t border-zinc-800/60')}>
-                  <td className="px-4 py-1 text-sm font-medium">{first ? name : ''}</td>
+              const ok = 'data' in v;
+              const good = ok && v.best.ev >= VALUE_MIN;
+              const ring = (side: 'over' | 'under', bk: string) => good && v.best.side === side && v.best.book === bk ? 'ring-2 ring-amber-400/70' : '';
+              const isOpen = ok && expanded === m.key;
+              const outcomeOf = (s: SideValue) => s.side === 'over' ? over : under;
+              return [
+                <tr key={m.key} onClick={ok ? () => setExpanded(isOpen ? null : m.key) : undefined}
+                  className={cn('hover:bg-zinc-800/20', ok && 'cursor-pointer', isOpen && 'bg-zinc-800/30', first && i > 0 && 'border-t border-zinc-800/60')}>
+                  <td className="px-4 py-1 text-sm font-medium">
+                    <span className="flex items-center gap-1.5">
+                      {ok && <ChevronDown size={12} className={cn('shrink-0 text-zinc-600 transition-transform', !isOpen && '-rotate-90')} />}
+                      {first ? name : ''}
+                    </span>
+                  </td>
                   <td className="px-2 py-1 text-center text-sm tabular-nums text-zinc-400">{m.line}</td>
-                  {'edge' in v ? <>
-                    <td className="cursor-help px-2 py-1 text-center text-xs tabular-nums text-zinc-400" title={v.title}>{pct(v.pOver)} / {pct(v.pUnder)}</td>
-                    <td className="cursor-help px-2 py-1 text-center text-xs tabular-nums" title={v.title}>
-                      <span className={cn('font-semibold', good ? 'text-emerald-400' : v.edge > 0 ? 'text-zinc-300' : 'text-zinc-600')}>
-                        {v.edge > 0 ? '+' : ''}{pct(v.edge)}
+                  {ok ? <>
+                    <td className="px-2 py-1 text-center text-xs tabular-nums text-zinc-400" title={v.title}>{pct(v.data.pOver)} / {pct(v.data.pUnder)}</td>
+                    <td className="px-2 py-1 text-center text-xs tabular-nums" title={v.title}>
+                      <span className={cn('font-semibold', good ? 'text-emerald-400' : v.best.ev > 0 ? 'text-zinc-300' : 'text-zinc-600')}>
+                        {v.best.ev > 0 ? '+' : ''}{pct(v.best.ev)}
                       </span>
-                      <span className="ml-1 text-zinc-500">{v.side === 'over' ? 'Más' : 'Menos'}</span>
+                      <span className="ml-1 text-zinc-500">{SIDE_LABEL[v.best.side]}</span>
                     </td>
-                  </> : <td colSpan={2} className="cursor-help px-2 py-1 text-center text-xs text-zinc-700" title={v.reason}>–</td>}
+                    <td className="px-2 py-1" title={v.title}>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <ReliabilityMeter rel={v.data.rel} compact />
+                        {(v.data.verdict.code === 'BET' || v.data.verdict.code === 'LEAN') && <VerdictBadge code={v.data.verdict.code} />}
+                      </div>
+                    </td>
+                  </> : <td colSpan={3} className="cursor-help px-2 py-1 text-center text-xs text-zinc-700" title={v.reason}>–</td>}
                   {cols.map(bk => [
-                    <td key={bk + 'o'} className="border-l border-zinc-800/60 py-1 pl-2 pr-1">
+                    <td key={bk + 'o'} className="border-l border-zinc-800/60 py-1 pl-2 pr-1" onClick={e => e.stopPropagation()}>
                       <OddButton className={cn('w-16', ring('over', bk))} price={over?.prices[bk]} best={!!bo && bo.n > 1 && over?.prices[bk] === bo.p}
                         title={`${bk}: ${over?.label}`} onClick={add => over && onPick(m.group, over.label, bk, over.prices[bk], add)} />
                     </td>,
-                    <td key={bk + 'u'} className="py-1 pl-1 pr-2">
+                    <td key={bk + 'u'} className="py-1 pl-1 pr-2" onClick={e => e.stopPropagation()}>
                       <OddButton className={cn('w-16', ring('under', bk))} price={under?.prices[bk]} best={!!bu && bu.n > 1 && under?.prices[bk] === bu.p}
                         title={`${bk}: ${under?.label}`} onClick={add => under && onPick(m.group, under.label, bk, under.prices[bk], add)} />
                     </td>
                   ])}
-                </tr>
-              );
+                </tr>,
+                isOpen && (
+                  <tr key={m.key + '-panel'} className="bg-zinc-950/40">
+                    <td colSpan={nCols} className="px-4 py-4">
+                      <div className="max-w-3xl">
+                        <ValuePanel v={v.data} bank={bank}
+                          onBet={s => { const o = outcomeOf(s); if (o && s.book) onPick(m.group, o.label, s.book, s.price); }}
+                          onSlip={s => { const o = outcomeOf(s); if (o && s.book) onPick(m.group, o.label, s.book, s.price, true); }} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ];
             })}
           </tbody>
         </table>

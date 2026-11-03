@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld('api', {
     match: m => call('odds:match', m), board: evs => call('odds:board', evs), auto: m => call('odds:auto', m),
     autoStatus: () => call('odds:autoStatus')
   },
+  basket: {
+    leagues: () => call('basket:leagues'),
+    games: date => call('basket:games', date),
+    days: (from, n) => call('basket:days', from, n),
+    live: () => call('basket:live'),
+    roster: (league, team) => call('basket:roster', league, team),
+    injuries: () => call('basket:injuries'),
+    boxscore: id => call('basket:boxscore', id),
+    search: q => call('basket:search', q),
+    gamelog: (league, id, team) => call('basket:gamelog', league, id, team)
+  },
   extension: { folder: () => call('extension:folder'), open: () => call('extension:open') },
   // Progreso del botón "Actualizar cuotas" (lo hace la extensión de Chrome)
   onOddsAuto: cb => { const h = (_e, job) => cb(job); ipcRenderer.on('odds:auto', h); return () => ipcRenderer.removeListener('odds:auto', h); },

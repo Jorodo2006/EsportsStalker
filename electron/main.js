@@ -9,19 +9,6 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 // Carpeta de la extensión de Chrome (se carga en chrome://extensions → Cargar descomprimida)
 const extensionDir = () => path.join(app.isPackaged ? app.getPath('userData') : app.getAppPath(), 'extension-chrome');
 
-// La extensión vive en Chrome: abrimos ahí la página aunque el navegador por defecto sea otro
-function openInChrome(url) {
-  const { spawn } = require('child_process');
-  const tryRun = (cmd, args) => { try { spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => shell.openExternal(url)).unref(); return true; } catch (_) { return false; } };
-  if (process.platform === 'win32') {
-    const exe = [process.env['PROGRAMFILES'], process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]
-      .filter(Boolean).map(d => path.join(d, 'Google', 'Chrome', 'Application', 'chrome.exe')).find(f => fs.existsSync(f));
-    if (exe && tryRun(exe, [url])) return;
-  } else if (process.platform === 'darwin') {
-    if (tryRun('open', ['-a', 'Google Chrome', url])) return;
-  } else if (tryRun('google-chrome', [url])) return;
-  shell.openExternal(url);
-}
 let win;
 
 function createWindow() {
@@ -62,8 +49,9 @@ function handle(channel, fn) {
 // Aquí sólo quedan los diálogos de fichero, el portapapeles, Chrome y la carpeta de la extensión.
 function registerIpc() {
   const { call, get } = backend;
-  const team = t => ({ name: t?.name, code: t?.code });
-  const matchOf = m => ({ a: team(m?.a), b: team(m?.b), start: m?.start });
+  const team = t => ({ name: t?.name, code: t?.code, ...(t?.alt?.length ? { alt: t.alt } : {}) });
+  // sport y league: el lector de Docker busca el partido en la sección de ese deporte (LoL o baloncesto)
+  const matchOf = m => ({ a: team(m?.a), b: team(m?.b), start: m?.start, ...(m?.sport ? { sport: m.sport, league: m.league } : {}) });
 
   handle('settings:get', () => get('/api/settings'));
   handle('settings:set', patch => call('PUT', '/api/settings', patch));
@@ -112,14 +100,20 @@ function registerIpc() {
   handle('odds:match', match => call('POST', '/api/odds/match', { match: matchOf(match) }));
   // Recibe [{ id, a, b, start }] del calendario y devuelve { id: { a, b } } con la cuota de ganador
   handle('odds:board', events => call('POST', '/api/odds/board', { events }));
-  // Botón "Actualizar cuotas": crea el trabajo y abre en Chrome la página que activa la extensión
-  handle('odds:auto', async match => {
-    const job = await call('POST', '/api/odds/jobs', { match: matchOf(match) });
-    openInChrome(`${backend.BASE}/auto?job=${job.id}`);
-    return job;
-  });
+  // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
+  handle('odds:auto', match => call('POST', '/api/odds/jobs', { match: matchOf(match) }));
   handle('odds:autoStatus', () => get('/api/odds/auto/status'));
   // Marcador de cuotas para tu Chrome y pegado manual si el envío directo falla
+  handle('basket:leagues', () => get('/api/basket/leagues'));
+  handle('basket:games', date => get('/api/basket/games', { date }));
+  handle('basket:days', (from, n) => get('/api/basket/days', { from, n }));
+  handle('basket:live', () => get('/api/basket/live'));
+  handle('basket:roster', (league, team) => get(`/api/basket/roster/${encodeURIComponent(league)}/${encodeURIComponent(team)}`));
+  handle('basket:injuries', () => get('/api/basket/injuries'));
+  handle('basket:boxscore', id => get(`/api/basket/boxscore/${encodeURIComponent(id)}`));
+  handle('basket:search', q => get('/api/basket/search', { q }));
+  handle('basket:gamelog', (league, id, team) => get(`/api/basket/gamelog/${encodeURIComponent(league)}/${encodeURIComponent(id)}`, { team }));
+
   handle('marcador:url', () => extension.bookmarkletUrl());
   handle('marcador:paste', match => {
     let data;
@@ -155,7 +149,7 @@ async function migrateLegacy() {
   }
 }
 
-const CSV_COLS = ['id', 'date', 'league', 'event', 'market', 'selection', 'bookmaker', 'odds', 'stake', 'status', 'cashout', 'notes', 'legs'];
+const CSV_COLS = ['id', 'date', 'sport', 'league', 'event', 'market', 'selection', 'bookmaker', 'odds', 'stake', 'status', 'cashout', 'notes', 'legs'];
 
 function toCsv(rows) {
   const cell = v => { const t = Array.isArray(v) ? JSON.stringify(v) : String(v ?? ''); return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };

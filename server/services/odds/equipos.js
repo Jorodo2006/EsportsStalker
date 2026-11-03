@@ -7,11 +7,14 @@ function teamScore(target, name) {
   const n = norm(name);
   if (!n) return 0;
   let best = 0;
-  for (const t of [target.name, target.code].filter(Boolean)) {
+  for (const t of [target.name, target.code, ...(target.alt || [])].filter(Boolean)) {
     const x = norm(t);
     if (!x) continue;
     if (x === n) return 1;
     if (x.length >= 3 && n.length >= 3 && (x.includes(n) || n.includes(x))) best = Math.max(best, 0.8);
+    // Abreviaturas de las casas ("R. Madrid" / "Real Madrid"): coincide la última palabra larga
+    const last = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 5).pop();
+    if (last(t) && last(t) === last(name)) best = Math.max(best, 0.6);
   }
   return best;
 }

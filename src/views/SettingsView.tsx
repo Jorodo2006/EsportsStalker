@@ -91,7 +91,7 @@ export default function SettingsView() {
           <ul className="space-y-3 text-sm text-zinc-300">
             <li><b>Calendario, resultados y directo:</b> API de lolesports.com (no oficial, gratis).</li>
             <li><b>Stats de jugadores y equipos:</b> Leaguepedia (lol.fandom.com), gratis.</li>
-            <li><b>Cuotas:</b> Bet365, Winamax y Betway, leídas de sus webs en tu Chrome con el marcador o la extensión. No se usa ninguna API de cuotas.</li>
+            <li><b>Cuotas:</b> Winamax y Betway, leídas de sus webs por el lector de Docker (Chromium sin cabeza), sin abrir tu Chrome. No se usa ninguna API de cuotas.</li>
             <li><b>Datos guardados:</b> apuestas, ajustes, cuotas e histórico en PostgreSQL, en el backend de Docker (<code>npm run backend</code>).</li>
           </ul>
           {!!checks.length && (
@@ -181,8 +181,8 @@ function ExtensionCard() {
   const [folder, setFolder] = useState('');
   useEffect(() => { window.api.extension.folder().then(setFolder).catch(() => {}); }, []);
   return (
-    <Card className="xl:col-span-2" title="Extensión de Chrome">
-      <p className="mb-2 text-sm text-zinc-400">La extensión abre Bet365, Winamax y Betway en pestañas de fondo de tu Chrome, busca el partido y trae las cuotas sin que hagas nada más: cuando pulsas <b>Actualizar cuotas</b> en un partido y cada pocos minutos con las lecturas automáticas.</p>
+    <Card className="xl:col-span-2" title="Extensión de Chrome (opcional)">
+      <p className="mb-2 text-sm text-zinc-400">Ya no hace falta: las lecturas las hace el contenedor <code>lector</code> de Docker. La extensión sólo sirve de reserva si Winamax o Betway bloquean el lector; entonces abre las casas en pestañas de fondo de tu Chrome y hace lo mismo.</p>
       <ol className="list-decimal space-y-1.5 pl-5 text-sm text-zinc-400">
         <li>En Chrome abre <code>chrome://extensions</code> y activa el <b>Modo de desarrollador</b> (arriba a la derecha).</li>
         <li>Pulsa <b>Cargar descomprimida</b> y elige esta carpeta: <code className="break-all text-zinc-300">{folder || '…'}</code></li>
@@ -206,11 +206,11 @@ function MarcadorCard() {
   // React no deja poner "javascript:" en href desde JSX: se pone directamente en el elemento
   useEffect(() => { if (url && link.current) link.current.setAttribute('href', url); }, [url]);
   return (
-    <Card className="xl:col-span-2" title="Marcador de cuotas (Bet365, Winamax, Betway)">
+    <Card className="xl:col-span-2" title="Marcador de cuotas (Winamax, Betway)">
       <ol className="list-decimal space-y-1.5 pl-5 text-sm text-zinc-400">
-        <li>Instálalo una vez: pulsa <b>Copiar marcador</b>. En Chrome, Ctrl+Shift+B → clic derecho en la barra de favoritos → <b>Añadir página…</b> → pega en <b>URL</b> y guarda. Si ya tenías el de Bet365, edítalo y pega el nuevo.</li>
+        <li>Instálalo una vez: pulsa <b>Copiar marcador</b>. En Chrome, Ctrl+Shift+B → clic derecho en la barra de favoritos → <b>Añadir página…</b> → pega en <b>URL</b> y guarda.</li>
         <li>Abre el partido en la app y déjalo abierto.</li>
-        <li>En Chrome abre ese partido en la casa. En Bet365 ve a la sección de <b>jugadores</b> (kills, asistencias, muertes) y despliégala; en Betway abre la pestaña <b>Mapa N - Especiales de Jugadores</b> (el marcador despliega solo los mercados). En Winamax basta con la página del partido.</li>
+        <li>En Chrome abre ese partido en la casa. En Betway abre la pestaña <b>Mapa N - Especiales de Jugadores</b> (el marcador despliega solo los mercados). En Winamax basta con la página del partido.</li>
         <li>Pulsa el favorito. Las cuotas llegan solas a la app. Si Chrome pide permiso de red local, acéptalo; si dice que las ha copiado, pulsa <b>Pegar cuotas del marcador</b> en el partido.</li>
       </ol>
       <p className="mt-2 text-xs text-zinc-500">Pon las cuotas en formato decimal. Cada envío vale 3 horas; repite el marcador para actualizar. Cada vez que lo usas se guarda una foto de la página (<code>captura-casa-marcador.json</code>) para poder mejorar el lector.</p>

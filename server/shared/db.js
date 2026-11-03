@@ -1,5 +1,5 @@
 // Conexión a PostgreSQL compartida por los servicios. Cada servicio tiene su propio esquema
-// (bets, esports, odds) y sus migraciones; ninguno toca las tablas de otro.
+// (bets, esports, odds, basket) y sus migraciones; ninguno toca las tablas de otro.
 const fs = require('fs');
 const path = require('path');
 const { Pool, types } = require('pg');

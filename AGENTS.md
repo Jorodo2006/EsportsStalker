@@ -5,17 +5,22 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 
 ## Qué es
 
-App de escritorio (Windows y Linux) con backend en Docker para seguir los esports de League of Legends y llevar el control de apuestas:
-partidos y directo, comparador de cuotas de Bet365 / Winamax / Betway, stats de jugadores y equipos, y registro de
+App de escritorio (Windows y Linux) con backend en Docker que son **dos apps en una**, con un selector arriba:
+**League of Legends** (esports) y **Baloncesto** (NBA, WNBA, Euroliga y EuroCup). Cada una tiene sus partidos y
+directo, el comparador de cuotas de Winamax / Betway, las stats y el valor de las líneas de jugador, y su registro de
 apuestas simples y combinadas con beneficio, ROI y gráficas. Electron es la interfaz; la lógica y los datos están en
-microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas se actualizan solas cada pocos minutos.
+microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas las lee solo, cada pocos minutos,
+un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 
 ## Reglas del proyecto (no negociables)
 
 1. **Nada de APIs de pago ni APIs de cuotas.** Todas las fuentes son gratuitas. Las cuotas se leen de las páginas
-   de las casas en el Chrome del usuario (marcador o extensión), nunca de una API de cuotas (OddsPapi, Pinnacle,
-   The Odds API… se quitaron a propósito; ver `OBSOLETE` en `server/services/bets/store.js`).
-2. **Casas soportadas: Bet365, Winamax y Betway.** William Hill y el resto se quitaron a petición del usuario.
+   de las casas con el lector de Docker (`server/lector`, Chromium sin cabeza) o, de reserva, con el marcador o la
+   extensión en el Chrome del usuario; nunca de una API de cuotas (OddsPapi, Pinnacle, The Odds API… se quitaron a
+   propósito; ver `OBSOLETE` en `server/services/bets/store.js`). **Sin trucos anti-bot:** si una casa bloquea el
+   lector, el trabajo termina con error y se ve en la app; no se disfraza el navegador.
+2. **Casas soportadas: Winamax y Betway.** Bet365 se quitó porque no se deja leer desde Docker; William Hill y el
+   resto, a petición del usuario.
 3. **La interfaz y los comentarios van en español.** Textos de la UI, mensajes de error y comentarios del código.
 4. **Ningún dato personal en el repo:** ni volcados de la base de datos, ni `data.json`, ni capturas
    (`capturas/`, `captura-*.json`), ni `casas-urls.json`, ni ficheros `*.migrado-*`, ni el `.env` con las credenciales.
@@ -23,7 +28,7 @@ microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas
    `server/shared/env.js`) y se documentan en `.env.example`.
 5. **Las peticiones a internet las hace el backend** (`server/`). El renderer (`src/`) no hace peticiones: habla con
    `window.api`, y el proceso principal (`electron/`) las reenvía al gateway.
-6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`). Si necesita datos de otro, llama a
+6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`). Si necesita datos de otro, llama a
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Nada de `git commit` ni `git push` sin que Jordi lo pida explícitamente en ese momento.** Prepara los cambios y
    espera su confirmación.
@@ -66,11 +71,14 @@ Docker Compose (docker-compose.yml)
   ├─ esports  :4001          server/services/esports/   lolesports + Leaguepedia (cola, caché) → esquema esports
   ├─ odds     :4002          server/services/odds/      puente, normalizador, trabajos,
   │                                                     programador cada X min, histórico     → esquema odds
+  ├─ basket   :4004          server/services/basket/    NBA y WNBA (ESPN), Euroliga y EuroCup
+  │                                                     (API de la Euroliga), días en hora de España → esquema basket
+  ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
+  │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
-Chrome del usuario
-  ├─ marcador (bookmarklet)  electron/bookmarklet/marcador.js  → POST /odds
-  └─ extensión MV3           electron/extension/               → GET /jobs/next cada 30 s (chrome.alarms) o
-                                                                 página /auto; abre las casas, inyecta el lector, POST /odds
+Chrome del usuario (reserva; ya no hace falta)
+  ├─ marcador (bookmarklet)  electron/bookmarklet/marcador.js  → POST /odds (el mismo lector que usa el contenedor)
+  └─ extensión MV3           electron/extension/               → GET /jobs/next cada 30 s (chrome.alarms)
 ```
 
 Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md) y
@@ -91,9 +99,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **TypeScript estricto** con `noUnusedLocals` y `noUnusedParameters`: nada de imports o variables sin usar.
 - Alias `@/` → `src/`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Dialog`, `Field`, `Input`,
   `Select`, `Badge`, `Tabs`, `Empty`, `Loading`, `th`/`td`…). Úsalos en vez de crear otros.
-- Estilo: tema oscuro `zinc`, acento `amber`, verde `emerald` para lo positivo, `rose` para lo negativo. Clases con `cn()`
-  de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
-- Estado global (vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
+- Estilo: tema azul tinta (la escala `zinc` está redefinida en `src/index.css`) y acento por app con las clases
+  `amber` (turquesa en LoL, naranja en baloncesto, según `data-app`); verde `emerald` para lo positivo, `rose` para lo
+  negativo. Barlow para el texto y `font-score` (Barlow Condensed) para marcadores y cifras. Piezas de partidos comunes
+  a las dos apps en `src/components/sport.tsx` (tira de días, filtros, bloque de competición, fila, marcador).
+  Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
+- Estado global (app activa `lol` | `basket`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
 - El proceso principal y el backend son CommonJS (`require`), el renderer ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
@@ -101,14 +112,19 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 
 ## Cosas que se rompen con facilidad
 
-- **Lectores de las casas** (`marcador.js` y `background.js`): dependen del HTML de Bet365, Winamax y Betway, que
-  cambia sin aviso. Cada lectura guarda `capturas/captura-<casa>-<nombre>.json` en el proyecto; úsalas para ajustar
-  selectores. Bet365 usa clases con hash (`rct-*`): busca por texto y estructura, no por clase.
-- **Emparejar equipos** entre lolesports y las casas (`orient`/`teamScore` en `server/services/odds/equipos.js`): nombres distintos
-  ("Gen.G Esports" / "GEN" / "Gen G"). Prueba con varios equipos.
+- **Lectores de las casas** (`marcador.js`, `server/lector/runner.js` y `background.js`): dependen del HTML y del
+  socket de Winamax y Betway, que cambian sin aviso. Cuando no encuentran algo guardan
+  `capturas/captura-<casa>-<nombre>.json`; úsalas para ajustar selectores. `marcador.js` se monta en el contenedor
+  `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio.
+- **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
+  salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
+  clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`.
+- **Emparejar equipos** entre lolesports / ESPN / la Euroliga y las casas (`orient`/`teamScore` en
+  `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
+  "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.
 - **Leaguepedia** limita mucho las peticiones anónimas: no quites la cola ni la caché de `leaguepedia.js`.
-- **Lecturas programadas**: la extensión las hace de una en una y sólo con Chrome abierto. No subas mucho la
-  frecuencia (Bet365 puede bloquear). En las programadas la pestaña nunca se pone delante.
+- **Lecturas programadas** (`server/services/odds/scheduler.js`): LoL y baloncesto de las próximas N horas; el lector
+  las hace de una en una. No subas mucho la frecuencia: las casas pueden bloquear.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.
 
@@ -123,3 +139,4 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/05-apuestas.md`](docs/specs/05-apuestas.md) | Registro de apuestas, combinadas, boleto, estadísticas, CSV |
 | [`docs/specs/06-ajustes.md`](docs/specs/06-ajustes.md) | Ajustes, fuentes de datos y pendientes conocidos |
 | [`docs/specs/07-backend.md`](docs/specs/07-backend.md) | Microservicios, gateway, PostgreSQL, migraciones, avisos en vivo |
+| [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
