@@ -108,6 +108,13 @@ function registerIpc() {
   handle('tennis:days', (from, n) => get('/api/tennis/days', { from, n }));
   handle('tennis:live', () => get('/api/tennis/live'));
   handle('tennis:rankings', tour => get(`/api/tennis/rankings/${encodeURIComponent(tour)}`));
+  handle('tennis:stats', (tour, id) => get(`/api/tennis/stats/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
+  handle('tennis:surface', (tour, name, city) => get(`/api/tennis/surface/${encodeURIComponent(tour)}`, { name, city }));
+  handle('tennis:picks', (date, id) => get('/api/tennis/picks', { date, id }));
+  handle('tennis:picksDay', date => get('/api/tennis/picks/day', { date }));
+  handle('tennis:profile', (tour, id) => get(`/api/tennis/profile/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
+  handle('basket:standings', league => get(`/api/basket/standings/${encodeURIComponent(league)}`));
+  handle('basket:team', (league, team) => get(`/api/basket/team/${encodeURIComponent(league)}/${encodeURIComponent(team)}`));
   handle('tennis:player', (tour, id) => get(`/api/tennis/player/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
   handle('basket:leagues', () => get('/api/basket/leagues'));
   handle('basket:games', date => get('/api/basket/games', { date }));

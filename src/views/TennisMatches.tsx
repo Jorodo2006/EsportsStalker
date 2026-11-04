@@ -7,8 +7,12 @@ import { useApp } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import type { TennisMatch, TennisPlayer } from '@/lib/types';
 import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
+import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
+import { TennisDayPicks, TennisPicksPanel } from '@/components/TennisPicks';
+import { TennisCompare } from '@/components/TennisStats';
 import { CompetitionBlock, DayStrip, MatchRow, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
+import { Panel, panel } from '@/components/viz';
 
 const stateOf = (m: TennisMatch): MatchState => (m.state === 'in' ? 'live' : m.state);
 export const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -58,7 +62,7 @@ export default function TennisMatches() {
   const open = (games.data ?? []).find(g => g.id === openId) ?? null;
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
-  if (open) return <MatchDetail key={open.id} m={open} onClose={() => setOpenId(null)} />;
+  if (open) return <MatchDetail key={open.id} m={open} date={date} onClose={() => setOpenId(null)} />;
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); savePref('tennis-closed', n); };
   return (
@@ -68,6 +72,7 @@ export default function TennisMatches() {
         <Toggle on={quali} onChange={v => { setQuali(v); savePref('tennis-quali', v); }} label="Previa" />
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('tennis-odds', v); }} label="Cuotas" />
       </StateFilterBar>
+      <TennisDayPicks date={date} onOpen={setOpenId} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
         : !shown.length ? <Empty icon={<CalendarX size={26} />}>Ese día no hay partidos de la ATP ni de la WTA con este filtro.</Empty>
           : byTour.map(([k, list]) => (
@@ -88,15 +93,17 @@ export default function TennisMatches() {
   );
 }
 
-type Tab = 'score' | 'odds' | 'form';
+type Tab = 'score' | 'odds' | 'picks' | 'form';
 
-function MatchDetail({ m, onClose }: { m: TennisMatch; onClose: () => void }) {
+function MatchDetail({ m, date, onClose }: { m: TennisMatch; date: string; onClose: () => void }) {
   const { openBet } = useApp();
   const st = stateOf(m);
-  const [tab, setTab] = useState<Tab>(st === 'pre' ? 'odds' : 'score');
+  const [tab, setTab] = useState<Tab>(st === 'pre' ? 'picks' : 'score');
   const t = targetOfMatch(m);
+  const [sheet, setSheet] = useState<string | null>(null);
+  if (sheet) return <TennisPlayerSheet key={sheet} tour={m.tour} id={sheet} backLabel="Partido" onBack={() => setSheet(null)} onPlayer={setSheet} />;
   return (
-    <div className="flex flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={16} />Volver a partidos</button>
       <Scoreboard competition={m.tournament} detail={[m.round, m.court].filter(Boolean).join(', ')} state={st}
         a={{ name: label(m.a), short: m.a.country, logo: m.a.flag, score: setsWon(m.a) }}
@@ -104,10 +111,10 @@ function MatchDetail({ m, onClose }: { m: TennisMatch; onClose: () => void }) {
         center={esTime(m.date)}
         centerSub={st === 'pre' ? new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? m.status : 'Final'}>
         <SheetTabs value={tab} onChange={setTab} items={[
-          ['score', 'Marcador'], ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]), ['form', 'Forma de los jugadores']
+          ['score', 'Marcador'], ...(st === 'pre' ? [['picks', 'Recomendaciones']] as [Tab, string][] : []), ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]), ['form', 'Forma de los jugadores']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'tennis', league: m.tournament, event: t.event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
-      {tab === 'score' ? <Sets m={m} /> : tab === 'odds' ? <SportOdds target={t} /> : <Form m={m} />}
+      {tab === 'score' ? <Sets m={m} /> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <Form m={m} onPlayer={setSheet} />}
     </div>
   );
 }
@@ -140,28 +147,59 @@ function Sets({ m }: { m: TennisMatch }) {
 }
 
 // Lo que lleva cada jugador en los torneos en juego (su camino y los últimos resultados) y su ranking
-function Form({ m }: { m: TennisMatch }) {
-  return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{[m.a, m.b].map(p => <PlayerForm key={p.id} tour={m.tour} p={p} current={m.id} />)}</div>;
+function Form({ m, onPlayer }: { m: TennisMatch; onPlayer: (id: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <TennisCompare tour={m.tour} a={m.a} b={m.b} tournament={m.tournament} city={m.city} />
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">{[m.a, m.b].map(p => <PlayerForm key={p.id} tour={m.tour} p={p} current={m.id} onPlayer={onPlayer} />)}</div>
+      <HeadToHead m={m} />
+    </div>
+  );
 }
 
-function PlayerForm({ tour, p, current }: { tour: TennisMatch['tour']; p: TennisPlayer; current: string }) {
+// Enfrentamientos recientes entre los dos, de los partidos que ESPN da del primero
+function HeadToHead({ m }: { m: TennisMatch }) {
+  const q = useQuery({ queryKey: ['tennis', 'profile', m.tour, m.a.id], queryFn: () => window.api.tennis.profile(m.tour, m.a.id), staleTime: 30 * 60e3, retry: false });
+  const list = (q.data?.matches ?? []).filter(x => x.opponent.id === m.b.id && x.id !== m.id);
+  if (q.isLoading || q.error) return null;
+  return (
+    <Panel title={`Enfrentamientos recientes${list.length ? `: ${m.a.name} ${list.filter(x => x.win).length} - ${list.filter(x => !x.win).length} ${m.b.name}` : ''}`}>
+      {!list.length ? <p className="px-3.5 py-2 text-[13px] text-zinc-400">Sin enfrentamientos recientes.</p> : (
+        <div className="divide-y divide-white/10 px-3.5">
+          {list.map(x => (
+            <div key={x.id} className="flex h-7 items-center gap-3 text-[13px]">
+              <span className="w-20 shrink-0 text-xs text-zinc-500">{new Date(x.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+              <span className="min-w-0 flex-1 truncate">{x.tournament}, {x.round}</span>
+              <span className="font-score tnum text-zinc-300">{x.score}</span>
+              <span className="w-32 truncate text-right font-medium text-amber-300">Gana {x.win ? m.a.name : m.b.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour']; p: TennisPlayer; current: string; onPlayer: (id: string) => void }) {
   const q = useQuery({ queryKey: ['tennis', 'player', tour, p.id], queryFn: () => window.api.tennis.player(tour, p.id), staleTime: 5 * 60e3 });
   const done = (q.data ?? []).filter(x => x.state === 'post' && x.id !== current);
   const wins = done.filter(x => (x.a.id === p.id ? x.a : x.b).winner).length;
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
-      <div className="flex items-center gap-3 border-b border-zinc-800/60 px-4 py-3">
-        {p.flag && <img src={p.flag} alt="" className="h-5 w-7 rounded-sm object-cover" />}
-        <div className="min-w-0 flex-1"><div className="truncate font-semibold">{p.name}</div><div className="text-xs text-zinc-500">{p.country}</div></div>
-        {p.rank && <div className="text-right"><div className="font-score text-2xl font-semibold tnum">{p.rank}</div><div className="text-[11px] text-zinc-500">ranking</div></div>}
+    <div className={cn(panel, 'overflow-hidden')}>
+      <div className="flex items-center gap-2.5 bg-gradient-to-r from-[var(--tv-band)] to-[var(--tv-band-2)] px-3.5 py-1.5 text-white">
+        {p.flag && <img src={p.flag} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
+        <div className="min-w-0 flex-1">
+          <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate font-score text-[17px] font-bold uppercase tracking-wide hover:opacity-80">{p.name}</button>
+        </div>
+        {p.rank && <div className="font-score text-xl font-bold">#{p.rank}</div>}
       </div>
-      {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-4 py-4 text-sm text-zinc-500">Sin partidos recientes en los torneos de estos días.</div> : <>
-        <div className="px-4 pt-3 text-xs text-zinc-500">Últimos días: {wins} ganados de {done.length}</div>
+      {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-3.5 py-2.5 text-[13px] text-zinc-500">Sin partidos en los últimos días.</div> : <>
+        <div className="px-3.5 pt-2 text-[11px] text-zinc-500">Últimos días: {wins} de {done.length}</div>
         <div className="divide-y divide-zinc-800/60">
-          {done.slice(0, 8).map(x => {
+          {done.slice(0, 5).map(x => {
             const me = x.a.id === p.id ? x.a : x.b, rival = x.a.id === p.id ? x.b : x.a;
             return (
-              <div key={x.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+              <div key={x.id} className="flex items-center gap-2.5 px-3.5 py-1.5 text-[13px]">
                 <Badge tone={me.winner ? 'success' : 'danger'}>{me.winner ? 'G' : 'P'}</Badge>
                 <div className="min-w-0 flex-1"><div className="truncate">vs {rival.name}</div><div className="truncate text-xs text-zinc-500">{x.tournament}, {x.round}</div></div>
                 <span className="font-score tnum text-zinc-300">{me.sets.map((s, i) => `${s}-${rival.sets[i] ?? ''}`).join(' ')}</span>

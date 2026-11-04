@@ -9,6 +9,7 @@ import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxT
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
 import { CompetitionBlock, DayStrip, MatchRow, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
+import { BasketTeamSheet, TeamsCompare } from '@/components/BasketTeamSheet';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'wnba'];
@@ -89,7 +90,7 @@ export default function BasketMatches() {
 // El día de la tira va al centro: la semana que se pide empieza 3 días antes
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
-type Tab = 'stats' | 'odds' | 'rosters' | 'value';
+type Tab = 'stats' | 'odds' | 'teams' | 'rosters' | 'value';
 
 // Ficha del partido (como la de LoL): estadísticas en juego o terminado, cuotas antes de empezar
 function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: BasketInjury[]; onClose: () => void }) {
@@ -100,6 +101,9 @@ function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: B
   const [player, setPlayer] = useState<Picked | null>(null);
   const pick = (p: { id: string; name: string; headshot?: string }, teamId: string) => { setPlayer({ id: p.id, name: p.name, league: game.league, headshot: p.headshot, teamId, game }); setTab('value'); };
   const event = `${game.away.abbr} @ ${game.home.abbr}`;
+  const [sheet, setSheet] = useState<string | null>(null);
+  if (sheet) return <BasketTeamSheet key={sheet} league={game.league} teamId={sheet} backLabel="Volver al partido" onBack={() => setSheet(null)}
+    onPlayer={(p, teamId) => { setSheet(null); pick(p, teamId); }} />;
   return (
     <div className="flex flex-col gap-5">
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100">
@@ -113,10 +117,10 @@ function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: B
         <SheetTabs value={tab} onChange={setTab} items={[
           ['stats', 'Estadísticas'],
           ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
-          ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
+          ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
-      {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} /> : tab === 'rosters'
+      {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} /> : tab === 'teams' ? <TeamsCompare game={game} onTeam={setSheet} /> : tab === 'rosters'
         ? <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Roster game={game} side="away" injuries={injuries} current={player?.id} onPick={pick} />
           <Roster game={game} side="home" injuries={injuries} current={player?.id} onPick={pick} />

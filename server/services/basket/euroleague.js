@@ -152,3 +152,104 @@ async function boxscore(lg, gid) {
 }
 
 module.exports.boxscore = boxscore;
+
+// ---------- Clasificación y ficha de equipo ----------
+const pctNum = s => { const n = parseFloat(s); return Number.isFinite(n) ? n / 100 : 0; };
+const fromEs = g => (/^[A-Z]$/.test(g || '') ? `Grupo ${g}` : /regular/i.test(g || '') ? 'Fase regular' : g || '');
+
+// La API pide la clasificación por jornada, y la jornada en curso puede no tenerla todavía (da 404): la última que responda
+async function basicStandings(lg) {
+  const s = code(lg, seasonStart());
+  const j = await getJSON(`${API}/v2/competitions/${COMPS[lg]}/seasons/${s}/rounds`, 6 * 3600e3);
+  const started = (j.data || []).filter(r => new Date(r.minGameStartDate).getTime() <= Date.now()).map(r => r.round).sort((a, b) => b - a);
+  let last;
+  for (const r of started.slice(0, 4)) {
+    try { return await getJSON(`${API}/v3/competitions/${COMPS[lg]}/seasons/${s}/rounds/${r}/basicstandings`, 15 * 60e3); } catch (e) { last = e; }
+  }
+  if (last) throw last;
+  return { teams: [] }; // la temporada aún no ha empezado
+}
+
+async function standings(lg) {
+  const j = await basicStandings(lg);
+  // Racha: los partidos terminados de cada equipo, del más reciente hacia atrás
+  const played = (await season(lg)).filter(g => g.played).sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
+  const streak = c => {
+    const won = played.filter(g => g.local?.club?.code === c || g.road?.club?.code === c)
+      .map(g => (g.local?.club?.code === c ? g.local.score > g.road.score : g.road.score > g.local.score));
+    if (!won.length) return '';
+    let n = 0;
+    while (n < won.length && won[n] === won[0]) n++;
+    return `${won[0] ? 'G' : 'P'}${n}`;
+  };
+  const groups = new Map();
+  for (const t of j.teams || []) {
+    const name = fromEs(t.groupName);
+    if (!groups.has(name)) groups.set(name, []);
+    const n = Math.max(1, t.gamesPlayed || 0);
+    groups.get(name).push({
+      id: t.club?.code || '', abbr: t.club?.tvCode || t.club?.code || '', name: (t.club?.editorialName || t.club?.name || '').trim(), logo: t.club?.images?.crest || '',
+      pos: t.position, seed: t.position, w: t.gamesWon || 0, l: t.gamesLost || 0, pct: pctNum(t.winPercentage), home: t.homeRecord || '', road: t.awayRecord || '', last: t.lastTenRecord || '',
+      streak: streak(t.club?.code), pf: Math.round(((t.pointsFor || 0) / n) * 10) / 10, pa: Math.round(((t.pointsAgainst || 0) / n) * 10) / 10,
+      diff: Math.round((((t.pointsFor || 0) - (t.pointsAgainst || 0)) / n) * 10) / 10, gb: '', form: (t.last5Form || []).map(x => (x === 'W' ? 'G' : 'P'))
+    });
+  }
+  return [...groups].map(([name, teams]) => ({ name, teams })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const ageFrom = d => { if (!d) return null; const b = new Date(d), n = new Date(); return n.getFullYear() - b.getFullYear() - (n < new Date(n.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0); };
+
+async function team(lg, id) {
+  const s = code(lg, seasonStart()), C = COMPS[lg];
+  const [club, people, stats, table, list, players] = await Promise.all([
+    getJSON(`${API}/v2/clubs/${encodeURIComponent(id)}`, 24 * 3600e3).catch(() => ({})),
+    getJSON(`${API}/v2/competitions/${C}/seasons/${s}/clubs/${encodeURIComponent(id)}/people`, 30 * 60e3).catch(() => []),
+    getJSON(`${API}/v3/competitions/${C}/seasons/${s}/clubs/${encodeURIComponent(id)}/stats`, 30 * 60e3).catch(() => []),
+    standings(lg).catch(() => []),
+    season(lg),
+    getJSON(`${API}/v3/competitions/${C}/statistics/players/traditional?seasonMode=Single&seasonCode=${s}&statisticMode=PerGame&limit=500`, 30 * 60e3).catch(() => ({}))
+  ]);
+  const staff = Array.isArray(people) ? people : people.data || [];
+  const avgs = Object.fromEntries((players.players || []).filter(p => p.player?.team?.code === id).map(p => [p.player.code, p]));
+  const roster = staff.filter(p => p.typeName === 'Player' && p.active !== false).map(p => {
+    const a = avgs[p.person.code];
+    return {
+      id: p.person.code, name: niceName(p.person.name), pos: p.positionName || '', jersey: p.dorsal || '', headshot: p.images?.headshot || '',
+      age: ageFrom(p.person.birthDate), height: p.person.height ? `${(p.person.height / 100).toFixed(2)} m` : '', weight: p.person.weight ? `${p.person.weight} kg` : '',
+      from: p.person.country?.name || '', years: null, salary: null, injury: null, injuryDetail: '', injuryReturn: null,
+      avg: a ? { pts: a.pointsScored, reb: a.totalRebounds, ast: a.assists, min: a.minutesPlayed } : null
+    };
+  });
+  const a = (Array.isArray(stats) ? stats[0] : stats)?.averagePerGame || {}, tot = (Array.isArray(stats) ? stats[0] : stats)?.accumulated || {};
+  const pc = (m, n) => (n ? `${((m / n) * 100).toFixed(1)}` : null);
+  const one = v => (v == null ? null : v.toFixed(1));
+  const statRows = [['Puntos', one(a.points)], ['Rebotes', one(a.totalRebounds)], ['Asistencias', one(a.assistances)], ['Robos', one(a.steals)], ['Tapones', one(a.blocksFavour)],
+    ['Pérdidas', one(a.turnovers)], ['Tiros de campo %', pc(tot.fieldGoalsMadeTotal, tot.fieldGoalsAttemptedTotal)], ['Triples %', pc(tot.fieldGoalsMade3, tot.fieldGoalsAttempted3)],
+    ['Tiros libres %', pc(tot.freeThrowsMade, tot.freeThrowsAttempted)]].filter(([, v]) => v != null).map(([label, value]) => ({ label, value }));
+  const top = (label, key, val) => {
+    const ls = roster.map(p => ({ p, a: avgs[p.id] })).filter(x => x.a && val(x.a) != null).sort((x, y) => val(y.a) - val(x.a)).slice(0, 3);
+    return ls.length ? [{ label, players: ls.map(x => ({ id: x.p.id, name: x.p.name, value: val(x.a).toFixed(1) })) }] : [];
+  };
+  const leaders = [['Puntos', 'pointsScored'], ['Rebotes', 'totalRebounds'], ['Asistencias', 'assists'], ['Triples', 'threePointersMade'], ['Robos', 'steals'], ['Tapones', 'blocks'], ['Minutos', 'minutesPlayed'], ['Valoración', 'pir']]
+    .flatMap(([label, k]) => top(label, k, x => x[k]));
+  const group = table.find(g => g.teams.some(x => x.id === id));
+  const side = (t, me, won) => ({ me, abbr: t?.club?.tvCode || t?.club?.code || '', name: (t?.club?.editorialName || t?.club?.name || '').trim(), logo: t?.club?.images?.crest || '', score: t?.score != null ? String(t.score) : null, winner: won });
+  const games = list.filter(g => g.local?.club?.code === id || g.road?.club?.code === id).map(g => {
+    const home = g.local.club.code === id, me = home ? g.local : g.road, opp = home ? g.road : g.local;
+    return { id: `${lg}:${g.season?.code || s}_${g.gameCode}`, date: g.utcDate, state: g.played ? 'post' : 'pre', home, us: side(me, true, g.played && me.score > opp.score), them: side(opp, false, g.played && opp.score > me.score) };
+  });
+  const row = group?.teams.find(x => x.id === id);
+  const any = list.map(g => [g.local, g.road]).flat().find(t => t?.club?.code === id)?.club;
+  return {
+    id, league: lg, name: (club.name || any?.name || '').replace(/\s+/g, ' ').trim(), abbr: any?.tvCode || id, logo: club.images?.crest || any?.images?.crest || '', color: '',
+    coach: niceName(staff.find(p => p.typeName === 'Coach')?.person?.name) || '', venue: club.venue?.name ? niceName(club.venue.name) : '', capacity: club.venue?.capacity || null,
+    city: club.city ? niceName(club.city) : '', country: club.country?.name || '', president: club.president || '', website: club.website || '', division: '',
+    group: group?.name || '', standing: row || null, stats: statRows, leaders,
+    results: games.filter(g => g.state === 'post').sort((x, y) => new Date(y.date) - new Date(x.date)).slice(0, 10),
+    upcoming: games.filter(g => g.state !== 'post').sort((x, y) => new Date(x.date) - new Date(y.date)).slice(0, 5),
+    roster
+  };
+}
+
+module.exports.standings = standings;
+module.exports.team = team;

@@ -3,9 +3,14 @@
 const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
+const tml = require('./tml');
+const { photoOf } = require('./photos');
+const { picksFor } = require('./picks');
 
 const TOURS = { atp: 'ATP', wta: 'WTA' };
 const site = t => `https://site.api.espn.com/apis/site/v2/sports/tennis/${t}`;
+const core = t => `https://sports.core.api.espn.com/v2/sports/tennis/leagues/${t}`;
+const HISTORY_TOURNAMENTS = 12; // cada torneo del historial cuesta dos peticiones a ESPN
 
 // ---------- caché ----------
 const mem = new Map();
@@ -70,14 +75,14 @@ async function ranks(tour) {
   const j = await getJSON(`${site(tour)}/rankings`, 6 * 3600e3);
   const list = (j.rankings?.[0]?.ranks || []).map(r => ({
     rank: r.current, previous: r.previous, points: r.points, trend: r.trend || '',
-    id: String(r.athlete?.id || ''), name: r.athlete?.displayName || '', short: r.athlete?.shortname || '', flag: r.athlete?.flag?.href || '', country: r.athlete?.flag?.alt || ''
+    id: String(r.athlete?.id || ''), name: r.athlete?.displayName || '', short: r.athlete?.shortname || '', flag: r.athlete?.flag?.href || (typeof r.athlete?.flag === 'string' ? r.athlete.flag : ''), country: r.athlete?.flagAltText || r.athlete?.flag?.alt || r.athlete?.citizenshipCountry || ''
   }));
   return list;
 }
 
 // Partidos individuales de los torneos que salen en el marcador de ESPN (trae el torneo entero)
-async function matches(tour, days) {
-  const [rk, ...boards] = await Promise.all([ranks(tour).catch(() => []), ...days.map(d => getJSON(`${site(tour)}/scoreboard?dates=${d}`, 60e3))]);
+async function matches(tour, days, ttl = 60e3) {
+  const [rk, ...boards] = await Promise.all([ranks(tour).catch(() => []), ...days.map(d => getJSON(`${site(tour)}/scoreboard?dates=${d}`, ttl))]);
   const rankById = Object.fromEntries(rk.map(r => [r.id, r]));
   const seen = new Set(), out = [];
   for (const j of boards) {
@@ -93,7 +98,8 @@ async function matches(tour, days) {
             id: `${tour}:${c.id}`, tour, tournament: e.name || '', tournamentId: e.id, major: !!e.major, date: c.date,
             state: st === 'in' ? 'in' : st === 'post' ? 'post' : 'pre', status: st === 'pre' ? '' : statusEs(c.status?.type?.detail),
             round: roundEs(c.round?.displayName), court: c.venue?.court || '', city: c.venue?.fullName || '',
-            bestOf: c.format?.regulation?.periods || 3, note: c.notes?.[0]?.text || '', a, b
+            // ESPN da 5 sets a todos los partidos de la ATP: sólo son a cinco los Grand Slam masculinos
+            bestOf: tour === 'atp' && e.major ? 5 : 3, note: c.notes?.[0]?.text || '', a, b
           });
         }
       }
@@ -110,7 +116,106 @@ async function between(from, to) {
     .sort((x, y) => new Date(x.date) - new Date(y.date));
 }
 
+// ---------- Ficha de un jugador ----------
+// Las referencias de la API core vienen con http://
+const secure = u => String(u || '').replace(/^http:/, 'https:');
+const statsOf = j => Object.fromEntries((j?.splits?.categories || []).flatMap(c => c.stats || []).map(s => [s.name, s.value]));
+const record = st => (st.singlesWon == null ? null : { won: st.singlesWon, lost: st.singlesLost ?? 0, titles: st.singlesTitles ?? 0, doublesTitles: st.doublesTitles ?? 0, prize: st.prize ?? 0 });
+
+// "6-3 7-6(5)": entre paréntesis, los puntos del que pierde el desempate
+const scoreFor = (me, rival) => me.sets.map((v, i) => {
+  const a = me.tiebreaks[i], b = rival.tiebreaks[i];
+  return `${v}-${rival.sets[i] ?? ''}${a != null && b != null ? `(${Math.min(a, b)})` : ''}`;
+}).join(' ');
+
+// ESPN sólo da referencias a cada partido, y pedirlas una a una serían decenas de peticiones:
+// se pide el cuadro de cada torneo (con caché) y se buscan ahí sus partidos
+async function history(tour, id) {
+  const log = await getJSON(`${core(tour)}/athletes/${id}/eventlog?limit=50`, 3600e3);
+  const wanted = new Map(); // referencia del torneo → ids de sus partidos
+  for (const it of log?.events?.items || []) {
+    const ref = secure(it.event?.$ref), comp = String(it.competition?.$ref || '').match(/competitions\/(\d+)/)?.[1];
+    if (!it.played || !ref || !comp) continue;
+    if (!wanted.has(ref) && wanted.size >= HISTORY_TOURNAMENTS) continue;
+    if (!wanted.has(ref)) wanted.set(ref, new Set());
+    wanted.get(ref).add(`${tour}:${comp}`);
+  }
+  const lists = await Promise.allSettled([...wanted].map(async ([ref, comps]) => {
+    const ev = await getJSON(ref, 12 * 3600e3);
+    // Un torneo terminado ya no cambia; el que está en juego, sí
+    const over = new Date(ev.endDate || 0).getTime() < Date.now();
+    return (await matches(tour, [ymd(String(ev.date).slice(0, 10))], over ? 6 * 3600e3 : 5 * 60e3)).filter(m => comps.has(m.id));
+  }));
+  return lists.flatMap(r => (r.status === 'fulfilled' ? r.value : [])).flatMap(m => {
+    const me = m.a.id === id ? m.a : m.b.id === id ? m.b : null, rival = me === m.a ? m.b : m.a;
+    if (!me || m.state !== 'post' || !rival.name) return []; // dobles, byes y partidos sin jugar no están en el cuadro individual
+    return [{
+      id: m.id, date: m.date, tournament: m.tournament, major: m.major, round: m.round, city: m.city, win: me.winner, score: scoreFor(me, rival),
+      note: /^final$/i.test(m.status) ? '' : m.status, sets: me.sets.length, games: me.sets.reduce((t, v, i) => t + v + (rival.sets[i] || 0), 0),
+      opponent: { id: rival.id, name: rival.name, flag: rival.flag, rank: rival.rank }
+    }];
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+async function profile(tour, id) {
+  const year = new Date().getFullYear();
+  const [a, career, season, last, list, rk] = await Promise.all([
+    getJSON(`${core(tour)}/athletes/${id}?lang=es&region=es`, 6 * 3600e3),
+    getJSON(`${core(tour)}/athletes/${id}/statistics`, 6 * 3600e3).catch(() => null),
+    getJSON(`${core(tour)}/seasons/${year}/types/2/athletes/${id}/statistics`, 3600e3).catch(() => null),
+    // En enero la temporada acaba de empezar: la anterior sigue dando contexto
+    getJSON(`${core(tour)}/seasons/${year - 1}/types/2/athletes/${id}/statistics`, 24 * 3600e3).catch(() => null),
+    history(tour, id).catch(e => { console.error('[tennis] historial:', e.message); return []; }),
+    ranks(tour).catch(() => [])
+  ]);
+  const r = rk.find(x => x.id === id);
+  const photo = await photoOf(id, a.displayName || '');
+  return {
+    id, tour, name: a.displayName || '', photo: photo.url, photoFrom: photo.from,
+    flag: r?.flag || '', country: r?.country || '', rank: r?.rank ?? null, previous: r?.previous ?? null, points: r?.points ?? null,
+    age: a.age ?? null, birthDate: a.dateOfBirth || null, birthPlace: a.birthPlace?.summary || '', height: a.displayHeight || '', weight: a.displayWeight || '',
+    hand: ({ RIGHT: 'Diestro', LEFT: 'Zurdo' })[a.hand?.type] || '', years: a.experience?.years ?? null, debut: a.debutYear ?? null, active: a.active !== false,
+    year, season: record(statsOf(season)), lastSeason: record(statsOf(last)), career: record(statsOf(career)), matches: list
+  };
+}
+
+// Mirar todo el día cuesta: dos pantallas seguidas no deben repetirlo
+const dayPicks = new Map();
+
 const routes = [
+  // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
+  ['GET', '/api/tennis/stats/:tour/:id', async ({ params }) => {
+    if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
+    const a = await getJSON(`${core(params.tour)}/athletes/${params.id}?lang=es&region=es`, 6 * 3600e3);
+    return tml.playerStats(params.tour, a.displayName);
+  }],
+  ['GET', '/api/tennis/surface/:tour', ({ params, query: q }) => {
+    if (!TOURS[params.tour]) throw fail('Circuito desconocido');
+    return tml.tournamentSurface(params.tour, q.name, q.city);
+  }],
+  ['GET', '/api/tennis/profile/:tour/:id', ({ params }) => {
+    if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
+    return profile(params.tour, params.id);
+  }],
+  // Recomendaciones de un partido, o las mejores de un día entre los partidos con cuotas leídas
+  ['GET', '/api/tennis/picks', async ({ query: q }) => {
+    const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
+    if (!m) throw fail('Partido no encontrado');
+    return picksFor(m);
+  }],
+  ['GET', '/api/tennis/picks/day', async ({ query: q }) => {
+    const hit = dayPicks.get(q.date);
+    if (hit && Date.now() - hit.t < 60e3) return hit.v;
+    const list = (await between(valid(q.date), valid(q.date))).filter(m => m.state === 'pre' && !/^previa/i.test(m.round));
+    const out = [];
+    for (const m of list) {
+      const r = await picksFor(m).catch(e => { console.error('[tennis] recomendaciones:', m.id, e.message); return null; });
+      if (r?.ready && r.top) out.push({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top: r.top, hard: r.hard[0] ?? null });
+    }
+    out.sort((x, y) => y.top.p - x.top.p);
+    dayPicks.set(q.date, { t: Date.now(), v: out });
+    return out;
+  }],
   ['GET', '/api/tennis/games', ({ query: q }) => between(valid(q.date), valid(q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));

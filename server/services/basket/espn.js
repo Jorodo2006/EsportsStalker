@@ -145,3 +145,103 @@ async function boxscore(lg, eventId) {
 }
 
 module.exports.boxscore = boxscore;
+
+// ---------- Clasificación y ficha de equipo ----------
+const CONF = { 'Eastern Conference': 'Conferencia Este', 'Western Conference': 'Conferencia Oeste' };
+const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+// "L5" → "P5", "W3" → "G3" (ganados y perdidos seguidos)
+const streakEs = s => String(s || '').replace(/^W/i, 'G').replace(/^L/i, 'P');
+
+async function standings(lg) {
+  const j = await getJSON(`https://site.web.api.espn.com/apis/v2/sports/basketball/${LEAGUES[lg]}/standings`, 15 * 60e3);
+  const kids = j.children?.length ? j.children : [j];
+  return kids.map(ch => {
+    const teams = (ch.standings?.entries || []).map(e => {
+      const st = n => (e.stats || []).find(x => x.name === n);
+      const dv = n => st(n)?.displayValue ?? '';
+      const t = e.team || {};
+      return {
+        id: String(t.id || ''), abbr: t.abbreviation || '', name: t.displayName || '', logo: t.logos?.[0]?.href || '',
+        seed: st('playoffSeed')?.value ?? null, w: num(dv('wins')) ?? 0, l: num(dv('losses')) ?? 0, pct: num(dv('winPercent')) ?? 0,
+        home: dv('Home'), road: dv('Road'), last: dv('Last Ten Games'), streak: streakEs(dv('streak')),
+        pf: num(dv('avgPointsFor')), pa: num(dv('avgPointsAgainst')), diff: num(dv('differential')), gb: dv('gamesBehind'), form: []
+      };
+    }).sort((a, b) => (a.seed ?? 99) - (b.seed ?? 99) || b.pct - a.pct).map((t, i) => ({ ...t, pos: i + 1 }));
+    return { name: CONF[ch.name] || ch.name || '', teams };
+  });
+}
+
+const TEAM_STATS = [['avgPoints', 'Puntos'], ['avgRebounds', 'Rebotes'], ['avgAssists', 'Asistencias'], ['avgSteals', 'Robos'], ['avgBlocks', 'Tapones'],
+  ['avgTurnovers', 'Pérdidas'], ['fieldGoalPct', 'Tiros de campo %'], ['threePointPct', 'Triples %'], ['freeThrowPct', 'Tiros libres %']];
+const LEADERS = [['pointsPerGame', 'Puntos', 'pts'], ['reboundsPerGame', 'Rebotes', 'reb'], ['assistsPerGame', 'Asistencias', 'ast'],
+  ['3PointMadePerGame', 'Triples', null], ['stealsPerGame', 'Robos', null], ['blocksPerGame', 'Tapones', null], ['minutesPerGame', 'Minutos', 'min']];
+
+// ESPN da la temporada en curso; fuera de temporada (WNBA en invierno) sirve la anterior
+async function leadersOf(lg, team) {
+  const y = seasonYear();
+  for (const s of [y, y - 1]) {
+    const j = await getJSON(`https://sports.core.api.espn.com/v2/sports/basketball/leagues/${LEAGUES[lg]}/seasons/${s}/types/2/teams/${team}/leaders`, 30 * 60e3).catch(() => null);
+    if (j?.categories?.length) return j.categories;
+  }
+  return [];
+}
+
+async function team(lg, id) {
+  const [info, rosterJ, sched, stats, table, inj, lead] = await Promise.all([
+    getJSON(`${site(lg)}/teams/${id}`, 30 * 60e3),
+    getJSON(`${site(lg)}/teams/${id}/roster`, 30 * 60e3).catch(() => ({})),
+    getJSON(`${site(lg)}/teams/${id}/schedule`, 15 * 60e3).catch(() => ({})),
+    // Temporada regular: fuera de ella ESPN daría sólo los pocos partidos del playoff
+    getJSON(`${site(lg)}/teams/${id}/statistics?seasontype=2`, 30 * 60e3).catch(() => null),
+    standings(lg).catch(() => []),
+    injuries(lg).catch(() => []),
+    leadersOf(lg, id)
+  ]);
+  const t = info.team || {};
+  const allStats = (stats?.results?.stats?.categories || []).flatMap(c => c.stats || []);
+  const group = table.find(g => g.teams.some(x => x.id === String(id)));
+  const row = group?.teams.find(x => x.id === String(id));
+  const list = Array.isArray(rosterJ.athletes?.[0]?.items) ? rosterJ.athletes.flatMap(g => g.items) : rosterJ.athletes || [];
+  const idOf = l => String(l.athlete?.$ref || '').match(/athletes\/(\d+)/)?.[1] || '';
+  // Los líderes traen a casi toda la plantilla: de ahí salen los promedios de cada jugador
+  const avg = {};
+  for (const [cat, , key] of LEADERS) {
+    if (!key) continue;
+    for (const l of lead.find(c => c.name === cat)?.leaders || []) (avg[idOf(l)] ||= {})[key] = l.value;
+  }
+  const roster = list.map(a => {
+    const out = inj.find(i => i.playerId === String(a.id));
+    return {
+      id: String(a.id), name: a.displayName, pos: a.position?.abbreviation || '', jersey: a.jersey || '', headshot: a.headshot?.href || headshot(lg, a.id),
+      age: a.age ?? null, height: a.height ? `${(a.height * 0.0254).toFixed(2)} m` : '', weight: a.weight ? `${Math.round(a.weight * 0.4536)} kg` : '',
+      from: a.college?.name || a.birthPlace?.country || '', years: a.experience?.years ?? null, salary: a.contract?.salary || null,
+      injury: out?.status || a.injuries?.[0]?.status || null, injuryDetail: out?.detail || '', injuryReturn: out?.returnDate || null, avg: avg[String(a.id)] || null
+    };
+  });
+  const names = Object.fromEntries(roster.map(p => [p.id, p.name]));
+  const side = (c, me) => ({ me, abbr: c?.team?.abbreviation || '', name: c?.team?.displayName || '', logo: c?.team?.logos?.[0]?.href || c?.team?.logo || '', score: c?.score?.displayValue ?? c?.score ?? null, winner: !!c?.winner });
+  const games = (sched.events || []).map(e => {
+    const c = e.competitions?.[0] || {};
+    const me = (c.competitors || []).find(x => String(x.team?.id) === String(id)), opp = (c.competitors || []).find(x => x !== me);
+    return { id: `${lg}:${e.id}`, date: e.date, state: c.status?.type?.state || 'pre', home: me?.homeAway === 'home', us: side(me, true), them: side(opp, false) };
+  });
+  const venue = t.franchise?.venue || {};
+  return {
+    id: String(id), league: lg, name: t.displayName || '', abbr: t.abbreviation || '', logo: t.logos?.[0]?.href || '', color: t.color ? `#${t.color}` : '',
+    coach: (rosterJ.coach || []).map(c => `${c.firstName} ${c.lastName}`)[0] || '', venue: venue.fullName || '', capacity: venue.capacity || null,
+    city: [venue.address?.city, venue.address?.state].filter(Boolean).join(', '), country: '', president: '', website: '',
+    division: / Division$/i.test(t.standingSummary || '') ? String(t.standingSummary).replace(/^(\d+)(?:st|nd|rd|th) in (.+?) Division$/i, '$1.º de la división $2') : '',
+    group: group?.name || '', standing: row || null,
+    stats: TEAM_STATS.flatMap(([k, label]) => { const x = allStats.find(v => v.name === k); return x ? [{ label, value: x.displayValue }] : []; }),
+    leaders: LEADERS.flatMap(([cat, label]) => {
+      const ls = (lead.find(c => c.name === cat)?.leaders || []).filter(l => names[idOf(l)]).slice(0, 3);
+      return ls.length ? [{ label, players: ls.map(l => ({ id: idOf(l), name: names[idOf(l)], value: l.displayValue })) }] : [];
+    }),
+    results: games.filter(g => g.state === 'post').sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10),
+    upcoming: games.filter(g => g.state !== 'post').sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 5),
+    roster
+  };
+}
+
+module.exports.standings = standings;
+module.exports.team = team;

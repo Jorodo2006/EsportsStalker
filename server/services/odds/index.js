@@ -23,7 +23,8 @@ async function receive(payload) {
 
 const routes = [
   // ---------- Para la app (vía gateway) ----------
-  ['POST', '/api/odds/match', async ({ body }) => { const m = matchOf(body); await bridge.noteMatch(m); return odds.getMatchOdds(m); }],
+  // quiet: sólo leer. Las recomendaciones miran muchos partidos y no deben pasar por "el último abierto" del lector
+  ['POST', '/api/odds/match', async ({ body }) => { const m = matchOf(body); if (!body.quiet) await bridge.noteMatch(m); return odds.getMatchOdds(m); }],
   ['POST', '/api/odds/board', ({ body }) => odds.getBoardFor(body?.events)],
   // Botón "Actualizar cuotas": trabajo inmediato (la app abre /auto?job=ID en Chrome)
   ['POST', '/api/odds/jobs', async ({ body }) => { const m = matchOf(body); await bridge.noteMatch(m); return bridge.newJob(m, 'manual'); }],

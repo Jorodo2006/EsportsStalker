@@ -92,3 +92,18 @@ vuelven a pedir.
 - Flechas de subida y bajada de las cuotas (el histórico ya se guarda en `odds.price_history`; falta la ruta).
 - Clasificaciones por liga.
 - No ajusta por bajas de compañeros, partidos seguidos, ritmo del rival ni defensa por posición.
+
+## Equipos
+
+*Jugadores → Equipos*: clasificación de cada liga, y al pulsar un equipo su ficha (`src/components/BasketTeamSheet.tsx`).
+La ficha de un partido tiene además la pestaña *Equipos*, con los dos frente a frente.
+
+| Ruta | IPC | Qué devuelve |
+|---|---|---|
+| `GET /api/basket/standings/:league` | `basket:standings` | Grupos con cada equipo: puesto, balance, casa, fuera, últimos 10, racha y puntos por partido |
+| `GET /api/basket/team/:league/:team` | `basket:team` | Clasificación, estadísticas, líderes, resultados, próximos partidos y plantilla con bajas |
+
+- **NBA y WNBA** (ESPN): los promedios de la plantilla salen de los líderes del equipo; la NBA añade salarios y bajas.
+  Las estadísticas se piden con `seasontype=2`, porque fuera de temporada ESPN daría sólo las del playoff.
+- **Euroliga y EuroCup** (API de la Euroliga): la clasificación se pide por jornada y la jornada en curso puede dar 404, así
+  que se usa la última que responda. Añaden aforo, ciudad, país y presidente; la API no da bajas.

@@ -139,38 +139,38 @@ export function MatchRow({ state, time, status, a, b, odds, active, onClick, tag
 }
 
 // ---------- marcador grande ----------
-// Lo más llamativo de la app: el marcador del partido abierto, con cifras condensadas de videomarcador
-// y una línea de acento bajo el que va ganando
+// El marcador del partido abierto, con cifras condensadas de videomarcador y una línea de acento bajo el que va ganando.
+// Es una sola franja: lo importante de la ficha son los datos que hay debajo
 export function Scoreboard({ competition, detail, a, b, state, center, centerSub, children }: {
   competition: string; detail?: string; a: RowTeam; b: RowTeam; state: MatchState; center?: ReactNode; centerSub?: string; children?: ReactNode;
 }) {
   const sa = Number(a.score), sb = Number(b.score);
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
-    <div className={cn('flex min-w-0 flex-col items-center gap-2 text-center', which === 'a' ? 'justify-self-end' : 'justify-self-start')}>
-      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-zinc-950/60 ring-1 ring-zinc-800"><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></div>
-      <div className="max-w-44 truncate text-base font-semibold" title={t.name}>{t.name}</div>
+    <div className={cn('flex min-w-0 items-center gap-2.5', which === 'a' ? 'flex-row-reverse justify-self-end text-right' : 'justify-self-start')}>
+      <TeamLogo src={t.logo} name={t.short || t.name} size={34} />
+      <div className="min-w-0 truncate text-lg font-semibold" title={t.name}>{t.name}</div>
     </div>
   );
   const num = (t: RowTeam, which: 'a' | 'b') => (
-    <span className={cn('relative font-score text-7xl leading-none font-bold tnum', lead && lead !== which ? 'text-zinc-500' : state === 'live' ? 'text-zinc-50' : 'text-zinc-100')}>
+    <span className={cn('relative font-score text-[40px] leading-none font-bold tnum', lead && lead !== which ? 'text-zinc-500' : state === 'live' ? 'text-zinc-50' : 'text-zinc-100')}>
       {t.score ?? 0}
-      {lead === which && <span className="absolute -bottom-2 left-1/2 h-1 w-8 -translate-x-1/2 rounded-full bg-amber-500" />}
+      {lead === which && <span className="absolute -bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-amber-500" />}
     </span>
   );
   return (
-    <div className="overflow-hidden rounded-3xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900 to-zinc-950">
-      <div className="flex items-center justify-center gap-2 px-5 pt-4 text-xs text-zinc-500">
+    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/50">
+      <div className="flex items-center justify-center gap-2 px-4 pt-2 text-[11px] text-zinc-500">
         <span className="font-medium text-zinc-300">{competition}</span>
         {detail && <span>{detail}</span>}
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-6 pb-6 pt-4">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-5 px-4 pb-2.5 pt-1">
         {side(a, 'a')}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-1">
           {state === 'pre'
-            ? <span className="font-score text-5xl font-semibold tnum text-zinc-100">{center}</span>
-            : <div className="flex items-center gap-4">{num(a, 'a')}<span className="font-score text-4xl text-zinc-700">–</span>{num(b, 'b')}</div>}
-          <span className={cn('mt-1 rounded-full px-2.5 py-0.5 text-xs font-medium', state === 'live' ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-800/80 text-zinc-400')}>
+            ? <span className="font-score text-[32px] font-semibold leading-none tnum text-zinc-100">{center}</span>
+            : <div className="flex items-center gap-3">{num(a, 'a')}<span className="font-score text-2xl text-zinc-700">–</span>{num(b, 'b')}</div>}
+          <span className={cn('rounded-full px-2 py-px text-[11px] font-medium', state === 'live' ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-800/80 text-zinc-400')}>
             {state === 'live' && <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400 align-middle" />}{centerSub}
           </span>
         </div>

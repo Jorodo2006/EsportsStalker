@@ -63,6 +63,8 @@ const routes = [
     const today = madridDay(Date.now());
     return (await between(addDays(today, -1), today)).filter(g => g.state === 'in');
   }],
+  ['GET', '/api/basket/standings/:league', ({ params }) => league(params.league).src.standings(params.league)],
+  ['GET', '/api/basket/team/:league/:team', ({ params }) => league(params.league).src.team(params.league, params.team)],
   ['GET', '/api/basket/roster/:league/:team', ({ params }) => league(params.league).src.roster(params.league, params.team)],
   ['GET', '/api/basket/injuries', () => espn.injuries('nba')],
   // id = "nba:401909912" o "euroleague:E2026_10" (el id del partido en la lista)

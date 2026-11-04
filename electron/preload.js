@@ -41,7 +41,12 @@ contextBridge.exposeInMainWorld('api', {
     days: (from, n) => call('tennis:days', from, n),
     live: () => call('tennis:live'),
     rankings: tour => call('tennis:rankings', tour),
-    player: (tour, id) => call('tennis:player', tour, id)
+    player: (tour, id) => call('tennis:player', tour, id),
+    profile: (tour, id) => call('tennis:profile', tour, id),
+    stats: (tour, id) => call('tennis:stats', tour, id),
+    surface: (tour, name, city) => call('tennis:surface', tour, name, city),
+    picks: (date, id) => call('tennis:picks', date, id),
+    picksDay: date => call('tennis:picksDay', date)
   },
   basket: {
     leagues: () => call('basket:leagues'),
@@ -49,6 +54,8 @@ contextBridge.exposeInMainWorld('api', {
     days: (from, n) => call('basket:days', from, n),
     live: () => call('basket:live'),
     roster: (league, team) => call('basket:roster', league, team),
+    standings: league => call('basket:standings', league),
+    team: (league, team) => call('basket:team', league, team),
     injuries: () => call('basket:injuries'),
     boxscore: id => call('basket:boxscore', id),
     search: q => call('basket:search', q),

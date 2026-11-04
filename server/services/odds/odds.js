@@ -371,7 +371,7 @@ async function getMatchOdds(match) {
       const prev = counts[name] || { n: 0, ts: 0 };
       counts[name] = { n: prev.n + n, ts: Math.max(prev.ts, imp.ts) };
       const mins = Math.round((Date.now() - counts[name].ts) / 60e3);
-      sources[name] = { ok: counts[name].n > 0, msg: `${counts[name].n} mercados · enviadas hace ${mins} min` };
+      sources[name] = { ok: counts[name].n > 0, ts: counts[name].ts, msg: `${counts[name].n} mercados · enviadas hace ${mins} min` };
     } catch (e) { if (!sources[name]?.ok) sources[name] = { ok: false, msg: e.message }; }
   }
   return book.result(sources);

@@ -20,6 +20,33 @@ Cada jugador lleva `alt` con los nombres que usan las casas ("Sinner", "J. Sinne
 | `GET /api/tennis/live` | `tennis:live` | Partidos en juego (aviso rojo del selector) |
 | `GET /api/tennis/rankings/:tour` | `tennis:rankings` | Ranking ATP o WTA (puesto, anterior, puntos) |
 | `GET /api/tennis/player/:tour/:id` | `tennis:player` | Partidos del jugador en los torneos de los últimos días |
+| `GET /api/tennis/profile/:tour/:id` | `tennis:profile` | Ficha: datos personales, balance de temporada y carrera, títulos, premios y últimos resultados |
+
+El historial de la ficha sale de `eventlog` (API core de ESPN), que sólo da referencias: se pide el cuadro de cada torneo
+(12 como mucho, con caché) y se buscan ahí sus partidos.
+
+## Estadísticas de juego (`server/services/tennis/tml.js`)
+
+ESPN no da saque, resto ni superficie. Salen de los **CSV gratuitos de TennisMyLife** (`stats.tennismylife.org/data/`: un
+fichero por año y por circuito, más los torneos en curso), que se bajan cada 6 h (en curso, cada 30 min) y se guardan en
+`tennis.cache`. Se calculan por año, 52 semanas y 3 años, en total y por superficie.
+
+| Ruta | IPC | Qué devuelve |
+|---|---|---|
+| `GET /api/tennis/stats/:tour/:id` | `tennis:stats` | Periodos con resultados, juegos, saque, resto, mejor y peor superficie (mínimo 5 partidos), y balance por rival y categoría |
+| `GET /api/tennis/surface/:tour?name=&city=` | `tennis:surface` | Superficie de un torneo, buscándolo por ciudad o nombre |
+
+- **Condiciones de TennisMyLife:** sólo uso personal y no comercial, y no se pueden redistribuir los CSV. Por eso no van al
+  repo. **Si la app se fuese a vender o a publicar con anuncios, hace falta su permiso escrito.**
+- Cada periodo lleva `tour`: la media de todo el circuito con el mismo filtro, que es la línea central de las barras de saque
+  y resto. Los colores de superficie (`SURFACE_COLOR`) están validados para daltonismo sobre el fondo oscuro.
+- Los jugadores se cruzan por nombre con ESPN (sin acentos). Si no aparecen, la pantalla lo dice.
+- **Fotos** (`server/services/tennis/photos.js`): el retrato de ESPN y, si no lo tiene, la imagen de su artículo de Wikipedia, comprobando que es un tenista y lleva su apellido. Se busca sólo al abrir una ficha, de una en una y guardando el resultado en `tennis.cache`, porque Wikipedia responde 429 si se le piden muchas seguidas. Sin foto salen las iniciales.
+- **Ratio de dominio**: % de puntos ganados al resto entre % de puntos perdidos al saque. Es la cifra grande de la ficha; se calcula en el renderer con los datos de TennisMyLife.
+- Se contrastó con la API oficial de la WTA (Swiatek 2026): los porcentajes coinciden con décimas de diferencia, pero faltan
+  unos pocos partidos (53 de 58), así que no hay que tomar los totales como cifra oficial. Los W.O. no cuentan.
+- Fuentes descartadas: atptour.com y Sofascore (403), Tennis Abstract y tennis-data.co.uk (su `robots.txt` lo prohíbe),
+  Sackmann (el repositorio ya no existe), Ultimate Tennis Statistics (se quedó en 2024).
 
 ## Cuotas
 
@@ -36,9 +63,45 @@ Cada jugador lleva `alt` con los nombres que usan las casas ("Sinner", "J. Sinne
 - *Partidos*: tira de días, filtro por estado, interruptores *Previa* (oculta la previa por defecto) y *Cuotas*,
   partidos agrupados por torneo (los Grand Slam primero). La ficha tiene marcador grande (sets ganados) y las pestañas
   *Marcador* (set a set con tie-breaks), *Cuotas* y *Forma de los jugadores* (ranking y últimos partidos).
-- *Jugadores*: rankings de la ATP y la WTA con buscador por nombre o país y la subida o bajada de cada jugador.
+- *Jugadores*: rankings de la ATP y la WTA con buscador por nombre o país y la subida o bajada de cada jugador. Al pulsar
+  uno se abre su ficha (`src/components/TennisPlayerSheet.tsx`), que también se abre desde *Forma de los jugadores*.
+  Esa pestaña enseña además los enfrentamientos recientes entre los dos.
 
 ## Pendiente
 
 - No hay modelo de valor para el tenis (habría que estimar la probabilidad de ganar con el ranking o un Elo).
 - Dobles: no se muestran.
+
+## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/components/TennisPicks.tsx`)
+
+Pestaña *Recomendaciones* de cada partido sin empezar y banda *Las más fiables del día* en la lista. `GET /api/tennis/picks?date=&id=` y `GET /api/tennis/picks/day?date=`; el servicio pide las cuotas a `odds` (`quiet: true`: sólo lee).
+
+**Modelo.** Sale de los CSV de TennisMyLife, reproducidos en orden y sin mirar nunca al futuro:
+
+- Elo general y por superficie (la retirada no cuenta) y puntos al saque y al resto *por encima de la media de cada condición*, con los partidos recientes pesando más y corregidos por el rival. Pista dura bajo techo es una condición propia: mezclarlas daba 0,7 juegos de menos bajo techo y 1,4 en hierba.
+- `logit(p) = wElo·logit(Elo) + wStats·logit(estadísticas)`, con pesos por circuito aprendidos con 2024.
+- Punto → juego → set → partido se calcula exacto, promediando la forma del día (`formSd`). De esa distribución salen ganador, sets, hándicaps, totales, juegos de cada jugador, sets sueltos, tie-break y combinaciones.
+
+**Mezcla con la casa.** La probabilidad final mezcla modelo y casa sin margen en logit: 25 % el modelo (10 % con poca muestra), y menos cuanto mayor es la discrepancia. Ese 25 % es una decisión, no una medida: no hay cuotas históricas gratuitas con las que ajustarlo. Los partidos se recalculan con la probabilidad final para que todos los mercados cuadren.
+
+**Selección.**
+
+- *La más fiable*: probabilidad ≥ 60 %, cuota ≥ 1,15, fiabilidad ≥ 50, valor ≥ −7 %. Se ordena por probabilidad + valor. Puede no haber ninguna.
+- *Más fáciles*: probabilidad ≥ 60 %, por valor, sin repetir tipo de mercado.
+- *Más complicadas*: probabilidad entre 15 y 45 %, cuota de 2,20 a 15. Contra el favorito sólo con valor ≥ 3 %.
+- Fiabilidad 0-100: datos de los jugadores, acuerdo modelo-casa sobre el ganador, tipo de mercado y cuotas. Se descarta lo que discrepa más de 20 puntos de la casa: suele ser un mercado mal leído o algo que el modelo no sabe.
+
+**Comprobación** (`node server/services/tennis/backtest.js <carpeta CSV> atp|wta 20250101`). Sobre partidos de 2025 y 2026, no usados para ajustar:
+
+| | ATP (5.276) | WTA (4.798) |
+|---|---|---|
+| Brier del ranking | 0,2212 | 0,2187 |
+| Brier del Elo | 0,2218 | 0,2153 |
+| Brier del modelo | 0,2145 | 0,2090 |
+| Dice 75 % → pasa | 73,4 % | 75,1 % |
+| Dice 84 % → pasa | 82,4 % | 84,9 % |
+| Juegos por partido: real / modelo | 26,05 / 26,11 | 22,04 / 22,11 |
+
+Los pesos y `formSd` se ajustaron sólo con 2024, pero el sesgo bajo techo y en hierba se vio mirando 2025-26, así que esta comprobación no es del todo ciega. Queda algo de sesgo en hierba (ATP: 24,97 juegos reales, 24,34 del modelo).
+
+Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: aces, roturas, primeros juegos, lesiones y cansancio. Sólo hay partidos del circuito principal: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.
