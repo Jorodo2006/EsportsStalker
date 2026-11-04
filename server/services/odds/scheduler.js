@@ -46,6 +46,17 @@ async function upcomingBasket(hours) {
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'basket', a: team(g.away), b: team(g.home) }));
 }
 
+// Tenis: hay decenas de partidos al día, así que sólo los del cuadro final (no la previa) de las próximas 3 horas
+async function upcomingTennis(hours) {
+  const until = Date.now() + Math.min(hours, 3) * 3600e3;
+  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const days = [...new Set([day(Date.now()), day(until)])];
+  const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
+  const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
+  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.a?.name && g.b?.name; })
+    .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
+}
+
 // ¿Toca leerlo? No si tiene un trabajo abierto o uno (manual o programado) de hace menos de `minutes`
 async function due(key, minutes) {
   const { rowCount } = await query(`SELECT 1 FROM odds.jobs WHERE match_key = $1
@@ -61,11 +72,12 @@ async function tick() {
     const minutes = clamp(s.oddsRefreshMinutes, 2, 240, 5);
     const hours = clamp(s.oddsAutoHours, 1, 48, 6);
     // Si una de las dos fuentes falla, la otra sigue
-    const [lol, basket] = await Promise.all([
+    const [lol, basket, tennis] = await Promise.all([
       upcoming(hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
-      upcomingBasket(hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; })
+      upcomingBasket(hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
+      upcomingTennis(hours).catch(e => { console.error('Programador (tenis):', e.message); return []; })
     ]);
-    const matches = [...lol, ...basket];
+    const matches = [...lol, ...basket, ...tennis];
     for (const m of matches) {
       if (!(await due(bridge.keyOf(m), minutes))) continue;
       await bridge.noteMatch(m);

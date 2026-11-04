@@ -4,7 +4,7 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfw
 
 // Selección de una combinada
 export type LegStatus = 'pending' | 'won' | 'lost' | 'void';
-export type Sport = 'lol' | 'basket';
+export type Sport = 'lol' | 'basket' | 'tennis';
 export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport }
 // En el boleto se guarda también la casa de donde salió la cuota
 export type SlipLeg = BetLeg & { bookmaker?: string };
@@ -12,7 +12,7 @@ export type SlipLeg = BetLeg & { bookmaker?: string };
 export interface Bet {
   id: string;
   date: string; // YYYY-MM-DD
-  sport?: Sport | 'mix'; // sin deporte es LoL; 'mix' = combinada con selecciones de LoL y de baloncesto
+  sport?: Sport | 'mix'; // sin deporte es LoL; 'mix' = combinada con selecciones de varios deportes
   league: string;
   event: string;
   market: string;
@@ -151,7 +151,19 @@ export interface AutoStatus {
 }
 
 // true si responde cada pieza del backend
-export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean };
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean };
+
+// ---------- Tenis (servicio tennis: ESPN, ATP y WTA individuales) ----------
+export type Tour = 'atp' | 'wta';
+export interface TennisPlayer {
+  id: string; name: string; short: string; flag: string; country: string; seed: number | null; rank: number | null;
+  sets: number[]; setWins: boolean[]; tiebreaks: (number | null)[]; winner: boolean; alt: string[];
+}
+export interface TennisMatch {
+  id: string; tour: Tour; tournament: string; tournamentId: string; major: boolean; date: string; state: 'pre' | 'in' | 'post';
+  status: string; round: string; court: string; city: string; bestOf: number; note: string; a: TennisPlayer; b: TennisPlayer;
+}
+export interface TennisRank { rank: number; previous: number; points: number; trend: string; id: string; name: string; short: string; flag: string; country: string }
 
 // ---------- Baloncesto (servicio basket: ESPN para NBA/WNBA, API de la Euroliga para Euroliga/EuroCup) ----------
 export type BasketLeagueId = 'nba' | 'wnba' | 'euroleague' | 'eurocup';
@@ -203,6 +215,13 @@ export interface Api {
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
+  };
+  tennis: {
+    games(date: string): Promise<TennisMatch[]>;
+    days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
+    live(): Promise<TennisMatch[]>;
+    rankings(tour: Tour): Promise<TennisRank[]>;
+    player(tour: Tour, id: string): Promise<TennisMatch[]>;
   };
   basket: {
     leagues(): Promise<BasketLeague[]>;

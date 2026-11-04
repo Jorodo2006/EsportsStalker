@@ -36,6 +36,13 @@ contextBridge.exposeInMainWorld('api', {
     match: m => call('odds:match', m), board: evs => call('odds:board', evs), auto: m => call('odds:auto', m),
     autoStatus: () => call('odds:autoStatus')
   },
+  tennis: {
+    games: date => call('tennis:games', date),
+    days: (from, n) => call('tennis:days', from, n),
+    live: () => call('tennis:live'),
+    rankings: tour => call('tennis:rankings', tour),
+    player: (tour, id) => call('tennis:player', tour, id)
+  },
   basket: {
     leagues: () => call('basket:leagues'),
     games: date => call('basket:games', date),

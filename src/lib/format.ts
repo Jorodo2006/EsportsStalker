@@ -37,6 +37,12 @@ export function betProfit(b: Bet) {
   }
 }
 
+// Cartera única para todas las apps (LoL, baloncesto, tenis): banca inicial + beneficio − lo que está en juego
+export function wallet(list: Bet[], initial = 0) {
+  const s = summarize(list);
+  return { balance: initial + s.profit - s.pendingStake, profit: s.profit, inPlay: s.pendingStake, pendingReturn: s.pendingReturn, total: initial + s.profit };
+}
+
 export function summarize(list: Bet[]) {
   const settled = list.filter(b => b.status !== 'pending' && b.status !== 'void');
   const staked = settled.reduce((s, b) => s + b.stake, 0);

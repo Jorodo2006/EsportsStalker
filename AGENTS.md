@@ -5,10 +5,11 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 
 ## Qué es
 
-App de escritorio (Windows y Linux) con backend en Docker que son **dos apps en una**, con un selector arriba:
-**League of Legends** (esports) y **Baloncesto** (NBA, WNBA, Euroliga y EuroCup). Cada una tiene sus partidos y
-directo, el comparador de cuotas de Winamax / Betway, las stats y el valor de las líneas de jugador, y su registro de
-apuestas simples y combinadas con beneficio, ROI y gráficas. Electron es la interfaz; la lógica y los datos están en
+App de escritorio (Windows y Linux) con backend en Docker que son **tres apps en una**, con un selector arriba:
+**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP y WTA, verde).
+Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
+apuestas con beneficio, ROI y gráficas. La **cartera es común** y las cuotas que se pulsan van a un **cupón** desde
+el que se registran como simples o combinada. Electron es la interfaz; la lógica y los datos están en
 microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas las lee solo, cada pocos minutos,
 un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 
@@ -28,7 +29,7 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
    `server/shared/env.js`) y se documentan en `.env.example`.
 5. **Las peticiones a internet las hace el backend** (`server/`). El renderer (`src/`) no hace peticiones: habla con
    `window.api`, y el proceso principal (`electron/`) las reenvía al gateway.
-6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`). Si necesita datos de otro, llama a
+6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`). Si necesita datos de otro, llama a
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Nada de `git commit` ni `git push` sin que Jordi lo pida explícitamente en ese momento.** Prepara los cambios y
    espera su confirmación.
@@ -73,6 +74,7 @@ Docker Compose (docker-compose.yml)
   │                                                     programador cada X min, histórico     → esquema odds
   ├─ basket   :4004          server/services/basket/    NBA y WNBA (ESPN), Euroliga y EuroCup
   │                                                     (API de la Euroliga), días en hora de España → esquema basket
+  ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings → esquema tennis
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -104,7 +106,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   negativo. Barlow para el texto y `font-score` (Barlow Condensed) para marcadores y cifras. Piezas de partidos comunes
   a las dos apps en `src/components/sport.tsx` (tira de días, filtros, bloque de competición, fila, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
-- Estado global (app activa `lol` | `basket`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
+- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
 - El proceso principal y el backend son CommonJS (`require`), el renderer ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
@@ -140,3 +142,4 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/06-ajustes.md`](docs/specs/06-ajustes.md) | Ajustes, fuentes de datos y pendientes conocidos |
 | [`docs/specs/07-backend.md`](docs/specs/07-backend.md) | Microservicios, gateway, PostgreSQL, migraciones, avisos en vivo |
 | [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
+| [`docs/specs/09-tenis.md`](docs/specs/09-tenis.md) | App de tenis: datos de ESPN, cuotas por sets y juegos |

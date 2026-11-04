@@ -39,6 +39,9 @@
 [data-app="basket"] {
   --acc-200: #ffd2b0; --acc-300: #ffb079; --acc-400: #ff8f4d; --acc-500: #ff7a2f; --acc-600: #e05e14;
 }
+[data-app="tennis"] {
+  --acc-200: #bbf7d0; --acc-300: #86efac; --acc-400: #4ade80; --acc-500: #22c55e; --acc-600: #16a34a;
+}
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {
   --color-amber-200: var(--acc-200); --color-amber-300: var(--acc-300); --color-amber-400: var(--acc-400);

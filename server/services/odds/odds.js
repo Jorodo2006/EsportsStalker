@@ -8,28 +8,34 @@ const round2 = x => Math.round(x * 100) / 100;
 const { norm, teamScore, orient } = require('./equipos');
 
 // ---------- Nombres de mercado ----------
-// Baloncesto: periodo 0 = partido, 1-2 = mitades, 11-14 = cuartos
-const BASKET_PERIOD = { 1: '1.ª mitad', 2: '2.ª mitad', 11: '1.er cuarto', 12: '2.º cuarto', 13: '3.er cuarto', 14: '4.º cuarto' };
-function basketLabel(type, period, teamName) {
+// Baloncesto: periodo 0 = partido, 1-2 = mitades, 11-14 = cuartos. Tenis: 21-25 = sets
+const BASKET_PERIOD = {
+  1: '1.ª mitad', 2: '2.ª mitad', 11: '1.er cuarto', 12: '2.º cuarto', 13: '3.er cuarto', 14: '4.º cuarto',
+  21: '1.er set', 22: '2.º set', 23: '3.er set', 24: '4.º set', 25: '5.º set'
+};
+function basketLabel(type, period, teamName, sport) {
   const pre = BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '';
+  const unit = sport === 'tennis' ? 'juegos' : 'puntos';
   switch (type) {
     case 'moneyline': return `${pre}Ganador`;
-    case 'spread': return `${pre}Hándicap`;
-    case 'total': return `${pre}Total de puntos`;
-    case 'team_total': return `${pre}Puntos de ${teamName}`;
+    case 'spread': return sport === 'tennis' ? `${pre}Hándicap de juegos` : `${pre}Hándicap`;
+    case 'total': return `${pre}Total de ${unit}`;
+    case 'team_total': return `${pre}${unit === 'juegos' ? 'Juegos' : 'Puntos'} de ${teamName}`;
     default: return type;
   }
 }
-// "1ª mitad - Hándicap…" → { period: 1, rest: "Hándicap…" }
+// "1ª mitad - Hándicap…" → { period: 1, rest: "Hándicap…" }; "1er set - Ganador" → { period: 21, … }
 function basketPeriod(title) {
   const t = String(title || '');
-  const m = t.match(/^\s*(\d)\s*(?:ª|º|er|o|a)?\s*(mitad|cuarto|tiempo)\s*[-·:]\s*/i);
+  const m = t.match(/^\s*(\d)\s*(?:ª|º|er|o|a)?\s*(mitad|cuarto|tiempo|set)\s*[-·:]?\s*/i);
   if (!m) return { period: 0, rest: t.trim() };
   const n = Number(m[1]);
-  return { period: /cuarto/i.test(m[2]) ? 10 + n : n, rest: t.slice(m[0].length).trim() };
+  return { period: /cuarto/i.test(m[2]) ? 10 + n : /set/i.test(m[2]) ? 20 + n : n, rest: t.slice(m[0].length).trim() };
 }
+// Deportes que usan el normalizador por periodos (ganador, hándicap, totales) en vez del de LoL
+const PERIOD_SPORTS = ['basket', 'tennis'];
 function marketLabel(type, period, teamName, sport) {
-  if (sport === 'basket') return basketLabel(type, period, teamName);
+  if (PERIOD_SPORTS.includes(sport)) return basketLabel(type, period, teamName, sport);
   const map = period ? `Mapa ${period} · ` : '';
   switch (type) {
     case 'moneyline': return period ? `${map}Ganador` : 'Ganador del partido';
@@ -205,11 +211,11 @@ function winamaxBasketInto(book, match, st, found) {
     const pid = outs.find(x => x.playerId)?.playerId;
     const who = pid ? playerName(pid) : null;
     n++;
-    const teamPts = /puntos (por|de) (.+)$/i.exec(rest);
-    const ptsTeam = teamPts ? teamOf(teamPts[2]) : null;
+    const teamPts = /(puntos|juegos) (por|de|ganados por) (.+)$/i.exec(rest);
+    const ptsTeam = teamPts ? teamOf(teamPts[3]) : null;
     if (bet.template === '2way' && /^ganador$/i.test(rest) && outs.length === 2) {
       book.addStd('moneyline', period, null, BK, Object.fromEntries(outs.map(x => [sideOf(x.code), x.price])), true);
-    } else if (bet.template === 'asian_handicap' && outs.length === 2 && sbv.hcp != null) {
+    } else if (bet.template === 'asian_handicap' && outs.length === 2 && sbv.hcp != null && !/h[aá]ndicap de sets/i.test(rest)) {
       const h = num(sbv.hcp);
       const [c1, c2] = outs;
       book.addStd('spread', period, o.swapped ? -h : h, BK, o.swapped ? { a: c2.price, b: c1.price } : { a: c1.price, b: c2.price }, true);
@@ -218,7 +224,7 @@ function winamaxBasketInto(book, match, st, found) {
       const outcomes = [over && { id: 'over', label: `${who} · Más de ${total}` }, under && { id: 'under', label: `${who} · Menos de ${total}` }].filter(Boolean);
       book.add({ key: `player|${stat}|${who.toLowerCase()}|${total}`, group: `Jugadores · ${stat}`, period: PLAYER_PERIOD, line: total, main: true, outcomes },
         BK, { over: over?.price, under: under?.price });
-    } else if (bet.template === 'OverUnder' && total != null && over && under && /^(n[uú]mero (total )?de puntos|total de puntos)$/i.test(rest)) {
+    } else if (bet.template === 'OverUnder' && total != null && over && under && /^(n[uú]mero (total )?de (puntos|juegos)|total (de )?(puntos|juegos))$/i.test(rest)) {
       book.addStd('total', period, total, BK, { over: over.price, under: under.price }, true);
     } else if (bet.template === 'OverUnder' && total != null && over && under && ptsTeam) {
       // "Número total de puntos por R. Madrid": puntos de un equipo
@@ -282,7 +288,7 @@ function marketsInto(book, imp, match) {
   const OBJ = /sangre|primer|primera|torre|drag|bar[oó]n|inhib|heraldo|grub|larva|duraci/;
   let n = 0;
   // Baloncesto: el periodo sale del título ("1ª mitad - …") o de la pestaña (marketGroup=1st-half, quarter…)
-  const basket = book.sport === 'basket';
+  const basket = PERIOD_SPORTS.includes(book.sport); // baloncesto y tenis
   const pagePeriod = basket ? (/marketGroup=(1st-half|half)\b/.test(imp.page || '') ? 1 : /marketGroup=(1st-quarter|quarter)\b/.test(imp.page || '') ? 11 : 0) : 0;
   for (const mk of imp.markets || []) {
     let period = mk.map || 0;
@@ -292,6 +298,9 @@ function marketsInto(book, imp, match) {
       period = bp.period || pagePeriod;
       rest = bp.rest.replace(/^otros\s+/i, '');
     }
+    // Tenis: "Brandon Nakashima 1er Set Juegos en total" lleva el set en medio del título
+    const inner = book.sport === 'tennis' && !period ? /(\d)\s*(?:er|º|ª|o)?\s*set\b/i.exec(rest) : null;
+    if (inner) { period = 20 + Number(inner[1]); rest = rest.replace(inner[0], '').replace(/\s+/g, ' ').trim(); }
     const lo = rest.toLowerCase();
     const outs = (mk.outcomes || []).filter(o => o.price > 1);
     if (!outs.length) continue;
@@ -300,16 +309,18 @@ function marketsInto(book, imp, match) {
     const overOf = o => /^(m[aá]s|over)/i.test(o.name);
     const label = basket ? (BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '') + sentence(rest) : period ? `Mapa ${period} · ${sentence(rest)}` : sentence(rest);
     n++;
-    if (outs.length === 2 && sides[0] && sides[1] && sides[0] !== sides[1] && /ganador|ganar[aá]|vencedor|resultado del partido|moneyline/.test(lo) && !OBJ.test(lo)) {
+    // En baloncesto y tenis sólo cuenta como ganador el mercado que se llama así ("Ganará un set" no lo es)
+    const isWinner = basket ? /^(ganador( del partido)?( \(pr[oó]rroga incluida\))?|moneyline)$/.test(lo) : /ganador|ganar[aá]|vencedor|resultado del partido|moneyline/.test(lo);
+    if (outs.length === 2 && sides[0] && sides[1] && sides[0] !== sides[1] && isWinner && !OBJ.test(lo)) {
       book.addStd('moneyline', period, null, BK, { [sides[0]]: outs[0].price, [sides[1]]: outs[1].price }, true);
-    } else if (/h[aá]ndicap/.test(lo) && sides.every(Boolean) && !OBJ.test(lo)) {
+    } else if (/h[aá]ndicap/.test(lo) && !/h[aá]ndicap de sets?/.test(lo) && sides.every(Boolean) && !OBJ.test(lo)) {
       // Pares (equipo A con línea h, equipo B con -h)
       for (const oa of outs.filter((o, i) => sides[i] === 'a')) {
         const h = lineOf(oa);
         const ob = outs.find((o, i) => sides[i] === 'b' && lineOf(o) === (h == null ? null : -h));
         if (h != null && ob) book.addStd('spread', period, h, BK, { a: oa.price, b: ob.price }, true);
       }
-    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos|v[ií]ctimas|puntos/.test(lo) && !(basket ? /par|impar/.test(lo) : OBJ.test(lo))) {
+    } else if (ou && /total/.test(lo) && /kills|mapas|asesinatos|v[ií]ctimas|puntos|juegos/.test(lo) && !(basket ? /par|impar|victoria/.test(lo) : OBJ.test(lo))) {
       const team = mentions(rest);
       const lines = [...new Set(outs.map(lineOf).filter(v => v != null).map(Math.abs))];
       for (const l of lines) {
@@ -342,7 +353,7 @@ function marketsInto(book, imp, match) {
 function intoBook(book, match, imp) {
   if (imp.book === 'winamax') {
     const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
-    return (book.sport === 'basket' ? winamaxBasketInto : winamaxInto)(book, match, imp.state, { e: { id: imp.matchId }, o });
+    return (PERIOD_SPORTS.includes(book.sport) ? winamaxBasketInto : winamaxInto)(book, match, imp.state, { e: { id: imp.matchId }, o });
   }
   return sectionsInto(book, imp) + marketsInto(book, imp, match);
 }

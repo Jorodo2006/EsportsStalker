@@ -125,8 +125,8 @@ async function newJob(match, source = 'manual') {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const steps = Object.fromEntries(BOOKS.map(b => [b, { estado: 'esperando', msg: '' }]));
   const team = t => ({ name: t.name, code: t.code || '', ...(Array.isArray(t.alt) && t.alt.length ? { alt: t.alt.map(String).slice(0, 4) } : {}) });
-  // sport: 'lol' (por defecto) o 'basket'; el lector busca el partido en esa sección de cada casa
-  const m = { a: team(match.a), b: team(match.b), ...(match.sport === 'basket' ? { sport: 'basket', league: String(match.league || '') } : {}) };
+  // sport: 'lol' (por defecto), 'basket' o 'tennis'; el lector busca el partido en esa sección de cada casa
+  const m = { a: team(match.a), b: team(match.b), ...(['basket', 'tennis'].includes(match.sport) ? { sport: match.sport, league: String(match.league || '') } : {}) };
   const { rows } = await query(`INSERT INTO odds.jobs (id, match_key, match, source, books, steps) VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb) RETURNING *`,
     [id, keyOf(m), JSON.stringify(m), source, BOOKS, JSON.stringify(steps)]);
   const job = toJob(rows[0]);

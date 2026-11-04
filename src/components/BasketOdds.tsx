@@ -1,4 +1,4 @@
-// Cuotas de un partido de baloncesto (Winamax y Betway, leídas por el lector de Docker): estado de cada casa,
+// Cuotas de un partido de baloncesto o de tenis (Winamax y Betway, leídas por el lector de Docker): estado de cada casa,
 // botón para leerlas ya, y los mercados por periodo con la mejor cuota marcada. En hándicaps y totales se enseñan
 // primero las líneas más igualadas, que son las que se suelen apostar.
 import { useEffect, useMemo, useState } from 'react';
@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, fmtTime, odd, pct } from '@/lib/format';
-import type { AutoJob, BasketGame, MarketLine, MatchOdds } from '@/lib/types';
+import type { AutoJob, BasketGame, MarketLine, MatchOdds, Sport, TeamRef } from '@/lib/types';
 import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading } from './ui';
@@ -18,41 +18,51 @@ export const matchOfGame = (g: BasketGame) => ({
   start: g.date, sport: 'basket' as const, league: g.league
 });
 
-export function useBasketOdds(g: BasketGame) {
+// Lo que necesita el comparador de cualquier deporte: el partido para el lector y cómo apuntarlo en el cupón
+export interface OddsTarget {
+  id: string; done: boolean; sport: Sport; event: string; league: string;
+  match: { a: TeamRef; b: TeamRef; start?: string; sport: Sport; league?: string };
+}
+export const targetOfGame = (g: BasketGame): OddsTarget => ({
+  id: g.id, done: g.state === 'post', sport: 'basket', event: `${g.away.abbr} @ ${g.home.abbr}`, league: LEAGUE_NAME[g.league], match: matchOfGame(g)
+});
+
+export function useMatchOdds(t: OddsTarget) {
   return useQuery({
-    queryKey: ['odds', 'basket', g.id], queryFn: () => window.api.odds.match(matchOfGame(g)),
-    refetchInterval: 60_000, enabled: g.state !== 'post'
+    queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match),
+    refetchInterval: 60_000, enabled: !t.done
   });
 }
+export const useBasketOdds = (g: BasketGame) => useMatchOdds(targetOfGame(g));
 
 const SECTIONS: [string, (m: MarketLine) => boolean][] = [
   ['Partido', m => m.period === 0],
   ['Jugadores', m => m.period === 98],
   ['Mitades', m => m.period === 1 || m.period === 2],
   ['Cuartos', m => m.period >= 11 && m.period <= 14],
+  ['Sets', m => m.period >= 21 && m.period <= 25],
   ['Otros', m => m.period === 50 || m.period === 99]
 ];
 const typeOf = (m: MarketLine) => m.key.split('|')[0];
 
-export function BasketOdds({ game }: { game: BasketGame }) {
-  const { openBet, addToSlip, toast } = useApp();
+export const BasketOdds = ({ game }: { game: BasketGame }) => <SportOdds target={targetOfGame(game)} />;
+
+export function SportOdds({ target }: { target: OddsTarget }) {
+  const { addToSlip, toast } = useApp();
   const qc = useQueryClient();
-  const { data, isLoading, error, dataUpdatedAt, isFetching } = useBasketOdds(game);
+  const { data, isLoading, error, dataUpdatedAt, isFetching } = useMatchOdds(target);
   const [job, setJob] = useState<AutoJob | null>(null);
   const [section, setSection] = useState('Partido');
-  const m = matchOfGame(game);
+  const m = target.match;
   useEffect(() => window.api.onOddsAuto(j => setJob(cur => {
     if (j.match.a.name !== m.a.name || j.match.b.name !== m.b.name) return cur;
-    if (j.done) qc.invalidateQueries({ queryKey: ['odds', 'basket', game.id] });
+    if (j.done) qc.invalidateQueries({ queryKey: ['odds', target.sport, target.id] });
     return j;
-  })), [m.a.name, m.b.name, game.id, qc]);
+  })), [m.a.name, m.b.name, target.id, target.sport, qc]);
   const running = !!job && !job.done;
   const books = data?.books.length ? data.books : ['Winamax', 'Betway'];
-  const event = `${game.away.abbr} @ ${game.home.abbr}`;
-  const pick = (market: string, sel: string, bk: string, price: number, slip?: boolean) => {
-    const b = { sport: 'basket' as const, league: LEAGUE_NAME[game.league], event, market, selection: sel, bookmaker: bk, odds: price };
-    if (slip) addToSlip({ ...b, status: 'pending' }); else openBet(b);
-  };
+  const pick = (market: string, sel: string, bk: string, price: number) =>
+    addToSlip({ sport: target.sport, league: target.league, event: target.event, market, selection: sel, bookmaker: bk, odds: price, status: 'pending' });
 
   const groups = useMemo(() => {
     const out = new Map<string, MarketLine[]>();
@@ -65,7 +75,7 @@ export function BasketOdds({ game }: { game: BasketGame }) {
     try { setJob(await window.api.odds.auto(m)); } catch (e) { toast((e as Error).message); }
   }
 
-  if (game.state === 'post') return <Empty>El partido ha terminado: ya no hay cuotas.</Empty>;
+  if (target.done) return <Empty>El partido ha terminado: ya no hay cuotas.</Empty>;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -104,9 +114,9 @@ export function BasketOdds({ game }: { game: BasketGame }) {
   );
 }
 
-// Una tarjeta de mercado: filas de selecciones y una columna por casa. Clic: apuesta; clic derecho: combinada
+// Una tarjeta de mercado: filas de selecciones y una columna por casa. Clic: al cupón
 function OddsCard({ group, lines, books, onPick }: {
-  group: string; lines: MarketLine[]; books: string[]; onPick: (market: string, sel: string, bk: string, price: number, slip?: boolean) => void;
+  group: string; lines: MarketLine[]; books: string[]; onPick: (market: string, sel: string, bk: string, price: number) => void;
 }) {
   const [all, setAll] = useState(false);
   // Líneas más igualadas primero (la principal de la casa suele ser la de menos diferencia entre lados)
@@ -136,8 +146,7 @@ function OddsCard({ group, lines, books, onPick }: {
                 const p = o.prices[bk];
                 return (
                   <button key={bk} disabled={!p} onClick={() => p && onPick(group, o.label, bk, p)}
-                    onContextMenu={e => { e.preventDefault(); if (p) onPick(group, o.label, bk, p, true); }}
-                    title={p ? `${bk}: ${o.label}. Clic para apostar, clic derecho para la combinada` : undefined}
+                    title={p ? `${bk}: ${o.label}. Clic para añadirla al cupón (otra vez para quitarla)` : undefined}
                     className={cn('h-7 w-[72px] rounded-md text-sm font-semibold tnum transition disabled:cursor-default',
                       !p ? 'text-zinc-700' : p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1) ? 'cursor-pointer bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'cursor-pointer bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700')}>
                     {p ? odd(p) : '–'}

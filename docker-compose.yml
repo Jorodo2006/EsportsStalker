@@ -72,6 +72,11 @@ services:
     <<: *servicio
     command: ["node", "services/basket/index.js"]
 
+  # Tenis: ATP y WTA (ESPN)
+  tennis:
+    <<: *servicio
+    command: ["node", "services/tennis/index.js"]
+
   gateway:
     <<: *servicio
     command: ["node", "services/gateway/index.js"]

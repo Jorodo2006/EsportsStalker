@@ -227,13 +227,27 @@ async function betwayEvent(page, job, base, say, max = 10) {
   return hechos.join(' · ');
 }
 
+// Cada deporte: id del deporte en Winamax, qué torneos mirar si no está en la portada y lista de Betway
+const SPORT_CFG = {
+  basket: {
+    wm: 2, tours: job => WINAMAX_TOURS[job.match.league] || 'nba|euro',
+    bw: job => (BETWAY_LISTS[job.match.league] ? 'grp/basketball/' + BETWAY_LISTS[job.match.league] : null), bwCat: 'cat/basketball'
+  },
+  // Tenis: el torneo va en league ("Rolex Paris Masters"); se buscan sus torneos por la palabra más larga del nombre
+  tennis: {
+    wm: 5, tours: job => (String(job.match.league || '').split(/[^A-Za-z]+/).sort((a, b) => b.length - a.length)[0] || 'atp|wta'),
+    bw: () => null, bwCat: 'cat/tennis'
+  }
+};
+const cfgOf = job => SPORT_CFG[job.match.sport] || SPORT_CFG.basket;
+
 const BASKET_BOOKS = {
   async winamax(job, ctx, say) {
     say('buscando', 'Buscando el partido…');
     let id = (String(job.urls.winamax || '').match(/match\/(\d+)/) || [])[1];
-    const page = await openTab(ctx, id ? `https://www.winamax.es/apuestas-deportivas/match/${id}` : 'https://www.winamax.es/apuestas-deportivas/sports/2');
+    const page = await openTab(ctx, id ? `https://www.winamax.es/apuestas-deportivas/match/${id}` : `https://www.winamax.es/apuestas-deportivas/sports/${cfgOf(job).wm}`);
     if (!id) {
-      id = await until(page, winamaxFind, [[job.match.a, job.match.b], { sport: 2, tours: WINAMAX_TOURS[job.match.league] || 'nba|euro' }], 20000);
+      id = await until(page, winamaxFind, [[job.match.a, job.match.b], { sport: cfgOf(job).wm, tours: cfgOf(job).tours(job) }], 20000);
       if (!id || id === 'no') throw new Error('No encuentro el partido en Winamax');
       await goTo(page, `https://www.winamax.es/apuestas-deportivas/match/${id}`);
     }
@@ -249,10 +263,10 @@ const BASKET_BOOKS = {
       const teams = [job.match.a, job.match.b];
       const opts = { href: 'a[href*="/sports/event/"]', selector: '[data-eventid],a[href*="/sports/event/"],div,li,article', scroll: true };
       const look = async ms => (String((await until(page, pageFind, [teams, opts], ms)) || '').match(/event\/(\d+)/) || [])[1];
-      const list = BETWAY_LISTS[job.match.league];
-      page = await openTab(ctx, `https://betway.es/es/es/sports/${list ? 'grp/basketball/' + list : 'cat/basketball'}`);
+      const list = cfgOf(job).bw(job);
+      page = await openTab(ctx, `https://betway.es/es/es/sports/${list || cfgOf(job).bwCat}`);
       ev = await look(12000);
-      if (!ev && list) { await goTo(page, 'https://betway.es/es/es/sports/cat/basketball'); ev = await look(10000); }
+      if (!ev && list) { await goTo(page, `https://betway.es/es/es/sports/${cfgOf(job).bwCat}`); ev = await look(10000); }
       if (!ev) {
         const snap = await run(page, snapshotOf);
         if (snap) await post('/snapshot', { ...snap, book: 'betway', nombre: 'lista-basket', motivo: 'lector: no encuentro el partido de baloncesto' });
@@ -271,7 +285,8 @@ async function runJob(job) {
   const say = (book, estado, msg) => post('/auto/progress', { id: job.id, book, estado, msg });
   const ctx = await (await getBrowser()).newContext({ locale: 'es-ES', timezoneId: 'Europe/Madrid', viewport: { width: 1366, height: 900 } });
   try {
-    const flows = job.match.sport === 'basket' ? BASKET_BOOKS : BOOKS;
+    // Baloncesto y tenis van por el mismo camino (con su configuración); LoL por el suyo
+    const flows = SPORT_CFG[job.match.sport] ? BASKET_BOOKS : BOOKS;
     await Promise.all(job.books.map(async book => {
       if (!flows[book]) return say(book, 'error', 'Casa no soportada');
       try { await say(book, 'ok', await flows[book](job, ctx, (estado, m) => say(book, estado, m))); }

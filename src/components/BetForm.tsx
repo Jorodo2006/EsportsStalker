@@ -29,6 +29,9 @@ const BASKET_MARKETS: Option[] = [
   ...['Puntos', 'Rebotes', 'Asistencias', 'Triples anotados', 'Pts + Reb + Ast', 'Pts + Reb', 'Pts + Ast', 'Reb + Ast', 'Robos',
     'Tapones', 'Robos + Tapones', 'Pérdidas', 'Doble-doble'].map(m => ({ value: `Jugador · ${m}`, group: 'Jugadores' }))
 ];
+// Mercados de tenis más habituales en Winamax y Betway
+const TENNIS_MARKETS: Option[] = ['Ganador', 'Hándicap de juegos', 'Total de juegos', 'Hándicap de sets', 'Resultado exacto', '1.er set · Ganador',
+  '1.er set · Total de juegos', 'Gana al menos un set', 'Juegos de un jugador'].map(value => ({ value, group: 'Tenis' }));
 const BOOKS = ['Winamax', 'Betway'];
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -74,8 +77,12 @@ export function BetFormDialog() {
     .map(value => ({ value, group: 'Usados antes' })), [bets]);
   // Mercados: primero los que el comparador ya leyó de ese partido (si se abrió su ficha), después la lista completa
   const nba = f.sport === 'basket';
+  // Fuera de LoL no hay calendario de lolesports para elegir el partido: se escribe a mano
+  const free = f.sport === 'basket' || f.sport === 'tennis';
+  const sportNow = (f.sport || 'lol') as BetLeg['sport'];
   const marketsFor = (event: string, sport = f.sport): Option[] => {
     if (sport === 'basket') return [...BASKET_MARKETS, ...usedMarkets];
+    if (sport === 'tennis') return [...TENNIS_MARKETS, ...usedMarkets];
     const read: Option[] = [];
     for (const [, d] of qc.getQueriesData<Schedule>({ queryKey: ['schedule'] }))
       for (const ev of d?.events ?? []) if (ev.teams.length === 2 && event && matchName(ev) === event)
@@ -84,7 +91,7 @@ export function BetFormDialog() {
   };
 
   function toCombo() {
-    const first: BetLeg = { event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection || '', odds: parseFloat(f.odds) || 0, status: 'pending', sport: nba ? 'basket' : 'lol' };
+    const first: BetLeg = { event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection || '', odds: parseFloat(f.odds) || 0, status: 'pending', sport: sportNow };
     setLegs(first.selection || first.event ? [first, emptyLeg()] : [emptyLeg(), emptyLeg()]);
   }
   function toSingle() {
@@ -138,7 +145,7 @@ export function BetFormDialog() {
           </div>
           <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm"
             title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de LoL y de baloncesto'}>
-            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }].map(x => (
+            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }].map(x => (
               <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
                 className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', (f.sport || 'lol') === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
             ))}
@@ -157,7 +164,7 @@ export function BetFormDialog() {
             <div className="flex flex-col gap-2 p-3">
               {legs.map((l, i) => (
                 <div key={i} className="grid grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] items-center gap-2">
-                  {l.sport === 'basket'
+                  {l.sport === 'basket' || l.sport === 'tennis'
                     ? <Input list="dl-events" placeholder="LAL @ BOS" value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
                     : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
                       onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
@@ -180,14 +187,14 @@ export function BetFormDialog() {
                 </div>
               ))}
               <div className="flex items-center justify-between pt-1">
-                <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: nba ? 'basket' : 'lol' }])}><Plus size={14} />Añadir selección</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: sportNow }])}><Plus size={14} />Añadir selección</Button>
                 <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
               </div>
             </div>
           </div>
         ) : <>
           <Field label="Partido">
-            {nba
+            {free
               ? <Input required list="dl-events" placeholder="LAL @ BOS" value={f.event || ''} onChange={set('event')} />
               : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
                 onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
@@ -233,7 +240,7 @@ export function BetFormDialog() {
           <Button type="button" variant="ghost" onClick={closeBet}>Cancelar</Button>
           {canAdd && (
             <Button type="button" variant="secondary" className="ml-auto" title="Guarda la selección en el boleto para combinarla con otras"
-              onClick={() => { addToSlip({ event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection, odds: parseFloat(f.odds), status: 'pending', bookmaker: f.bookmaker, sport: nba ? 'basket' : 'lol' }); closeBet(); }}>
+              onClick={() => { addToSlip({ event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection, odds: parseFloat(f.odds), status: 'pending', bookmaker: f.bookmaker, sport: sportNow }); closeBet(); }}>
               <Layers size={15} />Añadir a combinada
             </Button>
           )}

@@ -104,6 +104,11 @@ function registerIpc() {
   handle('odds:auto', match => call('POST', '/api/odds/jobs', { match: matchOf(match) }));
   handle('odds:autoStatus', () => get('/api/odds/auto/status'));
   // Marcador de cuotas para tu Chrome y pegado manual si el envío directo falla
+  handle('tennis:games', date => get('/api/tennis/games', { date }));
+  handle('tennis:days', (from, n) => get('/api/tennis/days', { from, n }));
+  handle('tennis:live', () => get('/api/tennis/live'));
+  handle('tennis:rankings', tour => get(`/api/tennis/rankings/${encodeURIComponent(tour)}`));
+  handle('tennis:player', (tour, id) => get(`/api/tennis/player/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
   handle('basket:leagues', () => get('/api/basket/leagues'));
   handle('basket:games', date => get('/api/basket/games', { date }));
   handle('basket:days', (from, n) => get('/api/basket/days', { from, n }));

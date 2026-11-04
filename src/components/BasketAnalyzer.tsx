@@ -24,7 +24,7 @@ export const badInjury = (s: string) => /out/i.test(s);
 export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null };
 
 export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { player: Picked; games?: BasketGame[]; injuries?: BasketInjury[]; odds?: MatchOdds }) {
-  const { openBet, addToSlip, settings } = useApp();
+  const { addToSlip, settings } = useApp();
   const log = useQuery({ queryKey: ['basket', 'gamelog', player.league, player.id, player.teamId], queryFn: () => window.api.basket.gamelog(player.league, player.id, player.teamId), staleTime: 10 * 60e3 });
   const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
@@ -140,7 +140,6 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
           <ValuePanel bank={bank}
             v={{ line: L!, pOver: R.pOver, pUnder: R.pUnder, pPush: R.pPush, fairOver: R.fairOver, fairUnder: R.fairUnder, margin: R.market.margin, exact: R.market.exact, sides: R.sides, rel: R.rel, verdict: R.verdict }}
-            onBet={s => openBet({ sport: 'basket', ...betOf(s) })}
             onSlip={s => addToSlip({ sport: 'basket', status: 'pending', ...betOf(s) })} />
           <div className="flex flex-col gap-5">
             <Card title={`Proyección: ${fx(R.mu)} ${M.short}`} action={<span className="text-xs text-zinc-500">{fx(R.projMin)} min previstos</span>}>

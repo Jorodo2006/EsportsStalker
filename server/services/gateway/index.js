@@ -12,6 +12,7 @@ const ROUTES = [
   [/^\/api\/(esports|stats)(\/|$)/, 'esports'],
   [/^\/api\/odds(\/|$)/, 'odds'],
   [/^\/api\/basket(\/|$)/, 'basket'],
+  [/^\/api\/tennis(\/|$)/, 'tennis'],
   [/^\/(odds|bet365|snapshot|auto|jobs)(\/|$)/, 'odds']
 ];
 

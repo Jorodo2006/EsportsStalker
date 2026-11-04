@@ -24,6 +24,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `esports` | `server/services/esports/` | 4001 (interno) | `esports` | lolesports (calendario, directo, detalle) y Leaguepedia (stats, con cola y caché) |
 | `odds` | `server/services/odds/` | 4002 (interno) | `odds` | Puente de los lectores, normalizador (LoL y baloncesto), trabajos, programador, histórico |
 | `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA y WNBA (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
+| `tennis` | `server/services/tennis/` | 4005 (interno) | `tennis` | Tenis ATP y WTA (ESPN): partidos de los torneos en juego, sets, rankings |
 | `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `electron/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |
 | `db` | `postgres:17-alpine` | `127.0.0.1:55432` (para depurar) | — | Volumen `pgdata` |
 | `adminer` | `adminer` | `127.0.0.1:8080` (`ADMINER_PORT`) | — | Visor web de la base de datos (tema oscuro, servidor `db`) |
@@ -51,6 +52,7 @@ Reglas:
 | `/api/esports`, `/api/stats` | esports |
 | `/api/odds`, `/odds`, `/bet365`, `/snapshot`, `/auto`, `/jobs` | odds |
 | `/api/basket` | basket |
+| `/api/tennis` | tennis |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
 
 API de la app (la usa `electron/main.js`):
@@ -82,7 +84,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 
 | Tabla | Contenido |
 |---|---|
-| `bets.bets` | Apuestas (simples y combinadas). `seq` guarda el orden de alta; `sport`: `lol`, `basket` o `mix` (migraciones 002 y 003) |
+| `bets.bets` | Apuestas (simples y combinadas). `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis` o `mix` (migraciones 002, 003 y 004) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |
 | `esports.cache` | Caché de Leaguepedia (6 h) |

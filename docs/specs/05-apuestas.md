@@ -50,14 +50,18 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
     - `cashout` si el usuario lo marca, y entonces manda sobre el cálculo;
   - **resumen**: `event` (partidos unidos con " + "), `selection` (lo mismo con las selecciones),
     `league` (ligas únicas unidas con " / ") y `market = 'Combinada'`.
-- **Boleto** (`slip` en `app-context`, guardado en `localStorage` con la clave `slip`):
-  - Para añadir, clic derecho o Mayús+clic en una cuota del comparador, o el botón *Añadir a combinada* del formulario
-    cuando se abre desde una cuota.
-  - Si llega otra selección del mismo partido y mercado, sustituye a la anterior. Si es la misma selección, se avisa
-    y no se duplica.
-  - El widget flotante (abajo a la derecha) enseña las selecciones y la cuota total. Avisa si mezclan casas distintas.
-    Tiene los botones *Crear combinada* (con 2 o más selecciones) y *Vaciar*.
-  - *Crear combinada* abre el formulario con `{ legs, bookmaker, league, fromSlip: true }`. Al guardar, el boleto se vacía.
+- **Cupón** (el "carrito"; `slip` en `app-context`, guardado en `localStorage` con la clave `slip`,
+  `src/components/Coupon.tsx`):
+  - Cualquier cuota de cualquier app (comparador de LoL, cuotas de baloncesto y tenis, *Añadir al cupón* del panel de
+    valor) se añade al cupón con su deporte. Pulsar otra vez la misma selección la quita.
+  - Pestaña *Simples*: un stake para cada selección (botones 5 / 10 / 25 / 50 para todas) y lo que gana cada una.
+    *Registrar apuestas* guarda una apuesta por cada selección con stake; las que no tienen se quedan en el cupón.
+  - Pestaña *Combinada* (2 o más selecciones, y nunca dos del mismo partido y mercado): cuota total, un stake y el
+    retorno. *Registrar combinada* la guarda y vacía el cupón; el lápiz la abre en el formulario para afinarla.
+  - Enseña el saldo de la cartera y avisa si se apuesta más de lo que queda, o si las cuotas son de casas distintas.
+- **Cartera común** (`wallet` en `src/lib/format.ts`, `useWallet` en `app-context`): banca inicial + beneficio de
+  todas las apuestas (LoL, baloncesto y tenis) − lo que está en juego. Sale arriba a la derecha y en *Mis apuestas*;
+  las estadísticas de *Mis apuestas* son las de la app abierta.
 - **Formulario**:
   - El selector *Simple / Combinada* pasa los campos de una a otra: la simple se convierte en la primera selección.
   - Hay una fila por selección (partido, mercado, selección, cuota y estado), con *Añadir selección* y la cuota

@@ -1,6 +1,6 @@
 // Piezas comunes del análisis de valor (LoL y NBA): veredicto, fiabilidad y panel con probabilidades,
 // valor esperado, ventaja y stake. Mismo aspecto en las dos secciones.
-import { AlertTriangle, Layers, Plus } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
 import { useCurrency } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
 import { SIDE_LABEL, VERDICT_LABEL, type Reliability, type Side, type SideValue, type ValueData, type VerdictCode } from '@/lib/value';
@@ -32,7 +32,7 @@ export function ReliabilityMeter({ rel, compact }: { rel: Reliability; compact?:
   );
 }
 
-// Panel completo. onBet / onSlip registran la apuesta o la añaden a la combinada con el lado elegido.
+// Panel completo. onSlip (u onBet) añade el lado elegido al cupón, donde se pone el stake y se registra.
 export function ValuePanel({ v, bank, onBet, onSlip }: {
   v: ValueData; bank?: number; onBet?: (s: SideValue) => void; onSlip?: (s: SideValue) => void;
 }) {
@@ -77,8 +77,7 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
                 </div>
                 {(onBet || onSlip) && (
                   <div className="mt-3 flex gap-2">
-                    {onBet && <Button size="sm" variant={good ? 'primary' : 'secondary'} onClick={() => onBet(s)}><Plus size={13} />Registrar</Button>}
-                    {onSlip && <Button size="sm" variant="ghost" onClick={() => onSlip(s)}><Layers size={13} />Combinada</Button>}
+                    <Button size="sm" variant={good ? 'primary' : 'secondary'} onClick={() => (onSlip ?? onBet)!(s)}><Plus size={13} />Añadir al cupón</Button>
                   </div>
                 )}
               </> : <div className="mt-2 text-xs text-zinc-600">Sin cuota</div>}

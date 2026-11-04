@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Check, Download, Layers, Pencil, Percent, Plus, Search, Target, Upload, Wallet, X } from 'lucide-react';
-import { useApp, useCurrency } from '@/lib/app-context';
+import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
 import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
@@ -12,15 +12,18 @@ const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning
 };
 
 
+const APP_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis' };
+
 export default function BetsView() {
-  const { openBet, toast, settings, app } = useApp();
+  const { openBet, toast, app } = useApp();
   const cur = useCurrency();
   const qc = useQueryClient();
   const { data: all = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   // Cada app ve sus apuestas; las combinadas que mezclan LoL y baloncesto salen en las dos
   const bets = useMemo(() => all.filter(b => (b.sport || 'lol') === app || b.sport === 'mix'), [all, app]);
   const s = useMemo(() => summarize(bets), [bets]);
-  const bankroll = (settings?.initialBankroll || 0) + s.profit;
+  // La cartera es común a todas las apps; las estadísticas de abajo son sólo de esta
+  const w = useWallet();
 
   async function quickSettle(b: Bet, status: BetStatus) {
     // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
@@ -33,7 +36,7 @@ export default function BetsView() {
 
   return (
     <>
-      <PageHeader title="Mis apuestas" subtitle={app === 'basket' ? 'Baloncesto: registro, beneficio y rendimiento' : 'LoL: registro, beneficio y rendimiento'}>
+      <PageHeader title="Mis apuestas" subtitle={`${APP_NAME[app]}: registro, beneficio y rendimiento`}>
         <Button variant="secondary" onClick={async () => {
           try { const n = await window.api.bets.import(); if (n) { toast(`${n} apuestas importadas`); qc.invalidateQueries({ queryKey: ['bets'] }); } }
           catch (e) { toast('Error al importar: ' + (e as Error).message); }
@@ -42,9 +45,11 @@ export default function BetsView() {
         <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Beneficio total" icon={<Wallet size={15} />} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
-          sub={settings?.initialBankroll ? `Banca: ${money(bankroll, cur)}` : `${s.settled} apuestas resueltas`} />
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
+          sub={`${money(w.inPlay, cur)} en juego · beneficio total ${money(w.profit, cur, true)}`} />
+        <Stat label={`Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
+          sub={`${s.settled} apuestas resueltas`} />
         <Stat label="ROI / Yield" icon={<Percent size={15} />} value={pct(s.roi)} valueClass={tone(s.roi)} sub={`Apostado ${money(s.staked, cur)}`} />
         <Stat label="Acierto" icon={<Target size={15} />} value={pct(s.hit)} sub={`${s.won} de ${s.settled} · cuota media ${odd(s.avgOdds)}`} />
         <Stat label="Pendientes" value={s.pendingCount} sub={`${money(s.pendingStake, cur)} en juego · retorno ${money(s.pendingReturn, cur)}`} />

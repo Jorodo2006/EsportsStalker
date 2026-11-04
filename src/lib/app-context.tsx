@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
+import { wallet } from './format';
 
 export type View = 'matches' | 'players' | 'bets' | 'settings';
 // Dos apps en una: LoL y baloncesto, cada una con sus partidos, sus jugadores y sus apuestas
@@ -24,6 +25,7 @@ interface Ctx {
   slip: SlipLeg[];
   addToSlip(l: SlipLeg): void;
   removeFromSlip(i: number): void;
+  keepInSlip(keep: (l: SlipLeg) => boolean): void; // deja en el cupón sólo las que cumplan
   clearSlip(): void;
   toast(msg: string): void;
   toastMsg: string | null;
@@ -34,7 +36,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
-  const [app, setApp] = useState<AppId>(() => { try { return localStorage.getItem('app') === 'basket' ? 'basket' : 'lol'; } catch { return 'lol'; } });
+  const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' ? a : 'lol'; } catch { return 'lol'; } });
   const [view, setView] = useState<View>('matches');
   const [viewParam, setViewParam] = useState<string>();
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);
@@ -82,15 +84,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openBet: d => setBetDraft({ sport: app, ...(app === 'basket' ? { league: 'NBA' } : {}), ...d }),
     closeBet: () => setBetDraft(null),
     slip,
+    // Cupón: pulsar una cuota la añade; pulsarla otra vez la quita (como en las casas)
     addToSlip(l) {
       const same = (x: SlipLeg) => x.event === l.event && x.market === l.market && x.selection === l.selection;
-      if (slip.some(same)) { toast('Esa selección ya está en la combinada'); return; }
-      // Otra selección del mismo mercado y partido la sustituye (no se pueden combinar)
-      const rep = slip.some(x => x.event === l.event && x.market === l.market);
-      setSlip(s => [...s.filter(x => !(x.event === l.event && x.market === l.market)), l]);
-      toast(rep ? 'Selección cambiada en la combinada' : `Añadida a la combinada (${slip.length + 1})`);
+      if (slip.some(same)) { setSlip(s => s.filter(x => !same(x))); toast('Quitada del cupón'); return; }
+      setSlip(s => [...s, { sport: app, ...l }]);
+      toast(`Añadida al cupón (${slip.length + 1})`);
     },
     removeFromSlip: i => setSlip(s => s.filter((_, j) => j !== i)),
+    keepInSlip: keep => setSlip(s => s.filter(keep)),
     clearSlip: () => setSlip(() => []),
     toast,
     toastMsg
@@ -105,4 +107,11 @@ export function useApp() {
 }
 
 export const useCurrency = () => useApp().settings?.currency || '€';
+
+// Saldo de la cartera común a las tres apps
+export function useWallet() {
+  const { settings } = useApp();
+  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  return wallet(bets, settings?.initialBankroll || 0);
+}
 export const useRefreshMs = () => Math.max(10, useApp().settings?.refreshSeconds || 30) * 1000;

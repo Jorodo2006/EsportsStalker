@@ -151,7 +151,7 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
 }
 
 function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string }) {
-  const { openBet, addToSlip, settings, toast } = useApp();
+  const { addToSlip, settings, toast } = useApp();
   const refreshMs = useRefreshMs();
   const [a, b] = match.teams;
   const [section, setSection] = useState<Section>('all');
@@ -209,9 +209,9 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
   const shown = useMemo(() => visible.filter(m => !mainOnly || m.main || !groupsWithMain.has(m.group) || isPlayerLine(m)),
     [visible, mainOnly, groupsWithMain]);
   const hasAlt = visible.some(m => !m.main && groupsWithMain.has(m.group) && !isPlayerLine(m));
-  const pick: Pick = (market, sel, bk, price, add) => add
-    ? addToSlip({ league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price, status: 'pending' })
-    : openBet({ league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price });
+  // Cualquier cuota va al cupón (allí se pone el stake y se registra como simple o combinada)
+  const pick: Pick = (market, sel, bk, price) =>
+    addToSlip({ sport: 'lol', league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price, status: 'pending' });
 
   if (match.state === 'completed') return <Empty>El partido ha terminado: ya no hay cuotas</Empty>;
 
