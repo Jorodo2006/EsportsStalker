@@ -6,7 +6,7 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 ## Qué es
 
 Web con login, para el ordenador y el móvil, con backend en Docker, que son **tres apps en una**, con un selector arriba:
-**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP y WTA, verde).
+**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP, Challengers y WTA, verde).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
 apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las tres apps**, y las cuotas que se pulsan van a un **cupón** desde
 el que se registran como simples o combinada. La interfaz es React en el navegador; la lógica y los datos están en
@@ -74,7 +74,8 @@ Docker Compose (docker-compose.yml)
   │                                                     programador cada X min, histórico     → esquema odds
   ├─ basket   :4004          server/services/basket/    NBA y WNBA (ESPN), Euroliga y EuroCup
   │                                                     (API de la Euroliga), días en hora de España → esquema basket
-  ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings → esquema tennis
+  ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings. Puntos del juego (WTA, LiveScore)
+  │                                                     y Challengers (LiveScore) → esquema tennis
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -129,6 +130,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   está el partido; el lector las hace de una en una, primero las más cercanas. No subas mucho la frecuencia: las casas
   pueden bloquear.
 - **Escáner de líneas y puntos de equipo** (`scanLine` en `src/lib/basket-model.ts`, `src/lib/basket-teams.ts`): el escáner debe dar la misma probabilidad que el analizador, y los parámetros de los puntos están ajustados con datos (cifras y límites en `docs/specs/08-baloncesto.md`). No guardes logs de ESPN enteros en la caché: pesan 700 KB cada uno (`remember` y `bulk` en `cache.js`).
+- **Recomendaciones de baloncesto** (`src/lib/basket-picks.ts`, `blendWithMarket` y `tooFar` en `src/lib/value.ts`): no ordenes por el EV del modelo a secas. Sube a la cabeza sus propios errores: en la prueba salían EV de +65 % con el modelo diciendo 29 % y la casa 10 %. Los pesos frente a la casa son una decisión, no una medida (`docs/specs/08-baloncesto.md`).
+- **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.

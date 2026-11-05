@@ -64,6 +64,8 @@ const routes = [
     return (await between(addDays(today, -1), today)).filter(g => g.state === 'in');
   }],
   ['GET', '/api/basket/standings/:league', ({ params }) => league(params.league).src.standings(params.league)],
+  // Color principal y secundario de cada equipo: { idEquipo: { color, alt } }
+  ['GET', '/api/basket/colors/:league', ({ params }) => league(params.league).src.colors(params.league)],
   ['GET', '/api/basket/team/:league/:team', ({ params }) => league(params.league).src.team(params.league, params.team)],
   ['GET', '/api/basket/roster/:league/:team', ({ params }) => league(params.league).src.roster(params.league, params.team)],
   // Partidos terminados de toda la liga con sus parciales: de aquí salen los puntos de los equipos y la proyección del total

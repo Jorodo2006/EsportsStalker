@@ -6,6 +6,8 @@ const { migrate, query } = require('../../shared/db');
 const tml = require('./tml');
 const { photoOf } = require('./photos');
 const { picksFor } = require('./picks');
+const { withPoints } = require('./points');
+const ls = require('./livescore');
 
 const TOURS = { atp: 'ATP', wta: 'WTA' };
 const site = t => `https://site.api.espn.com/apis/site/v2/sports/tennis/${t}`;
@@ -14,6 +16,7 @@ const HISTORY_TOURNAMENTS = 12; // cada torneo del historial cuesta dos peticion
 
 // ---------- caché ----------
 const mem = new Map();
+const saved = new Map(); // última escritura en tennis.cache: es sólo una copia por si ESPN no responde, no hace falta guardarla cada 20 s
 async function getJSON(url, ttlMs) {
   const hit = mem.get(url);
   if (hit && Date.now() - hit.t < ttlMs) return hit.v;
@@ -22,8 +25,11 @@ async function getJSON(url, ttlMs) {
     if (!res.ok) throw new Error(`respondió ${res.status}`);
     const v = await res.json();
     mem.set(url, { t: Date.now(), v });
-    query(`INSERT INTO tennis.cache (key, value, t) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, t = EXCLUDED.t`,
-      [url, JSON.stringify(v)]).catch(e => console.error('tennis.cache:', e.message));
+    if (Date.now() - (saved.get(url) || 0) >= 60e3) {
+      saved.set(url, Date.now());
+      query(`INSERT INTO tennis.cache (key, value, t) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, t = EXCLUDED.t`,
+        [url, JSON.stringify(v)]).catch(e => console.error('tennis.cache:', e.message));
+    }
     return v;
   } catch (e) {
     const old = hit?.v ?? (await query('SELECT value FROM tennis.cache WHERE key = $1', [url]).catch(() => ({ rows: [] }))).rows[0]?.value;
@@ -80,8 +86,9 @@ async function ranks(tour) {
   return list;
 }
 
-// Partidos individuales de los torneos que salen en el marcador de ESPN (trae el torneo entero)
-async function matches(tour, days, ttl = 60e3) {
+// Partidos individuales de los torneos que salen en el marcador de ESPN (trae el torneo entero). 20 s: los puntos del juego sólo se
+// enseñan si los juegos cuadran con los de ESPN, y con más caché desaparecerían un buen rato al acabar cada juego
+async function matches(tour, days, ttl = 20e3) {
   const [rk, ...boards] = await Promise.all([ranks(tour).catch(() => []), ...days.map(d => getJSON(`${site(tour)}/scoreboard?dates=${d}`, ttl))]);
   const rankById = Object.fromEntries(rk.map(r => [r.id, r]));
   const seen = new Set(), out = [];
@@ -114,6 +121,14 @@ async function between(from, to) {
   const lists = await Promise.all(Object.keys(TOURS).map(t => matches(t, days).catch(e => { console.error(`[tennis] ${t}:`, e.message); return []; })));
   return lists.flat().filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; })
     .sort((x, y) => new Date(x.date) - new Date(y.date));
+}
+
+// Los Challenger sólo entran en las pantallas de partidos: el modelo, las recomendaciones y las fichas de jugador no tienen sus datos
+async function withChallengers(list, from, to) {
+  const a = dayStart(from), b = dayStart(addDays(to, 1));
+  const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
+  const extra = await ls.challengers(days).catch(e => { console.error('[tennis] Challenger:', e.message); return []; });
+  return [...list, ...extra.filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; })].sort((x, y) => new Date(x.date) - new Date(y.date));
 }
 
 // ---------- Ficha de un jugador ----------
@@ -216,16 +231,16 @@ const routes = [
     dayPicks.set(q.date, { t: Date.now(), v: out });
     return out;
   }],
-  ['GET', '/api/tennis/games', ({ query: q }) => between(valid(q.date), valid(q.date))],
+  ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await between(valid(q.date), valid(q.date)), q.date, q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));
-    const list = await between(from, addDays(from, n - 1));
+    const list = await withChallengers(await between(from, addDays(from, n - 1)), from, addDays(from, n - 1));
     const out = {};
     for (let i = 0; i < n; i++) out[addDays(from, i)] = { total: 0, live: 0 };
     for (const m of list) { const d = out[madridDay(new Date(m.date).getTime())]; if (d) { d.total++; if (m.state === 'in') d.live++; } }
     return out;
   }],
-  ['GET', '/api/tennis/live', async () => { const t = madridDay(Date.now()); return (await between(addDays(t, -1), t)).filter(m => m.state === 'in'); }],
+  ['GET', '/api/tennis/live', async () => { const t = madridDay(Date.now()); return withPoints((await withChallengers(await between(addDays(t, -1), t), addDays(t, -1), t)).filter(m => m.state === 'in')); }],
   ['GET', '/api/tennis/rankings/:tour', ({ params }) => { if (!TOURS[params.tour]) throw fail('Circuito desconocido'); return ranks(params.tour); }],
   // Partidos de un jugador en los torneos en juego (su camino en el torneo y lo último que ha jugado)
   ['GET', '/api/tennis/player/:tour/:id', async ({ params }) => {

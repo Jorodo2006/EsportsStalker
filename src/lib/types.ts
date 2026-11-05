@@ -122,7 +122,7 @@ export interface MarketLine {
 export interface MatchOdds {
   books: string[];
   markets: MarketLine[];
-  sources: Record<string, { ok: boolean; msg: string }>;
+  sources: Record<string, { ok: boolean; msg: string; ts?: number }>;
 }
 
 export interface TeamRef { name: string; code: string; alt?: string[] } // alt: otros nombres del equipo en las casas
@@ -166,7 +166,11 @@ export interface TennisPlayer {
 export interface TennisMatch {
   id: string; tour: Tour; tournament: string; tournamentId: string; major: boolean; date: string; state: 'pre' | 'in' | 'post';
   status: string; round: string; court: string; city: string; bestOf: number; note: string; a: TennisPlayer; b: TennisPlayer;
+  points?: TennisPoints | null; // sólo en juego, si cuadra con los juegos de ESPN
+  level?: 'challenger'; // ATP Challenger (LiveScore): sin modelo, recomendaciones ni fichas de jugador
 }
+// Puntos del juego en curso: "15", "40", "AD"; en el tie-break, los que lleven. at: cuándo cambiaron por última vez (ms); source: de dónde salen
+export interface TennisPoints { a: string; b: string; server: 'a' | 'b' | null; tiebreak: boolean; at: number; source: string }
 export interface TennisRank { rank: number; previous: number; points: number; trend: string; id: string; name: string; short: string; flag: string; country: string }
 
 // Recomendaciones de un partido (modelo + cuotas). p, pModel y pMarket van de 0 a 1; ev es el valor esperado por unidad
@@ -236,6 +240,8 @@ export interface BasketTeamInfo {
   president: string; website: string; division: string; group: string; standing: BasketStanding | null; stats: { label: string; value: string; group?: string }[];
   leaders: { label: string; players: { id: string; name: string; value: string }[] }[]; results: BasketTeamGame[]; upcoming: BasketTeamGame[]; roster: BasketTeamPlayer[];
 }
+// Colores de un equipo ("#552583"); alt puede faltar
+export interface BasketTeamColor { color: string; alt: string | null }
 export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null }
 export interface BasketPlayerHit { id: string; league: BasketLeagueId; name: string; team: string; teamId?: string; pos: string; headshot: string }
 // Un partido de un jugador (lo más reciente primero en BasketGamelog.games)
@@ -316,6 +322,7 @@ export interface Api {
     standings(league: BasketLeagueId): Promise<BasketGroup[]>;
     team(league: BasketLeagueId, teamId: string): Promise<BasketTeamInfo>;
     leagueGames(league: BasketLeagueId): Promise<BasketLeagueGames>;
+    colors(league: BasketLeagueId): Promise<Record<string, BasketTeamColor>>;
     teamLogs(league: BasketLeagueId, teamId: string): Promise<BasketTeamLogs>;
     injuries(): Promise<BasketInjury[]>;
     boxscore(gameId: string): Promise<BasketBox>;

@@ -99,7 +99,8 @@ export function CompetitionBlock({ name, sub, logo, count, live, open, onToggle,
   );
 }
 
-export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean }
+// games y points: los juegos del set y los puntos del juego en curso (tenis en juego); serving: saca él; color: el del equipo, de fondo en el marcador grande; plate: su escudo necesita una placa clara para verse
+export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
 
 // Fila de partido: hora o estado a la izquierda, los dos equipos uno encima de otro con su marcador,
 // y la mejor cuota de cada uno si se piden
@@ -111,6 +112,7 @@ export function MatchRow({ state, time, status, a, b, odds, active, onClick, tag
     <div className="flex h-6 min-w-0 items-center gap-2.5">
       <TeamLogo src={t.logo} name={t.short || t.name} size={20} />
       <span className={cn('truncate text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'text-zinc-200')} title={t.name}>{t.name}</span>
+      {t.serving && <span title="Saca" aria-label="Saca" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
     </div>
   );
   const score = (t: RowTeam) => <span className={cn('h-6 font-score text-lg leading-6 font-semibold tnum', t.lose ? 'text-zinc-500' : state === 'live' ? 'text-rose-300' : 'text-zinc-50')}>{t.score ?? ''}</span>;
@@ -134,6 +136,16 @@ export function MatchRow({ state, time, status, a, b, odds, active, onClick, tag
           </div>
         )}
         {state !== 'pre' && <div className="flex w-8 flex-col items-end gap-1">{score(a)}{score(b)}</div>}
+        {state === 'live' && (a.games != null || b.games != null) && (
+          <div className="flex flex-col items-end gap-1">
+            {[a, b].map((t, i) => (
+              <span key={i} className="flex h-6 items-center gap-2 font-score text-base leading-6 tnum">
+                <span className="w-4 text-right text-zinc-300" title="Juegos de este set">{t.games ?? ''}</span>
+                {(a.points != null || b.points != null) && <span className="w-6 text-right font-semibold text-amber-300" title="Puntos del juego">{t.points ?? ''}</span>}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -149,7 +161,7 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
     <div className={cn('flex w-full min-w-0 flex-col items-center gap-1 text-center sm:w-auto sm:flex-row sm:gap-2.5 sm:text-left', which === 'a' ? 'sm:flex-row-reverse sm:justify-self-end sm:text-right' : 'sm:justify-self-start')}>
-      <TeamLogo src={t.logo} name={t.short || t.name} size={34} />
+      <span className={t.plate ? 'rounded-md bg-white/90 p-0.5' : t.color ? 'drop-shadow-[0_0_4px_rgb(255_255_255_/_.4)]' : ''}><TeamLogo src={t.logo} name={t.short || t.name} size={34} /></span>
       <div className="max-w-full truncate text-sm font-semibold sm:min-w-0 sm:text-lg" title={t.name}>{t.name}</div>
     </div>
   );
@@ -160,7 +172,8 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
     </span>
   );
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/50">
+    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/50"
+      style={a.color || b.color ? { backgroundImage: `linear-gradient(90deg, ${a.color ? `color-mix(in oklab, ${a.color} 55%, transparent)` : 'transparent'}, transparent 42%, transparent 58%, ${b.color ? `color-mix(in oklab, ${b.color} 55%, transparent)` : 'transparent'})` } : undefined}>
       <div className="flex items-center justify-center gap-2 px-4 pt-2 text-[11px] text-zinc-500">
         <span className="font-medium text-zinc-300">{competition}</span>
         {detail && <span>{detail}</span>}

@@ -262,8 +262,16 @@ async function team(lg, id) {
   };
 }
 
+// ESPN da los colores de todos los equipos de una vez
+async function colors(lg) {
+  const j = await getJSON(`${site(lg)}/teams`, 7 * 24 * 3600e3);
+  const hash = v => (/^[0-9a-f]{6}$/i.test(v || '') ? `#${v}` : null);
+  return Object.fromEntries((j.sports?.[0]?.leagues?.[0]?.teams || []).map(x => x.team).filter(t => hash(t?.color)).map(t => [String(t.id), { color: hash(t.color), alt: hash(t.alternateColor) }]));
+}
+
 module.exports.standings = standings;
 module.exports.team = team;
+module.exports.colors = colors;
 
 // ---------- Partidos de toda la liga con sus parciales ----------
 // ESPN no acepta rangos de fechas: un marcador por día. Cada uno trae todos los partidos de esa jornada, así que sale mucho más

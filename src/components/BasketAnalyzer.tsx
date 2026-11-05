@@ -6,10 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct, summarize } from '@/lib/format';
-import { BASKET_MARKETS, analyze, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket } from '@/lib/basket-model';
+import { BASKET_MARKETS, analyze, playerLines, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket } from '@/lib/basket-model';
 import { SIDE_LABEL, type SideValue } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketLogGame, MatchOdds } from '@/lib/types';
-import { playerLines } from './BasketOdds';
 import { ValuePanel } from './ValuePanel';
 import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, td, th } from './ui';
 
