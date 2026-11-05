@@ -1,15 +1,47 @@
-// Lecturas de cuotas programadas: cada minuto mira qué partidos empiezan en las próximas N horas y crea un
-// trabajo para la extensión de Chrome si hace más de X minutos que no se leen. La extensión los recoge sola
-// (chrome.alarms), así que hace falta que Chrome esté abierto con la extensión cargada.
+// Lecturas de cuotas programadas: cada minuto mira qué partidos empiezan pronto y crea un trabajo para el lector
+// de Docker si le toca según lo que falte para el partido (everyMinutes). El lector los hace de uno en uno.
 const { query } = require('../../shared/db');
 const client = require('../../shared/client');
 const bridge = require('./bridge');
 
 const TICK = 60e3;
+const FAR_HOURS = 48; // hasta dónde llegan las lecturas espaciadas
+// El tenis tiene decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
+const TENNIS_NEAR_HOURS = 3;
+const TENNIS_FAR_HOURS = 24;
+const MAX_QUEUE = 10; // unos 6 min de trabajo: así la cola no llega a caducar y un partido cercano entra enseguida
 const clamp = (v, lo, hi, def) => Math.min(hi, Math.max(lo, Number(v) || def));
 const TBD = /^(tbd|tba|por determinar)$/i;
 
-let last = { at: null, matches: [], error: null };
+let last = { at: null, matches: [], far: 0, error: null };
+
+// Reparte por turnos entre deportes (cada uno ya ordenado por inicio): si no, las decenas de partidos de tenis
+// que empiezan antes llenan la cola y el baloncesto, que suele jugarse de noche, no llega a entrar
+function byTurns(list) {
+  const groups = new Map();
+  for (const m of list) groups.set(m.sport || 'lol', [...(groups.get(m.sport || 'lol') || []), m]);
+  const out = [];
+  for (let i = 0; out.length < list.length; i++) for (const g of groups.values()) if (g[i]) out.push(g[i]);
+  return out;
+}
+
+const hoursLeft = m => (new Date(m.start).getTime() - Date.now()) / 3600e3;
+const isNear = (m, hours) => hoursLeft(m) <= (m.sport === 'tennis' ? Math.min(hours, TENNIS_NEAR_HOURS) : hours);
+
+// Cada cuántos minutos se lee un partido: lo cercano cada X min (ajuste), lo lejano cada hora o cada 3 horas.
+// El tenis lejano siempre cada 3 horas: con una hora, sus partidos solos llenarían las ~100 lecturas por hora del lector
+function everyMinutes(m, minutes, hours) {
+  if (isNear(m, hours)) return minutes;
+  return Math.max(minutes, hoursLeft(m) <= 24 && m.sport !== 'tennis' ? 60 : 180);
+}
+
+// Días de España entre ahora y `until`, los dos incluidos
+function daysUntil(until) {
+  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const days = new Set([day(until)]);
+  for (let t = Date.now(); t < until; t += 864e5) days.add(day(t));
+  return [...days];
+}
 
 // Partidos sin empezar con los dos equipos conocidos que empiezan antes de `hours` horas
 async function upcoming(hours) {
@@ -34,23 +66,21 @@ async function upcoming(hours) {
   }).map(e => ({ id: e.id, league: e.league, start: e.startTime, a: { name: e.teams[0].name, code: e.teams[0].code }, b: { name: e.teams[1].name, code: e.teams[1].code } }));
 }
 
-// Baloncesto: partidos sin empezar de hoy y mañana (días de España) que empiezan antes de `hours` horas.
+// Baloncesto: partidos sin empezar que empiezan antes de `hours` horas.
 // El partido va como visitante (a) contra local (b), igual que en la app
 async function upcomingBasket(hours) {
   const until = Date.now() + hours * 3600e3;
-  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
-  const days = [...new Set([day(Date.now()), day(until)])];
+  const days = daysUntil(until);
   const games = (await Promise.all(days.map(d => client.call('basket', 'GET', `/api/basket/games?date=${d}`).catch(() => [])))).flat();
   const team = s => ({ name: s.name, code: s.abbr || '', alt: s.alt || [] });
   return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && g.home?.name && g.away?.name; })
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'basket', a: team(g.away), b: team(g.home) }));
 }
 
-// Tenis: hay decenas de partidos al día, así que sólo los del cuadro final (no la previa) de las próximas 3 horas
+// Tenis: sólo los del cuadro final (no la previa)
 async function upcomingTennis(hours) {
-  const until = Date.now() + Math.min(hours, 3) * 3600e3;
-  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
-  const days = [...new Set([day(Date.now()), day(until)])];
+  const until = Date.now() + hours * 3600e3;
+  const days = daysUntil(until);
   const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
   const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
   return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.a?.name && g.b?.name; })
@@ -68,22 +98,31 @@ async function tick() {
   try {
     await bridge.cleanup();
     const s = await client.settings();
-    if (!s.oddsAutoEnabled) { last = { at: Date.now(), matches: [], error: null }; return; }
+    if (!s.oddsAutoEnabled) { last = { at: Date.now(), matches: [], far: 0, error: null }; return; }
     const minutes = clamp(s.oddsRefreshMinutes, 2, 240, 5);
     const hours = clamp(s.oddsAutoHours, 1, 48, 6);
-    // Si una de las dos fuentes falla, la otra sigue
+    // Con las lecturas espaciadas apagadas sólo se miran los partidos cercanos
+    const far = s.oddsFarEnabled !== false;
+    // Si una de las fuentes falla, las otras siguen
     const [lol, basket, tennis] = await Promise.all([
-      upcoming(hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
-      upcomingBasket(hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
-      upcomingTennis(hours).catch(e => { console.error('Programador (tenis):', e.message); return []; })
+      upcoming(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
+      upcomingBasket(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
+      upcomingTennis(far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS)).catch(e => { console.error('Programador (tenis):', e.message); return []; })
     ]);
-    const matches = [...lol, ...basket, ...tennis];
-    for (const m of matches) {
-      if (!(await due(bridge.keyOf(m), minutes))) continue;
+    const matches = [...lol, ...basket, ...tennis].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
+    let queued = rows[0].n;
+    // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes
+    const order = [...byTurns(matches.filter(m => isNear(m, hours))), ...byTurns(matches.filter(m => !isNear(m, hours)))];
+    for (const m of order) {
+      if (queued >= MAX_QUEUE) break;
+      if (!(await due(bridge.keyOf(m), everyMinutes(m, minutes, hours)))) continue;
       await bridge.noteMatch(m);
       await bridge.newJob(m, 'auto');
+      queued++;
     }
-    last = { at: Date.now(), matches, error: null };
+    const near = matches.filter(m => isNear(m, hours));
+    last = { at: Date.now(), matches: near, far: matches.length - near.length, error: null };
   } catch (e) {
     console.error('Programador de cuotas:', e.message);
     last = { ...last, at: Date.now(), error: e.message };
@@ -107,6 +146,7 @@ async function status() {
     lastRun: last.at,
     error: last.error,
     matches: last.matches,
+    far: last.far,
     queued: rows[0].queued,
     running: rows[0].running,
     lastPoll: bridge.lastPoll()

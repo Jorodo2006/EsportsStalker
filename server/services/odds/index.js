@@ -29,6 +29,7 @@ const routes = [
   ['POST', '/api/odds/jobs', async ({ body }) => { const m = matchOf(body); await bridge.noteMatch(m); return bridge.newJob(m, 'manual'); }],
   // Pegar del marcador: lo que el marcador copió al portapapeles cuando Chrome no le dejó enviarlo
   ['POST', '/api/odds/paste', async ({ body }) => { if (body?.match) await bridge.noteMatch(body.match); return receive(body?.data); }],
+  ['POST', '/api/odds/history', ({ body }) => bridge.priceHistory(matchOf(body))],
   ['GET', '/api/odds/auto/status', () => scheduler.status()],
   // Primer arranque con backend: direcciones aprendidas que había en casas-urls.json
   ['POST', '/api/odds/legacy-urls', ({ body }) => bridge.importUrls(body?.urls)],
