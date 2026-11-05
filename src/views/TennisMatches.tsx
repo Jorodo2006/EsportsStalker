@@ -1,16 +1,16 @@
 // Tenis · Partidos: igual que LoL y baloncesto. Tira de días (hora de España), filtro por estado, partidos agrupados
 // por torneo y, al pulsar uno, su ficha: marcador por sets, cuotas de Winamax y Betway y la forma de los dos jugadores.
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
-import { useApp } from '@/lib/app-context';
+import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import type { TennisMatch, TennisPlayer } from '@/lib/types';
 import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
 import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { TennisDayPicks, TennisPicksPanel } from '@/components/TennisPicks';
 import { TennisCompare } from '@/components/TennisStats';
-import { CompetitionBlock, DayStrip, MatchRow, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { Panel, panel } from '@/components/viz';
 
@@ -49,9 +49,11 @@ export default function TennisMatches() {
     all: all.length, live: all.filter(g => g.state === 'in').length, pre: all.filter(g => g.state === 'pre').length, post: all.filter(g => g.state === 'post').length
   }), [all]);
   const shown = all.filter(g => filter === 'all' || stateOf(g) === filter);
+  // Los que están en juego van arriba, destacados; el resto por torneo
+  const liveNow = shown.filter(g => g.state === 'in');
   const byTour = useMemo(() => {
     const m = new Map<string, TennisMatch[]>();
-    for (const g of shown) m.set(`${g.tour}|${g.tournament}`, [...(m.get(`${g.tour}|${g.tournament}`) ?? []), g]);
+    for (const g of shown) if (g.state !== 'in') m.set(`${g.tour}|${g.tournament}`, [...(m.get(`${g.tour}|${g.tournament}`) ?? []), g]);
     return [...m.entries()].sort((x, y) => Number(y[1][0].major) - Number(x[1][0].major) || x[0].localeCompare(y[0]));
   }, [shown]);
   const pending = useMemo(() => all.filter(g => g.state !== 'post').map(g => ({ id: g.id, ...targetOfMatch(g).match, start: g.date })), [all]);
@@ -60,13 +62,30 @@ export default function TennisMatches() {
     enabled: ok && showOdds && pending.length > 0, refetchInterval: 60_000
   });
   const open = (games.data ?? []).find(g => g.id === openId) ?? null;
+  useSections(open ? [] : [
+    ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
+    ...byTour.map(([k, list]) => ({ id: sectionId(k), label: list[0].tournament, count: list.length, live: 0 }))
+  ]);
+  const has = useCallback((id: string) => (games.data ?? []).some(g => g.id === id), [games.data]);
+  useFocus(setOpenId, has);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
   if (open) return <MatchDetail key={open.id} m={open} date={date} onClose={() => setOpenId(null)} />;
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); savePref('tennis-closed', n); };
+  const card = (g: TennisMatch, featured?: boolean) => {
+    const st = stateOf(g);
+    return (
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null} featured={featured}
+        competition={featured ? g.tournament : undefined}
+        time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'} status={st === 'live' ? g.status : g.round}
+        a={{ name: label(g.a), short: g.a.country, logo: g.a.flag, score: st === 'pre' ? null : setsWon(g.a), win: g.a.winner, lose: st === 'post' && !g.a.winner }}
+        b={{ name: label(g.b), short: g.b.country, logo: g.b.flag, score: st === 'pre' ? null : setsWon(g.b), win: g.b.winner, lose: st === 'post' && !g.b.winner }} />
+    );
+  };
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-5">
+      <MatchesTitle date={date} />
       <DayStrip value={date} onChange={setDate} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={quali} onChange={v => { setQuali(v); savePref('tennis-quali', v); }} label="Previa" />
@@ -74,21 +93,16 @@ export default function TennisMatches() {
       </StateFilterBar>
       <TennisDayPicks date={date} onOpen={setOpenId} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
-        : !shown.length ? <Empty icon={<CalendarX size={26} />}>Ese día no hay partidos de la ATP ni de la WTA con este filtro.</Empty>
-          : byTour.map(([k, list]) => (
-            <CompetitionBlock key={k} name={list[0].tournament} sub={[list[0].tour.toUpperCase(), list[0].city].filter(Boolean).join(', ')}
-              count={list.length} live={list.filter(g => g.state === 'in').length} open={!closed.includes(k)} onToggle={() => toggle(k)}>
-              {list.map(g => {
-                const st = stateOf(g);
-                return (
-                  <MatchRow key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null}
-                    time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'} status={st === 'live' ? g.status : g.round}
-                    a={{ name: label(g.a), short: g.a.country, logo: g.a.flag, score: st === 'pre' ? null : setsWon(g.a), win: g.a.winner, lose: st === 'post' && !g.a.winner }}
-                    b={{ name: label(g.b), short: g.b.country, logo: g.b.flag, score: st === 'pre' ? null : setsWon(g.b), win: g.b.winner, lose: st === 'post' && !g.b.winner }} />
-                );
-              })}
-            </CompetitionBlock>
-          ))}
+        : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de la ATP ni de la WTA con este filtro.</Empty>
+          : <>
+            {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
+            {byTour.map(([k, list]) => (
+              <CompetitionBlock key={k} id={sectionId(k)} name={list[0].tournament} sub={[list[0].tour.toUpperCase(), list[0].city].filter(Boolean).join(', ')}
+                count={list.length} open={!closed.includes(k)} onToggle={() => toggle(k)}>
+                {list.map(g => card(g))}
+              </CompetitionBlock>
+            ))}
+          </>}
     </div>
   );
 }
@@ -135,7 +149,7 @@ function Sets({ m }: { m: TennisMatch }) {
   );
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
+      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
         <table className="w-full">
           <thead className="bg-zinc-900/60"><tr><th className={th}>Jugador</th>{Array.from({ length: n }, (_, i) => <th key={i} className={th + ' text-center'}>Set {i + 1}</th>)}</tr></thead>
           <tbody className="divide-y divide-zinc-800/60">{row(m.a, m.b)}{row(m.b, m.a)}</tbody>
@@ -186,12 +200,12 @@ function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour'];
   const wins = done.filter(x => (x.a.id === p.id ? x.a : x.b).winner).length;
   return (
     <div className={cn(panel, 'overflow-hidden')}>
-      <div className="flex items-center gap-2.5 bg-gradient-to-r from-[var(--tv-band)] to-[var(--tv-band-2)] px-3.5 py-1.5 text-white">
+      <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50 shadow-[inset_2px_0_0_var(--tv-mark)]">
         {p.flag && <img src={p.flag} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
         <div className="min-w-0 flex-1">
-          <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate font-score text-[17px] font-bold uppercase tracking-wide hover:opacity-80">{p.name}</button>
+          <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate text-[15px] font-semibold hover:text-amber-400">{p.name}</button>
         </div>
-        {p.rank && <div className="font-score text-xl font-bold">#{p.rank}</div>}
+        {p.rank && <div className="font-mono text-[13px] font-bold text-zinc-400">#{p.rank}</div>}
       </div>
       {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-3.5 py-2.5 text-[13px] text-zinc-500">Sin partidos en los últimos días.</div> : <>
         <div className="px-3.5 pt-2 text-[11px] text-zinc-500">Últimos días: {wins} de {done.length}</div>

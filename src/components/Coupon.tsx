@@ -1,6 +1,8 @@
 // Cupón de apuestas (el "carrito"): las cuotas que se pulsan en cualquier app se van juntando aquí. Desde el cupón
 // se elige si van como apuestas simples (un stake para cada una) o como combinada (un stake para todas),
 // se ve lo que se puede ganar y se registran en Mis apuestas. El saldo es el de la cartera común.
+// docked: fijo en la columna derecha de las pantallas anchas (siempre visible, con aviso si está vacío);
+// sin docked: flotante abajo a la derecha (móvil y pantallas medianas), sólo cuando hay algo.
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Pencil, Ticket, Trash2, X } from 'lucide-react';
@@ -8,7 +10,7 @@ import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money, odd } from '@/lib/format';
 import type { BetDraft, SlipLeg } from '@/lib/types';
 import { comboOdds } from './BetForm';
-import { Button } from './ui';
+import { Button, chip, seg } from './ui';
 
 const QUICK = [5, 10, 25, 50];
 const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis' };
@@ -16,18 +18,19 @@ const num = (v: string) => { const n = parseFloat(String(v).replace(',', '.')); 
 const today = () => new Date().toISOString().slice(0, 10);
 const keyOf = (l: SlipLeg) => `${l.event}|${l.market}|${l.selection}`;
 
-export function Coupon() {
+export function Coupon({ docked }: { docked?: boolean }) {
   const { slip, removeFromSlip, keepInSlip, clearSlip, openBet, betDraft, toast } = useApp();
   const qc = useQueryClient();
   const cur = useCurrency();
   const w = useWallet();
-  // En el móvil empieza plegado: abierto taparía toda la pantalla
-  const [open, setOpen] = useState(() => window.innerWidth >= 1024);
+  // El flotante empieza plegado: abierto taparía las tarjetas (en pantallas anchas va fijo en la columna derecha)
+  const [open, setOpen] = useState(() => !!docked);
   const [mode, setMode] = useState<'single' | 'combo'>('single');
   const [stakes, setStakes] = useState<Record<string, string>>({});
   const [comboStake, setComboStake] = useState('');
   const [saving, setSaving] = useState(false);
-  if (!slip.length || betDraft) return null;
+  if (!slip.length) return docked ? <EmptyCoupon balance={money(w.balance, cur)} /> : null;
+  if (betDraft && !docked) return null;
 
   // Dos selecciones del mismo mercado y partido no se pueden combinar
   const clash = slip.some((l, i) => slip.some((x, j) => j !== i && x.event === l.event && x.market === l.market));
@@ -68,67 +71,75 @@ export function Coupon() {
     finally { setSaving(false); }
   }
 
+  const quick = (on: boolean) => cn(chip(on), 'justify-center px-0 font-mono tnum');
+
   return (
-    <div className="fixed inset-x-2 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 flex max-h-[75dvh] flex-col sm:left-auto sm:w-[360px] lg:bottom-5 lg:right-5 overflow-hidden rounded-2xl border border-zinc-700/70 bg-zinc-950 shadow-2xl shadow-black/60">
-      <button onClick={() => setOpen(!open)} className="flex w-full cursor-pointer items-center gap-2 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-zinc-950">
-        <Ticket size={16} />Cupón
-        <span className="rounded-full bg-zinc-950/20 px-1.5 text-xs">{slip.length}</span>
-        {m === 'combo' && <span className="ml-1 font-score text-base tnum">@ {odd(comboOdds(slip))}</span>}
-        <span className="ml-auto text-xs font-medium">Cartera {money(w.balance, cur)}</span>
-        <ChevronDown size={15} className={cn('transition', !open && 'rotate-180')} />
+    <div className={cn('flex flex-col overflow-hidden rounded-2xl border border-amber-500/40 bg-surface',
+      docked ? 'shrink-0' : 'fixed inset-x-2 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 max-h-[75dvh] shadow-2xl shadow-black/70 sm:left-auto sm:w-[360px] lg:bottom-5 lg:right-5')}>
+      <button onClick={() => !docked && setOpen(!open)} className={cn('flex w-full items-center gap-2 bg-zinc-900 px-3 py-2.5 text-left', !docked && 'cursor-pointer')}>
+        <Ticket size={16} className="text-amber-400" />
+        <span className="text-[15px] font-semibold">Cupón</span>
+        <span className="rounded-full bg-amber-500 px-2 font-mono text-[11px] font-bold text-zinc-950">{slip.length}</span>
+        {m === 'combo' && <span className="font-mono text-[13px] font-semibold text-amber-400 tnum">@ {odd(comboOdds(slip))}</span>}
+        <span className="ml-auto rounded-full bg-zinc-950 px-2.5 py-1 font-mono text-[11px] text-zinc-400 ring-1 ring-inset ring-zinc-800">Saldo <span className="text-zinc-100 tnum">{money(w.balance, cur)}</span></span>
+        {!docked && <ChevronDown size={15} className={cn('text-zinc-400 transition', !open && 'rotate-180')} />}
       </button>
       {open && <>
-        <div className="flex gap-1 border-b border-zinc-800 p-2">
+        <div className="mx-3 my-2.5 grid grid-cols-2 gap-0.5 rounded-full bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800">
           {([['single', `Simples (${slip.length})`], ['combo', 'Combinada']] as const).map(([v, label]) => (
             <button key={v} onClick={() => setMode(v)} disabled={v === 'combo' && !canCombo}
               title={v === 'combo' && clash ? 'Hay dos selecciones del mismo mercado y partido' : v === 'combo' && slip.length < 2 ? 'Añade al menos dos selecciones' : undefined}
-              className={cn('flex-1 cursor-pointer rounded-lg py-1.5 text-sm font-medium transition disabled:cursor-default disabled:opacity-35',
-                m === v ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{label}</button>
+              className={cn(seg(m === v), 'py-1')}>{label}</button>
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 divide-y divide-zinc-800/70 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
           {slip.map((l, i) => (
-            <div key={keyOf(l)} className="px-4 py-2.5">
+            <div key={keyOf(l)} className="rounded-xl bg-zinc-900/70 px-3 py-2.5 ring-1 ring-inset ring-zinc-800">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{l.selection}</div>
-                  <div className="truncate text-xs text-zinc-500">{l.market}</div>
-                  <div className="truncate text-xs text-zinc-600">{[SPORT_TAG[l.sport || 'lol'], l.event, l.bookmaker].filter(Boolean).join(', ')}</div>
+                  <div className="truncate font-mono text-[11px]">
+                    {l.bookmaker && <span className="font-semibold text-amber-400">{l.bookmaker}</span>}
+                    <span className="text-zinc-500">{l.bookmaker ? ' · ' : ''}{l.market}</span>
+                  </div>
+                  <div className="mt-0.5 truncate text-sm font-semibold text-zinc-50">{l.selection}</div>
+                  <div className="truncate font-mono text-[11px] text-zinc-500">{[SPORT_TAG[l.sport || 'lol'], l.event].filter(Boolean).join(' · ')}</div>
                 </div>
-                <span className="pt-0.5 font-score text-lg font-semibold tnum">{odd(l.odds)}</span>
-                <button title="Quitar" onClick={() => removeFromSlip(i)} className="cursor-pointer pt-1 text-zinc-600 hover:text-rose-400"><X size={14} /></button>
+                <button title="Quitar" onClick={() => removeFromSlip(i)} className="grid h-6 w-6 cursor-pointer place-items-center rounded-full text-zinc-500 transition hover:bg-rose-500/15 hover:text-rose-300"><X size={14} /></button>
               </div>
-              {m === 'single' && (
-                <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex items-center gap-2">
+                <span className="font-mono text-sm font-bold text-amber-400 tnum">@ {odd(l.odds)}</span>
+                {m === 'single' && <>
+                  <span className="ml-auto hidden font-mono text-[11px] text-zinc-500 min-[380px]:inline">gana <b className="font-semibold text-emerald-400 tnum">{money(num(stakes[keyOf(l)] || '') * (l.odds - 1), cur)}</b></span>
                   <StakeInput value={stakes[keyOf(l)] || ''} onChange={v => setStakes(s => ({ ...s, [keyOf(l)]: v }))} cur={cur} />
-                  <span className="ml-auto text-xs text-zinc-500">gana <b className="text-emerald-400 tnum">{money(num(stakes[keyOf(l)] || '') * (l.odds - 1), cur)}</b></span>
-                </div>
-              )}
+                </>}
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-col gap-2.5 border-t border-zinc-800 p-4">
-          {m === 'single'
-            ? <div className="flex items-center gap-1.5 text-xs text-zinc-500">A todas:
-              {QUICK.map(q => <button key={q} onClick={() => setAll(String(q))} className="cursor-pointer rounded-md border border-zinc-800 px-2 py-0.5 tnum text-zinc-300 hover:border-zinc-600">{q}</button>)}
-            </div>
-            : <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2.5 border-t border-zinc-800 bg-zinc-900/60 p-3">
+          {m === 'combo' && (
+            <div className="flex items-end justify-between gap-3">
+              <div><div className="label-data text-zinc-500">Cuota combinada</div><div className="font-mono text-2xl font-bold text-zinc-50 tnum">@ {odd(comboOdds(slip))}</div></div>
               <StakeInput value={comboStake} onChange={setComboStake} cur={cur} />
-              {QUICK.map(q => <button key={q} onClick={() => setComboStake(String(q))} className="cursor-pointer rounded-md border border-zinc-800 px-2 py-0.5 text-xs tnum text-zinc-300 hover:border-zinc-600">{q}</button>)}
-            </div>}
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-1">
+            {QUICK.map(q => <button key={q} onClick={() => (m === 'combo' ? setComboStake(String(q)) : setAll(String(q)))}
+              className={quick(m === 'combo' ? num(comboStake) === q : slip.every(l => num(stakes[keyOf(l)] || '') === q))}>{q} {cur}</button>)}
+          </div>
           {books.length > 1 && m === 'combo' && <div className="text-xs text-amber-300/80">Las cuotas son de casas distintas ({books.join(', ')}): en una sola casa la combinada puede pagar otra cosa.</div>}
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><div className="text-xs text-zinc-500">Apuestas</div><div className="font-semibold tnum">{money(total, cur)}</div></div>
-            <div className="text-right"><div className="text-xs text-zinc-500">Retorno posible</div><div className="font-score text-xl font-semibold text-emerald-400 tnum">{money(win, cur)}</div></div>
+          <div className="flex items-end justify-between gap-2">
+            <div><div className="label-data text-zinc-500">{m === 'combo' ? 'Importe' : 'Importe total'}</div><div className="font-mono text-sm font-semibold text-zinc-100 tnum">{money(total, cur)}</div></div>
+            <div className="text-right"><div className="label-data text-zinc-500">Retorno posible</div><div className="font-mono text-2xl font-bold text-emerald-400 tnum">{money(win, cur)}</div></div>
           </div>
           {total > w.balance && w.balance > 0 && <div className="text-xs text-rose-300">Es más de lo que te queda en la cartera ({money(w.balance, cur)}).</div>}
-          <div className="flex gap-2">
-            <Button className="flex-1" disabled={saving || !total} onClick={place}>{m === 'combo' ? 'Registrar combinada' : 'Registrar apuestas'}</Button>
-            {m === 'combo' && <Button variant="secondary" size="icon" title="Abrir en el formulario (más opciones)"
+          <div className="flex gap-1.5">
+            <Button className="h-10 flex-1" disabled={saving || !total} onClick={place}>{m === 'combo' ? 'Registrar combinada' : 'Registrar apuestas'}</Button>
+            {m === 'combo' && <Button variant="secondary" className="h-10 w-10" size="icon" title="Abrir en el formulario (más opciones)"
               onClick={() => openBet({ legs: slip.map(({ bookmaker: _, ...l }) => l), stake: num(comboStake) || undefined, bookmaker: books.length === 1 ? books[0] : '', fromSlip: true })}><Pencil size={15} /></Button>}
-            <Button variant="ghost" size="icon" title="Vaciar el cupón" onClick={clearSlip}><Trash2 size={15} /></Button>
+            <Button variant="secondary" className="h-10 w-10" size="icon" title="Vaciar el cupón" onClick={clearSlip}><Trash2 size={15} /></Button>
           </div>
         </div>
       </>}
@@ -136,11 +147,23 @@ export function Coupon() {
   );
 }
 
+// Cupón fijo sin selecciones: explica cómo se llena
+function EmptyCoupon({ balance }: { balance: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-zinc-700/80 bg-surface px-5 py-6 text-center">
+      <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-zinc-900 text-amber-400"><Ticket size={18} /></div>
+      <div className="text-sm font-semibold text-zinc-100">Cupón vacío</div>
+      <p className="mt-1 text-xs leading-relaxed text-zinc-500">Pulsa una cuota en la ficha de un partido para añadirla. Aquí eliges simples o combinada y la registras.</p>
+      <div className="mt-3 inline-flex rounded-full bg-zinc-900 px-3 py-1 font-mono text-[11px] text-zinc-400">Saldo <span className="ml-1 text-zinc-100 tnum">{balance}</span></div>
+    </div>
+  );
+}
+
 function StakeInput({ value, onChange, cur }: { value: string; onChange: (v: string) => void; cur: string }) {
   return (
-    <label className="flex h-8 w-28 items-center gap-1 rounded-lg border border-zinc-700/70 bg-zinc-900 px-2 focus-within:border-amber-500/70">
-      <input inputMode="decimal" placeholder="Stake" value={value} onChange={e => onChange(e.target.value)} className="w-full bg-transparent text-sm tnum outline-none placeholder:text-zinc-600" />
-      <span className="text-xs text-zinc-500">{cur}</span>
+    <label className="flex h-8 w-28 items-center gap-1 rounded-full border border-zinc-700/70 bg-zinc-950 px-3 transition focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20">
+      <input inputMode="decimal" placeholder="Importe" value={value} onChange={e => onChange(e.target.value)} className="w-full bg-transparent text-right font-mono text-sm tnum outline-none placeholder:text-zinc-600" />
+      <span className="font-mono text-xs text-zinc-500">{cur}</span>
     </label>
   );
 }

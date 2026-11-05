@@ -1,12 +1,13 @@
-// LoL · Partidos: misma estructura que el baloncesto. Tira de días, filtro por estado, cuotas de ganador opcionales
-// y los partidos agrupados por liga. Al abrir uno se ve su ficha completa (marcador, cuotas y partida en vivo).
+// LoL · Partidos: misma estructura que el baloncesto y el tenis. Título, tira de días, filtro por estado, cuotas de
+// ganador opcionales, los partidos en juego destacados arriba y el resto en tarjetas agrupadas por liga.
+// Al abrir uno se ve su ficha completa (marcador, cuotas y partida en vivo).
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarX, RefreshCw } from 'lucide-react';
-import { useApp, useRefreshMs } from '@/lib/app-context';
+import { sectionId, useApp, useRefreshMs, useSections } from '@/lib/app-context';
 import { fmtTime } from '@/lib/format';
 import type { MatchEvent } from '@/lib/types';
-import { CompetitionBlock, DayStrip, MatchRow, StateFilterBar, Toggle, isoDay, today, type MatchState, type StateFilter } from '@/components/sport';
+import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, StateFilterBar, Toggle, isoDay, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Button, Empty, ErrorBox, Loading, Select } from '@/components/ui';
 import MatchDetail from './MatchDetail';
 
@@ -46,9 +47,11 @@ export default function MatchesView() {
   }, [events]);
   const ofDay = events.filter(e => dayOf(e) === date);
   const shown = ofDay.filter(e => filter === 'all' || stateOf(e) === filter);
+  // Los que están en juego van arriba, destacados; el resto por liga
+  const liveNow = shown.filter(e => e.state === 'inProgress');
   const byLeague = useMemo(() => {
     const m = new Map<string, MatchEvent[]>();
-    for (const e of shown) m.set(e.league, [...(m.get(e.league) ?? []), e]);
+    for (const e of shown) if (e.state !== 'inProgress') m.set(e.league, [...(m.get(e.league) ?? []), e]);
     return [...m.entries()];
   }, [shown]);
 
@@ -58,29 +61,45 @@ export default function MatchesView() {
     enabled: showOdds && pending.length > 0, refetchInterval: 60_000
   });
 
+  useSections(openMatch ? [] : [
+    ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
+    ...byLeague.map(([name, list]) => ({ id: sectionId(name), label: name, count: list.length, live: 0 }))
+  ]);
+
   if (openMatch) return <MatchDetail match={openMatch} onClose={() => setOpenMatch(null)} />;
 
   const stateCounts = { all: ofDay.length, live: ofDay.filter(e => e.state === 'inProgress').length, pre: ofDay.filter(e => e.state === 'unstarted').length, post: ofDay.filter(e => e.state === 'completed').length };
   const loaded = Object.keys(counts).sort();
   const outside = !!loaded.length && (date < loaded[0] || date > loaded[loaded.length - 1]);
   const toggle = (name: string) => { const n = closed.includes(name) ? closed.filter(x => x !== name) : [...closed, name]; setClosed(n); savePref('lol-closed', n); };
+  const card = (m: MatchEvent, featured?: boolean) => {
+    const [a, b] = m.teams, st = stateOf(m);
+    return (
+      <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} odds={showOdds ? board.data?.[m.id] : null} featured={featured}
+        competition={featured ? m.league : undefined} status={featured ? m.blockName : undefined}
+        time={st === 'pre' ? fmtTime(m.startTime) : st === 'live' ? 'En juego' : 'Final'} tag={m.bestOf ? `Bo${m.bestOf}` : undefined}
+        a={{ name: a.name, short: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}
+        b={{ name: b.name, short: b.code, logo: b.image, score: st === 'pre' ? null : b.wins ?? 0, win: b.outcome === 'win', lose: b.outcome === 'loss' }} />
+    );
+  };
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-5">
+      <MatchesTitle date={date} />
       <DayStrip value={date} onChange={setDate} counts={counts} />
       <StateFilterBar value={filter} onChange={setFilter} counts={stateCounts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('lol-odds', v); }} label="Cuotas" />
-        <Select className="h-8 w-52" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
+        <Select className="h-9 w-52 rounded-full" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
           <option value="">Todas las ligas</option>
           {leagues.data?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </Select>
-        <Button variant="ghost" size="icon" title="Actualizar" onClick={() => { live.refetch(); schedule.refetch(); }}>
+        <Button variant="secondary" size="icon" title="Actualizar" onClick={() => { live.refetch(); schedule.refetch(); }}>
           <RefreshCw size={15} className={schedule.isFetching ? 'animate-spin' : ''} />
         </Button>
       </StateFilterBar>
 
       {schedule.isLoading ? <Loading label="Cargando calendario…" /> : schedule.error ? <ErrorBox error={schedule.error} /> : !shown.length ? (
-        <Empty icon={<CalendarX size={26} />}>
+        <Empty icon={<CalendarX size={22} />}>
           {outside ? 'Ese día queda fuera del calendario cargado.' : 'Ese día no hay partidos de LoL con este filtro.'}
           <div className="mt-3 flex gap-2">
             {outside && date < loaded[0] && schedule.data?.older && <Button size="sm" variant="secondary" onClick={() => setPage(schedule.data!.older)}>Cargar días anteriores</Button>}
@@ -88,23 +107,18 @@ export default function MatchesView() {
             {page && <Button size="sm" variant="ghost" onClick={() => { setPage(null); setDate(today()); }}>Volver a hoy</Button>}
           </div>
         </Empty>
-      ) : byLeague.map(([name, list]) => {
-        const meta = leagues.data?.find(l => l.name === name);
-        return (
-          <CompetitionBlock key={name} name={name} sub={[meta?.region, list[0]?.blockName].filter(Boolean).join(', ')} logo={meta?.image}
-            count={list.length} live={list.filter(e => e.state === 'inProgress').length} open={!closed.includes(name)} onToggle={() => toggle(name)}>
-            {list.map(m => {
-              const [a, b] = m.teams, st = stateOf(m);
-              return (
-                <MatchRow key={m.id} state={st} onClick={() => setOpenMatch(m)} odds={showOdds ? board.data?.[m.id] : null}
-                  time={st === 'pre' ? fmtTime(m.startTime) : st === 'live' ? 'En juego' : 'Final'} tag={m.bestOf ? `Bo${m.bestOf}` : undefined}
-                  a={{ name: a.name, short: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}
-                  b={{ name: b.name, short: b.code, logo: b.image, score: st === 'pre' ? null : b.wins ?? 0, win: b.outcome === 'win', lose: b.outcome === 'loss' }} />
-              );
-            })}
-          </CompetitionBlock>
-        );
-      })}
+      ) : <>
+        {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(m => card(m, true))}</LiveSection>}
+        {byLeague.map(([name, list]) => {
+          const meta = leagues.data?.find(l => l.name === name);
+          return (
+            <CompetitionBlock key={name} id={sectionId(name)} name={name} sub={[meta?.region, list[0]?.blockName].filter(Boolean).join(', ')} logo={meta?.image}
+              count={list.length} open={!closed.includes(name)} onToggle={() => toggle(name)}>
+              {list.map(m => card(m))}
+            </CompetitionBlock>
+          );
+        })}
+      </>}
     </div>
   );
 }

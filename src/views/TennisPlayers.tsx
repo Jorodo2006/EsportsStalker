@@ -28,7 +28,7 @@ export default function TennisPlayers() {
         </div>
       </PageHeader>
       {r.isLoading ? <Loading /> : r.error ? <ErrorBox error={r.error} /> : (
-        <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
+        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
           <table className="w-full">
             <thead className="bg-zinc-900/60"><tr><th className={th + ' w-16 text-right'}>Puesto</th><th className={th + ' w-14'} /><th className={th}>Jugador</th><th className={th}>País</th><th className={th + ' text-right'}>Puntos</th></tr></thead>
             <tbody className="divide-y divide-zinc-800/60">

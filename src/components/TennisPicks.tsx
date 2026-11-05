@@ -35,7 +35,7 @@ function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => 
     <div className="px-3 py-1.5 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-score text-[15px] font-semibold uppercase tracking-wide text-white">{pick.title}</div>
+          <div className="truncate text-[14px] font-semibold text-zinc-50">{pick.title}</div>
           <div className="truncate text-[11px] text-zinc-400">{pick.why}</div>
         </div>
         <div className="w-14 shrink-0 text-right">
@@ -43,12 +43,12 @@ function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => 
           <ValueChip pick={pick} />
         </div>
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
-          className="flex h-9 w-[58px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm bg-white/[.08] text-white transition hover:bg-[var(--tv-mark)] hover:text-black">
+          className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)] active:scale-[.97]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
           <span className="text-[9px] leading-tight opacity-75">{pick.book}</span>
         </button>
       </div>
-      <div className="mt-1 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
+      <div className="mt-1 h-[2px] bg-zinc-800"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
   );
 }
@@ -87,19 +87,19 @@ export function TennisPicksPanel({ m, date, onOdds }: { m: TennisMatch; date: st
       {top ? (
         <div className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
           <div className="min-w-0">
-            <div className="font-score text-[30px] font-bold uppercase leading-none tracking-wide text-white">{top.title}</div>
+            <div className="text-[24px] font-bold leading-tight tracking-tight text-zinc-50">{top.title}</div>
             <div className="mt-1.5 truncate text-[13px] text-zinc-300">{top.why}</div>
           </div>
           <div className="text-center" title={`Modelo ${p0(top.pModel)}, casa ${p0(top.pMarket)}`}>
-            <div className="font-score text-[50px] font-bold leading-[46px] text-[var(--tv-mark)] tnum">{p0(top.p)}</div>
-            <div className="font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Probabilidad</div>
+            <div className="font-mono text-[44px] font-bold leading-[46px] text-[var(--tv-mark)] tnum">{p0(top.p)}</div>
+            <div className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">Probabilidad</div>
           </div>
           <div className="min-w-32">
-            <div className="mb-1 flex justify-between font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400"><span>Fiabilidad</span><span>{top.rel.label}</span></div>
+            <div className="mb-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400"><span>Fiabilidad</span><span>{top.rel.label}</span></div>
             <ReliabilityMeter rel={top.rel} />
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
-          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[92px] cursor-pointer flex-col items-center justify-center rounded-sm bg-[var(--tv-mark)] text-black transition hover:opacity-85">
+          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-2xl bg-[var(--tv-mark)] text-black shadow-md shadow-black/30 transition hover:opacity-90 active:scale-[.97]">
             <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
             <span className="text-[11px] font-medium">{top.book}</span>
           </button>
@@ -131,8 +131,8 @@ export function TennisDayPicks({ date, onOpen }: { date: string; onOpen: (id: st
   const row = (d: TennisDayPick) => (
     <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="grid w-full cursor-pointer grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1.2fr)_3rem_3rem_1rem] items-center gap-2 border-b border-white/10 px-3 py-1.5 text-left transition last:border-0 hover:bg-white/[.05]">
       <span className="font-score text-[14px] text-zinc-400 tnum">{esTime(d.date)}</span>
-      <span className="truncate font-score text-[14px] font-medium uppercase tracking-wide text-zinc-200">{surname(d.a.name)} - {surname(d.b.name)}</span>
-      <span className="truncate font-score text-[15px] font-bold uppercase tracking-wide text-white">{d.top.title}</span>
+      <span className="truncate text-[13px] font-medium text-zinc-200">{surname(d.a.name)} - {surname(d.b.name)}</span>
+      <span className="truncate text-[14px] font-semibold text-zinc-50">{d.top.title}</span>
       <span className="text-right font-score text-[17px] font-bold text-[var(--tv-mark)] tnum">{p0(d.top.p)}</span>
       <span className="text-right font-score text-[17px] font-bold text-white tnum">{odd(d.top.price)}</span>
       <ChevronRight size={14} className="text-zinc-500" />

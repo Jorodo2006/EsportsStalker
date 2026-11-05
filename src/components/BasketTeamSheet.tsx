@@ -92,7 +92,7 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
 
       {!!statKpis.length && (
         <div className={cn(panel, 'grid grid-cols-4 gap-x-4 gap-y-1 px-3.5 py-2 md:grid-cols-8')}>
-          {statKpis.map(x => <div key={x.label} className="min-w-0"><div className="truncate font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{x.label.replace('Tiros de campo %', 'T. campo %').replace('Tiros libres %', 'T. libres %')}</div><div className="font-score text-[18px] font-bold leading-tight text-white tnum">{x.value.replace('.', ',')}</div></div>)}
+          {statKpis.map(x => <div key={x.label} className="min-w-0"><div className="truncate font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{x.label.replace('Tiros de campo %', 'T. campo %').replace('Tiros libres %', 'T. libres %')}</div><div className="font-score text-[18px] font-bold leading-tight text-white tnum">{x.value.replace('.', ',')}</div></div>)}
         </div>
       )}
 
@@ -141,10 +141,10 @@ function TeamStats({ team }: { team: BasketTeamInfo }) {
   if (!groups.length) return null;
   return (
     <Panel title="Estadísticas por partido">
-      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 2xl:grid-cols-4">
         {groups.map(g => (
           <div key={g} className="py-1.5">
-            <div className="px-3.5 pb-1 font-score text-[12px] font-semibold uppercase tracking-wider text-zinc-400">{g}</div>
+            <div className="px-3.5 pb-1 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{g}</div>
             {team.stats.filter(s => s.group === g).map(s => (
               <div key={s.label} className="flex h-6 items-center justify-between gap-3 px-3.5 text-[13px]">
                 <span className="truncate text-zinc-300" title={s.label}>{s.label}</span>

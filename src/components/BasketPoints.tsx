@@ -13,7 +13,7 @@ import { SIDE_LABEL } from '@/lib/value';
 import type { BasketGame, BasketLeagueId, MatchOdds } from '@/lib/types';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { ValuePanel } from './ValuePanel';
-import { Empty, ErrorBox, Input, Loading, TeamLogo, th } from './ui';
+import { Empty, ErrorBox, Input, Loading, TeamLogo, chip, th } from './ui';
 import { Panel, TvBand, TvFrame, TvHeader, TvTabs, panel, tdc } from './viz';
 
 export const dec = (v: number | null | undefined, d = 1) => (v == null ? '–' : v.toFixed(d).replace('.', ','));
@@ -162,15 +162,15 @@ function LineChart({ title, rows, value, line }: { title: string; rows: TeamRow[
       <div className="h-44 px-1 pb-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -14, bottom: 0 }} barCategoryGap={2}>
-            <CartesianGrid stroke="#222a3b" vertical={false} />
-            <XAxis dataKey="x" stroke="#637089" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
-            <YAxis stroke="#637089" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
-            <Tooltip cursor={{ fill: '#222a3b88' }} contentStyle={{ background: '#161d2b', border: '1px solid #313b51', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#8590a8' }}
+            <CartesianGrid stroke="#2b3034" vertical={false} />
+            <XAxis dataKey="x" stroke="#85948f" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
+            <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
+            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }} labelStyle={{ color: '#9aaaa4' }}
               labelFormatter={(_, p) => (p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : '')}
               formatter={(_, __, p) => [`${p.payload.v} (${p.payload.d > 0 ? '+' : ''}${fmtLine(p.payload.d)})`, 'Puntos']} />
-            <ReferenceLine y={0} stroke="#c7cedb" />
+            <ReferenceLine y={0} stroke="#cdd6d2" />
             <Bar dataKey="d" radius={[3, 3, 0, 0]} maxBarSize={18}>
-              {data.map((d, i) => <Cell key={i} fill={d.d > 0 ? '#34d399' : d.d < 0 ? '#fb7185' : '#637089'} />)}
+              {data.map((d, i) => <Cell key={i} fill={d.d > 0 ? '#55f28c' : d.d < 0 ? '#ff8a7f' : '#85948f'} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -309,11 +309,11 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
           {cards.map(c => {
             const x = P[c.id], main = mainLine(pointLines(odds, c.id, period));
             return (
-              <button key={c.id} onClick={() => setKind(c.id)} aria-pressed={kind === c.id} className={cn('flex cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition', kind === c.id ? 'bg-amber-500/10 shadow-[inset_0_-2px_0_var(--acc-500)]' : 'hover:bg-white/[.04]')}>
+              <button key={c.id} onClick={() => setKind(c.id)} aria-pressed={kind === c.id} className={cn('flex cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition', kind === c.id ? 'bg-amber-500/10 shadow-[inset_0_-2px_0_var(--acc-500)]' : 'hover:bg-zinc-900')}>
                 {c.abbr && <TeamLogo src={c.logo} name={c.abbr} size={30} />}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-score text-[13px] font-semibold uppercase tracking-wide text-zinc-300">{c.title}</span>
-                  <span className="block font-score text-[30px] font-bold leading-none text-white">{dec(x.mu)}</span>
+                  <span className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{c.title}</span>
+                  <span className="block font-mono text-[26px] font-bold leading-tight text-zinc-50">{dec(x.mu)}</span>
                   <span className="block font-score text-[12px] text-zinc-400 tnum" title="Entre estos valores cae el 80 % de las veces, según el modelo">{dec(x.mu - 1.2816 * x.sd, 0)}–{dec(x.mu + 1.2816 * x.sd, 0)}{main ? ` · casas: ${fmtLine(main.line)}` : ''}</span>
                 </span>
               </button>
@@ -333,7 +333,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
             <span className="mr-1 text-zinc-500">En las casas:</span>
             {lines.map(l => (
               <button key={l.line} onClick={() => applyLine(l)} title={`Más ${odd(l.over)} (${l.overBook ?? '–'}) · Menos ${odd(l.under)} (${l.underBook ?? '–'})`}
-                className={cn('cursor-pointer rounded-full border px-2.5 py-1 tnum transition', L === l.line ? 'border-amber-500/60 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700')}>
+                className={cn(chip(L === l.line), 'font-mono tnum')}>
                 {fmtLine(l.line)} <span className="text-zinc-500">{odd(l.over)} / {odd(l.under)}</span>
               </button>
             ))}
@@ -342,7 +342,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
       </div>
 
       {!A || L == null ? <Empty>Escribe una línea válida (por ejemplo 225,5)</Empty> : (
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-2.5 2xl:grid-cols-2">
           <ValuePanel bank={bank} v={A} onSlip={s => addToSlip({
             sport: 'basket', status: 'pending', league: LEAGUE_NAME[game.league], event: `${away.abbr} @ ${home.abbr}`, market, selection: `${SIDE_LABEL[s.side]} de ${L}`, odds: s.price, bookmaker: s.book
           })} />
@@ -363,7 +363,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-2.5 2xl:grid-cols-2">
         <Panel title={`${away.name}: ${label.toLowerCase()}`}><SplitsTable splits={pointSplits(P.rowsAway, season)} value={f.a} line={L} /></Panel>
         <Panel title={`${home.name}: ${label.toLowerCase()}`}><SplitsTable splits={pointSplits(P.rowsHome, season)} value={f.b} line={L} /></Panel>
       </div>

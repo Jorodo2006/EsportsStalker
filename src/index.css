@@ -1,50 +1,80 @@
 @import "tailwindcss";
-@import "@fontsource/barlow/400.css";
-@import "@fontsource/barlow/500.css";
-@import "@fontsource/barlow/600.css";
-@import "@fontsource/barlow/700.css";
-@import "@fontsource/barlow-condensed/500.css";
-@import "@fontsource/barlow-condensed/600.css";
-@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
 
-/* Tema: tinta azul de pabellón de noche en vez de gris. Toda la app usa las clases zinc, así que se cambia la escala
-   entera aquí. El acento (las clases amber) depende de la app: verde azulado hextech en LoL, naranja de balón en
-   baloncesto. Barlow para leer, Barlow Condensed para marcadores y cifras (como un videomarcador). */
+/* Tema "terminal" (diseño de Stitch): fondo casi negro, superficies planas con bordes finos y esquinas de 2-4 px.
+   Toda la app usa las clases zinc, así que se cambia la escala entera aquí:
+   950 fondo · 900 superficie · 800 superficie elevada y separadores · 700 bordes marcados · 500-300 textos secundarios.
+   El acento (las clases amber) depende de la app: turquesa en LoL, naranja en baloncesto y verde en tenis.
+   Inter para leer y JetBrains Mono (font-score) para cifras, cuotas, dinero y etiquetas. */
 @theme {
-  --font-sans: "Barlow", "Segoe UI", system-ui, sans-serif;
-  --font-score: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-score: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
 
-  --color-zinc-50: #f3f5fa;
-  --color-zinc-100: #e6eaf2;
-  --color-zinc-200: #cbd2e0;
-  --color-zinc-300: #a9b3c7;
-  --color-zinc-400: #8590a8;
-  --color-zinc-500: #637089;
-  --color-zinc-600: #47536b;
-  --color-zinc-700: #313b51;
-  --color-zinc-800: #222a3b;
-  --color-zinc-900: #161d2b;
-  --color-zinc-950: #0c111c;
+  --color-zinc-50: #f1f2f7;
+  --color-zinc-100: #e1e2eb;
+  --color-zinc-200: #cdd6d2;
+  --color-zinc-300: #bacac4;
+  --color-zinc-400: #9aaaa4;
+  --color-zinc-500: #85948f;
+  --color-zinc-600: #5e6c68;
+  --color-zinc-700: #3b4a45;
+  --color-zinc-800: #2b3034;
+  --color-zinc-900: #191c22;
+  --color-zinc-950: #0b0e14;
+
+  /* Positivo (beneficio, ganada) y negativo o en juego (pérdida, directo) */
+  --color-emerald-200: #c3fbd6;
+  --color-emerald-300: #8ef5b2;
+  --color-emerald-400: #55f28c;
+  --color-emerald-500: #2ed573;
+  --color-emerald-600: #1fae5c;
+  --color-rose-200: #ffdad6;
+  --color-rose-300: #ffb4ab;
+  --color-rose-400: #ff8a7f;
+  --color-rose-500: #f2554a;
+  --color-rose-600: #c8322a;
+
+  /* Superficie de paneles y tarjetas: un punto por encima del fondo (zinc-950) */
+  --color-surface: #10131a;
 
   --color-amber-200: var(--acc-200);
   --color-amber-300: var(--acc-300);
   --color-amber-400: var(--acc-400);
   --color-amber-500: var(--acc-500);
   --color-amber-600: var(--acc-600);
+
+  /* Todo redondeado: paneles y tarjetas a 16 px (rounded-2xl), cajas internas a 14 px (rounded-xl), fichas de cuota y
+     campos a 12 px (rounded-lg); los botones, pestañas y filtros van en píldora (rounded-full) */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 22px;
 }
 
-/* --tv-*: los rótulos de retransmisión de las fichas (src/components/viz.tsx): banda, final de su degradado, línea y fondo */
+/* --tv-*: las fichas (src/components/viz.tsx): franja de cabecera, marca de acento y fondo de los paneles */
 :root, [data-app="lol"] {
-  --acc-200: #b4f3ec; --acc-300: #7be8de; --acc-400: #3fd9cb; --acc-500: #19c2b3; --acc-600: #0e9c90;
-  --tv-band: #0b7f76; --tv-band-2: #0a5a5c; --tv-mark: #7be8de; --tv-bg: #070b13;
+  --acc-200: #bcfbef; --acc-300: #8af8e3; --acc-400: #5ff5d8; --acc-500: #46efcf; --acc-600: #2adec0;
+  --tv-band: #191c22; --tv-band-2: #191c22; --tv-mark: #46efcf; --tv-bg: #10131a;
 }
 [data-app="basket"] {
-  --acc-200: #ffd2b0; --acc-300: #ffb079; --acc-400: #ff8f4d; --acc-500: #ff7a2f; --acc-600: #e05e14;
-  --tv-band: #c2410c; --tv-band-2: #8f2c0a; --tv-mark: #ffd23f; --tv-bg: #0a0a10;
+  --acc-200: #ffdbc8; --acc-300: #ffb68b; --acc-400: #ffa064; --acc-500: #ff8a3d; --acc-600: #ff7f1c;
+  --tv-band: #191c22; --tv-band-2: #191c22; --tv-mark: #ff8a3d; --tv-bg: #10131a;
 }
 [data-app="tennis"] {
-  --acc-200: #bbf7d0; --acc-300: #86efac; --acc-400: #4ade80; --acc-500: #22c55e; --acc-600: #16a34a;
-  --tv-band: #15803d; --tv-band-2: #0f5e55; --tv-mark: #4ade80; --tv-bg: #070c12;
+  --acc-200: #c3fbd6; --acc-300: #92f8b9; --acc-400: #6ff5a0; --acc-500: #55f28c; --acc-600: #2ed573;
+  --tv-band: #191c22; --tv-band-2: #191c22; --tv-mark: #55f28c; --tv-bg: #10131a;
 }
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {
@@ -56,13 +86,22 @@ html { color-scheme: dark; }
 html, body, #root { height: 100%; }
 /* En el móvil la barra del navegador aparece y desaparece: dvh es el alto que queda de verdad */
 #root { height: 100dvh; }
-body { @apply bg-zinc-950 text-zinc-100 antialiased; }
-#root > div { background-image: radial-gradient(ellipse 70% 40% at 50% -10%, color-mix(in oklab, var(--acc-500) 9%, transparent), transparent); }
+body { @apply bg-zinc-950 text-zinc-100 antialiased; font-feature-settings: "cv11", "ss01"; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #313b51; border-radius: 99px; border: 2px solid #0c111c; }
+::-webkit-scrollbar-thumb { background: #2b3034; border-radius: 99px; border: 2px solid #0b0e14; }
+/* Tiras que se desplazan de lado (pestañas, filtros) sin barra visible */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+::-webkit-scrollbar-thumb:hover { background: #3b4a45; }
 ::-webkit-scrollbar-track { background: transparent; }
-select option { background: #161d2b; }
+select option { background: #191c22; }
 input[type=number]::-webkit-inner-spin-button { opacity: .4; }
-:focus-visible { outline: 2px solid var(--acc-400); outline-offset: 2px; }
+:focus-visible { outline: 1px solid var(--acc-500); outline-offset: 1px; }
 .tnum { font-variant-numeric: tabular-nums; }
+/* Etiqueta de datos: mono, pequeña y en mayúsculas (cabeceras de tabla, rótulos de cifras) */
+.label-data { font-family: var(--font-mono); font-size: 10px; line-height: 12px; letter-spacing: .06em; text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* Gráficas (Recharts): cifras de los ejes y del tooltip en mono, como el resto de datos */
+.recharts-cartesian-axis-tick-value, .recharts-tooltip-wrapper { font-family: var(--font-mono); }
+/* Cifras de las tablas en mono, como en el diseño. En la capa base para que una clase de fuente explícita mande */
+@layer base { td.tabular-nums, td .tabular-nums, td.tnum, td .tnum { font-family: var(--font-mono); } }

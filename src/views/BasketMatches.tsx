@@ -1,13 +1,13 @@
 // Baloncesto · Partidos: igual que en LoL. Tira de días (hora de España), filtro por estado, partidos agrupados por
 // competición y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
 import { cn } from '@/lib/format';
-import { useApp } from '@/lib/app-context';
+import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
-import { CompetitionBlock, DayStrip, MatchRow, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { GamePoints } from '@/components/BasketPoints';
@@ -47,8 +47,16 @@ export default function BasketMatches() {
     queryKey: ['board', 'basket', pending.map(e => e.id).join()], queryFn: () => window.api.odds.board(pending),
     enabled: ok && showOdds && pending.length > 0, refetchInterval: 60_000
   });
-  const byLeague = ORDER.map(id => ({ id, list: shown.filter(g => g.league === id) })).filter(x => x.list.length);
+  // Los que están en juego van arriba, destacados; el resto por competición
+  const liveNow = shown.filter(g => g.state === 'in');
+  const byLeague = ORDER.map(id => ({ id, list: shown.filter(g => g.league === id && g.state !== 'in') })).filter(x => x.list.length);
   const open = all.find(g => g.id === openId) ?? null;
+  useSections(open ? [] : [
+    ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
+    ...byLeague.map(({ id, list }) => ({ id: sectionId(LEAGUE_NAME[id]), label: LEAGUE_NAME[id], count: list.length, live: 0 }))
+  ]);
+  const has = useCallback((id: string) => all.some(g => g.id === id), [all]);
+  useFocus(setOpenId, has);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el baloncesto hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
 
@@ -56,35 +64,40 @@ export default function BasketMatches() {
 
   if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} onClose={() => setOpenId(null)} />;
 
+  const card = (g: BasketGame, featured?: boolean) => {
+    const st = stateOf(g), done = st === 'post';
+    const sa = Number(g.away.score), sh = Number(g.home.score);
+    return (
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null} featured={featured}
+        competition={featured ? LEAGUE_NAME[g.league] : undefined}
+        time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'}
+        status={st === 'live' ? g.status : undefined}
+        a={{ name: g.away.name, short: g.away.abbr, logo: g.away.logo, score: g.away.score, win: done && sa > sh, lose: done && sa < sh }}
+        b={{ name: g.home.name, short: g.home.abbr, logo: g.home.logo, score: g.home.score, win: done && sh > sa, lose: done && sh < sa }} />
+    );
+  };
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="flex min-w-0 flex-col gap-4">
-        <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
-        <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
-          <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
-        </StateFilterBar>
-        {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
-          : !all.length ? <Empty icon={<CalendarX size={26} />}>Ese día no hay partidos de NBA, Euroliga, EuroCup ni WNBA. Prueba otro día de la tira.</Empty>
-            : byLeague.map(({ id, list }) => {
+    <div className="flex min-w-0 flex-col gap-5">
+      <MatchesTitle date={date} />
+      <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
+      <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
+        <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
+      </StateFilterBar>
+      {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
+        : !all.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de NBA, Euroliga, EuroCup ni WNBA. Prueba otro día de la tira.</Empty>
+          : <>
+            {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
+            {byLeague.map(({ id, list }) => {
               const meta = leagues.data?.find(l => l.id === id);
               return (
-                <CompetitionBlock key={id} name={LEAGUE_NAME[id]} sub={[meta?.country, list[0]?.round].filter(Boolean).join(', ')} logo={meta?.logo}
-                  count={list.length} live={list.filter(g => g.state === 'in').length} open={!closed.has(id)} onToggle={() => toggle(id)}>
-                  {list.map(g => {
-                    const st = stateOf(g), done = st === 'post';
-                    const sa = Number(g.away.score), sh = Number(g.home.score);
-                    return (
-                      <MatchRow key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null}
-                        time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'}
-                        status={st === 'live' ? g.status : undefined}
-                        a={{ name: g.away.name, short: g.away.abbr, logo: g.away.logo, score: g.away.score, win: done && sa > sh, lose: done && sa < sh }}
-                        b={{ name: g.home.name, short: g.home.abbr, logo: g.home.logo, score: g.home.score, win: done && sh > sa, lose: done && sh < sa }} />
-                    );
-                  })}
+                <CompetitionBlock key={id} id={sectionId(LEAGUE_NAME[id])} name={LEAGUE_NAME[id]} sub={[meta?.country, list[0]?.round].filter(Boolean).join(', ')} logo={meta?.logo}
+                  count={list.length} open={!closed.has(id)} onToggle={() => toggle(id)}>
+                  {list.map(g => card(g))}
                 </CompetitionBlock>
               );
             })}
-      </div>
+          </>}
     </div>
   );
 }
@@ -145,7 +158,7 @@ function Roster({ game, side, injuries, current, onPick }: {
   const r = useQuery({ queryKey: ['basket', 'roster', game.league, team.id], queryFn: () => window.api.basket.roster(game.league, team.id), staleTime: 30 * 60e3 });
   const injuryOf = (p: BasketRosterPlayer) => (game.league === 'nba' ? injuries.find(i => i.playerId === p.id)?.status : null) || p.injury;
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
+    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <div className="flex items-center gap-2.5 border-b border-zinc-800/60 px-4 py-2.5">
         {team.logo && <img src={team.logo} alt="" className="h-6 w-6 object-contain" />}
         <span className="font-semibold">{team.name}</span>
@@ -206,7 +219,7 @@ function Periods({ teams }: { teams: BoxTeam[] }) {
   const n = Math.max(...teams.map(t => t.periods.length));
   const label = (i: number) => (i < 4 ? `${i + 1}.º` : `P${i - 3}`);
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
+    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <table className="w-full">
         <thead className="bg-zinc-900/60"><tr><th className={th}>Equipo</th>{Array.from({ length: n }, (_, i) => <th key={i} className={th + ' text-center'}>{label(i)}</th>)}<th className={th + ' text-center'}>Total</th></tr></thead>
         <tbody className="divide-y divide-zinc-800/60">
@@ -235,7 +248,7 @@ function Compare({ teams }: { teams: BoxTeam[] }) {
     ['Robos', a.totals.stl, b.totals.stl], ['Tapones', a.totals.blk, b.totals.blk], ['Pérdidas', a.totals.tov, b.totals.tov]
   ];
   return (
-    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-5">
+    <div className="rounded-xl border border-zinc-800 bg-surface p-5">
       <div className="mb-3 flex justify-between text-sm font-semibold"><span>{a.abbr}</span><span>{b.abbr}</span></div>
       <div className="flex flex-col gap-3">
         {rows.map(([label, x, y, unit]) => {
@@ -261,7 +274,7 @@ function BoxTable({ team, onPick }: { team: BoxTeam; onPick: (p: { id: string; n
   const list = team.players.slice().sort((x, y) => Number(y.starter) - Number(x.starter) || y.min - x.min);
   const top = Math.max(...list.map(p => p.pts));
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
+    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <div className="flex items-center gap-2.5 border-b border-zinc-800/60 px-4 py-2.5">
         {team.logo && <img src={team.logo} alt="" className="h-6 w-6 object-contain" />}
         <span className="font-semibold">{team.name}</span>
@@ -295,13 +308,13 @@ function BoxTable({ team, onPick }: { team: BoxTeam; onPick: (p: { id: string; n
 // Enfrentamientos de la temporada entre los dos equipos
 function Series({ series }: { series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }) {
   return (
-    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-4">
+    <div className="rounded-xl border border-zinc-800 bg-surface p-4">
       <div className="mb-3 text-sm font-semibold">Enfrentamientos esta temporada</div>
       <div className="flex flex-wrap gap-2">
         {series.map(s => {
           const played = s.score.some(x => x.winner);
           return (
-            <div key={s.date} className="rounded-xl border border-zinc-800 px-3 py-2 text-sm">
+            <div key={s.date} className="rounded-lg bg-zinc-900 px-3 py-2 text-sm">
               <div className="text-xs text-zinc-500">{new Date(s.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</div>
               {played
                 ? <div className="font-score text-base tnum">{s.score.map((x, i) => <span key={i} className={x.winner ? 'font-semibold text-zinc-50' : 'text-zinc-500'}>{i ? ' – ' : ''}{x.abbr} {x.score}</span>)}</div>

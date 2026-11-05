@@ -91,7 +91,7 @@ export function SearchBox({ onPick }: { onPick: (p: Pick) => void }) {
         className="h-9 w-full rounded-lg border border-zinc-700/70 bg-zinc-900 pl-9 pr-9 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-amber-500/70 focus:ring-2 focus:ring-amber-500/20" />
       {loading && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-zinc-500" />}
       {open && (items.length > 0 || remote) && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl shadow-black/60">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-zinc-700/70 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60">
           {!q.trim() && <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Recientes</div>}
           {items.map((p, i) => (
             <button key={p.kind + p.name} onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); choose(p); }}

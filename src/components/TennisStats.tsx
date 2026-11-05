@@ -68,7 +68,7 @@ export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: Tour
   const score = dominance(b);
   const row = (m: Metric) => <TvRow key={m.key} label={m.label} a={num(b, m.key)} b={num(avg, m.key)} aText={fmt(m, num(b, m.key))} bText={fmt(m, num(avg, m.key))} better={m.better} spread={m.spread} muted dim={dim} title={`${m.label}: ${fmt(m, num(b, m.key))}. Media del circuito: ${fmt(m, num(avg, m.key))}`} />;
   const count = (label: string, r: { won: number; lost: number }) => <TvRow key={label} label={label} a={r.won} b={r.lost} aText={n0(r.won)} bText={n0(r.lost)} spread={r.won + r.lost || 1} muted title={`${label}: ${r.won} ganados, ${r.lost} perdidos`} />;
-  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tour.toUpperCase()}</span></div>;
+  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tour.toUpperCase()}</span></div>;
   const rivals = ([['Top 10', p.vs.top10], ['Puestos 11 a 50', p.vs.top11to50], ['Resto del ranking', p.vs.rest], ['Grand Slam', p.levels.grandSlam], ['Masters / WTA 1000', p.levels.masters], ['Torneos 250 y 500', p.levels.others]] as const).filter(([, r]) => r.won + r.lost);
 
   return (
@@ -93,7 +93,7 @@ export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: Tour
             { label: 'Aces por partido', value: n1(b.acesPerMatch), sub: `${n0(b.aces)} en total` }
           ]} />
           {dim && <p className="px-3 pt-1.5 text-xs text-amber-300">Sólo {b.matches} partidos con este filtro: los porcentajes dicen poco.</p>}
-          <div className="grid grid-cols-1 xl:grid-cols-2 xl:divide-x xl:divide-white/10">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 xl:divide-x xl:divide-white/10">
             <div className="pb-2"><TvBand>Saque</TvBand>{heads}{SERVE.map(row)}<div className="mt-2"><TvBand>Balance · ganados / perdidos</TvBand></div>{count('Partidos', { won: b.won, lost: b.lost })}{count('Sets', { won: b.setsWon, lost: b.setsLost })}{count('Juegos', { won: b.gamesWon, lost: b.gamesLost })}{count('Tie-breaks', { won: b.tbWon, lost: b.tbLost })}</div>
             <div className="pb-2"><TvBand>Resto</TvBand>{heads}{RETURN.map(row)}{!!rivals.length && <><div className="mt-2"><TvBand>{`Por rival y torneo · ${p.label}`}</TvBand></div>{rivals.map(([l, r]) => count(l, r))}</>}</div>
           </div>

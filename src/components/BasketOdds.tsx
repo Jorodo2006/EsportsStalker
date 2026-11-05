@@ -9,7 +9,7 @@ import { cn, fmtTime, odd, pct } from '@/lib/format';
 import type { AutoJob, BasketGame, MarketLine, MatchOdds, Sport, TeamRef } from '@/lib/types';
 import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
-import { Button, Empty, ErrorBox, Loading } from './ui';
+import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
 
 // El partido tal y como lo guardan el lector y el comparador: visitante (a) contra local (b)
 export const matchOfGame = (g: BasketGame) => ({
@@ -84,14 +84,14 @@ export function SportOdds({ target }: { target: OddsTarget }) {
           const busy = running && step && ['esperando', 'buscando', 'leyendo'].includes(step.estado);
           return (
             <span key={name} title={step?.msg || st?.msg || 'Sin cuotas todavía'}
-              className={cn('inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-xs font-medium',
-                step?.estado === 'error' ? 'border-rose-500/30 text-rose-300' : st?.ok ? 'border-zinc-800 bg-zinc-900 text-zinc-200' : 'border-dashed border-zinc-800 text-zinc-500')}>
+              className={cn('inline-flex h-8 items-center gap-2 rounded-full border px-3 font-mono text-[11px] font-medium',
+                step?.estado === 'error' ? 'border-rose-500/40 text-rose-300' : st?.ok ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-dashed border-zinc-700 text-zinc-500')}>
               {busy ? <Loader2 size={12} className="animate-spin text-amber-400" /> : <BookIcon name={name} size={16} className={cn(!st?.ok && 'opacity-40 grayscale')} />}
               {name}{busy && step?.msg && <span className="max-w-40 truncate font-normal text-zinc-500">{step.msg}</span>}
             </span>
           );
         })}
-        <span className="ml-auto text-xs text-zinc-500">{dataUpdatedAt && data?.markets.length ? `Actualizado ${fmtTime(dataUpdatedAt)}` : ''}{isFetching && ' …'}</span>
+        <span className="ml-auto font-mono text-[11px] text-zinc-500">{dataUpdatedAt && data?.markets.length ? `Actualizado ${fmtTime(dataUpdatedAt)}` : ''}{isFetching && ' …'}</span>
         <Button size="sm" disabled={running} onClick={start}><RefreshCw size={14} className={cn(running && 'animate-spin')} />{running ? 'Leyendo…' : 'Actualizar cuotas'}</Button>
       </div>
 
@@ -101,8 +101,8 @@ export function SportOdds({ target }: { target: OddsTarget }) {
         <div className="flex flex-wrap gap-1">
           {SECTIONS.filter(([n]) => counts[n]).map(([n]) => (
             <button key={n} onClick={() => setSection(n)}
-              className={cn('cursor-pointer rounded-full px-3 py-1 text-sm font-medium transition', section === n ? 'bg-zinc-100 text-zinc-950' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
-              {n} <span className="text-xs tnum opacity-60">{counts[n]}</span>
+              className={chip(section === n)}>
+              {n} <span className={cn('font-mono tnum', section === n ? 'text-amber-200' : 'text-zinc-500')}>{counts[n]}</span>
             </button>
           ))}
         </div>
@@ -128,27 +128,27 @@ function OddsCard({ group, lines, books, onPick }: {
   const sorted = many ? lines.slice().sort((x, y) => gap(x) - gap(y)) : lines;
   const shown = all || !many ? (many ? sorted.slice().sort((x, y) => (x.line ?? 0) - (y.line ?? 0)) : sorted) : sorted.slice(0, 3).sort((x, y) => (x.line ?? 0) - (y.line ?? 0));
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
-      <div className="flex items-center gap-2 border-b border-zinc-800/60 px-4 py-2">
-        <h4 className="min-w-0 flex-1 truncate text-sm font-semibold" title={group}>{group}</h4>
-        <span className="w-11 text-right text-[11px] text-zinc-600" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
+    <div className={cn(panelCls, 'overflow-hidden')}>
+      <div className="flex items-center gap-2 border-b border-zinc-800/70 px-4 py-2.5">
+        <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />
+        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{group}</h4>
+        <span className="label-data w-11 text-right text-zinc-500" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
         {books.map(bk => <BookHead key={bk} name={bk} className="w-[72px]" />)}
       </div>
-      <div className="divide-y divide-zinc-800/50">
+      <div className="divide-y divide-zinc-800">
         {shown.map(l => {
           const bests = l.outcomes.map(o => Math.max(0, ...books.map(b => o.prices[b] || 0)));
           const inv = bests.map(p => (p ? 1 / p : 0)), sum = inv.reduce((s, x) => s + x, 0);
           return l.outcomes.map((o, i) => (
-            <div key={l.key + o.id} className="flex items-center gap-2 px-4 py-1">
-              <span className="min-w-0 flex-1 truncate text-sm text-zinc-300" title={o.label}>{o.label}</span>
-              <span className="w-11 text-right text-xs tnum text-zinc-500">{sum && inv[i] ? pct(inv[i] / sum) : ''}</span>
+            <div key={l.key + o.id} className="flex items-center gap-2 px-3 py-1 hover:bg-zinc-900/70">
+              <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200" title={o.label}>{o.label}</span>
+              <span className="w-11 text-right font-mono text-[11px] tnum text-zinc-400">{sum && inv[i] ? pct(inv[i] / sum) : ''}</span>
               {books.map(bk => {
                 const p = o.prices[bk];
                 return (
                   <button key={bk} disabled={!p} onClick={() => p && onPick(group, o.label, bk, p)}
                     title={p ? `${bk}: ${o.label}. Clic para añadirla al cupón (otra vez para quitarla)` : undefined}
-                    className={cn('h-7 w-[72px] rounded-md text-sm font-semibold tnum transition disabled:cursor-default',
-                      !p ? 'text-zinc-700' : p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1) ? 'cursor-pointer bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'cursor-pointer bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700')}>
+                    className={cn(oddBtn(!!p && p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1)), 'h-8 w-[72px] text-[13px]', !p && 'bg-transparent text-zinc-700 hover:bg-transparent')}>
                     {p ? odd(p) : '–'}
                   </button>
                 );
@@ -157,7 +157,7 @@ function OddsCard({ group, lines, books, onPick }: {
           ));
         })}
       </div>
-      {many && <button onClick={() => setAll(!all)} className="w-full cursor-pointer border-t border-zinc-800/60 py-1.5 text-xs text-zinc-500 hover:text-zinc-200">{all ? 'Ver sólo las líneas más igualadas' : `Ver las ${lines.length} líneas`}</button>}
+      {many && <button onClick={() => setAll(!all)} className="w-full cursor-pointer border-t border-zinc-800 py-2 font-mono text-[11px] text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100">{all ? 'Ver sólo las líneas más igualadas' : `Ver las ${lines.length} líneas`}</button>}
     </div>
   );
 }

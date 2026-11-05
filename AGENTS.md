@@ -97,15 +97,26 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 ## Convenciones de código
 
 - **TypeScript estricto** con `noUnusedLocals` y `noUnusedParameters`: nada de imports o variables sin usar.
-- Alias `@/` → `src/`. Piezas de las fichas, con aspecto de rótulo de retransmisión (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
-  `src/components/viz.tsx`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Dialog`, `Field`, `Input`,
+- Alias `@/` → `src/`. Piezas de las fichas, paneles planos de terminal de datos (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
+  `src/components/viz.tsx`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Mark`, `Dialog`, `Field`, `Input`,
   `Select`, `Badge`, `Tabs`, `Empty`, `Loading`, `th`/`td`…). Úsalos en vez de crear otros.
-- Estilo: tema azul tinta (la escala `zinc` está redefinida en `src/index.css`) y acento por app con las clases
-  `amber` (turquesa en LoL, naranja en baloncesto, según `data-app`); verde `emerald` para lo positivo, `rose` para lo
-  negativo. Barlow para el texto y `font-score` (Barlow Condensed) para marcadores y cifras. Piezas de partidos comunes
-  a las dos apps en `src/components/sport.tsx` (tira de días, filtros, bloque de competición, fila, marcador).
+- Estilo (diseño de Stitch suavizado): fondo casi negro, paneles `panelCls` (superficie `bg-surface`, borde fino, esquinas
+  de 12 px) y sin degradados, cristal ni brillos. Cada sección abre con la marca del acento (`Mark`). Cada tipo de control
+  tiene su forma, con los estilos de `ui.tsx`: acción principal en píldora del acento (`Button`), secundaria en píldora
+  gris, pestañas en selector segmentado con la elegida en blanco (`segWrap` + `seg`, `Tabs`, `SheetTabs`), filtros en
+  píldora con contorno (`chip`, `TvTabs`) y cuotas en ficha rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css`
+  y el acento por app va con las clases `amber` (turquesa en LoL, naranja en baloncesto, verde en tenis, según `data-app`);
+  verde `emerald` para lo positivo, `rose` para lo negativo y lo que está en juego. Inter para el texto y `font-score` /
+  `font-mono` (JetBrains Mono) para cifras, cuotas, dinero y etiquetas; la clase `label-data` es la etiqueta pequeña en mono
+  y mayúsculas. Piezas de partidos comunes a las tres apps en `src/components/sport.tsx` (tira de días, filtros, bloque de
+  competición con tarjetas `MatchCard`, sección `LiveSection` de partidos en juego, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
-- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
+- Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,
+  competiciones del día y cartera); desde 1400 px además una columna derecha con el cupón fijo (`<Coupon docked />`) y
+  los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
+  sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
+  Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
+- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).

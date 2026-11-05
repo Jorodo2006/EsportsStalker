@@ -96,7 +96,7 @@ export function MatchPicker({ value, onChange, onPick, day, past = [], placehold
           else if (e.key === 'Tab') setOpen(false);
         }} />
       {open && (
-        <div className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-[26rem] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl shadow-black/60">
+        <div className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-[26rem] overflow-y-auto rounded-xl border border-zinc-700/70 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60">
           <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600 first-letter:uppercase">{header}</div>
           {base.isLoading && <div className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-500"><Loader2 size={13} className="animate-spin" />Cargando calendario…</div>}
           {items.map((it, i) => it.kind === 'match' ? (

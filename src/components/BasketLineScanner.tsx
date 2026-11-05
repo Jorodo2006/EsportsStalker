@@ -126,7 +126,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
         <div className="flex flex-wrap items-center gap-2">
           <TvTabs value={side} onChange={setSide} items={[{ value: 'over', label: 'Más de' }, { value: 'under', label: 'Menos de' }]} />
           <Input aria-label="Línea" autoFocus inputMode="decimal" className="h-7 w-20 text-center font-semibold" placeholder="4,5" value={line} onChange={e => onLine(e.target.value)} />
-          <span className="font-score text-[15px] font-semibold uppercase tracking-wide text-zinc-100">{M.label}</span>
+          <span className="text-[14px] font-semibold text-zinc-100">{M.label}</span>
         </div>
         <TvTabs value={market} onChange={setMarket} items={(Object.keys(BASKET_MARKETS) as BasketMarket[]).map(k => ({ value: k, label: BASKET_MARKETS[k].short, title: BASKET_MARKETS[k].label }))} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">

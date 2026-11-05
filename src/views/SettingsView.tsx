@@ -47,7 +47,7 @@ export default function SettingsView() {
   return (
     <>
       <PageHeader title="Ajustes" />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <AccountCard isAdmin={isAdmin} />
         <form onSubmit={submit}>
           <Card title="Preferencias">
@@ -150,7 +150,7 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
   }
 
   return (
-    <Card className="xl:col-span-2" title="Tu cuenta" action={<Button variant="secondary" size="sm" onClick={logout}><LogOut size={14} />Salir</Button>}>
+    <Card className="2xl:col-span-2" title="Tu cuenta" action={<Button variant="secondary" size="sm" onClick={logout}><LogOut size={14} />Salir</Button>}>
       <p className="mb-4 text-sm text-zinc-400">
         Has entrado como <b className="text-zinc-100">{user?.username}</b>{isAdmin ? ' (administrador)' : ''}. Tus apuestas, tu cartera y tus preferencias son sólo tuyas.
       </p>
@@ -196,7 +196,7 @@ function AutoOddsCard() {
   // El lector pregunta cada 5 s entre trabajos y un trabajo puede durar más de un minuto: a los 5 min sin preguntar, está parado
   const readerOk = !!st?.lastPoll && Date.now() - st.lastPoll < 300e3;
   return (
-    <Card className="xl:col-span-2" title="Cuotas automáticas">
+    <Card className="2xl:col-span-2" title="Cuotas automáticas">
       <form onSubmit={submit} className="flex flex-wrap items-end gap-4">
         <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.on} onChange={e => setF(p => ({ ...p, on: e.target.checked }))} />
@@ -237,7 +237,7 @@ function AutoOddsCard() {
 // Extensión de Chrome: hace el trabajo del marcador sola al pulsar "Actualizar cuotas" en un partido
 function ExtensionCard() {
   return (
-    <Card className="xl:col-span-2" title="Extensión de Chrome (opcional)">
+    <Card className="2xl:col-span-2" title="Extensión de Chrome (opcional)">
       <p className="mb-2 text-sm text-zinc-400">Ya no hace falta: las lecturas las hace el contenedor <code>lector</code> de Docker. La extensión sólo sirve de reserva si Winamax o Betway bloquean el lector; entonces abre las casas en pestañas de fondo de tu Chrome y hace lo mismo.</p>
       <ol className="list-decimal space-y-1.5 pl-5 text-sm text-zinc-400">
         <li>En la carpeta del proyecto ejecuta <code className="text-zinc-300">npm run extension</code>: prepara la carpeta <code className="text-zinc-300">extension-chrome</code>.</li>
@@ -259,7 +259,7 @@ function MarcadorCard() {
   // React no deja poner "javascript:" en href desde JSX: se pone directamente en el elemento
   useEffect(() => { if (url && link.current) link.current.setAttribute('href', url); }, [url]);
   return (
-    <Card className="xl:col-span-2" title="Marcador de cuotas (Winamax, Betway)">
+    <Card className="2xl:col-span-2" title="Marcador de cuotas (Winamax, Betway)">
       <ol className="list-decimal space-y-1.5 pl-5 text-sm text-zinc-400">
         <li>Instálalo una vez: pulsa <b>Copiar marcador</b>. En Chrome, Ctrl+Shift+B → clic derecho en la barra de favoritos → <b>Añadir página…</b> → pega en <b>URL</b> y guarda.</li>
         <li>Abre el partido en la app y déjalo abierto.</li>

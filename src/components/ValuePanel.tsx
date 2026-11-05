@@ -14,7 +14,7 @@ const VERDICT_TONE: Record<VerdictCode, string> = {
 };
 
 export function VerdictBadge({ code, className }: { code: VerdictCode; className?: string }) {
-  return <span className={cn('inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide', VERDICT_TONE[code], className)}>{VERDICT_LABEL[code]}</span>;
+  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider', VERDICT_TONE[code], className)}>{VERDICT_LABEL[code]}</span>;
 }
 
 const relColor = (s: number) => (s >= 70 ? 'bg-emerald-400' : s >= 50 ? 'bg-amber-400' : 'bg-rose-400');
@@ -25,9 +25,9 @@ export function ReliabilityMeter({ rel, compact }: { rel: Reliability; compact?:
   return (
     <div className={cn('flex items-center gap-2', compact && 'justify-center')} title={tip}>
       <div className={cn('h-1.5 overflow-hidden rounded-full bg-zinc-800', compact ? 'w-10' : 'w-full')}>
-        <div className={cn('h-full rounded-full', relColor(rel.score))} style={{ width: `${rel.score}%` }} />
+        <div className={cn('h-full', relColor(rel.score))} style={{ width: `${rel.score}%` }} />
       </div>
-      <span className="text-xs tabular-nums text-zinc-300">{rel.score}</span>
+      <span className="font-mono text-[11px] tabular-nums text-zinc-300">{rel.score}</span>
     </div>
   );
 }
@@ -44,14 +44,14 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
     <div className="flex flex-col gap-4">
       <div className={cn('flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3', VERDICT_TONE[vd.code])}>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider opacity-80">{VERDICT_LABEL[vd.code]}</div>
+          <div className="label-data font-bold opacity-90">{VERDICT_LABEL[vd.code]}</div>
           <div className="text-lg font-bold text-zinc-50">{vd.title}</div>
           <div className="text-sm text-zinc-400">{vd.text}</div>
         </div>
         {stake > 0 && (
           <div className="text-right">
-            <div className="text-xs text-zinc-400">Stake orientativo (¼ Kelly)</div>
-            <div className="text-lg font-bold tabular-nums text-zinc-50">{pct(stake)} del bank</div>
+            <div className="label-data text-zinc-400">Stake orientativo (¼ Kelly)</div>
+            <div className="font-mono text-lg font-bold tabular-nums text-zinc-50">{pct(stake)} del bank</div>
             {!!bank && bank > 0 && <div className="text-xs text-zinc-400">{money(bank * stake, cur)}</div>}
           </div>
         )}
@@ -63,14 +63,14 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
           const p = side === 'over' ? v.pOver : v.pUnder, fair = side === 'over' ? v.fairOver : v.fairUnder;
           const good = !!s && s.ev >= 0.015;
           return (
-            <div key={side} className={cn('rounded-xl border bg-zinc-900/60 p-3', good ? 'border-emerald-500/40' : 'border-zinc-800')}>
+            <div key={side} className={cn('rounded-xl border bg-surface p-3', good ? 'border-emerald-500/50' : 'border-zinc-700/80')}>
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-semibold">{SIDE_LABEL[side]} de {v.line}</span>
-                <span className="text-xl font-bold tabular-nums">{pct(p)}</span>
+                <span className="font-mono text-xl font-bold tabular-nums">{pct(p)}</span>
               </div>
-              <div className="mt-1 text-xs text-zinc-500">Cuota justa <span className="tabular-nums text-zinc-300">{odd(fair)}</span></div>
+              <div className="mt-1 font-mono text-[11px] text-zinc-500">Cuota justa <span className="tabular-nums text-zinc-200">{odd(fair)}</span></div>
               {s ? <>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[11px]">
                   <div><div className="text-zinc-500">Cuota{s.book ? ` ${s.book}` : ''}</div><div className="font-semibold tabular-nums">{odd(s.price)}</div></div>
                   <div><div className="text-zinc-500">Valor (EV)</div><div className={cn('font-semibold tabular-nums', s.ev >= 0.015 ? 'text-emerald-400' : s.ev < 0 ? 'text-rose-400' : 'text-zinc-300')}>{s.ev > 0 ? '+' : ''}{pct(s.ev)}</div></div>
                   <div title="Probabilidad estimada menos la de la casa sin margen"><div className="text-zinc-500">Ventaja</div><div className="font-semibold tabular-nums">{s.edge == null ? '–' : `${s.edge > 0 ? '+' : ''}${pct(s.edge)}`}</div></div>
@@ -90,17 +90,17 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
         {v.margin != null && <>Margen de la casa {pct(v.margin)} ({v.exact ? 'exacto, con las dos cuotas' : 'estimado, sólo hay una cuota'})</>}
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="rounded-xl border border-zinc-800 bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-semibold">Fiabilidad</span>
-          <span className="text-sm"><span className="text-xl font-bold tabular-nums">{v.rel.score}</span><span className="text-zinc-500">/100 · {v.rel.label}</span></span>
+          <span className="label-data text-zinc-400">Índice de fiabilidad</span>
+          <span className="text-sm"><span className="font-mono text-xl font-bold tabular-nums">{v.rel.score}</span><span className="text-zinc-500">/100 · {v.rel.label}</span></span>
         </div>
         <div className="flex flex-col gap-2">
           {v.rel.factors.map(f => (
             <div key={f.label} className="grid grid-cols-[150px_1fr_48px] items-center gap-3 text-xs" title={f.note}>
               <span className="text-zinc-400">{f.label}</span>
-              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className={cn('h-full rounded-full', relColor((f.score / f.max) * 100))} style={{ width: `${(f.score / f.max) * 100}%` }} /></div>
-              <span className="text-right tabular-nums text-zinc-500">{f.score.toFixed(0)}/{f.max}</span>
+              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className={cn('h-full', relColor((f.score / f.max) * 100))} style={{ width: `${(f.score / f.max) * 100}%` }} /></div>
+              <span className="text-right font-mono tabular-nums text-zinc-500">{f.score.toFixed(0)}/{f.max}</span>
             </div>
           ))}
         </div>

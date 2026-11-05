@@ -50,7 +50,7 @@ export function OptionInput({ value, onChange, options, placeholder, required }:
           else if (e.key === 'Tab') setOpen(false);
         }} />
       {open && items.length > 0 && (
-        <div ref={list} className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-full min-w-[18rem] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl shadow-black/60">
+        <div ref={list} className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-full min-w-[18rem] overflow-y-auto rounded-xl border border-zinc-700/70 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60">
           {items.map((o, i) => {
             const head = o.group && o.group !== lastGroup ? o.group : null;
             lastGroup = o.group;

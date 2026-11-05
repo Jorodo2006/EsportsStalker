@@ -1,17 +1,20 @@
-// Piezas de las fichas, con el aspecto de los rótulos de una retransmisión: banda de color, filas con el dato a cada lado y
-// una línea fina debajo que se inclina hacia quien va por delante. Los colores salen de --tv-* (index.css), según la app.
+// Piezas de las fichas, con el aspecto de terminal de datos del diseño: paneles planos con borde fino, cabecera con la
+// marca del acento, cifras en mono y una línea fina debajo de cada comparación que se inclina hacia quien va por delante.
+// El acento sale de --tv-mark (index.css), según la app.
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/format';
+import { Mark, chip } from './ui';
 
-export const panel = 'rounded-lg border border-white/10 bg-[var(--tv-bg)]';
+export const panel = 'rounded-xl border border-zinc-800 bg-[var(--tv-bg)]';
 export const tdc = 'px-3 py-1.5 text-[13px]';
 
-// Banda de sección, centrada y a todo el ancho
+// Cabecera de sección: marca, título y, a la derecha, un dato de contexto
 export function TvBand({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
-    <div className="relative bg-gradient-to-r from-[var(--tv-band-2)] via-[var(--tv-band)] to-[var(--tv-band-2)] px-3 py-[3px] text-center font-score text-[13px] font-bold uppercase leading-[18px] tracking-[.08em] text-white">
-      {children}
-      {aside && <span className="absolute right-3 top-1/2 hidden -translate-y-1/2 text-[11px] font-medium normal-case tracking-normal text-white/75 sm:block">{aside}</span>}
+    <div className="flex items-center gap-2 border-b border-zinc-800/70 px-4 py-2.5">
+      <Mark className="bg-[var(--tv-mark)]" />
+      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50">{children}</span>
+      {aside && <span className="label-data hidden shrink-0 text-zinc-500 sm:block">{aside}</span>}
     </div>
   );
 }
@@ -26,17 +29,17 @@ export function Panel({ title, aside, children, className }: { title?: ReactNode
 }
 
 export function TvFrame({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cn(panel, 'overflow-hidden shadow-xl shadow-black/30', className)}>{children}</section>;
+  return <section className={cn(panel, 'overflow-hidden', className)}>{children}</section>;
 }
 
-// Cabecera del rótulo: título grande a la izquierda y lo que toque a la derecha
+// Cabecera de la ficha: título grande a la izquierda y lo que toque a la derecha
 export function TvHeader({ title, sub, media, children }: { title: ReactNode; sub?: ReactNode; media?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t-2 border-[var(--tv-mark)] bg-gradient-to-r from-[var(--tv-band)] to-[var(--tv-band-2)] px-4 py-2.5 text-white">
+    <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-zinc-800/70 bg-zinc-900/60 px-4 py-3.5 shadow-[inset_3px_0_0_var(--tv-mark)]">
       {media}
       <div className="min-w-0 flex-1 basis-56">
-        <div className="truncate font-score text-[28px] font-bold uppercase leading-none tracking-wide">{title}</div>
-        {sub && <div className="mt-1 truncate font-score text-[13px] font-medium uppercase tracking-wider text-white/80">{sub}</div>}
+        <div className="truncate text-2xl font-bold leading-tight tracking-tight text-zinc-50">{title}</div>
+        {sub && <div className="label-data mt-1 truncate text-zinc-400">{sub}</div>}
       </div>
       {children}
     </header>
@@ -45,10 +48,10 @@ export function TvHeader({ title, sub, media, children }: { title: ReactNode; su
 
 export function TvStat({ label, value, sub, title }: { label: string; value: ReactNode; sub?: ReactNode; title?: string }) {
   return (
-    <div title={title} className="min-w-0 border-l border-white/25 pl-3 first:border-0 first:pl-0">
-      <div className="font-score text-[11px] font-semibold uppercase tracking-wider text-white/75">{label}</div>
-      <div className="font-score text-[24px] font-bold leading-[26px] tnum">{value}</div>
-      {sub != null && sub !== '' && <div className="font-score text-[12px] font-medium text-white/75 tnum">{sub}</div>}
+    <div title={title} className="min-w-0 border-l border-zinc-700 pl-3 first:border-0 first:pl-0">
+      <div className="label-data text-zinc-500">{label}</div>
+      <div className="mt-0.5 font-score text-xl font-semibold leading-6 text-zinc-50 tnum">{value}</div>
+      {sub != null && sub !== '' && <div className="font-mono text-[11px] text-zinc-500 tnum">{sub}</div>}
     </div>
   );
 }
@@ -57,26 +60,25 @@ export function TvStat({ label, value, sub, title }: { label: string; value: Rea
 export type Kpi = { label: string; value: ReactNode; sub?: ReactNode; title?: string };
 export function KpiStrip({ items, className }: { items: Kpi[]; className?: string }) {
   return (
-    <div className={cn('grid divide-x divide-white/10', className)} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+    <div className={cn('grid divide-x divide-zinc-800', className)} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
       {items.map(k => (
-        <div key={k.label} title={k.title} className="min-w-0 px-3 py-1.5 text-center">
-          <div className="truncate font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{k.label}</div>
-          <div className="truncate font-score text-[22px] font-bold leading-tight text-white tnum">{k.value}</div>
-          {k.sub != null && k.sub !== '' && <div className="truncate font-score text-[12px] text-zinc-400 tnum">{k.sub}</div>}
+        <div key={k.label} title={k.title} className="min-w-0 px-3 py-2 text-center">
+          <div className="label-data truncate text-zinc-500">{k.label}</div>
+          <div className="mt-0.5 truncate font-score text-lg font-semibold leading-tight text-zinc-50 tnum">{k.value}</div>
+          {k.sub != null && k.sub !== '' && <div className="truncate font-mono text-[11px] text-zinc-500 tnum">{k.sub}</div>}
         </div>
       ))}
     </div>
   );
 }
 
-// Selector cuadrado de la barra de filtros
+// Selector de la barra de filtros: píldoras con contorno, la elegida teñida del acento
 export function TvTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: ReactNode; disabled?: boolean; title?: string }[] }) {
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1.5">
       {items.map(it => (
         <button key={it.value} onClick={() => onChange(it.value)} disabled={it.disabled} title={it.title} aria-pressed={value === it.value}
-          className={cn('flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2.5 font-score text-[13px] font-semibold uppercase tracking-wide transition disabled:cursor-default disabled:opacity-35',
-            value === it.value ? 'bg-[var(--tv-mark)] text-black' : 'bg-white/[.06] text-zinc-200 hover:bg-white/[.12]')}>
+          className={chip(value === it.value)}>
           {it.label}
         </button>
       ))}
@@ -96,15 +98,15 @@ export function TvRow({ label, a, b, aText, bText, better, spread, muted, dim, t
   const size = Math.min(1, Math.abs(lead) / top);
   const aTop = lead > 0, bTop = lead < 0;
   return (
-    <div tabIndex={0} title={title ?? `${label}: ${aText} / ${bText}`} className={cn('px-3 outline-none transition hover:bg-white/[.04] focus-visible:bg-white/[.06]', dim && 'opacity-50')}>
-      <div className="grid h-[25px] grid-cols-[4rem_minmax(0,1fr)_4rem] items-center gap-2">
-        <span className={cn('font-score text-[18px] tnum', aTop ? 'font-bold text-white' : 'font-medium text-zinc-300')}>{aText}</span>
-        <span className="truncate text-center font-score text-[13px] font-semibold uppercase tracking-wide text-zinc-100">{label}</span>
-        <span className={cn('text-right font-score text-[18px] tnum', bTop && !muted ? 'font-bold text-white' : 'font-medium text-zinc-300')}>{bText}</span>
+    <div tabIndex={0} title={title ?? `${label}: ${aText} / ${bText}`} className={cn('px-4 py-0.5 outline-none transition hover:bg-zinc-900 focus-visible:bg-zinc-900', dim && 'opacity-50')}>
+      <div className="grid h-[25px] grid-cols-[4.5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+        <span className={cn('font-mono text-[14px] tnum', aTop ? 'font-bold text-zinc-50' : 'font-medium text-zinc-400')}>{aText}</span>
+        <span className="truncate text-center font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{label}</span>
+        <span className={cn('text-right font-mono text-[14px] tnum', bTop && !muted ? 'font-bold text-zinc-50' : 'font-medium text-zinc-400')}>{bText}</span>
       </div>
-      <div className="relative h-[2px] bg-white/15">
-        {!!size && <span className={cn('absolute top-0 h-full', bTop && muted ? 'bg-zinc-400' : 'bg-[var(--tv-mark)]')} style={aTop ? { right: '50%', width: `${Math.max(size, 0.04) * 50}%` } : { left: '50%', width: `${Math.max(size, 0.04) * 50}%` }} />}
-        <span className="absolute -top-[2px] left-1/2 h-[6px] w-px bg-white/40" />
+      <div className="relative h-[3px] rounded-full bg-zinc-800">
+        {!!size && <span className={cn('absolute top-0 h-full rounded-full', bTop && muted ? 'bg-zinc-500' : 'bg-[var(--tv-mark)]')} style={aTop ? { right: '50%', width: `${Math.max(size, 0.04) * 50}%` } : { left: '50%', width: `${Math.max(size, 0.04) * 50}%` }} />}
+        <span className="absolute -top-[2px] left-1/2 h-[6px] w-px bg-zinc-500" />
       </div>
     </div>
   );
@@ -122,25 +124,25 @@ export function TvPortrait({ name, photo, logo, side, heroLabel, hero, lead, her
   const { first, last } = split(name);
   const right = side === 'right';
   const vertical = (
-    <div className="shrink-0 rotate-180 font-score uppercase leading-none text-white [writing-mode:vertical-rl]">
-      <div className="text-[12px] font-medium tracking-wider text-zinc-300">{first}</div>
-      <div className="max-h-44 truncate text-[25px] font-bold tracking-wide">{last}</div>
+    <div className="shrink-0 rotate-180 uppercase leading-none text-zinc-50 [writing-mode:vertical-rl]">
+      <div className="font-mono text-[11px] font-medium tracking-wider text-zinc-400">{first}</div>
+      <div className="max-h-44 truncate text-[22px] font-bold tracking-tight">{last}</div>
     </div>
   );
   return (
-    <div className="relative hidden min-h-80 overflow-hidden md:block" style={{ background: `radial-gradient(90% 55% at 50% 26%, color-mix(in oklab, var(--tv-band) 42%, transparent), transparent)` }}>
+    <div className={cn('relative hidden min-h-80 overflow-hidden bg-zinc-900 md:block', right ? 'border-l' : 'border-r', 'border-zinc-800')}>
       {photo && !broken ? (
         <img src={photo} alt="" onError={() => setBroken(true)}
           className={cn('absolute inset-x-0 top-0 w-full', logo ? 'h-[58%] object-contain p-9' : 'h-[74%] object-cover object-top')}
           style={logo ? undefined : { maskImage: 'linear-gradient(to bottom, #000 66%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, #000 66%, transparent 100%)' }} />
       ) : (
-        <div className="absolute inset-x-0 top-10 text-center font-score text-[84px] font-bold uppercase leading-none text-white/10">{(first[0] ?? '') + (last[0] ?? '')}</div>
+        <div className="absolute inset-x-0 top-10 text-center font-mono text-[72px] font-bold uppercase leading-none text-zinc-800">{(first[0] ?? '') + (last[0] ?? '')}</div>
       )}
       <div className={cn('absolute inset-x-0 bottom-0 flex items-end gap-2.5 p-3', right && 'flex-row-reverse')}>
         {vertical}
         <div className={cn('min-w-0 flex-1', right && 'text-right')} title={heroTitle}>
-          <div className={cn('font-score text-[11px] font-semibold uppercase leading-[13px] tracking-wider', lead ? 'text-[var(--tv-mark)]' : 'text-zinc-200')}>{heroLabel}</div>
-          <div className={cn('font-score text-[52px] font-bold leading-[50px] tnum', lead ? 'text-[var(--tv-mark)]' : 'text-white')}>{hero}</div>
+          <div className={cn('label-data', lead ? 'text-[var(--tv-mark)]' : 'text-zinc-400')}>{heroLabel}</div>
+          <div className={cn('text-[46px] font-bold leading-[48px] tracking-tight tnum', lead ? 'text-[var(--tv-mark)]' : 'text-zinc-50')}>{hero}</div>
         </div>
       </div>
     </div>
@@ -151,7 +153,7 @@ export function TvPortrait({ name, photo, logo, side, heroLabel, hero, lead, her
 export function FormChips({ list }: { list: { win: boolean; title?: string }[] }) {
   return (
     <span className="flex gap-0.5">
-      {list.map((m, i) => <span key={i} title={m.title} className={cn('grid h-[18px] w-[18px] place-items-center rounded-[3px] font-score text-[11px] font-bold', m.win ? 'bg-emerald-500/25 text-emerald-200' : 'bg-rose-500/25 text-rose-200')}>{m.win ? 'G' : 'P'}</span>)}
+      {list.map((m, i) => <span key={i} title={m.title} className={cn('grid h-[18px] w-[18px] place-items-center rounded-md font-mono text-[10px] font-bold', m.win ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300')}>{m.win ? 'G' : 'P'}</span>)}
     </span>
   );
 }

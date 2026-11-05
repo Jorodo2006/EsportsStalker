@@ -1,5 +1,5 @@
 // Estado global: ajustes, navegación, formulario de apuesta y avisos
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 import { wallet } from './format';
@@ -29,7 +29,16 @@ interface Ctx {
   clearSlip(): void;
   toast(msg: string): void;
   toastMsg: string | null;
+  // Competiciones de la lista de partidos que se está viendo, para el menú lateral
+  sections: Section[];
+  setSections(s: Section[]): void;
+  // Partido de baloncesto o tenis que hay que abrir (p. ej. desde la lista de directo); la vista lo recoge y lo borra
+  focusId: string | null;
+  setFocusId(id: string | null): void;
 }
+
+// Una competición del día: id del bloque en la página (para desplazarse hasta él), nombre, partidos y en juego
+export interface Section { id: string; label: string; count: number; live: number }
 
 const AppCtx = createContext<Ctx | null>(null);
 
@@ -42,6 +51,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);
   const [betDraft, setBetDraft] = useState<BetDraft | null>(null);
   const [toastMsg, setToast] = useState<string | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [focusId, setFocusId] = useState<string | null>(null);
   const [slip, setSlipState] = useState<SlipLeg[]>(() => {
     try { return JSON.parse(localStorage.getItem('slip') || '[]'); } catch { return []; }
   });
@@ -95,9 +106,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     keepInSlip: keep => setSlip(s => s.filter(keep)),
     clearSlip: () => setSlip(() => []),
     toast,
-    toastMsg
+    toastMsg,
+    sections,
+    setSections,
+    focusId,
+    setFocusId
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
+}
+
+// La vista de partidos publica sus competiciones para el menú lateral; al salir (o al abrir un partido) se vacía
+export function useSections(list: Section[]) {
+  const { setSections } = useApp();
+  const key = list.map(s => `${s.id}:${s.count}:${s.live}`).join('|');
+  useEffect(() => {
+    setSections(list);
+    return () => setSections([]);
+  }, [key, setSections]); // key resume el contenido de list, que cambia de identidad en cada render
+}
+
+// El id del bloque de una competición en la página
+export const sectionId = (name: string) => 'comp-' + name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-');
+
+// Abre en la vista el partido pedido desde fuera (lista de directo) en cuanto la vista lo tiene cargado
+export function useFocus(open: (id: string) => void, has: (id: string) => boolean) {
+  const { focusId, setFocusId } = useApp();
+  useEffect(() => {
+    if (focusId && has(focusId)) { open(focusId); setFocusId(null); }
+  }, [focusId, has, open, setFocusId]);
 }
 
 export function useApp() {

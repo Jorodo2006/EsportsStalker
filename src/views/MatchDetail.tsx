@@ -7,7 +7,7 @@ import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamForm,
 import { MIN_GAMES, analyzeLine, estimate, findPlayer, mapWinA, parseStat } from '@/lib/edge';
 import { SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
 import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePanel';
-import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
+import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
 import { Scoreboard, SheetTabs } from '@/components/sport';
 
@@ -62,11 +62,10 @@ export default function MatchDetail({ match, onClose }: { match: MatchEvent; onC
             <div className="mb-5 flex flex-wrap items-center gap-2">
               {games.map(g => (
                 <button key={g.id} onClick={() => setGameId(g.id)}
-                  className={cn('flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                    g.id === gameId ? 'border-amber-500/60 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200')}>
-                  Mapa {g.number}
+                  className={cn(chip(g.id === gameId), 'h-9 px-4 text-[13px]')}>
                   {g.state === 'inProgress' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />}
-                  {g.state === 'completed' && <span className="text-zinc-500">✓</span>}
+                  Mapa {g.number}
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{g.state === 'inProgress' ? 'en juego' : g.state === 'completed' ? 'final' : 'pendiente'}</span>
                 </button>
               ))}
             </div>
@@ -120,9 +119,9 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
         const failed = step?.estado === 'error';
         return (
           <span key={name} title={step?.msg || st?.msg || 'Sin cuotas todavía'}
-            className={cn('inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-xs font-medium',
-              failed ? 'border-rose-500/30 bg-rose-500/5 text-rose-300'
-                : st?.ok ? 'border-zinc-800 bg-zinc-900 text-zinc-200' : 'border-dashed border-zinc-800 text-zinc-500')}>
+            className={cn('inline-flex h-8 items-center gap-2 rounded-full border px-3 font-mono text-[11px] font-medium',
+              failed ? 'border-rose-500/40 bg-rose-500/5 text-rose-300'
+                : st?.ok ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-dashed border-zinc-700 text-zinc-500')}>
             {busy ? <Loader2 size={12} className="animate-spin text-amber-400" />
               : <BookIcon name={name} size={16} className={cn(!st?.ok && 'opacity-40 grayscale')} />}
             {name}
@@ -138,11 +137,11 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
         </span>
       )}
       <div className="ml-auto flex items-center gap-3">
-        <span className="text-xs text-zinc-500">{updatedAt ? `Actualizado ${fmtTime(updatedAt)}` : ''}{fetching && ' · …'}</span>
-        <button className="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300" onClick={onPaste} title="Si el marcador no pudo enviarlas, las copia al portapapeles">
+        <span className="font-mono text-[11px] text-zinc-500">{updatedAt ? `Actualizado ${fmtTime(updatedAt)}` : ''}{fetching && ' · …'}</span>
+        <button className="cursor-pointer text-xs text-zinc-400 hover:text-zinc-100" onClick={onPaste} title="Si el marcador no pudo enviarlas, las copia al portapapeles">
           Pegar del marcador
         </button>
-        <Button size="sm" disabled={running} onClick={start} className="h-8 px-3">
+        <Button size="sm" disabled={running} onClick={start} className="h-8 whitespace-nowrap px-3">
           <RefreshCw size={14} className={cn(running && 'animate-spin')} />{running ? 'Actualizando…' : 'Actualizar cuotas'}
         </Button>
       </div>
@@ -232,14 +231,13 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
         </Empty>
       ) : (
         <>
-          <div className="sticky top-0 z-10 -mx-3 flex flex-wrap items-center gap-3 border-b border-zinc-800/70 bg-zinc-950/85 px-3 py-2.5 lg:-mx-6 lg:px-6 backdrop-blur">
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-3 py-2 shadow-lg shadow-black/40">
             <div className="flex w-full gap-1 overflow-x-auto sm:w-auto sm:flex-wrap">
               {(['all', ...sections] as Section[]).map(s => (
-                <button key={s} onClick={() => setSection(s)}
-                  className={cn('shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition',
-                    section === s ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100')}>
+                <button key={s} onClick={() => setSection(s)} aria-pressed={section === s}
+                  className={chip(section === s)}>
                   {SECTION_LABEL(s)}
-                  <span className={cn('ml-1.5 tabular-nums', section === s ? 'text-zinc-950/60' : 'text-zinc-600')}>
+                  <span className={cn('font-mono tabular-nums', section === s ? 'text-amber-200' : 'text-zinc-500')}>
                     {s === 'all' ? visible.length : visible.filter(m => sectionOf(m) === s).length}
                   </span>
                 </button>
@@ -261,9 +259,9 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
             if (!ms.length) return null;
             return (
               <section key={s} className="space-y-3">
-                {section === 'all' && <h3 className="pt-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{SECTION_LABEL(s)}</h3>}
+                {section === 'all' && <h3 className="label-data flex items-center gap-2 pt-2 text-zinc-400"><span className="h-px w-4 bg-amber-500" />{SECTION_LABEL(s)}</h3>}
                 {s === 'players' && <PlayerLines markets={ms.filter(isPlayerLine)} books={books} value={value} onPick={pick} open={!closed.has('__jugadores')} onToggle={() => toggle('__jugadores')} />}
-                <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+                <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-2">
                   {[...groupBy(ms.filter(m => !isPlayerLine(m)), m => m.group)].map(([group, lines]) => (
                     <MarketCard key={group} title={shortGroup(group)} group={group} lines={lines} books={books} onPick={pick}
                       open={!closed.has(shortGroup(group))} onToggle={() => toggle(shortGroup(group))} />
@@ -290,19 +288,17 @@ function bestOf(prices: Record<string, number>, books: string[]) {
 }
 
 function OddButton({ price, best, onClick, title, className }: { price?: number; best?: boolean; onClick?: (add: boolean) => void; title?: string; className?: string }) {
-  if (!price) return <span className={cn('grid h-8 place-items-center text-xs text-zinc-700', className)}>–</span>;
+  if (!price) return <span className={cn('grid h-8 place-items-center font-mono text-xs text-zinc-700', className)}>–</span>;
   return (
     <button onClick={e => onClick?.(e.shiftKey)} onContextMenu={e => { e.preventDefault(); onClick?.(true); }}
       title={title && title + ' · clic derecho: añadir a combinada'}
-      className={cn('h-9 cursor-pointer rounded-md text-[13px] font-semibold tabular-nums transition lg:h-8',
-        best ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40 hover:bg-emerald-500/25'
-          : 'bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700', className)}>
+      className={cn(oddBtn(best), 'h-9 text-[13px] lg:h-8', className)}>
       {odd(price)}
     </button>
   );
 }
 
-// Un mercado: selecciones en filas y una columna fija por casa (con su icono); la mejor cuota en verde.
+// Un mercado: selecciones en filas y una columna fija por casa (con su icono); la mejor cuota con el acento.
 // Se pliega pulsando la cabecera y los mercados largos se recortan.
 function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
   title: string; group: string; lines: MarketLine[]; books: string[]; onPick: Pick; open: boolean; onToggle: () => void;
@@ -312,17 +308,18 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
   const list = all ? lines : lines.slice(0, limit);
   const best = lines.reduce((mx, l) => Math.max(mx, ...l.outcomes.flatMap(o => Object.values(o.prices))), 0);
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/40">
-      <button onClick={onToggle} className={cn('flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left transition hover:bg-zinc-800/30', open && 'border-b border-zinc-800/60')}>
-        <ChevronDown size={14} className={cn('shrink-0 text-zinc-500 transition-transform', !open && '-rotate-90')} />
-        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-100" title={group}>{title}</h4>
+    <div className={cn(panelCls, 'overflow-hidden')}>
+      <button onClick={onToggle} className={cn('flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left transition hover:bg-zinc-900/60', open && 'border-b border-zinc-800/70')}>
+        <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />
+        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{title}</h4>
         {open ? <>
-          <span className="hidden w-11 text-right text-[10px] font-medium uppercase tracking-wider text-zinc-600 sm:inline" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
+          <span className="label-data hidden w-11 text-right text-zinc-500 sm:inline" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
           {books.map(bk => <BookHead key={bk} name={bk} className="w-16 sm:w-[72px]" />)}
-        </> : <span className="text-xs text-zinc-500">{lines.length > 1 ? `${lines.length} líneas` : ''}{best ? ` · hasta ${odd(best)}` : ''}</span>}
+        </> : <span className="font-mono text-[11px] text-zinc-500">{lines.length > 1 ? `${lines.length} líneas` : ''}{best ? ` · hasta ${odd(best)}` : ''}</span>}
+        <ChevronDown size={14} className={cn('shrink-0 text-zinc-500 transition-transform', !open && '-rotate-90')} />
       </button>
       {open && <>
-        <div className="divide-y divide-zinc-800/50">
+        <div className="divide-y divide-zinc-800">
           {list.map(l => {
             const bests = l.outcomes.map(o => bestOf(o.prices, books));
             const inv = bests.map(x => (x.p ? 1 / x.p : 0));
@@ -330,9 +327,9 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
             return (
               <div key={l.key} className="py-1">
                 {l.outcomes.map((o, oi) => (
-                  <div key={o.id} className="flex items-center gap-2 px-3 py-0.5 hover:bg-zinc-800/20 sm:px-4">
-                    <span className="min-w-0 flex-1 truncate text-sm text-zinc-300 sm:pl-[22px]" title={o.label}>{o.label}</span>
-                    <span className="hidden w-11 text-right text-xs tabular-nums text-zinc-500 sm:inline">{sum ? pct(inv[oi] / sum) : '–'}</span>
+                  <div key={o.id} className="flex items-center gap-2 px-3 py-0.5 hover:bg-zinc-900/70">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200 sm:pl-3" title={o.label}>{o.label}</span>
+                    <span className="hidden w-11 text-right font-mono text-[11px] tabular-nums text-zinc-400 sm:inline">{sum ? pct(inv[oi] / sum) : '–'}</span>
                     {books.map(bk => (
                       <OddButton key={bk} className="w-16 sm:w-[72px]" price={o.prices[bk]} best={bests[oi].n > 1 && o.prices[bk] === bests[oi].p}
                         title={`${bk}: registrar apuesta`} onClick={add => onPick(group, o.label, bk, o.prices[bk], add)} />
@@ -344,7 +341,7 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
           })}
         </div>
         {lines.length > limit && (
-          <button onClick={() => setAll(v => !v)} className="w-full cursor-pointer border-t border-zinc-800/60 py-2 text-xs font-medium text-zinc-400 transition hover:bg-zinc-800/30 hover:text-zinc-200">
+          <button onClick={() => setAll(v => !v)} className="w-full cursor-pointer border-t border-zinc-800 py-2 font-mono text-[11px] font-medium text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-100">
             {all ? 'Ver menos' : `Ver ${lines.length - limit} líneas más`}
           </button>
         )}
@@ -412,30 +409,30 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
   if (!stats.length) return null;
   const nCols = 5 + cols.length * 2;
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/40">
-      <div className={cn('flex flex-wrap items-center gap-2 px-4 py-2.5', open && 'border-b border-zinc-800/60')}>
-        <button onClick={onToggle} className="mr-2 flex cursor-pointer items-center gap-2 text-[13px] font-semibold hover:text-zinc-50">
-          <ChevronDown size={14} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />Líneas de jugador
-          {!open && <span className="text-xs font-normal text-zinc-500">{markets.length} líneas</span>}
+    <div className={cn(panelCls, 'overflow-hidden')}>
+      <div className={cn('flex flex-wrap items-center gap-2 px-4 py-2.5', open && 'border-b border-zinc-800/70')}>
+        <button onClick={onToggle} className="mr-2 flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-zinc-50">
+          <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />Líneas de jugador
+          {!open && <span className="font-mono text-[11px] font-normal text-zinc-500">{markets.length} líneas</span>}
+          <ChevronDown size={14} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />
         </button>
         {open && <><div className="flex flex-wrap gap-1">
           {stats.map(s => (
-            <button key={s} onClick={() => setStat(s)}
-              className={cn('cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition',
-                s === cur ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200')}>{s}</button>
+            <button key={s} onClick={() => setStat(s)} aria-pressed={s === cur}
+              className={chip(s === cur)}>{s}</button>
           ))}
         </div>
-        <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400" title="Líneas con veredicto Apostar o Valor ligero">
+        <label className="ml-auto flex cursor-pointer items-center gap-2 font-mono text-[11px] text-zinc-400" title="Líneas con veredicto Apostar o Valor ligero">
           <input type="checkbox" className="accent-amber-500" checked={onlyValue} onChange={e => setOnlyValue(e.target.checked)} />
           Sólo con valor
         </label>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar jugador…"
-          className="h-7 w-44 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 text-xs outline-none placeholder:text-zinc-600 focus:border-amber-500/60" /></>}
+          className="h-8 w-44 rounded-full border border-zinc-700/70 bg-zinc-950 px-3.5 text-xs outline-none transition placeholder:text-zinc-600 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" /></>}
       </div>
       {open && <div className="overflow-x-auto">
         <table className="w-full table-fixed" style={{ minWidth: 640 + cols.length * 170 }}>
           <thead>
-            <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <tr className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               <th className="px-4 py-2 text-left">Jugador</th>
               <th className="w-20 px-2 py-2 text-center">Línea</th>
               <th className="w-24 px-2 py-2 text-center" title="Probabilidad de Más / Menos estimada con sus últimas partidas (Leaguepedia)">Estimado</th>
@@ -467,10 +464,10 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
                       {first ? name : ''}
                     </span>
                   </td>
-                  <td className="px-2 py-1 text-center text-sm tabular-nums text-zinc-400">{m.line}</td>
+                  <td className="px-2 py-1 text-center font-mono text-[13px] tabular-nums text-zinc-300">{m.line}</td>
                   {ok ? <>
-                    <td className="px-2 py-1 text-center text-xs tabular-nums text-zinc-400" title={v.title}>{pct(v.data.pOver)} / {pct(v.data.pUnder)}</td>
-                    <td className="px-2 py-1 text-center text-xs tabular-nums" title={v.title}>
+                    <td className="px-2 py-1 text-center font-mono text-[11px] tabular-nums text-zinc-400" title={v.title}>{pct(v.data.pOver)} / {pct(v.data.pUnder)}</td>
+                    <td className="px-2 py-1 text-center font-mono text-[11px] tabular-nums" title={v.title}>
                       <span className={cn('font-semibold', good ? 'text-emerald-400' : v.best.ev > 0 ? 'text-zinc-300' : 'text-zinc-600')}>
                         {v.best.ev > 0 ? '+' : ''}{pct(v.best.ev)}
                       </span>
@@ -531,15 +528,17 @@ function GameStats({ gameId, live, teams }: { gameId: string; live: boolean; tea
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-zinc-400">
         {w.state === 'finished' ? <Badge>Terminada</Badge> : w.state === 'paused' ? <Badge tone="warning">Pausada</Badge> : <Badge tone="live">En juego</Badge>}
-        <span>Parche {w.patch}</span><span>·</span><span>Actualizado {fmtTime(w.timestamp)}</span><span>·</span>
+        <span>Parche <b className="text-zinc-100">{w.patch}</b></span><span className="text-zinc-700">|</span>
+        <span>Actualizado <b className="text-zinc-100">{fmtTime(w.timestamp)}</b></span><span className="text-zinc-700">|</span>
         <span>Diferencia de oro <b className={diff >= 0 ? 'text-sky-400' : 'text-rose-400'}>{diff >= 0 ? '+' : ''}{k(diff)}</b></span>
       </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-        <div className="mb-4 flex justify-between text-sm font-bold">
-          <span className="text-sky-400">{blue?.name ?? 'Azul'}</span><span className="text-rose-400">{red?.name ?? 'Rojo'}</span>
+      <div className={cn(panelCls, 'p-4 sm:p-5')}>
+        <div className="mb-4 flex justify-between gap-3 text-sm font-semibold">
+          <span className="flex items-center gap-2 text-sky-400"><span className="h-3.5 w-1 rounded-full bg-sky-400" />{blue?.name ?? 'Azul'}<span className="label-data text-zinc-500">Lado azul</span></span>
+          <span className="flex items-center gap-2 text-rose-400"><span className="label-data text-zinc-500">Lado rojo</span>{red?.name ?? 'Rojo'}<span className="h-3.5 w-1 rounded-full bg-rose-400" /></span>
         </div>
         <Bar label="Oro" a={w.blue.gold} b={w.red.gold} fmt={k} />
         <Bar label="Kills" a={w.blue.kills} b={w.red.kills} />
@@ -548,12 +547,12 @@ function GameStats({ gameId, live, teams }: { gameId: string; live: boolean; tea
         <Bar label="Barones" a={w.blue.barons} b={w.red.barons} />
         <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
           <div className="flex flex-wrap gap-1">{w.blue.dragons.map((d, i) => <Badge key={i} tone="info">{DRAGONS[d] ?? d}</Badge>)}</div>
-          <div className="text-[11px] uppercase tracking-wider text-zinc-500">Dragones</div>
+          <div className="label-data text-zinc-500">Dragones</div>
           <div className="flex flex-wrap justify-end gap-1">{w.red.dragons.map((d, i) => <Badge key={i} tone="danger">{DRAGONS[d] ?? d}</Badge>)}</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <Players side={w.blue} name={blue?.code ?? 'Azul'} color="text-sky-400" />
         <Players side={w.red} name={red?.code ?? 'Rojo'} color="text-rose-400" />
       </div>
@@ -566,14 +565,14 @@ function Bar({ label, a, b, fmt = String }: { label: string; a: number; b: numbe
   const p = tot ? (a / tot) * 100 : 50;
   return (
     <div className="mb-3">
-      <div className="mb-1 grid grid-cols-[1fr_auto_1fr] text-sm tabular-nums">
-        <span className="font-semibold">{fmt(a)}</span>
-        <span className="text-[11px] uppercase tracking-wider text-zinc-500">{label}</span>
-        <span className="text-right font-semibold">{fmt(b)}</span>
+      <div className="mb-1 grid grid-cols-[1fr_auto_1fr] items-center font-mono text-[14px] tabular-nums">
+        <span className={cn('font-semibold', a > b ? 'text-zinc-50' : 'text-zinc-400')}>{fmt(a)}</span>
+        <span className="label-data text-zinc-500">{label}</span>
+        <span className={cn('text-right font-semibold', b > a ? 'text-zinc-50' : 'text-zinc-400')}>{fmt(b)}</span>
       </div>
-      <div className="flex h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div className="bg-gradient-to-r from-sky-600 to-sky-400 transition-all duration-700" style={{ width: `${p}%` }} />
-        <div className="flex-1 bg-gradient-to-r from-rose-400 to-rose-600" />
+      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-zinc-800">
+        <div className="bg-sky-500 transition-all duration-700" style={{ width: `${p}%` }} />
+        <div className="flex-1 bg-rose-500" />
       </div>
     </div>
   );
@@ -581,19 +580,19 @@ function Bar({ label, a, b, fmt = String }: { label: string; a: number; b: numbe
 
 function Players({ side, name, color }: { side: LiveSide; name: string; color: string }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800">
-      <table className="w-full">
-        <thead className="bg-zinc-900/80"><tr>
+    <div className={cn(panelCls, 'overflow-x-auto')}>
+      <table className="w-full min-w-[460px]">
+        <thead className="border-b border-zinc-800 bg-zinc-900"><tr>
           <th className={cn(th, color)}>{name}</th><th className={th}>Campeón</th><th className={th + ' text-right'}>Nv</th>
           <th className={th + ' text-right'}>K/D/A</th><th className={th + ' text-right'}>CS</th><th className={th + ' text-right'}>Oro</th><th className={th}>Vida</th>
         </tr></thead>
-        <tbody className="divide-y divide-zinc-800/70">
+        <tbody className="divide-y divide-zinc-800">
           {side.players.map(p => (
-            <tr key={p.name} className="hover:bg-zinc-900/50">
+            <tr key={p.name} className="hover:bg-zinc-900/70">
               <td className={td + ' font-medium'}>{p.name}</td><td className={td + ' text-zinc-400'}>{p.champion}</td>
-              <td className={td + ' text-right tabular-nums'}>{p.level}</td>
-              <td className={td + ' text-right tabular-nums'}>{p.kills}/<span className="text-rose-400">{p.deaths}</span>/{p.assists}</td>
-              <td className={td + ' text-right tabular-nums'}>{p.cs}</td><td className={td + ' text-right tabular-nums'}>{k(p.gold)}</td>
+              <td className={td + ' text-right font-mono tabular-nums'}>{p.level}</td>
+              <td className={td + ' text-right font-mono tabular-nums'}>{p.kills}/<span className="text-rose-400">{p.deaths}</span>/{p.assists}</td>
+              <td className={td + ' text-right font-mono tabular-nums'}>{p.cs}</td><td className={td + ' text-right font-mono tabular-nums'}>{k(p.gold)}</td>
               <td className={td}>
                 <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
                   <div className="h-full bg-emerald-500" style={{ width: `${p.maxHp ? (p.hp / p.maxHp) * 100 : 0}%` }} />
