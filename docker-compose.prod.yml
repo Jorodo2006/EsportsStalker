@@ -1,0 +1,60 @@
+# Producción: se usa junto al compose normal, que no se toca.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build     (o npm run backend:prod)
+# Exige en el .env: POSTGRES_PASSWORD, INTERNAL_SECRET, LECTOR_TOKEN, ADMIN_USER y ADMIN_PASSWORD (ver .env.example).
+# Si falta alguno, Docker Compose no arranca y dice cuál. Pensado para ir detrás de un proxy con HTTPS en el mismo equipo:
+# la web sólo escucha en 127.0.0.1 y es el proxy el que la publica.
+
+x-secretos: &secretos
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env}
+  INTERNAL_SECRET: ${INTERNAL_SECRET:?Falta INTERNAL_SECRET en el .env (openssl rand -hex 32)}
+  LECTOR_TOKEN: ${LECTOR_TOKEN:?Falta LECTOR_TOKEN en el .env (openssl rand -hex 32)}
+  COOKIE_SECURE: "1"
+
+services:
+  db:
+    # Sin puerto publicado: sólo se llega a PostgreSQL desde la red de Docker
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env}
+
+  bets:
+    environment:
+      <<: *secretos
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+      ADMIN_USER: ${ADMIN_USER:?Falta ADMIN_USER en el .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Falta ADMIN_PASSWORD en el .env}
+
+  esports:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+
+  odds:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+      CAPTURAS_DIR: /capturas
+
+  basket:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+
+  tennis:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+
+  gateway:
+    # Sin puerto publicado: sólo lo alcanzan la web y el lector por la red de Docker
+    ports: !reset []
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?Falta INTERNAL_SECRET en el .env}
+      LECTOR_TOKEN: ${LECTOR_TOKEN:?Falta LECTOR_TOKEN en el .env}
+
+  lector:
+    environment:
+      GATEWAY_URL: http://gateway:47365
+      LECTOR_TOKEN: ${LECTOR_TOKEN:?Falta LECTOR_TOKEN en el .env}
+
+  web:
+    # Sólo en este equipo: el proxy con HTTPS es quien la publica
+    ports: !override
+      - "127.0.0.1:${WEB_PORT:-8090}:80"

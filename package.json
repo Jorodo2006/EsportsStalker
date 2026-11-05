@@ -13,6 +13,11 @@
     "backend": "docker compose up -d --build",
     "backend:logs": "docker compose logs -f --tail 100",
     "backend:stop": "docker compose down",
+    "backend:debug": "docker compose --profile debug up -d --build",
+    "backend:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build",
+    "db:backup": "node scripts/backup.js",
+    "db:restore": "node scripts/restore.js",
+    "test": "node --test \"server/test/**/*.test.js\"",
     "extension": "node scripts/extension.js"
   },
   "dependencies": {

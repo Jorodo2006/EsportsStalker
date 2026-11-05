@@ -44,18 +44,22 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 npm install
 npm run backend    # docker compose up -d --build: web (http://127.0.0.1:8090) + PostgreSQL + gateway + servicios (Docker Desktop encendido)
 npm run dev        # Vite (http://127.0.0.1:5173) con recarga al momento; necesita el backend en marcha
-npm run typecheck  # tsc --noEmit: es la única comprobación automática que hay
+npm run typecheck  # tsc --noEmit
+npm test           # pruebas del servidor (node:test, sin base de datos): validación de apuestas y firmas
+npm run backend:debug  # como backend, más Adminer (http://127.0.0.1:8080); Adminer no arranca con npm run backend
+npm run backend:prod   # producción: docker-compose.prod.yml (exige secretos en el .env, ver .env.example)
+npm run db:backup      # copia de PostgreSQL en backups/ (ignorada por git); npm run db:restore -- <fichero> la restaura
 npm run build      # typecheck + vite build
 npm run extension  # prepara extension-chrome/, la extensión de reserva
 npm run backend:logs  # registros del backend;  npm run backend:stop para pararlo
 ```
 
-- No hay tests automáticos. Antes de dar algo por terminado: `npm run typecheck` sin errores y probar en `npm run dev`.
+- Hay pocas pruebas automáticas (`npm test`, sólo lógica sin base de datos). Antes de dar algo por terminado: `npm run typecheck` y `npm test` sin errores y probar en `npm run dev`.
 - `npm run dev` recarga los cambios de `src/` al momento. La web de `127.0.0.1:8090` es una imagen compilada: para verlos
   ahí hay que volver a ejecutar `npm run backend`.
 - **Si cambias algo en `server/` hay que volver a ejecutar `npm run backend`** (reconstruye la imagen y reinicia los
   contenedores). Para probar una ruta sin la app hace falta la cookie de sesión: `curl -c c.txt -H "Content-Type: application/json" -d '{"username":"…","password":"…"}' http://127.0.0.1:47365/api/auth/login` y luego `curl -b c.txt http://127.0.0.1:47365/api/...`. Para mirar la base de
-  datos: Adminer en http://127.0.0.1:8080 (servidor `db`) o `docker compose exec db psql -U lolet -d lolet`.
+  datos: Adminer (con `npm run backend:debug`) en http://127.0.0.1:8080 (servidor `db`) o `docker compose exec db psql -U lolet -d lolet`.
 - Si cambias `chrome/extension/` o `chrome/bookmarklet/marcador.js` y usas la extensión de reserva, ejecuta
   `npm run extension` y pulsa **Recargar** en `chrome://extensions`.
 
@@ -146,3 +150,4 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/07-backend.md`](docs/specs/07-backend.md) | Microservicios, gateway, PostgreSQL, migraciones, avisos en vivo |
 | [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
 | [`docs/specs/09-tenis.md`](docs/specs/09-tenis.md) | App de tenis: datos de ESPN, cuotas por sets y juegos, modelo y recomendaciones |
+| [`docs/specs/10-base-de-datos.md`](docs/specs/10-base-de-datos.md) | Esquema de PostgreSQL: tablas, relaciones, diagramas y puntos a vigilar |

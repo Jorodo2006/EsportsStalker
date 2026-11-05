@@ -98,7 +98,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 | `odds.jobs` | Trabajos del lector (`source`: `manual` o `auto`), con el progreso por casa y el inicio del partido (`start`), que ordena la cola |
 | `odds.book_urls` | Dirección de cada partido en cada casa |
 
-Para mirar la base de datos: Adminer en http://127.0.0.1:8080 (Sistema *PostgreSQL*, servidor `db`, usuario, clave y
+Para mirar la base de datos: Adminer (arranca con `npm run backend:debug`, no con `npm run backend`) en http://127.0.0.1:8080 (Sistema *PostgreSQL*, servidor `db`, usuario, clave y
 base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec db psql -U lolet -d lolet`.
 
 ## Usuarios y sesiones
@@ -114,3 +114,22 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 - **Contraseña olvidada.** `docker compose exec bets node services/bets/reset-password.js <usuario> <nueva>`.
 - **Apuestas ajenas.** El id de la apuesta lo manda el cliente y es único entre todos: guardar con un id de otro usuario da 404, e importar
   el CSV de otro le da ids nuevos.
+
+## Producción y seguridad entre servicios
+
+- **`docker-compose.prod.yml`** se usa junto al normal (`npm run backend:prod`). Exige en el `.env`: `POSTGRES_PASSWORD`,
+  `INTERNAL_SECRET`, `LECTOR_TOKEN`, `ADMIN_USER` y `ADMIN_PASSWORD`; si falta alguno Docker Compose no arranca y dice
+  cuál. Ni PostgreSQL ni el gateway publican puertos; la web sólo escucha en `127.0.0.1` (la publica un proxy con HTTPS) y
+  la cookie de sesión lleva `Secure`.
+- **`INTERNAL_SECRET`**: el gateway firma `x-user-id` y `x-user-admin` con un HMAC (`x-user-sig`, ver
+  `server/shared/internal.js`) y `bets` lo comprueba en cada petición. Sin él (desarrollo) no se firma ni se exige.
+- **`LECTOR_TOKEN`**: con él, las rutas del lector del gateway (`/jobs`, `/odds`, `/snapshot`, `/auto`…) exigen la
+  cabecera `x-lector-token` y dejan de responder con CORS; el contenedor `lector` la manda. Sin él (desarrollo) siguen
+  abiertas para el marcador y la extensión de reserva, que no funcionan con el token puesto.
+- **`ADMIN_USER` / `ADMIN_PASSWORD`**: si no hay usuarios, `bets` crea ese administrador al arrancar. Si ya los hay, no
+  hace nada.
+- **Límites de intentos** (en memoria, `bets/auth.js`): login por IP y usuario (5 fallos → 1 min) y por IP (30 → 10 min);
+  registro 5 por IP y hora. La IP la pone nginx en `X-Real-IP`.
+- **Copias de seguridad**: `npm run db:backup` (`pg_dump -Fc` desde el contenedor `db`, conserva las últimas 14) y
+  `npm run db:restore -- <fichero>`. En producción: `COMPOSE_FILES=docker-compose.yml,docker-compose.prod.yml` y
+  programarlo con cron.

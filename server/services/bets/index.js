@@ -5,6 +5,7 @@ const { migrate, query } = require('../../shared/db');
 const env = require('../../shared/env');
 const store = require('./store');
 const auth = require('./auth');
+const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
 // A quien no es administrador tampoco le llegan las claves comunes
@@ -25,16 +26,17 @@ function cleanPatch(patch) {
 // El gateway comprueba la sesión y pasa el usuario en estas cabeceras; este servicio no se publica directamente
 function who(req) {
   const id = req.headers['x-user-id'];
-  if (!id) throw fail('Inicia sesión', 401);
-  return { id, isAdmin: req.headers['x-user-admin'] === '1' };
+  const admin = req.headers['x-user-admin'] === '1' ? '1' : '0';
+  if (!id || !internal.verify(id, admin, req.headers['x-user-sig'])) throw fail('Inicia sesión', 401);
+  return { id, isAdmin: admin === '1' };
 }
 
 const routes = [
   // ---------- Cuenta (estas cuatro primeras son las únicas abiertas sin sesión) ----------
   ['GET', '/api/auth/config', () => auth.config()],
   ['GET', '/api/auth/me', ({ req }) => auth.userOf(auth.cookieOf(req))],
-  ['POST', '/api/auth/register', ({ body, res }) => auth.register(body, res)],
-  ['POST', '/api/auth/login', ({ body, res }) => auth.login(body, res)],
+  ['POST', '/api/auth/register', ({ body, req, res }) => auth.register(body, req, res)],
+  ['POST', '/api/auth/login', ({ body, req, res }) => auth.login(body, req, res)],
   ['POST', '/api/auth/logout', ({ req, res }) => auth.logout(req, res)],
   ['POST', '/api/auth/password', ({ req, body }) => auth.changePassword(who(req).id, req, body)],
   // El gateway pregunta aquí de quién es cada sesión (no se publica)
@@ -52,5 +54,6 @@ const routes = [
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))
+  .then(() => auth.bootstrapAdmin())
   .then(() => start({ name: 'bets', port: Number(process.env.PORT) || 4003, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

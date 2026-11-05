@@ -61,6 +61,8 @@ services:
     restart: unless-stopped
     environment:
       GATEWAY_URL: http://gateway:47365
+      # Sólo el token (no todo el .env): el contenedor que abre páginas de terceros no necesita más secretos
+      LECTOR_TOKEN: ${LECTOR_TOKEN:-}
     volumes:
       # El lector de cada casa es el mismo del marcador: se lee en cada trabajo, sin reconstruir
       - ./chrome/bookmarklet:/lector-src:ro
@@ -96,9 +98,11 @@ services:
     depends_on:
       - gateway
 
-  # Visor web de la base de datos: http://127.0.0.1:8080 (Sistema PostgreSQL, servidor db, usuario y clave del .env)
+  # Visor web de la base de datos: http://127.0.0.1:8080 (Sistema PostgreSQL, servidor db, usuario y clave del .env).
+  # Sólo para depurar: no arranca con `npm run backend`, sino con `npm run backend:debug` (perfil "debug")
   adminer:
-    image: adminer:latest
+    profiles: ["debug"]
+    image: adminer:4
     restart: unless-stopped
     environment:
       ADMINER_DEFAULT_SERVER: db
