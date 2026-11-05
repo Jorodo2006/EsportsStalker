@@ -40,7 +40,7 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 ## Combinadas
 
 - **Guardado.** `normalizeBet` lee `legs`, que puede llegar como array o como texto JSON desde el CSV. Si hay 2 o más
-  selecciones válidas, se llama a `normalizeCombo`, que recalcula siempre en el proceso principal:
+  selecciones válidas, se llama a `normalizeCombo`, que recalcula siempre en el backend:
   - **cuota** = producto de las cuotas de las selecciones; las nulas cuentan como 1;
   - **estado**:
     - `lost` si alguna selección está perdida;

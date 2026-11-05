@@ -117,8 +117,8 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
   return (
     <Card title={title} className="overflow-hidden">
       {!rows.length ? <Empty>Sin datos todavía</Empty> : (
-        <div className="-m-5">
-          <table className="w-full">
+        <div className="-m-5 overflow-x-auto">
+          <table className="w-full min-w-[480px]">
             <thead className="bg-zinc-900/60"><tr>
               <th className={th}></th><th className={th + ' text-right'}>Apuestas</th><th className={th + ' text-right'}>Apostado</th>
               <th className={th + ' text-right'}>En juego</th><th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
@@ -154,19 +154,22 @@ function History({ bets, onEdit, onSettle }: {
 
   return (
     <Card className="overflow-hidden" title="Historial" action={
-      <div className="flex gap-2">
-        <div className="relative">
+      <div className="flex w-full gap-2 sm:w-auto">
+        <div className="relative min-w-0 flex-1">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <Input className="h-8 w-48 pl-8" placeholder="Buscar" value={q} onChange={e => setQ(e.target.value)} />
+          <Input className="h-8 w-full pl-8 sm:w-48" placeholder="Buscar" value={q} onChange={e => setQ(e.target.value)} />
         </div>
-        <Select className="h-8 w-44" value={st} onChange={e => setSt(e.target.value)}>
+        <Select className="h-8 min-w-0 flex-1 sm:w-44 sm:flex-none" value={st} onChange={e => setSt(e.target.value)}>
           <option value="">Todos los estados</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </Select>
       </div>
     }>
-      {!list.length ? <Empty>{bets.length ? 'Ninguna apuesta coincide con el filtro' : 'Aún no has registrado apuestas. Pulsa "Nueva apuesta".'}</Empty> : (
-        <div className="-m-5 overflow-x-auto">
+      {!list.length ? <Empty>{bets.length ? 'Ninguna apuesta coincide con el filtro' : 'Aún no has registrado apuestas. Pulsa "Nueva apuesta".'}</Empty> : <>
+        <div className="-m-5 divide-y divide-zinc-800/70 lg:hidden">
+          {list.map(b => <BetCard key={b.id} bet={b} onEdit={onEdit} onSettle={onSettle} />)}
+        </div>
+        <div className="-m-5 hidden overflow-x-auto lg:block">
           <table className="w-full">
             <thead className="bg-zinc-900/60"><tr>
               {['Fecha', 'Liga', 'Partido', 'Mercado', 'Selección', 'Casa'].map(h => <th key={h} className={th}>{h}</th>)}
@@ -218,7 +221,38 @@ function History({ bets, onEdit, onSettle }: {
             </tbody>
           </table>
         </div>
-      )}
+      </>}
     </Card>
+  );
+}
+
+// El historial en el móvil: once columnas no caben, así que cada apuesta es una tarjeta
+function BetCard({ bet: b, onEdit, onSettle }: { bet: Bet; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void }) {
+  const cur = useCurrency();
+  const p = betProfit(b);
+  const combo = !!b.legs?.length;
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{b.selection}</div>
+          <div className="truncate text-xs text-zinc-400">{combo ? `Combinada ×${b.legs!.length}` : `${b.event} · ${b.market}`}</div>
+        </div>
+        <div className={'shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
+          {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+        <Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge>
+        <span className="min-w-0 truncate tabular-nums">{[fmtDate(b.date), b.bookmaker, `${money(b.stake, cur)} a ${odd(b.odds)}`].filter(Boolean).join(' · ')}</span>
+        <div className="ml-auto flex shrink-0 gap-1">
+          {b.status === 'pending' && !combo && <>
+            <Button size="icon" variant="success" title="Ganada" aria-label="Ganada" onClick={() => onSettle(b, 'won')}><Check size={15} /></Button>
+            <Button size="icon" variant="danger" title="Perdida" aria-label="Perdida" onClick={() => onSettle(b, 'lost')}><X size={15} /></Button>
+          </>}
+          <Button size="icon" variant="ghost" title="Editar" aria-label="Editar" onClick={() => onEdit(b)}><Pencil size={15} /></Button>
+        </div>
+      </div>
+    </div>
   );
 }

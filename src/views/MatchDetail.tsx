@@ -232,11 +232,11 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
         </Empty>
       ) : (
         <>
-          <div className="sticky top-0 z-10 -mx-8 flex flex-wrap items-center gap-3 border-b border-zinc-800/70 bg-zinc-950/85 px-8 py-2.5 backdrop-blur">
-            <div className="flex flex-wrap gap-1">
+          <div className="sticky top-0 z-10 -mx-3 flex flex-wrap items-center gap-3 border-b border-zinc-800/70 bg-zinc-950/85 px-3 py-2.5 lg:-mx-6 lg:px-6 backdrop-blur">
+            <div className="flex w-full gap-1 overflow-x-auto sm:w-auto sm:flex-wrap">
               {(['all', ...sections] as Section[]).map(s => (
                 <button key={s} onClick={() => setSection(s)}
-                  className={cn('cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition',
+                  className={cn('shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition',
                     section === s ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100')}>
                   {SECTION_LABEL(s)}
                   <span className={cn('ml-1.5 tabular-nums', section === s ? 'text-zinc-950/60' : 'text-zinc-600')}>
@@ -294,7 +294,7 @@ function OddButton({ price, best, onClick, title, className }: { price?: number;
   return (
     <button onClick={e => onClick?.(e.shiftKey)} onContextMenu={e => { e.preventDefault(); onClick?.(true); }}
       title={title && title + ' · clic derecho: añadir a combinada'}
-      className={cn('h-8 cursor-pointer rounded-md text-[13px] font-semibold tabular-nums transition',
+      className={cn('h-9 cursor-pointer rounded-md text-[13px] font-semibold tabular-nums transition lg:h-8',
         best ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40 hover:bg-emerald-500/25'
           : 'bg-zinc-800/70 text-zinc-200 hover:bg-zinc-700', className)}>
       {odd(price)}
@@ -317,8 +317,8 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
         <ChevronDown size={14} className={cn('shrink-0 text-zinc-500 transition-transform', !open && '-rotate-90')} />
         <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-100" title={group}>{title}</h4>
         {open ? <>
-          <span className="w-11 text-right text-[10px] font-medium uppercase tracking-wider text-zinc-600" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
-          {books.map(bk => <BookHead key={bk} name={bk} className="w-[72px]" />)}
+          <span className="hidden w-11 text-right text-[10px] font-medium uppercase tracking-wider text-zinc-600 sm:inline" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
+          {books.map(bk => <BookHead key={bk} name={bk} className="w-16 sm:w-[72px]" />)}
         </> : <span className="text-xs text-zinc-500">{lines.length > 1 ? `${lines.length} líneas` : ''}{best ? ` · hasta ${odd(best)}` : ''}</span>}
       </button>
       {open && <>
@@ -330,11 +330,11 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
             return (
               <div key={l.key} className="py-1">
                 {l.outcomes.map((o, oi) => (
-                  <div key={o.id} className="flex items-center gap-2 px-4 py-0.5 hover:bg-zinc-800/20">
-                    <span className="min-w-0 flex-1 truncate pl-[22px] text-sm text-zinc-300" title={o.label}>{o.label}</span>
-                    <span className="w-11 text-right text-xs tabular-nums text-zinc-500">{sum ? pct(inv[oi] / sum) : '–'}</span>
+                  <div key={o.id} className="flex items-center gap-2 px-3 py-0.5 hover:bg-zinc-800/20 sm:px-4">
+                    <span className="min-w-0 flex-1 truncate text-sm text-zinc-300 sm:pl-[22px]" title={o.label}>{o.label}</span>
+                    <span className="hidden w-11 text-right text-xs tabular-nums text-zinc-500 sm:inline">{sum ? pct(inv[oi] / sum) : '–'}</span>
                     {books.map(bk => (
-                      <OddButton key={bk} className="w-[72px]" price={o.prices[bk]} best={bests[oi].n > 1 && o.prices[bk] === bests[oi].p}
+                      <OddButton key={bk} className="w-16 sm:w-[72px]" price={o.prices[bk]} best={bests[oi].n > 1 && o.prices[bk] === bests[oi].p}
                         title={`${bk}: registrar apuesta`} onClick={add => onPick(group, o.label, bk, o.prices[bk], add)} />
                     ))}
                   </div>

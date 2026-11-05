@@ -1,6 +1,6 @@
 // Servidor HTTP mínimo para cada servicio (sin framework, sólo node:http).
 // Rutas: [método, '/ruta/:param', handler]. El handler recibe { req, res, params, query, body }.
-// Las rutas /api/* y /internal/* responden { ok: true, data } o { ok: false, error }, igual que el IPC de Electron.
+// Las rutas /api/* y /internal/* responden { ok: true, data } o { ok: false, error }.
 // Las demás (las del marcador y la extensión) devuelven lo que devuelva el handler tal cual.
 const http = require('http');
 

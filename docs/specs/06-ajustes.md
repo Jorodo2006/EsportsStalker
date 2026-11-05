@@ -1,6 +1,9 @@
 # 06 · Ajustes y pendientes
 
-## Ajustes (`src/views/SettingsView.tsx`, valores por defecto en `server/services/bets/store.js`, tabla `bets.settings`)
+## Ajustes (`src/views/SettingsView.tsx`, valores por defecto en `server/services/bets/store.js`, tablas `bets.settings` y `bets.user_settings`)
+
+De cada usuario: `currency`, `initialBankroll`, `featuredBooks`, `refreshSeconds` y `favoriteLeagues`. El resto son comunes: sólo
+los ve y los cambia el administrador (a los demás no les llegan las claves, y lo que manden de esos ajustes se ignora).
 
 | Ajuste | Por defecto | Uso |
 |---|---|---|
@@ -8,10 +11,12 @@
 | `initialBankroll` | 0 | Banca inicial, que se suma al beneficio |
 | `featuredBooks` | `Bet365,Winamax,Betway` | Columnas del comparador y su orden |
 | `refreshSeconds` | 30 | Refresco del calendario y del directo (mínimo 10) |
-| `oddsAutoEnabled` | `true` | Lecturas de cuotas programadas (las hace la extensión) |
-| `oddsRefreshMinutes` | 5 | Cada cuántos minutos se vuelve a leer cada partido (2–240) |
-| `oddsAutoHours` | 6 | Se leen los partidos que empiezan en las próximas N horas (1–48) |
+| `oddsAutoEnabled` | `true` | Lecturas de cuotas programadas (las hace el lector de Docker) |
+| `oddsRefreshMinutes` | 5 | Cada cuántos minutos se vuelve a leer cada partido cercano (2–240) |
+| `oddsAutoHours` | 6 | Son cercanos los partidos que empiezan en las próximas N horas (1–48) |
+| `oddsFarEnabled` | `true` | Leer también los de más adelante: cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (tenis: cada 3 h y sólo desde 24 h antes) |
 | `favoriteLeagues` | `[]` | Ligas que salen primero |
+| `signupOpen` | `true` | Si se pueden crear cuentas desde la pantalla de entrada |
 | `lolesportsKey` | clave pública de lolesports.com | Cabecera `x-api-key` |
 | `leaguepediaUser` / `leaguepediaPassword` | vacío | *Bot password* de Fandom (opcional). **Sólo en la base de datos o en el `.env`, nunca en el repo** |
 
@@ -26,6 +31,7 @@ Variables (plantilla en `.env.example`):
 | `LEAGUEPEDIA_USER` | `leaguepediaUser` |
 | `LEAGUEPEDIA_PASSWORD` | `leaguepediaPassword` |
 | `LOLESPORTS_KEY` | `lolesportsKey` |
+| `WEB_PORT` / `WEB_BIND` | Puerto de la web (8090) e interfaz donde escucha (`0.0.0.0`; `127.0.0.1` la cierra a la red) |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Base de datos (por defecto `lolet`). Sólo cuentan antes del primer arranque |
 
 - Lo que venga del `.env` manda sobre lo guardado: `GET /internal/settings` de `bets` devuelve `{ ...ajustes, ...env }`.
@@ -35,12 +41,12 @@ Variables (plantilla en `.env.example`):
 
 Secciones de la pantalla:
 
+- **Tu cuenta**: cambiar la contraseña, salir y, si eres administrador, abrir o cerrar el registro.
 - **Preferencias.**
 - **Fuentes de datos**: incluye *Probar conexiones* para comprobar lolesports y Leaguepedia.
-- **Cuotas automáticas**: activar, cada cuántos minutos y qué horizonte, más el estado (extensión conectada, cola,
+- **Cuotas automáticas** (administrador): activar, cada cuántos minutos y qué horizonte, más el estado (lector, cola,
   partidos que entran ahora).
-- **Extensión de Chrome**: carpeta de la extensión, con un botón para abrirla y los pasos para cargarla en
-  `chrome://extensions` con *Cargar descomprimida*.
+- **Extensión de Chrome** (administrador): `npm run extension` y los pasos para cargarla en `chrome://extensions`.
 - **Marcador de cuotas**: un enlace que se arrastra a la barra de favoritos.
 
 Al cargar los ajustes:

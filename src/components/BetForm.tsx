@@ -136,7 +136,7 @@ export function BetFormDialog() {
   return (
     <Dialog open={!!betDraft} onClose={closeBet} title={title} wide={!!legs}>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm">
             {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
               <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
@@ -151,27 +151,29 @@ export function BetFormDialog() {
             ))}
           </div>
         </div>
-        <div className={cn('grid gap-3', legs ? 'grid-cols-2' : 'grid-cols-3')}>
+        <div className={cn('grid grid-cols-1 gap-3', legs ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
           <Field label="Fecha"><Input type="date" required value={f.date || ''} onChange={set('date')} /></Field>
           {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
           <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Winamax, Betway…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
         </div>
         {legs ? (
           <div className="rounded-xl border border-zinc-800">
-            <div className="grid grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-400">
+            <div className="hidden grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-400 lg:grid">
               <span>Partido</span><span>Mercado</span><span>Selección</span><span>Cuota</span><span>Estado</span><span />
             </div>
             <div className="flex flex-col gap-2 p-3">
               {legs.map((l, i) => (
-                <div key={i} className="grid grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] items-center gap-2">
-                  {l.sport === 'basket' || l.sport === 'tennis'
-                    ? <Input list="dl-events" placeholder="LAL @ BOS" value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
-                    : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
-                      onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
-                  <OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} />
-                  <Input placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
-                  <Input type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
-                  <div className="flex gap-1">
+                <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 lg:grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] lg:border-0 lg:pb-0">
+                  <div className="col-span-6 lg:col-span-1">
+                    {l.sport === 'basket' || l.sport === 'tennis'
+                      ? <Input list="dl-events" placeholder="LAL @ BOS" value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                      : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
+                        onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
+                  </div>
+                  <div className="col-span-6 lg:col-span-1"><OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} /></div>
+                  <Input className="col-span-6 lg:col-span-1" placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
+                  <Input className="col-span-2 lg:col-span-1" type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
+                  <div className="col-span-3 flex gap-1 lg:col-span-1">
                     {(Object.keys(LEG_LABEL) as LegStatus[]).map(v => {
                       const Icon = LEG_ICON[v];
                       return (
@@ -186,7 +188,7 @@ export function BetFormDialog() {
                   <Button type="button" size="icon" variant="ghost" title="Quitar" disabled={legs.length <= 2} onClick={() => setLegs(legs.filter((_, j) => j !== i))}><X size={15} /></Button>
                 </div>
               ))}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: sportNow }])}><Plus size={14} />Añadir selección</Button>
                 <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
               </div>
@@ -199,12 +201,12 @@ export function BetFormDialog() {
               : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
                 onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
             <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
           </div>
         </>}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {legs
             ? <Field label="Cuota total"><div className={inputCls + ' flex items-center font-semibold tabular-nums text-zinc-300'}>{odd(o)}</div></Field>
             : <Field label="Cuota (decimal)"><Input type="number" step="0.01" min="1.01" required value={f.odds || ''} onChange={set('odds')} /></Field>}

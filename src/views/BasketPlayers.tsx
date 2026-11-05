@@ -24,7 +24,7 @@ export default function BasketPlayers() {
       <PageHeader title="Jugadores" subtitle="Busca un jugador de la NBA, la Euroliga o la EuroCup y mira si su línea tiene valor">
         <div className="relative">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <Input autoFocus className="w-80 pl-9" placeholder="Nombre del jugador" value={q} onChange={e => setQ(e.target.value)} />
+          <Input autoFocus className="w-full pl-9 sm:w-80" placeholder="Nombre del jugador" value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </PageHeader>
       {dq.length >= 2 && (

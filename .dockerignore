@@ -1,0 +1,12 @@
+node_modules
+dist
+release
+extension-chrome
+capturas
+server
+docs
+.git
+.claude
+.env
+.env.*
+*.log

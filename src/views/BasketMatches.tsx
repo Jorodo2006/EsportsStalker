@@ -176,10 +176,7 @@ function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: strin
     refetchInterval: st === 'live' ? 20_000 : false, staleTime: st === 'post' ? 3600e3 : 15_000
   });
   if (box.isLoading) return <Loading label="Cargando estadísticas…" />;
-  // El renderer se recarga solo, pero el proceso principal no: si aún no conoce la ruta, hay que relanzar la app
-  if (box.error) return /No handler registered/.test(String(box.error))
-    ? <ErrorBox error="La app tiene que reiniciarse para ver las estadísticas">Para <code>npm run dev</code> (Ctrl+C) y vuelve a lanzarlo: el proceso principal de Electron no se recarga solo.</ErrorBox>
-    : <ErrorBox error={box.error} />;
+  if (box.error) return <ErrorBox error={box.error} />;
   const teams = ['away', 'home'].map(s => box.data!.teams.find(t => t.side === s)).filter(Boolean) as BoxTeam[];
   const played = teams.some(t => t.players.length);
   return (

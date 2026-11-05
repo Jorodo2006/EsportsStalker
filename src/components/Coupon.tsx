@@ -21,7 +21,8 @@ export function Coupon() {
   const qc = useQueryClient();
   const cur = useCurrency();
   const w = useWallet();
-  const [open, setOpen] = useState(true);
+  // En el móvil empieza plegado: abierto taparía toda la pantalla
+  const [open, setOpen] = useState(() => window.innerWidth >= 1024);
   const [mode, setMode] = useState<'single' | 'combo'>('single');
   const [stakes, setStakes] = useState<Record<string, string>>({});
   const [comboStake, setComboStake] = useState('');
@@ -68,7 +69,7 @@ export function Coupon() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex max-h-[80vh] w-[360px] flex-col overflow-hidden rounded-2xl border border-zinc-700/70 bg-zinc-950 shadow-2xl shadow-black/60">
+    <div className="fixed inset-x-2 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 flex max-h-[75dvh] flex-col sm:left-auto sm:w-[360px] lg:bottom-5 lg:right-5 overflow-hidden rounded-2xl border border-zinc-700/70 bg-zinc-950 shadow-2xl shadow-black/60">
       <button onClick={() => setOpen(!open)} className="flex w-full cursor-pointer items-center gap-2 bg-amber-500 px-4 py-2.5 text-sm font-semibold text-zinc-950">
         <Ticket size={16} />Cupón
         <span className="rounded-full bg-zinc-950/20 px-1.5 text-xs">{slip.length}</span>

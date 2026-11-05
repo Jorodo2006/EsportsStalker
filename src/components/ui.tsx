@@ -30,7 +30,7 @@ export function Card({ className, children, title, action }: { className?: strin
   return (
     <div className={cn('rounded-xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm', className)}>
       {(title || action) && (
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-800/80 px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 px-5 py-3.5">
           <h3 className="text-sm font-semibold text-zinc-200">{title}</h3>
           {action}
         </div>
@@ -52,7 +52,8 @@ export function Badge({ tone = 'neutral', children, className }: { tone?: keyof 
   return <span className={cn('inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide', BADGE[tone], className)}>{children}</span>;
 }
 
-export const inputCls = 'h-9 w-full rounded-lg border border-zinc-700/70 bg-zinc-900 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-amber-500/70 focus:ring-2 focus:ring-amber-500/20';
+// 16 px en el móvil: con menos, el iPhone amplía la página al tocar el campo
+export const inputCls = 'h-10 w-full rounded-lg border border-zinc-700/70 bg-zinc-900 px-3 text-base text-zinc-100 lg:h-9 lg:text-sm placeholder:text-zinc-500 outline-none transition focus:border-amber-500/70 focus:ring-2 focus:ring-amber-500/20';
 
 export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...p} className={cn(inputCls, className)} />;
@@ -89,13 +90,13 @@ export function Dialog({ open, onClose, title, children, wide }: { open: boolean
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-6 pt-14 backdrop-blur-sm" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-2 pt-4 backdrop-blur-sm sm:p-6 sm:pt-14" onMouseDown={e => e.target === e.currentTarget && onClose()}>
       <div className={cn('relative w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50', wide ? 'max-w-5xl' : 'max-w-2xl')}>
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-6 py-4">
+        <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0 flex-1 text-base font-semibold">{title}</div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar"><X size={18} /></Button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6">{children}</div>
       </div>
     </div>
   );

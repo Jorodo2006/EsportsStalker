@@ -50,6 +50,8 @@
 
 html { color-scheme: dark; }
 html, body, #root { height: 100%; }
+/* En el móvil la barra del navegador aparece y desaparece: dvh es el alto que queda de verdad */
+#root { height: 100dvh; }
 body { @apply bg-zinc-950 text-zinc-100 antialiased; }
 #root > div { background-image: radial-gradient(ellipse 70% 40% at 50% -10%, color-mix(in oklab, var(--acc-500) 9%, transparent), transparent); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }

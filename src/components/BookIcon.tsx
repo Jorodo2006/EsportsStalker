@@ -32,7 +32,7 @@ export function BookIcon({ name, size = 18, className }: { name: string; size?: 
 export function BookHead({ name, className }: { name: string; className?: string }) {
   return (
     <span className={cn('inline-flex min-w-0 items-center justify-center gap-1.5 text-[11px] font-semibold text-zinc-300', className)} title={name}>
-      <BookIcon name={name} size={16} /><span className="truncate">{name}</span>
+      <BookIcon name={name} size={16} /><span className="hidden truncate sm:inline">{name}</span>
     </span>
   );
 }

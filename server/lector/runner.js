@@ -1,7 +1,7 @@
 // lector: hace en Docker, con Chromium sin cabeza, los trabajos de lectura de cuotas que antes hacía la extensión
 // de Chrome. Pregunta al gateway cada pocos segundos (GET /jobs/next), abre Winamax y Betway, busca el partido,
-// pasa el mismo lector del marcador (electron/bookmarklet/marcador.js, montado en /lector-src) y manda las cuotas.
-// Es el mismo flujo que electron/extension/background.js, cambiando chrome.tabs/scripting por Playwright.
+// pasa el mismo lector del marcador (chrome/bookmarklet/marcador.js, montado en /lector-src) y manda las cuotas.
+// Es el mismo flujo que chrome/extension/background.js, cambiando chrome.tabs/scripting por Playwright.
 // No usa trucos anti-bot: si una casa bloquea el navegador, el trabajo termina con error y se ve en la app.
 const fs = require('fs');
 const { chromium } = require('playwright');

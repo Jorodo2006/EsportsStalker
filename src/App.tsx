@@ -47,40 +47,47 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
 
+  const appTabs = (
+    <div className="flex rounded-2xl border border-zinc-800 bg-zinc-900/70 p-1" role="tablist" aria-label="App">
+      {APPS.map(({ id, label, icon: Icon }) => (
+        <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
+          className={cn('flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl px-2 py-1.5 text-sm font-semibold transition lg:flex-none lg:px-3.5',
+            app === id ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-black/30' : 'text-zinc-400 hover:text-zinc-100')}>
+          <Icon size={16} />{label}
+          {!!live[id] && <span className={cn('flex items-center gap-1 rounded-full px-1.5 text-[11px] font-bold', app === id ? 'bg-zinc-950/20 text-zinc-950' : 'bg-rose-500/15 text-rose-300')}>
+            <span className={cn('h-1.5 w-1.5 animate-pulse rounded-full', app === id ? 'bg-zinc-950' : 'bg-rose-400')} />{live[id]}
+          </span>}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div data-app={app} className="flex h-full flex-col">
-      <header className="flex h-16 shrink-0 items-center gap-4 border-b border-zinc-800/70 bg-zinc-950/80 px-6 backdrop-blur">
-        <div className="font-score text-xl font-bold tracking-tight">Esports<span className="text-amber-400">Stalker</span></div>
-        <div className="flex rounded-2xl border border-zinc-800 bg-zinc-900/70 p-1" role="tablist" aria-label="App">
-          {APPS.map(({ id, label, icon: Icon }) => (
-            <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
-              className={cn('flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-1.5 text-sm font-semibold transition',
-                app === id ? 'bg-amber-500 text-zinc-950 shadow-lg shadow-black/30' : 'text-zinc-400 hover:text-zinc-100')}>
-              <Icon size={16} />{label}
-              {!!live[id] && <span className={cn('flex items-center gap-1 rounded-full px-1.5 text-[11px] font-bold', app === id ? 'bg-zinc-950/20 text-zinc-950' : 'bg-rose-500/15 text-rose-300')}>
-                <span className={cn('h-1.5 w-1.5 animate-pulse rounded-full', app === id ? 'bg-zinc-950' : 'bg-rose-400')} />{live[id]}
-              </span>}
-            </button>
-          ))}
+      <header className="shrink-0 border-b border-zinc-800/70 bg-zinc-950/80 px-3 backdrop-blur lg:px-6">
+        <div className="flex h-14 items-center gap-3 lg:h-16 lg:gap-4">
+          <div className="font-score text-xl font-bold tracking-tight">Esports<span className="text-amber-400">Stalker</span></div>
+          <div className="hidden lg:block">{appTabs}</div>
+          <nav className="hidden gap-1 lg:flex">
+            {NAV.map(({ view: v, label, icon: Icon }) => (
+              <button key={v} onClick={() => go(v)} aria-current={view === v}
+                className={cn('flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
+                  view === v ? 'text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>
+                <Icon size={16} className={view === v ? 'text-amber-400' : ''} />{label}
+              </button>
+            ))}
+          </nav>
+          <WalletChip onClick={() => go('bets')} />
+          <button onClick={() => go('settings')} title="Ajustes" aria-label="Ajustes" aria-current={view === 'settings'}
+            className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg transition', view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
+            <Cog size={17} />
+          </button>
         </div>
-        <nav className="flex gap-1">
-          {NAV.map(({ view: v, label, icon: Icon }) => (
-            <button key={v} onClick={() => go(v)} aria-current={view === v}
-              className={cn('flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
-                view === v ? 'text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>
-              <Icon size={16} className={view === v ? 'text-amber-400' : ''} />{label}
-            </button>
-          ))}
-        </nav>
-        <WalletChip onClick={() => go('bets')} />
-        <button onClick={() => go('settings')} title="Ajustes" aria-current={view === 'settings'}
-          className={cn('grid h-9 w-9 cursor-pointer place-items-center rounded-lg transition', view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
-          <Cog size={17} />
-        </button>
+        <div className="pb-2 lg:hidden">{appTabs}</div>
       </header>
 
       <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1500px] px-6 py-6">
+        <div className="mx-auto max-w-[1500px] px-3 py-4 lg:px-6 lg:py-6">
           <BackendBanner />
           {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : <TennisMatches />)}
           {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : <TennisPlayers />)}
@@ -89,10 +96,19 @@ export default function App() {
         </div>
       </main>
 
+      <nav className="grid shrink-0 grid-cols-3 border-t border-zinc-800/70 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        {NAV.map(({ view: v, label, icon: Icon }) => (
+          <button key={v} onClick={() => go(v)} aria-current={view === v}
+            className={cn('flex cursor-pointer flex-col items-center gap-0.5 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
+            <Icon size={20} className={view === v ? 'text-amber-400' : ''} />{label}
+          </button>
+        ))}
+      </nav>
+
       <BetFormDialog />
       <Coupon />
       {toastMsg && (
-        <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm shadow-xl">{toastMsg}</div>
+        <div className="fixed bottom-20 left-1/2 z-[60] w-max max-w-[90vw] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm shadow-xl lg:bottom-5">{toastMsg}</div>
       )}
     </div>
   );

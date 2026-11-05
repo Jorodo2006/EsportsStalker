@@ -1,6 +1,7 @@
 // Apuestas y ajustes en PostgreSQL (esquema bets). Antes era data.json en la carpeta de datos del usuario.
 const crypto = require('crypto');
 const { query, tx } = require('../../shared/db');
+const { fail } = require('../../shared/service');
 
 const DEFAULT_SETTINGS = {
   currency: '€',
@@ -11,19 +12,27 @@ const DEFAULT_SETTINGS = {
   lolesportsKey: '0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z',
   refreshSeconds: 30,
   favoriteLeagues: [],
-  // Lecturas de cuotas programadas (las hace la extensión de Chrome)
+  // Lecturas de cuotas programadas (las hace el lector de Docker)
   oddsAutoEnabled: true,
   oddsRefreshMinutes: 5,
-  oddsAutoHours: 6 // partidos que empiezan en las próximas N horas
+  oddsAutoHours: 6, // partidos que empiezan en las próximas N horas: se leen cada oddsRefreshMinutes
+  oddsFarEnabled: true, // el resto, hasta 48 h: cada hora, o cada 3 h a más de un día
+  signupOpen: true // si se pueden crear cuentas nuevas desde la pantalla de entrada
 };
+
+// Cada usuario tiene las suyas; el resto de ajustes son comunes y sólo los cambia el administrador
+const USER_KEYS = ['currency', 'initialBankroll', 'featuredBooks', 'refreshSeconds', 'favoriteLeagues'];
+const SECRET_KEYS = ['leaguepediaUser', 'leaguepediaPassword', 'lolesportsKey'];
 
 const OLD_FEATURED = ['Pinnacle,Bet365,Bwin,Betfair Ex,William Hill,Unibet,Betway,1xBet,Codere,Betsson,Marathonbet,Stake', 'Bet365,Winamax,Betway,Betfair,William Hill', 'Bet365,Winamax,William Hill,Betway'];
 // Ajustes de las antiguas fuentes por API (Pinnacle, OddsPapi, Unibet…), que ya no se usan
 const OBSOLETE = ['usePinnacle', 'useWinamax', 'useKambi', 'oddspapiKey', 'oddspapiBookmakers', 'pinnacleKey', 'oddsProvider'];
 
-async function getSettings() {
+// Sin usuario (los demás servicios) sólo cuentan los ajustes comunes
+async function getSettings(userId) {
   const { rows } = await query('SELECT key, value FROM bets.settings');
-  const s = { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map(r => [r.key, r.value])) };
+  const own = userId ? (await query('SELECT key, value FROM bets.user_settings WHERE user_id = $1', [userId])).rows : [];
+  const s = { ...DEFAULT_SETTINGS, ...Object.fromEntries([...rows, ...own].map(r => [r.key, r.value])) };
   // La lista de casas de versiones anteriores pasa a la nueva por defecto
   if (OLD_FEATURED.includes(s.featuredBooks)) s.featuredBooks = DEFAULT_SETTINGS.featuredBooks;
   // Bet365 se quitó: no se deja leer desde el lector de Docker
@@ -32,20 +41,30 @@ async function getSettings() {
   return s;
 }
 
-async function setSettings(patch) {
-  const entries = Object.entries(patch || {}).filter(([k, v]) => !OBSOLETE.includes(k) && v !== undefined);
-  if (entries.length) {
-    await tx(async c => {
-      for (const [k, v] of entries) {
+// El formulario manda todos los ajustes: los comunes se ignoran si no es administrador
+async function setSettings(userId, isAdmin, patch) {
+  const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined);
+  await tx(async c => {
+    for (const [k, v] of entries) {
+      if (USER_KEYS.includes(k)) {
+        await c.query(`INSERT INTO bets.user_settings (user_id, key, value) VALUES ($1, $2, $3::jsonb)
+          ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [userId, k, JSON.stringify(v)]);
+      } else if (isAdmin) {
         await c.query(`INSERT INTO bets.settings (key, value) VALUES ($1, $2::jsonb)
           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [k, JSON.stringify(v)]);
       }
-    });
-  }
-  return getSettings();
+    }
+  });
+  return getSettings(userId);
 }
 
-const hasSettings = async () => (await query('SELECT 1 FROM bets.settings LIMIT 1')).rowCount > 0;
+// El primer usuario se queda con las apuestas y las preferencias de cuando no había cuentas
+async function claimExisting(c, userId) {
+  await c.query('UPDATE bets.bets SET user_id = $1 WHERE user_id IS NULL', [userId]);
+  await c.query(`INSERT INTO bets.user_settings (user_id, key, value)
+    SELECT $1, key, value FROM bets.settings WHERE key = ANY($2)`, [userId, USER_KEYS]);
+  await c.query('DELETE FROM bets.settings WHERE key = ANY($1)', [USER_KEYS]);
+}
 
 // ---------- Apuestas ----------
 const LEGS_SQL = `(SELECT json_agg(json_build_object('event', l.event, 'league', l.league, 'market', l.market,
@@ -60,20 +79,27 @@ function fromRow(r) {
   return bet;
 }
 
-async function listBets() {
-  const { rows } = await query(`SELECT b.*, ${LEGS_SQL} FROM bets.bets b ORDER BY b.seq`);
+async function listBets(userId) {
+  const { rows } = await query(`SELECT b.*, ${LEGS_SQL} FROM bets.bets b WHERE b.user_id = $1 ORDER BY b.seq`, [userId]);
   return rows.map(fromRow);
 }
 
-// Guarda la apuesta (ya normalizada) con sus selecciones. onlyNew: no pisa una existente (importar)
-async function writeBet(c, b, onlyNew) {
-  const vals = [b.id, b.date, b.league, b.event, b.market, b.selection, b.bookmaker, b.odds, b.stake, b.status, b.cashout, b.notes, b.sport];
-  const r = await c.query(`INSERT INTO bets.bets (id, date, league, event, market, selection, bookmaker, odds, stake, status, cashout, notes, sport)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    ON CONFLICT (id) DO ${onlyNew ? 'NOTHING' : `UPDATE SET date = EXCLUDED.date, sport = EXCLUDED.sport, league = EXCLUDED.league, event = EXCLUDED.event,
+// Guarda la apuesta (ya normalizada) con sus selecciones. onlyNew: no pisa una existente (importar).
+// El id lo manda el cliente y es único entre todos: nunca se puede pisar la apuesta de otro usuario
+async function writeBet(c, userId, b, onlyNew) {
+  if (onlyNew) {
+    const { rows } = await c.query('SELECT user_id FROM bets.bets WHERE id = $1', [b.id]);
+    if (rows[0] && String(rows[0].user_id) === String(userId)) return false;
+    if (rows[0]) b = { ...b, id: crypto.randomUUID() }; // el CSV de otro usuario: para éste es una apuesta nueva
+  }
+  const vals = [b.id, b.date, b.league, b.event, b.market, b.selection, b.bookmaker, b.odds, b.stake, b.status, b.cashout, b.notes, b.sport, userId];
+  const r = await c.query(`INSERT INTO bets.bets (id, date, league, event, market, selection, bookmaker, odds, stake, status, cashout, notes, sport, user_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    ON CONFLICT (id) DO UPDATE SET date = EXCLUDED.date, sport = EXCLUDED.sport, league = EXCLUDED.league, event = EXCLUDED.event,
       market = EXCLUDED.market, selection = EXCLUDED.selection, bookmaker = EXCLUDED.bookmaker, odds = EXCLUDED.odds,
-      stake = EXCLUDED.stake, status = EXCLUDED.status, cashout = EXCLUDED.cashout, notes = EXCLUDED.notes, updated_at = now()`}`, vals);
-  if (onlyNew && !r.rowCount) return false;
+      stake = EXCLUDED.stake, status = EXCLUDED.status, cashout = EXCLUDED.cashout, notes = EXCLUDED.notes, updated_at = now()
+    WHERE bets.bets.user_id = EXCLUDED.user_id`, vals);
+  if (!r.rowCount) throw fail('Esa apuesta no existe', 404);
   await c.query('DELETE FROM bets.bet_legs WHERE bet_id = $1', [b.id]);
   for (const [i, l] of (b.legs || []).entries()) {
     await c.query(`INSERT INTO bets.bet_legs (bet_id, pos, event, league, market, selection, odds, status, sport)
@@ -82,22 +108,22 @@ async function writeBet(c, b, onlyNew) {
   return true;
 }
 
-async function saveBet(bet) {
+async function saveBet(userId, bet) {
   const clean = normalizeBet(bet);
-  await tx(c => writeBet(c, clean, false));
+  await tx(c => writeBet(c, userId, clean, false));
   return clean;
 }
 
-async function deleteBet(id) {
-  await query('DELETE FROM bets.bets WHERE id = $1', [String(id)]);
+async function deleteBet(userId, id) {
+  await query('DELETE FROM bets.bets WHERE id = $1 AND user_id = $2', [String(id), userId]);
 }
 
 // Añade las que no estén ya (por id); devuelve cuántas son nuevas
-async function importBets(list) {
+async function importBets(userId, list) {
   if (!Array.isArray(list)) throw new Error('Se esperaba una lista de apuestas');
   return tx(async c => {
     let n = 0;
-    for (const b of list) if (await writeBet(c, normalizeBet({ ...b, id: b.id || undefined }), true)) n++;
+    for (const b of list) if (await writeBet(c, userId, normalizeBet({ ...b, id: b.id || undefined }), true)) n++;
     return n;
   });
 }
@@ -166,4 +192,4 @@ function normalizeCombo(b, legs, num) {
   };
 }
 
-module.exports = { getSettings, setSettings, hasSettings, listBets, saveBet, deleteBet, importBets, DEFAULT_SETTINGS, OBSOLETE };
+module.exports = { getSettings, setSettings, claimExisting, listBets, saveBet, deleteBet, importBets, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

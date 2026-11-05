@@ -1,8 +1,8 @@
 # 03 · Cuotas
 
 **Regla:** no se usa ninguna API de cuotas. Las cuotas se leen de las páginas de **Winamax y Betway** y llegan al
-backend por el gateway (`127.0.0.1:47365`). Se pueden leer a mano (botón *Actualizar cuotas*) o solas cada X minutos
-(lecturas programadas, de LoL y de baloncesto).
+backend por el gateway (`127.0.0.1:47365`). Se pueden leer a mano (botón *Actualizar cuotas*) o solas (lecturas
+programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL.
 
 > **Desde la 0.4** las lee el contenedor `lector` (`server/lector/runner.js`): un Chromium sin cabeza dentro de Docker
 > que hace lo mismo que la extensión (buscar el partido, abrir sus pestañas, pasar `marcador.js` y mandar el resultado),
@@ -14,12 +14,12 @@ backend por el gateway (`127.0.0.1:47365`). Se pueden leer a mano (botón *Actua
 
 | Pieza | Fichero | Papel |
 |---|---|---|
-| Servidor puente | `server/services/odds/bridge.js` (detrás del gateway en `127.0.0.1:47365`) | Guarda las importaciones durante 3 h en `odds.imports`, lleva los trabajos y las direcciones aprendidas |
-| Programador | `server/services/odds/scheduler.js` | Crea un trabajo por partido próximo cada X minutos |
-| Lector (marcador) | `electron/bookmarklet/marcador.js` | Lee la página de la casa abierta. Funciona como bookmarklet o inyectado por la extensión |
-| Extensión Chrome MV3 | `electron/extension/` (`manifest.json`, `background.js`, `pagina.js`) | Hace los trabajos: abre las casas en pestañas de fondo, busca el partido, lo lee y cierra |
+| Servidor puente | `server/services/odds/bridge.js` (detrás del gateway en `127.0.0.1:47365`) | Guarda las importaciones durante 6 h en `odds.imports` y el histórico en `odds.price_history`, lleva los trabajos y las direcciones aprendidas |
+| Programador | `server/services/odds/scheduler.js` | Crea trabajos para los partidos próximos, más seguidos cuanto más cerca están |
+| Lector (marcador) | `chrome/bookmarklet/marcador.js` | Lee la página de la casa abierta. Funciona como bookmarklet o inyectado por la extensión |
+| Extensión Chrome MV3 | `chrome/extension/` (`manifest.json`, `background.js`, `pagina.js`) | Hace los trabajos: abre las casas en pestañas de fondo, busca el partido, lo lee y cierra |
 | Normalizador | `server/services/odds/odds.js` (+ `equipos.js`) | Convierte lo recibido en filas comparables entre casas, cuota de ganador e histórico |
-| Generador | `electron/services/extension.js` | Copia la extensión a `extension-chrome/` y genera el marcador |
+| Generador | `scripts/extension.js` (`npm run extension`), `src/lib/api.ts` | Copia la extensión a `extension-chrome/`; el enlace del marcador se genera en la web |
 | Interfaz | `src/views/MatchDetail.tsx`, `src/components/BookIcon.tsx` | Comparador por columnas |
 
 ## Servidor puente (`bridge.js`, servicio `odds`)
@@ -43,20 +43,35 @@ backend por el gateway (`127.0.0.1:47365`). Se pueden leer a mano (botón *Actua
 - **Direcciones aprendidas.** La dirección de cada partido en cada casa se guarda en `odds.book_urls`, así la
   próxima vez se va directo.
 - **Tras cada importación** (`afterImport` en `odds.js`): se guarda la cuota de ganador en `odds.imports.ml` (para las
-  tarjetas del calendario) y las cuotas que han cambiado en `odds.price_history`.
-- **Generación de la extensión.** Electron copia la extensión al arrancar con `writeExtension` (`electron/services/extension.js`).
-  Pone el puerto y genera `lector.js` a partir de `marcador.js`.
+  tarjetas del calendario) y se actualiza `odds.price_history`.
+- **Histórico** (`odds.price_history`, se guarda 365 días). Cada fila es un tramo: la cuota valió `price` desde `ts`
+  hasta `last_seen`. Si una lectura ve la misma cuota, alarga `last_seen`; si cambia, abre otra fila. Así el `last_seen`
+  más nuevo antes de `match_start` da la cuota de cierre, y una cuota cuyo `last_seen` se queda atrás es que la casa la
+  ha quitado. `match_start` separa las revanchas (misma pareja con el inicio a más de 12 h). `POST /api/odds/history`
+  con `{ match }` devuelve los tramos de un partido, del más antiguo al más nuevo.
+- **Generación de la extensión.** `npm run extension` (`scripts/extension.js`) copia la extensión a `extension-chrome/`,
+  pone el puerto y genera `lector.js` a partir de `marcador.js`.
 
 ## Lecturas programadas (`scheduler.js`)
 
-- Cada minuto: limpia lo caducado y, si `oddsAutoEnabled`, pide el calendario a `esports` (y una página más si hace
-  falta) y se queda con los partidos **sin empezar que empiezan en las próximas `oddsAutoHours` horas** (6 por defecto),
-  con los dos equipos conocidos (sin TBD).
+- Cada minuto: limpia lo caducado y, si `oddsAutoEnabled`, pide el calendario de los tres deportes y se queda con los
+  partidos **sin empezar**, con los dos equipos conocidos (sin TBD). No se leen partidos en directo.
+- Frecuencia según lo que falte para el partido:
+
+  | Falta | Se lee cada |
+  |---|---|
+  | Hasta `oddsAutoHours` (tenis: hasta 3 h como mucho) | `oddsRefreshMinutes` min |
+  | Hasta 24 h | 60 min (tenis: 180 min) |
+  | Hasta 48 h (tenis: no entra) | 180 min |
+
+  Los dos tramos lejanos se apagan con `oddsFarEnabled`. Si `oddsRefreshMinutes` es mayor, manda ese valor.
 - Crea un trabajo `auto` para cada uno que no tenga un trabajo abierto ni uno (manual o programado) de hace menos de
-  `oddsRefreshMinutes` minutos (5 por defecto, mínimo 2).
-- La extensión los hace **de uno en uno**. Hace falta que Chrome esté abierto con la extensión cargada.
-- `GET /api/odds/auto/status` da el estado para *Ajustes → Cuotas automáticas*: partidos que entran, cola, última
-  pasada y última vez que la extensión preguntó (`lastPoll`).
+  lo que le toque, sin pasar de **10 en cola**. Entran primero los cercanos y luego los lejanos, y en cada grupo por
+  turnos entre deportes, para que el tenis no deje sin sitio al baloncesto, que suele jugarse de noche.
+- El lector hace **uno cada vez** (unos 35 s de media, unas 100 lecturas por hora): primero los manuales y luego el que
+  empieza antes. Si no da abasto, lo que se retrasa son los partidos lejanos.
+- `GET /api/odds/auto/status` da el estado para *Ajustes → Cuotas automáticas*: partidos cercanos, cuántos hay más
+  adelante (`far`), cola, última pasada y última vez que el lector preguntó (`lastPoll`).
 
 ## Extensión (`background.js`)
 

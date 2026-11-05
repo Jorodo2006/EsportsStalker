@@ -3,7 +3,7 @@ node_modules/
 dist/
 release/
 
-# Generado por la app al arrancar (se copia desde electron/extension/)
+# Generado por npm run extension (se copia desde chrome/extension/)
 extension-chrome/
 
 # Datos locales de cada usuario: capturas de páginas de las casas y direcciones aprendidas

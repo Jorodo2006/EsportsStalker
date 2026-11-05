@@ -1,4 +1,4 @@
-// Tipos compartidos con el proceso principal (electron/preload.js expone window.api) y el backend (server/)
+// Tipos de la interfaz (src/lib/api.ts implementa window.api) y de lo que devuelve el backend (server/)
 
 export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfwon' | 'halflost';
 
@@ -38,7 +38,9 @@ export interface Settings {
   lolesportsKey: string;
   refreshSeconds: number;
   favoriteLeagues: string[];
-  oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace la extensión de Chrome)
+  oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace el lector de Docker)
+  oddsFarEnabled: boolean; // leer también, más espaciados, los partidos de hasta 48 h
+  signupOpen: boolean; // si se pueden crear cuentas nuevas (lo cambia el administrador)
   oddsRefreshMinutes: number; // cada cuántos minutos se vuelve a leer cada partido
   oddsAutoHours: number; // partidos que empiezan en las próximas N horas
   envKeys?: (keyof Settings)[]; // ajustes que vienen del fichero .env (sus valores no llegan a la interfaz)
@@ -144,10 +146,11 @@ export interface AutoStatus {
   hours: number;
   lastRun: number | null; // última pasada del programador
   error: string | null;
-  matches: { id: string; league: string; start: string; a: TeamRef; b: TeamRef }[]; // partidos que entran ahora
-  queued: number; // trabajos esperando a la extensión
+  matches: { id: string; league: string; start: string; a: TeamRef; b: TeamRef }[]; // partidos cercanos que entran ahora
+  far: number; // partidos más lejanos que se leen más espaciados
+  queued: number; // trabajos esperando al lector
   running: number;
-  lastPoll: number | null; // última vez que la extensión preguntó si había trabajo (null: no la ha visto)
+  lastPoll: number | null; // última vez que el lector preguntó si había trabajo (null: no lo ha visto)
 }
 
 // true si responde cada pieza del backend
@@ -188,7 +191,17 @@ export interface BoxLine { min: number; pts: number; reb: number; ast: number; s
 export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
 export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
+export interface AuthUser { id: string; username: string; isAdmin: boolean }
+
 export interface Api {
+  auth: {
+    me(): Promise<AuthUser | null>;
+    config(): Promise<{ first: boolean; signupOpen: boolean }>;
+    login(username: string, password: string): Promise<AuthUser>;
+    register(username: string, password: string): Promise<AuthUser>;
+    logout(): Promise<void>;
+    changePassword(current: string, next: string): Promise<void>;
+  };
   settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings> };
   bets: {
     list(): Promise<Bet[]>; save(b: BetDraft): Promise<Bet>; delete(id: string): Promise<void>;
@@ -234,7 +247,6 @@ export interface Api {
     search(q: string): Promise<BasketPlayerHit[]>;
     gamelog(league: BasketLeagueId, playerId: string, teamId?: string): Promise<BasketGamelog>;
   };
-  extension: { folder(): Promise<string>; open(): Promise<void> };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;
   marcador: { url(): Promise<string>; paste(m?: { a: TeamRef; b: TeamRef }): Promise<{ ok: boolean; partido: string | null }> };
   onOddsImported(cb: () => void): () => void;

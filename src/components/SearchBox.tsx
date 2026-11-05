@@ -78,7 +78,7 @@ export function SearchBox({ onPick }: { onPick: (p: Pick) => void }) {
   }
 
   return (
-    <div ref={box} className="relative w-96">
+    <div ref={box} className="relative w-full sm:w-96">
       <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       <input value={q} placeholder="Buscar jugador o equipo (Faker, T1, Gen.G…)"
         onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}

@@ -21,7 +21,7 @@ export function DayStrip({ value, onChange, counts, span = 7 }: {
   const now = today();
   return (
     <div className="flex items-stretch gap-1">
-      <button className="grid w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200" onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
+      <button className="grid w-6 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 sm:w-8" onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
       <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` }}>
         {days.map(d => {
           const dt = new Date(d + 'T12:00:00');
@@ -33,13 +33,14 @@ export function DayStrip({ value, onChange, counts, span = 7 }: {
                 sel ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
               <span className="text-[11px] font-medium first-letter:uppercase">{d === now ? 'Hoy' : dt.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')}</span>
               <span className="font-score text-2xl leading-none font-semibold">{dt.getDate()}</span>
-              <span className={cn('mt-0.5 text-[10px] tnum', sel ? 'text-zinc-900/70' : 'text-zinc-600')}>{c ? (c.total ? `${c.total} partidos` : 'sin partidos') : ' '}</span>
+              <span className={cn('mt-0.5 hidden text-[10px] tnum sm:block', sel ? 'text-zinc-900/70' : 'text-zinc-600')}>{c ? (c.total ? `${c.total} partidos` : 'sin partidos') : ' '}</span>
+              <span className={cn('mt-0.5 text-[10px] tnum sm:hidden', sel ? 'text-zinc-900/70' : 'text-zinc-600')}>{c?.total || ' '}</span>
               {!!c?.live && <span className="absolute right-2 top-2 h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" title={`${c.live} en juego`} />}
             </button>
           );
         })}
       </div>
-      <button className="grid w-8 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200" onClick={() => onChange(addDays(value, span))} aria-label="Semana siguiente"><ChevronRight size={16} /></button>
+      <button className="grid w-6 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 sm:w-8" onClick={() => onChange(addDays(value, span))} aria-label="Semana siguiente"><ChevronRight size={16} /></button>
     </div>
   );
 }
@@ -115,7 +116,7 @@ export function MatchRow({ state, time, status, a, b, odds, active, onClick, tag
   const score = (t: RowTeam) => <span className={cn('h-6 font-score text-lg leading-6 font-semibold tnum', t.lose ? 'text-zinc-500' : state === 'live' ? 'text-rose-300' : 'text-zinc-50')}>{t.score ?? ''}</span>;
   return (
     <button onClick={onClick} aria-current={active}
-      className={cn('grid w-full cursor-pointer grid-cols-[64px_1fr_auto] items-center gap-3 px-4 py-2 text-left transition',
+      className={cn('grid w-full cursor-pointer grid-cols-[52px_1fr_auto] items-center gap-2 px-3 py-2 text-left transition sm:grid-cols-[64px_1fr_auto] sm:gap-3 sm:px-4',
         active ? 'bg-amber-500/10 shadow-[inset_3px_0_0_var(--acc-500)]' : 'hover:bg-zinc-800/30')}>
       <div className="flex flex-col items-start leading-tight">
         <span className={cn('text-xs tnum', state === 'live' ? 'font-semibold text-rose-300' : 'text-zinc-400')}>{time}</span>
@@ -147,13 +148,13 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   const sa = Number(a.score), sb = Number(b.score);
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
-    <div className={cn('flex min-w-0 flex-col items-center gap-2 text-center', which === 'a' ? 'justify-self-end' : 'justify-self-start')}>
-      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-zinc-950/60 ring-1 ring-zinc-800"><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></div>
-      <div className="max-w-44 truncate text-base font-semibold" title={t.name}>{t.name}</div>
+    <div className={cn('flex w-full min-w-0 flex-col items-center gap-2 text-center sm:w-auto', which === 'a' ? 'sm:justify-self-end' : 'sm:justify-self-start')}>
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-zinc-950/60 ring-1 ring-zinc-800 sm:h-16 sm:w-16"><TeamLogo src={t.logo} name={t.short || t.name} size={36} /></div>
+      <div className="max-w-full truncate text-sm font-semibold sm:max-w-44 sm:text-base" title={t.name}>{t.name}</div>
     </div>
   );
   const num = (t: RowTeam, which: 'a' | 'b') => (
-    <span className={cn('relative font-score text-7xl leading-none font-bold tnum', lead && lead !== which ? 'text-zinc-500' : state === 'live' ? 'text-zinc-50' : 'text-zinc-100')}>
+    <span className={cn('relative font-score text-5xl leading-none font-bold tnum sm:text-7xl', lead && lead !== which ? 'text-zinc-500' : state === 'live' ? 'text-zinc-50' : 'text-zinc-100')}>
       {t.score ?? 0}
       {lead === which && <span className="absolute -bottom-2 left-1/2 h-1 w-8 -translate-x-1/2 rounded-full bg-amber-500" />}
     </span>
@@ -164,12 +165,12 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
         <span className="font-medium text-zinc-300">{competition}</span>
         {detail && <span>{detail}</span>}
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-6 pb-6 pt-4">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-5 pt-3 sm:gap-6 sm:px-6 sm:pb-6 sm:pt-4">
         {side(a, 'a')}
         <div className="flex flex-col items-center gap-2">
           {state === 'pre'
-            ? <span className="font-score text-5xl font-semibold tnum text-zinc-100">{center}</span>
-            : <div className="flex items-center gap-4">{num(a, 'a')}<span className="font-score text-4xl text-zinc-700">–</span>{num(b, 'b')}</div>}
+            ? <span className="font-score text-4xl font-semibold tnum text-zinc-100 sm:text-5xl">{center}</span>
+            : <div className="flex items-center gap-2 sm:gap-4">{num(a, 'a')}<span className="font-score text-3xl text-zinc-700 sm:text-4xl">–</span>{num(b, 'b')}</div>}
           <span className={cn('mt-1 rounded-full px-2.5 py-0.5 text-xs font-medium', state === 'live' ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-800/80 text-zinc-400')}>
             {state === 'live' && <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400 align-middle" />}{centerSub}
           </span>
@@ -184,10 +185,10 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
 // Pestañas bajo el marcador
 export function SheetTabs<T extends string>({ value, onChange, items, right }: { value: T; onChange: (v: T) => void; items: [T, string][]; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-1 border-t border-zinc-800/70 px-3">
+    <div className="flex flex-wrap items-center gap-1 border-t border-zinc-800/70 px-1 sm:px-3">
       {items.map(([v, label]) => (
         <button key={v} onClick={() => onChange(v)}
-          className={cn('-mb-px cursor-pointer border-b-2 px-3 py-3 text-sm font-medium transition',
+          className={cn('-mb-px cursor-pointer whitespace-nowrap border-b-2 px-2 py-3 text-sm font-medium transition sm:px-3',
             value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-200')}>{label}</button>
       ))}
       {right && <div className="ml-auto flex gap-2 py-2">{right}</div>}

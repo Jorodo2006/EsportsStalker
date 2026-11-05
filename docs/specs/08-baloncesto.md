@@ -89,6 +89,6 @@ vuelven a pedir.
 
 ## Pendiente
 
-- Flechas de subida y bajada de las cuotas (el histórico ya se guarda en `odds.price_history`; falta la ruta).
+- Flechas de subida y bajada de las cuotas (el histórico se guarda en `odds.price_history` y lo da `POST /api/odds/history`; falta la interfaz).
 - Clasificaciones por liga.
 - No ajusta por bajas de compañeros, partidos seguidos, ritmo del rival ni defensa por posición.

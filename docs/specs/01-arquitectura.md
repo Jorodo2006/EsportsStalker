@@ -4,29 +4,37 @@
 
 | Proceso | Código | Qué hace |
 |---|---|---|
-| Backend (Docker) | `server/`, `docker-compose.yml` | Gateway + microservicios `bets`, `esports` y `odds` sobre PostgreSQL. Todas las peticiones a internet, los datos y el puente de las cuotas. Ver [07-backend.md](07-backend.md) |
-| Principal (Node, CommonJS) | `electron/main.js`, `electron/services/*` | Ventana, reenvío de cada canal IPC al gateway (`backend.js`), diálogos de fichero, portapapeles, abrir Chrome, generar la extensión y el marcador (`extension.js`) |
-| Preload | `electron/preload.js` | Expone `window.api` con `contextBridge`. Cada llamada es `ipcRenderer.invoke(canal)` y lanza un error si la respuesta trae `ok: false` |
-| Renderer (React 19 + TS) | `src/` | Interfaz. No hace peticiones a internet ni al backend: todo pasa por `window.api` |
-| Chrome del usuario | `electron/bookmarklet/marcador.js`, `electron/extension/` | Lee las cuotas de las casas donde no hay bloqueos anti-bot y las manda al gateway (`127.0.0.1:47365`) |
+| Backend (Docker) | `server/`, `docker-compose.yml` | Gateway + microservicios sobre PostgreSQL. Todas las peticiones a internet, los datos y el puente de las cuotas. Ver [07-backend.md](07-backend.md) |
+| Web (nginx en Docker) | `web/`, puerto 8090 abierto a la red | Sirve la interfaz compilada y reenvía sólo `/api` y `/events` al gateway |
+| Interfaz (React 19 + TS, en el navegador) | `src/` | Las vistas sólo hablan con `window.api` (`src/lib/api.ts`), que llama al backend por el mismo origen. No llama a internet |
+| Chrome del usuario (reserva) | `chrome/bookmarklet/marcador.js`, `chrome/extension/` | Lee las cuotas de las casas si bloquean al lector de Docker y las manda al gateway (`127.0.0.1:47365`) |
 
-`main.js` envuelve cada canal con `handle(canal, fn)`, que devuelve `{ ok: true, data }` o `{ ok: false, error }`.
+En desarrollo (`npm run dev`) Vite sirve la interfaz en `127.0.0.1:5173` y hace de proxy al gateway, igual que nginx.
+Las respuestas del backend son `{ ok: true, data }` o `{ ok: false, error }`; `api.ts` devuelve `data` o lanza el error.
 Si el backend no responde, el error dice cómo arrancarlo (`npm run backend`).
 
-## Canales IPC (`window.api`)
+**Red:** sólo la web se abre a la red, para entrar desde el móvil (`http://<IP del equipo>:8090`); `WEB_BIND=127.0.0.1` en el
+`.env` la cierra. Va por HTTP, así que sólo es para una red de confianza: fuera de casa haría falta HTTPS o una VPN. Sin HTTPS
+el móvil tampoco puede leer el portapapeles, de modo que *Pegar del marcador* sólo funciona en el propio equipo.
+
+**Sesión:** `AuthGate` (`src/components/AuthGate.tsx`) enseña la pantalla de entrada hasta que hay sesión. Ver
+[07-backend.md](07-backend.md).
+
+## `window.api`
 
 | Grupo | Métodos | Backend |
 |---|---|---|
+| `auth` | `me`, `config`, `login`, `register`, `logout`, `changePassword` | bets |
 | `settings` | `get`, `set(patch)` | bets |
-| `bets` | `list`, `save(bet)`, `delete(id)`, `export()`, `import()` | bets + diálogos de fichero en `main.js` (CSV o JSON) |
+| `bets` | `list`, `save(bet)`, `delete(id)`, `export()`, `import()` | bets. Exportar descarga un CSV e importar acepta CSV o JSON, los dos en el navegador (`src/lib/csv.ts`) |
 | `esports` | `leagues`, `schedule({leagueIds, pageToken})`, `live`, `eventDetails(id)`, `liveWindow(gameId)` | esports |
 | `stats` | `searchPlayers(q)`, `searchTeams(q)`, `resolveTeam(name, code)`, `playerGames(page)`, `teamGames(team)`, `teamRoster(team)` | esports |
 | `odds` | `match(m)`, `board(events)`, `auto(m)`, `autoStatus()` | odds |
-| `extension` | `folder()`, `open()` | local: carpeta `extension-chrome/` |
-| `marcador` | `url()`, `paste(match)` | local (enlace del bookmarklet) + odds (pegado desde el portapapeles) |
+| `tennis`, `basket` | partidos, directo, rankings, plantillas y estadísticas | tennis, basket |
+| `marcador` | `url()`, `paste(match)` | el enlace se genera en el navegador; el pegado lee el portapapeles y va a odds |
 | `backend` | `status()` | gateway (`/api/health`) |
-| eventos | `onOddsImported(cb)`, `onOddsAuto(cb)`, `onBackendStatus(cb)` | SSE del gateway reenviado por `main.js` |
-| otros | `openExternal(url)` | sólo `http(s)://` |
+| eventos | `onOddsImported(cb)`, `onOddsAuto(cb)`, `onBackendStatus(cb)` | SSE del gateway (`/events`), se reconecta solo |
+| otros | `openExternal(url)` | sólo `http(s)://`, en otra pestaña |
 
 Los tipos de todo esto están en `src/lib/types.ts` (interfaz `Api`).
 
@@ -44,8 +52,8 @@ Los tipos de todo esto están en `src/lib/types.ts` (interfaz `Api`).
 
 | Qué | Dónde | En git |
 |---|---|---|
-| Apuestas, ajustes, cuotas, histórico, trabajos, direcciones de las casas, caché de Leaguepedia | PostgreSQL en Docker (volumen `pgdata`) | No |
+| Usuarios, apuestas, ajustes, cuotas, histórico, trabajos, direcciones de las casas, caché de Leaguepedia | PostgreSQL en Docker (volumen `pgdata`) | No |
+| Preferencias de la interfaz (secciones plegadas, boleto) | `localStorage` del navegador | No |
 | Credenciales (`.env`) | raíz del proyecto, junto a `docker-compose.yml` | No (sí `.env.example`) |
-| Extensión generada | `extension-chrome/` (en desarrollo, junto al proyecto; empaquetada, en la carpeta de datos) | No |
+| Extensión generada | `extension-chrome/` (`npm run extension`) | No |
 | Fotos de las páginas de las casas | `capturas/captura-<casa>-<nombre>.json` (volumen del servicio `odds`) | No |
-| `data.json` y `casas-urls.json` antiguos | se importan a la base de datos y se renombran a `*.migrado-*` | No |

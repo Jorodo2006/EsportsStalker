@@ -1,7 +1,8 @@
-# Backend de LoL Esports Tracker: PostgreSQL + gateway + cuatro servicios.
+# LoL Esports Tracker: web + PostgreSQL + gateway + servicios.
 #   docker compose up -d --build     (o npm run backend)
-# Sólo el gateway (127.0.0.1:47365) y, para depurar, PostgreSQL (127.0.0.1:55432) y Adminer (127.0.0.1:8080)
-# se abren al equipo, nunca a la red.
+# Sólo la web (puerto 8090) se abre a la red, para entrar desde el móvil; pide usuario y contraseña. El gateway
+# (127.0.0.1:47365) y, para depurar, PostgreSQL (127.0.0.1:55432) y Adminer (127.0.0.1:8080) se quedan en este equipo.
+# Para cerrar la web a la red: WEB_BIND=127.0.0.1 en el .env.
 # Las credenciales salen del .env de esta carpeta (no se sube a git; plantilla en .env.example).
 
 x-servicio: &servicio
@@ -62,7 +63,7 @@ services:
       GATEWAY_URL: http://gateway:47365
     volumes:
       # El lector de cada casa es el mismo del marcador: se lee en cada trabajo, sin reconstruir
-      - ./electron/bookmarklet:/lector-src:ro
+      - ./chrome/bookmarklet:/lector-src:ro
     shm_size: 512m
     depends_on:
       - gateway
@@ -82,6 +83,18 @@ services:
     command: ["node", "services/gateway/index.js"]
     ports:
       - "127.0.0.1:47365:47365"
+
+  # La web: http://127.0.0.1:8090 en este equipo; desde el móvil, http://<IP de este equipo>:8090
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    image: lol-esports-tracker-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8090}:80"
+    depends_on:
+      - gateway
 
   # Visor web de la base de datos: http://127.0.0.1:8080 (Sistema PostgreSQL, servidor db, usuario y clave del .env)
   adminer:
