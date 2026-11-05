@@ -1,4 +1,5 @@
 // Tipos de la interfaz (src/lib/api.ts implementa window.api) y de lo que devuelve el backend (server/)
+import type { Reliability } from './value';
 
 export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfwon' | 'halflost';
 
@@ -168,6 +169,47 @@ export interface TennisMatch {
 }
 export interface TennisRank { rank: number; previous: number; points: number; trend: string; id: string; name: string; short: string; flag: string; country: string }
 
+// Recomendaciones de un partido (modelo + cuotas). p, pModel y pMarket van de 0 a 1; ev es el valor esperado por unidad
+export interface TennisPick {
+  id: string; title: string; market: string; selection: string; family: string; side: 'a' | 'b' | null; book: string; price: number; prices: Record<string, number>;
+  p: number; pModel: number; pMarket: number; fair: number; ev: number; rel: Reliability; why: string;
+}
+export interface TennisPicks {
+  ready: boolean; reason?: 'started' | 'finished' | 'noodds'; surface?: TennisSurface | null; indoor?: boolean; bestOf?: number; oddsAge?: number;
+  match?: { pModel: number; pElo: number; pStats: number; pMarket: number | null; pFinal: number; expectedGames: number; holdA: number; holdB: number; weight: number };
+  top?: TennisPick | null; easy?: TennisPick[]; hard?: TennisPick[]; considered?: number; warnings?: string[];
+}
+export interface TennisDayPick { id: string; tour: Tour; tournament: string; round: string; date: string; a: TennisPlayer; b: TennisPlayer; top: TennisPick; hard: TennisPick | null }
+
+// Ficha de un tenista: datos personales, balance y últimos resultados
+export interface TennisRecord { won: number; lost: number; titles: number; doublesTitles: number; prize: number }
+export interface TennisResult {
+  id: string; date: string; tournament: string; major: boolean; round: string; city: string; win: boolean; score: string; note: string;
+  sets: number; games: number; opponent: { id: string; name: string; flag: string; rank: number | null };
+}
+export interface TennisProfile {
+  id: string; tour: Tour; name: string; photo: string; photoFrom: string; flag: string; country: string; rank: number | null; previous: number | null; points: number | null;
+  age: number | null; birthDate: string | null; birthPlace: string; height: string; weight: string; hand: string; years: number | null; debut: number | null; active: boolean;
+  year: number; season: TennisRecord | null; lastSeason: TennisRecord | null; career: TennisRecord | null; matches: TennisResult[];
+}
+
+// Estadísticas de juego (TennisMyLife): los porcentajes van de 0 a 1 y son null si no hay datos
+export type TennisSurface = 'Hard' | 'Clay' | 'Grass';
+export interface TennisStatBlock {
+  matches: number; won: number; lost: number; winPct: number | null; statMatches: number;
+  gamesWon: number; gamesLost: number; gamesPct: number | null; gamesPerMatch: number | null; gamesWonPerMatch: number | null; gamesLostPerMatch: number | null;
+  setsWon: number; setsLost: number; setsPct: number | null; tbWon: number; tbLost: number; tbPct: number | null; minutesPerMatch: number | null;
+  aces: number; df: number; acesPerMatch: number | null; dfPerMatch: number | null; acePct: number | null; dfPct: number | null;
+  firstInPct: number | null; firstWonPct: number | null; secondWonPct: number | null; servePtsPct: number | null; holdPct: number | null; bpSavedPct: number | null; bpFacedPerMatch: number | null;
+  acesAgainstPerMatch: number | null; ret1Pct: number | null; ret2Pct: number | null; retPtsPct: number | null; breakPct: number | null; bpConvPct: number | null; bpChancesPerMatch: number | null; totalPtsPct: number | null;
+}
+export interface TennisWinLoss { won: number; lost: number; winPct: number | null }
+export interface TennisStatPeriod {
+  key: string; label: string; total: TennisStatBlock; surfaces: Record<TennisSurface, TennisStatBlock>; tour: Record<TennisSurface | 'all', TennisStatBlock>; best: TennisSurface | null; worst: TennisSurface | null;
+  vs: { top10: TennisWinLoss; top11to50: TennisWinLoss; rest: TennisWinLoss }; levels: { grandSlam: TennisWinLoss; masters: TennisWinLoss; others: TennisWinLoss };
+}
+export interface TennisStats { source: string; updated: string | null; minSurface: number; found: boolean; periods: TennisStatPeriod[] }
+
 // ---------- Baloncesto (servicio basket: ESPN para NBA/WNBA, API de la Euroliga para Euroliga/EuroCup) ----------
 export type BasketLeagueId = 'nba' | 'wnba' | 'euroleague' | 'eurocup';
 export interface BasketLeague { id: BasketLeagueId; name: string; country: string; logo: string }
@@ -177,6 +219,23 @@ export interface BasketGame {
   home: BasketSide; away: BasketSide;
 }
 export interface BasketRosterPlayer { id: string; name: string; pos: string; jersey: string; headshot: string; injury: string | null }
+// Clasificación y ficha de equipo
+export interface BasketStanding {
+  id: string; abbr: string; name: string; logo: string; pos: number; seed: number | null; w: number; l: number; pct: number; home: string; road: string; last: string;
+  streak: string; pf: number | null; pa: number | null; diff: number | null; gb: string; form: string[];
+}
+export interface BasketGroup { name: string; teams: BasketStanding[] }
+export interface BasketTeamSide { me: boolean; abbr: string; name: string; logo: string; score: string | null; winner: boolean }
+export interface BasketTeamGame { id: string; date: string; state: string; home: boolean; us: BasketTeamSide; them: BasketTeamSide }
+export interface BasketTeamPlayer {
+  id: string; name: string; pos: string; jersey: string; headshot: string; age: number | null; height: string; weight: string; from: string; years: number | null; salary: number | null;
+  injury: string | null; injuryDetail: string; injuryReturn: string | null; avg: { pts?: number; reb?: number; ast?: number; min?: number } | null;
+}
+export interface BasketTeamInfo {
+  id: string; league: BasketLeagueId; name: string; abbr: string; logo: string; color: string; coach: string; venue: string; capacity: number | null; city: string; country: string;
+  president: string; website: string; division: string; group: string; standing: BasketStanding | null; stats: { label: string; value: string; group?: string }[];
+  leaders: { label: string; players: { id: string; name: string; value: string }[] }[]; results: BasketTeamGame[]; upcoming: BasketTeamGame[]; roster: BasketTeamPlayer[];
+}
 export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null }
 export interface BasketPlayerHit { id: string; league: BasketLeagueId; name: string; team: string; teamId?: string; pos: string; headshot: string }
 // Un partido de un jugador (lo más reciente primero en BasketGamelog.games)
@@ -186,6 +245,12 @@ export interface BasketLogGame {
   min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number;
 }
 export interface BasketGamelog { currentSeason: number; games: BasketLogGame[] }
+// Plantilla con los partidos de cada jugador (escáner de líneas)
+export interface BasketTeamLogs { currentSeason: number; players: (BasketRosterPlayer & { games: BasketLogGame[] })[] }
+// Partidos terminados de una liga con sus parciales (q: un valor por cuarto y prórroga), de más reciente a más antiguo
+export interface BasketPointSide { id: string; pts: number; q: number[] }
+export interface BasketPointGame { id: string; date: string; season: number; type: 'reg' | 'post'; home: BasketPointSide; away: BasketPointSide }
+export interface BasketLeagueGames { currentSeason: number; teams: Record<string, { abbr: string; name: string; logo: string }>; games: BasketPointGame[] }
 // Estadísticas de un partido: por equipo, puntos por cuarto, jugadores y totales; series = enfrentamientos de la temporada
 export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string }
 export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
@@ -224,7 +289,8 @@ export interface Api {
     teamForm(name: string, code?: string): Promise<TeamForm>;
   };
   odds: {
-    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<MatchOdds>;
+    // quiet: sólo leer, sin apuntarlo como el último partido abierto (el marcador lo usa para repartir sus capturas)
+    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
@@ -235,6 +301,11 @@ export interface Api {
     live(): Promise<TennisMatch[]>;
     rankings(tour: Tour): Promise<TennisRank[]>;
     player(tour: Tour, id: string): Promise<TennisMatch[]>;
+    profile(tour: Tour, id: string): Promise<TennisProfile>;
+    stats(tour: Tour, id: string): Promise<TennisStats>;
+    surface(tour: Tour, name: string, city: string): Promise<TennisSurface | null>;
+    picks(date: string, id: string): Promise<TennisPicks>;
+    picksDay(date: string): Promise<TennisDayPick[]>;
   };
   basket: {
     leagues(): Promise<BasketLeague[]>;
@@ -242,6 +313,10 @@ export interface Api {
     days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
     live(): Promise<BasketGame[]>;
     roster(league: BasketLeagueId, teamId: string): Promise<BasketRosterPlayer[]>;
+    standings(league: BasketLeagueId): Promise<BasketGroup[]>;
+    team(league: BasketLeagueId, teamId: string): Promise<BasketTeamInfo>;
+    leagueGames(league: BasketLeagueId): Promise<BasketLeagueGames>;
+    teamLogs(league: BasketLeagueId, teamId: string): Promise<BasketTeamLogs>;
     injuries(): Promise<BasketInjury[]>;
     boxscore(gameId: string): Promise<BasketBox>;
     search(q: string): Promise<BasketPlayerHit[]>;

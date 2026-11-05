@@ -1,7 +1,7 @@
 // Analizador de props de jugador de baloncesto (adaptado de courtside-edge): mercado, línea y cuotas, el panel de
 // valor común con LoL, la proyección, los últimos partidos frente a la línea, tramos, escalera y bajas.
 // Vale para cualquier liga del servicio basket (NBA con ESPN, Euroliga y EuroCup con sus box scores).
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '@/lib/app-context';
@@ -21,7 +21,8 @@ const num = (v: string) => { const n = parseFloat(v.replace(',', '.')); return i
 const fx = (v: number | null | undefined, d = 1) => (v == null || !isFinite(v) ? '–' : v.toFixed(d));
 export const badInjury = (s: string) => /out/i.test(s);
 
-export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null };
+// market y line: con qué abrir el análisis (lo manda el escáner de líneas)
+export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null; market?: BasketMarket; line?: number };
 
 export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { player: Picked; games?: BasketGame[]; injuries?: BasketInjury[]; odds?: MatchOdds }) {
   const { addToSlip, settings } = useApp();
@@ -29,8 +30,10 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
 
-  const [market, setMarket] = useState<BasketMarket>('pts');
+  const [market, setMarket] = useState<BasketMarket>(player.market ?? 'pts');
   const [line, setLine] = useState('');
+  // La línea con la que se abrió se respeta hasta que se cambie de mercado
+  const wanted = useRef<{ market: BasketMarket; line: number } | null>(player.market && player.line != null ? { market: player.market, line: player.line } : null);
   const [over, setOver] = useState('');
   const [under, setUnder] = useState('');
   const [book, setBook] = useState(BOOKS[0]);
@@ -62,6 +65,13 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   // Al cambiar de mercado: la línea principal de las casas si la hay (la más igualada); si no, la de la proyección
   useEffect(() => {
     if (!ctx) return;
+    if (wanted.current?.market !== market) wanted.current = null;
+    if (wanted.current) {
+      const c = casa.find(x => x.line === wanted.current!.line);
+      if (c) useLine(c);
+      else { setLine(String(wanted.current.line).replace('.', ',')); setOver(''); setUnder(''); }
+      return;
+    }
     const main = casa.slice().sort((x, y) => Math.abs((x.over ?? 9) - (x.under ?? 0)) - Math.abs((y.over ?? 9) - (y.under ?? 0)))[0];
     if (main) { useLine(main); return; }
     const s = suggestedLine(all, market, ctx);

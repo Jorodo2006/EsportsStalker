@@ -138,7 +138,7 @@ export const api: Api = {
     teamForm: (name, code) => get('/api/stats/team-form', { name, code })
   },
   odds: {
-    match: m => call('POST', '/api/odds/match', { match: matchOf(m) }),
+    match: (m, opts) => call('POST', '/api/odds/match', { match: matchOf(m), quiet: !!opts?.quiet }),
     board: events => call('POST', '/api/odds/board', { events }),
     // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
     auto: m => call('POST', '/api/odds/jobs', { match: matchOf(m) }),
@@ -149,7 +149,12 @@ export const api: Api = {
     days: (from, n) => get('/api/tennis/days', { from, n }),
     live: () => get('/api/tennis/live'),
     rankings: tour => get(`/api/tennis/rankings/${part(tour)}`),
-    player: (tour, id) => get(`/api/tennis/player/${part(tour)}/${part(id)}`)
+    player: (tour, id) => get(`/api/tennis/player/${part(tour)}/${part(id)}`),
+    profile: (tour, id) => get(`/api/tennis/profile/${part(tour)}/${part(id)}`),
+    stats: (tour, id) => get(`/api/tennis/stats/${part(tour)}/${part(id)}`),
+    surface: (tour, name, city) => get(`/api/tennis/surface/${part(tour)}`, { name, city }),
+    picks: (date, id) => get('/api/tennis/picks', { date, id }),
+    picksDay: date => get('/api/tennis/picks/day', { date })
   },
   basket: {
     leagues: () => get('/api/basket/leagues'),
@@ -157,6 +162,10 @@ export const api: Api = {
     days: (from, n) => get('/api/basket/days', { from, n }),
     live: () => get('/api/basket/live'),
     roster: (league, t) => get(`/api/basket/roster/${part(league)}/${part(t)}`),
+    standings: league => get(`/api/basket/standings/${part(league)}`),
+    team: (league, t) => get(`/api/basket/team/${part(league)}/${part(t)}`),
+    leagueGames: league => get(`/api/basket/league-games/${part(league)}`),
+    teamLogs: (league, t) => get(`/api/basket/team-logs/${part(league)}/${part(t)}`),
     injuries: () => get('/api/basket/injuries'),
     boxscore: id => get(`/api/basket/boxscore/${part(id)}`),
     search: q => get('/api/basket/search', { q }),

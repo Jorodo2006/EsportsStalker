@@ -1,9 +1,14 @@
-// Baloncesto · Jugadores: buscador de NBA, Euroliga y EuroCup y el analizador de líneas del jugador elegido
+// Baloncesto · Jugadores, equipos y líneas: buscador de NBA, Euroliga y EuroCup con el analizador de líneas del jugador elegido,
+// la clasificación y los puntos de cada liga con la ficha de cada equipo, y el escáner que ordena a los jugadores para una línea
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Search, User } from 'lucide-react';
 import { BasketAnalyzer, LEAGUE_NAME, type Picked } from '@/components/BasketAnalyzer';
-import { Empty, Input, PageHeader } from '@/components/ui';
+import { LeaguePoints } from '@/components/BasketPoints';
+import { BasketStandings, BasketTeamSheet } from '@/components/BasketTeamSheet';
+import BasketLines from './BasketLines';
+import type { BasketLeagueId } from '@/lib/types';
+import { Empty, Input, PageHeader, Tabs } from '@/components/ui';
 
 function useDebounced<T>(v: T, ms: number) {
   const [d, setD] = useState(v);
@@ -14,14 +19,40 @@ function useDebounced<T>(v: T, ms: number) {
 export default function BasketPlayers() {
   const [player, setPlayer] = useState<Picked | null>(null);
   const [q, setQ] = useState('');
+  const [mode, setMode] = useState<'players' | 'teams' | 'lines'>('players');
+  const [teamView, setTeamView] = useState<'standings' | 'points'>('standings');
+  const [league, setLeague] = useState<BasketLeagueId>('nba');
+  const [team, setTeam] = useState<string | null>(null);
   const dq = useDebounced(q.trim(), 400);
   const ok = !!window.api.basket;
   const injuries = useQuery({ queryKey: ['basket', 'injuries'], queryFn: () => window.api.basket.injuries(), staleTime: 10 * 60e3, enabled: ok });
   const r = useQuery({ queryKey: ['basket', 'search', dq], queryFn: () => window.api.basket.search(dq), enabled: ok && dq.length >= 2, staleTime: 10 * 60e3 });
 
+  const switcher = <Tabs value={mode} onChange={setMode} items={[{ value: 'players', label: 'Jugadores' }, { value: 'teams', label: 'Equipos' }, { value: 'lines', label: 'Líneas' }]} />;
+  if (mode === 'lines') return (
+    <>
+      <PageHeader title="Líneas" subtitle="Pon una línea y mira qué jugadores tienen más probabilidad de superarla">{switcher}</PageHeader>
+      <BasketLines />
+    </>
+  );
+  if (mode === 'teams') {
+    if (team) return <BasketTeamSheet key={`${league}:${team}`} league={league} teamId={team} onBack={() => setTeam(null)}
+      onPlayer={(p, teamId) => { setPlayer({ id: p.id, name: p.name, league, headshot: p.headshot, teamId }); setMode('players'); setTeam(null); }} />;
+    return (
+      <>
+        <PageHeader title="Equipos" subtitle={teamView === 'points' ? 'Puntos anotados, encajados y totales de cada equipo' : 'Clasificación por liga'}>
+          {switcher}
+          <Tabs value={teamView} onChange={setTeamView} items={[{ value: 'standings', label: 'Clasificación' }, { value: 'points', label: 'Puntos' }]} />
+          <Tabs value={league} onChange={setLeague} items={(['nba', 'euroleague', 'eurocup', 'wnba'] as BasketLeagueId[]).map(l => ({ value: l, label: LEAGUE_NAME[l] }))} />
+        </PageHeader>
+        {teamView === 'points' ? <LeaguePoints key={league} league={league} onTeam={setTeam} /> : <BasketStandings league={league} onTeam={setTeam} />}
+      </>
+    );
+  }
   return (
     <>
       <PageHeader title="Jugadores" subtitle="Busca un jugador de la NBA, la Euroliga o la EuroCup y mira si su línea tiene valor">
+        {switcher}
         <div className="relative">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <Input autoFocus className="w-full pl-9 sm:w-80" placeholder="Nombre del jugador" value={q} onChange={e => setQ(e.target.value)} />

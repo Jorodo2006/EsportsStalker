@@ -1,19 +1,23 @@
-// Tenis · Jugadores: rankings de la ATP y la WTA con buscador, subida o bajada de cada jugador y sus puntos
+// Tenis · Jugadores: rankings de la ATP y la WTA con buscador, subida o bajada de cada jugador y sus puntos.
+// Al pulsar un jugador se abre su ficha.
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/format';
 import type { Tour } from '@/lib/types';
+import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { ErrorBox, Input, Loading, PageHeader, Tabs, td, th } from '@/components/ui';
 
 export default function TennisPlayers() {
   const [tour, setTour] = useState<Tour>('atp');
   const [q, setQ] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
   const ok = !!window.api.tennis;
   const r = useQuery({ queryKey: ['tennis', 'rankings', tour], queryFn: () => window.api.tennis.rankings(tour), staleTime: 6 * 3600e3, enabled: ok });
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const list = (r.data ?? []).filter(p => !q || norm(p.name).includes(norm(q)) || norm(p.country).includes(norm(q)));
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo.</ErrorBox>;
+  if (open) return <TennisPlayerSheet key={open} tour={tour} id={open} onBack={() => setOpen(null)} onPlayer={setOpen} />;
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="Rankings" subtitle="Clasificación individual de la ATP y la WTA">
@@ -31,7 +35,7 @@ export default function TennisPlayers() {
               {list.map(p => {
                 const diff = p.previous && p.rank ? p.previous - p.rank : 0;
                 return (
-                  <tr key={p.id} className="hover:bg-zinc-800/30">
+                  <tr key={p.id} onClick={() => setOpen(p.id)} className="cursor-pointer hover:bg-zinc-800/30">
                     <td className={td + ' text-right font-score text-lg font-semibold tnum'}>{p.rank}</td>
                     <td className={cn(td, 'text-xs tnum', diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-rose-400' : 'text-zinc-600')} title={`Antes: ${p.previous}`}>{diff > 0 ? `▲${diff}` : diff < 0 ? `▼${-diff}` : '='}</td>
                     <td className={td}><span className="flex items-center gap-2">{p.flag && <img src={p.flag} alt="" className="h-4 w-6 rounded-sm object-cover" />}{p.name}</span></td>

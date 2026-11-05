@@ -2,7 +2,7 @@
 // ajuste local / visitante y por rival, probabilidad de la línea mezclada con la frecuencia histórica,
 // y el valor, la fiabilidad y el veredicto con las funciones comunes de value.ts.
 import type { BasketLogGame } from './types';
-import { devig, lineProbs, relCommon, reliability, sideValue, verdict, type SideValue } from './value';
+import { devig, lineProbs, relCommon, reliability, sideValue, verdict, type Side, type SideValue } from './value';
 
 type G = BasketLogGame;
 export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (g: G) => number }> = {
@@ -26,8 +26,8 @@ export interface BasketCtx { currentSeason: number; home: boolean | null; opp: s
 const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
 const mean = (a: number[]) => (a.length ? sum(a) / a.length : 0);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const wmean = (xs: number[], ws: number[]) => { const W = sum(ws); return W ? sum(xs.map((x, i) => x * ws[i])) / W : 0; };
-function wvar(xs: number[], ws: number[]) {
+export const wmean = (xs: number[], ws: number[]) => { const W = sum(ws); return W ? sum(xs.map((x, i) => x * ws[i])) / W : 0; };
+export function wvar(xs: number[], ws: number[]) {
   const m = wmean(xs, ws), W = sum(ws), W2 = sum(ws.map(w => w * w));
   const denom = W - W2 / W; // corrección de sesgo con pesos
   return denom > 0 ? sum(xs.map((x, i) => ws[i] * (x - m) ** 2)) / denom : 0;
@@ -185,6 +185,21 @@ export function scanMarkets(games: G[], ctx: BasketCtx) {
       l10: mean(P.pool.slice(0, 10).map(BASKET_MARKETS[k].f)), consistency: cv < 0.3 ? 'Alta' : cv < 0.5 ? 'Media' : 'Baja'
     }];
   });
+}
+
+// Una línea de un jugador para el escáner, con el mismo cálculo que el analizador: las dos pantallas dan la misma probabilidad
+export function scanLine(games: G[], market: BasketMarket, line: number, side: Side, ctx: BasketCtx, odds: { over?: number | null; under?: number | null } = {}) {
+  const R = analyze(games, market, line, odds, ctx);
+  if (!R) return null;
+  const f = BASKET_MARKETS[market].f;
+  const reg = games.filter(g => g.type !== 'pre');
+  const hit = (list: G[]) => ({ n: list.length, won: list.filter(g => (side === 'over' ? f(g) > line : f(g) < line)).length });
+  return {
+    mu: R.mu, projMin: R.projMin, rel: R.rel, push: R.pPush,
+    p: side === 'over' ? R.pOver : R.pUnder, fair: side === 'over' ? R.fairOver : R.fairUnder,
+    value: R.sides.find(s => s.side === side) ?? null,
+    played: reg.length, last5: hit(reg.slice(0, 5)), last10: hit(reg.slice(0, 10)), season: hit(reg.filter(g => g.season === ctx.currentSeason))
+  };
 }
 
 // Línea sugerida: la media proyectada redondeada a x,5

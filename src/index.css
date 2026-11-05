@@ -33,14 +33,18 @@
   --color-amber-600: var(--acc-600);
 }
 
+/* --tv-*: los rótulos de retransmisión de las fichas (src/components/viz.tsx): banda, final de su degradado, línea y fondo */
 :root, [data-app="lol"] {
   --acc-200: #b4f3ec; --acc-300: #7be8de; --acc-400: #3fd9cb; --acc-500: #19c2b3; --acc-600: #0e9c90;
+  --tv-band: #0b7f76; --tv-band-2: #0a5a5c; --tv-mark: #7be8de; --tv-bg: #070b13;
 }
 [data-app="basket"] {
   --acc-200: #ffd2b0; --acc-300: #ffb079; --acc-400: #ff8f4d; --acc-500: #ff7a2f; --acc-600: #e05e14;
+  --tv-band: #c2410c; --tv-band-2: #8f2c0a; --tv-mark: #ffd23f; --tv-bg: #0a0a10;
 }
 [data-app="tennis"] {
   --acc-200: #bbf7d0; --acc-300: #86efac; --acc-400: #4ade80; --acc-500: #22c55e; --acc-600: #16a34a;
+  --tv-band: #15803d; --tv-band-2: #0f5e55; --tv-mark: #4ade80; --tv-bg: #070c12;
 }
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {
