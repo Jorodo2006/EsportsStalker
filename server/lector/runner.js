@@ -21,7 +21,10 @@ async function getBrowser() {
   return browser;
 }
 
-const post = (p, body) => fetch(APP + p, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })
+// Con LECTOR_TOKEN (producción) el gateway sólo atiende al lector si manda este token
+const AUTH = process.env.LECTOR_TOKEN ? { 'x-lector-token': process.env.LECTOR_TOKEN } : {};
+
+const post = (p, body) => fetch(APP + p, { method: 'POST', headers: { 'Content-Type': 'text/plain', ...AUTH }, body: JSON.stringify(body) })
   .then(r => r.json()).catch(() => null);
 
 // ---------- utilidades de página (equivalen a las de la extensión) ----------
@@ -302,7 +305,7 @@ async function loop() {
   for (;;) {
     let job = null;
     try {
-      const r = await fetch(`${APP}/jobs/next?lector=docker`);
+      const r = await fetch(`${APP}/jobs/next?lector=docker`, { headers: AUTH });
       if (r.status === 200) job = await r.json().catch(() => null);
     } catch (_) { /* el gateway aún no está */ }
     if (job && job.id) {

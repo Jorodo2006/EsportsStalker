@@ -39,16 +39,37 @@ function cookieOf(req) {
   return null;
 }
 
-function setCookie(res, token, maxAge) {
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`);
+// Con HTTPS (COOKIE_SECURE=1 en el .env, o el proxy avisa con X-Forwarded-Proto) la cookie sólo viaja cifrada
+const isSecure = req => process.env.COOKIE_SECURE === '1' || String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+
+function setCookie(res, token, maxAge, secure) {
+  res.setHeader('Set-Cookie', `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`);
 }
 
-async function openSession(res, userId) {
+async function openSession(res, userId, secure) {
   const token = crypto.randomBytes(32).toString('hex');
   await query('DELETE FROM bets.sessions WHERE expires_at < now()');
   await query(`INSERT INTO bets.sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '${SESSION_DAYS} days')`, [sha(token), userId]);
-  setCookie(res, token, SESSION_DAYS * 86400);
+  setCookie(res, token, SESSION_DAYS * 86400, secure);
 }
+
+// ---------- Límites de intentos (en memoria: se reinician con el servicio) ----------
+// IP del cliente: nginx la pone en X-Real-IP (y se pisa, no se acepta la que mande el cliente)
+const ipOf = req => String(req?.headers?.['x-real-ip'] || req?.socket?.remoteAddress || 'desconocida');
+
+// Cuenta eventos por clave en una ventana; devuelve true si ya se pasó del máximo
+function limiter(max, windowMs) {
+  const m = new Map();
+  const prune = () => { if (m.size > 20000) { const now = Date.now(); for (const [k, v] of m) if (v.until < now) m.delete(k); } };
+  return {
+    blocked(key) { const v = m.get(key); return !!v && v.n >= max && Date.now() < v.until; },
+    add(key) { prune(); const v = m.get(key); m.set(key, v && Date.now() < v.until ? { n: v.n + 1, until: v.until } : { n: 1, until: Date.now() + windowMs }); },
+    clear(key) { m.delete(key); }
+  };
+}
+const loginPair = limiter(MAX_FAILS, LOCK_MS);          // misma IP y mismo usuario: 5 fallos → 1 minuto
+const loginIp = limiter(30, 10 * 60e3);                 // una IP que prueba muchos usuarios: 30 fallos → 10 minutos
+const registerIp = limiter(5, 60 * 60e3);               // altas desde una IP: 5 por hora
 
 async function config() {
   const { rows } = await query('SELECT count(*)::int AS n FROM bets.users');
@@ -56,7 +77,27 @@ async function config() {
   return { first, signupOpen: first || (await store.getSettings(null)).signupOpen !== false };
 }
 
-async function register(body, res) {
+// ADMIN_USER y ADMIN_PASSWORD en el .env: si aún no hay usuarios se crea ese administrador al arrancar, y así el primer
+// registro de la web nunca es el administrador por casualidad. Si ya hay usuarios no hace nada (no pisa contraseñas)
+async function bootstrapAdmin() {
+  const username = String(process.env.ADMIN_USER || '').trim();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!username || !password) return;
+  if (!/^[\p{L}\p{N}_.-]{3,30}$/u.test(username)) throw new Error('ADMIN_USER no es válido (3 a 30 letras, números o . _ -)');
+  validPassword(password);
+  const hash = await hashPassword(password);
+  await tx(async c => {
+    await c.query('SELECT pg_advisory_xact_lock($1)', [FIRST_USER_LOCK]);
+    if ((await c.query('SELECT 1 FROM bets.users LIMIT 1')).rowCount) return;
+    const { rows } = await c.query('INSERT INTO bets.users (username, password_hash, is_admin) VALUES ($1, $2, true) RETURNING *', [username, hash]);
+    await store.claimExisting(c, rows[0].id);
+    console.log(`Administrador creado: ${username}`);
+  });
+}
+
+async function register(body, req, res) {
+  const ip = ipOf(req);
+  if (registerIp.blocked(ip)) throw fail('Demasiados registros desde esta conexión: prueba más tarde', 429);
   const username = String(body?.username || '').trim();
   if (!/^[\p{L}\p{N}_.-]{3,30}$/u.test(username)) throw fail('El usuario debe tener de 3 a 30 letras, números o . _ -');
   validPassword(body?.password);
@@ -71,34 +112,33 @@ async function register(body, res) {
     if (first) await store.claimExisting(c, rows[0].id);
     return rows[0];
   });
-  await openSession(res, user.id);
+  registerIp.add(ip);
+  await openSession(res, user.id, isSecure(req));
   return toUser(user);
 }
 
-// Intentos fallidos por usuario, en memoria: basta para frenar a quien pruebe contraseñas desde la red
-const fails = new Map();
-
-async function login(body, res) {
+// El bloqueo es por IP (y usuario), no sólo por usuario: así nadie puede dejar sin acceso a otro repitiendo su nombre
+async function login(body, req, res) {
+  const ip = ipOf(req);
   const username = String(body?.username || '').trim();
-  const key = username.toLowerCase();
-  const f = fails.get(key);
-  if (f && f.n >= MAX_FAILS && Date.now() < f.until) throw fail('Demasiados intentos: espera un minuto', 429);
+  const pair = `${ip}|${username.toLowerCase()}`;
+  if (loginPair.blocked(pair) || loginIp.blocked(ip)) throw fail('Demasiados intentos: espera un poco', 429);
   const { rows } = await query('SELECT * FROM bets.users WHERE lower(username) = lower($1)', [username]);
   const ok = await checkPassword(body?.password ?? '', rows[0]?.password_hash || await DUMMY);
   if (!ok || !rows[0]) {
-    const n = f && Date.now() < f.until ? f.n + 1 : 1;
-    fails.set(key, { n, until: Date.now() + LOCK_MS });
+    loginPair.add(pair);
+    loginIp.add(ip);
     throw fail('Usuario o contraseña incorrectos', 401);
   }
-  fails.delete(key);
-  await openSession(res, rows[0].id);
+  loginPair.clear(pair);
+  await openSession(res, rows[0].id, isSecure(req));
   return toUser(rows[0]);
 }
 
 async function logout(req, res) {
   const token = cookieOf(req);
   if (token) await query('DELETE FROM bets.sessions WHERE token_hash = $1', [sha(token)]);
-  setCookie(res, '', 0);
+  setCookie(res, '', 0, isSecure(req));
 }
 
 // Usuario de un token, o null si no hay sesión o ha caducado
@@ -118,4 +158,4 @@ async function changePassword(userId, req, body) {
   await query('DELETE FROM bets.sessions WHERE user_id = $1 AND token_hash <> $2', [userId, sha(cookieOf(req))]);
 }
 
-module.exports = { config, register, login, logout, userOf, changePassword, cookieOf, hashPassword };
+module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword };

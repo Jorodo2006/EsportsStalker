@@ -18,6 +18,13 @@ data.json
 # Versión antigua guardada a mano
 _old_v1/
 
+# Copias de seguridad de la base de datos (datos personales)
+backups/
+*.dump
+
+# Lista de tareas personal (auditoría)
+tareas.md
+
 # Entorno y editores
 .env
 .env.*

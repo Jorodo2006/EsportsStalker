@@ -1,10 +1,22 @@
 // gateway: única puerta del backend en 127.0.0.1:47365 (el mismo puerto que usaban el marcador y la extensión).
 // Reparte cada petición a su servicio y reenvía a la app los avisos de PostgreSQL (LISTEN lolet) por SSE.
 const http = require('http');
+const crypto = require('crypto');
 const { Client } = require('pg');
 const { URLS, call } = require('../../shared/client');
 
+const internal = require('../../shared/internal');
+
 const PORT = Number(process.env.PORT) || 47365;
+
+// Con LECTOR_TOKEN (producción), las rutas del lector (/jobs, /odds…) exigen ese token y ya no se abren con CORS: sólo
+// las usa el contenedor lector. Sin él (desarrollo) siguen abiertas, para el marcador y la extensión de reserva
+const LECTOR_TOKEN = process.env.LECTOR_TOKEN || '';
+function lectorTokenOk(req) {
+  const got = Buffer.from(String(req.headers['x-lector-token'] || ''));
+  const want = Buffer.from(LECTOR_TOKEN);
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
 
 // Prefijo de la ruta → servicio. /internal/* no se publica: es sólo entre servicios.
 const ROUTES = [
@@ -33,9 +45,16 @@ function proxy(req, res, service, user) {
   const headers = { ...req.headers, host: target.host };
   delete headers['x-user-id'];
   delete headers['x-user-admin'];
-  if (user) { headers['x-user-id'] = user.id; headers['x-user-admin'] = user.isAdmin ? '1' : '0'; }
+  delete headers['x-user-sig'];
+  delete headers['x-lector-token']; // el token del lector no sale del gateway
+  if (user) {
+    headers['x-user-id'] = user.id;
+    headers['x-user-admin'] = user.isAdmin ? '1' : '0';
+    const sig = internal.sign(headers['x-user-id'], headers['x-user-admin']);
+    if (sig) headers['x-user-sig'] = sig;
+  }
   const up = http.request(target, { method: req.method, headers }, r => {
-    res.writeHead(r.statusCode || 502, { ...r.headers, ...(req.url.startsWith('/api/') ? {} : { 'access-control-allow-origin': '*' }) });
+    res.writeHead(r.statusCode || 502, { ...r.headers, ...(req.url.startsWith('/api/') || LECTOR_TOKEN ? {} : { 'access-control-allow-origin': '*' }) });
     r.pipe(res);
   });
   up.setTimeout(180e3, () => up.destroy(new Error('tiempo de espera agotado')));
@@ -73,11 +92,13 @@ async function health() {
 }
 
 const server = http.createServer(async (req, res) => {
+  // "//host/ruta" se interpretaría como otro servidor al construir la URL del servicio: sólo valen rutas que empiecen por una "/"
+  if (!/^\/(?!\/|\\)/.test(req.url)) return json(res, 400, { ok: false, error: 'Ruta no válida' });
   const { pathname } = new URL(req.url, 'http://localhost');
   const isApi = pathname.startsWith('/api/');
   // CORS + acceso a red local para que la página de la casa pueda llamar a 127.0.0.1. La API de la web no lo
   // necesita (va por el mismo origen), y exigir JSON hace que otra web no pueda escribir en ella desde el navegador
-  if (!isApi) {
+  if (!isApi && !LECTOR_TOKEN) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -89,6 +110,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/ping') return json(res, 200, { ok: true });
+  if (LECTOR_TOKEN && !isApi && pathname !== '/events' && !lectorTokenOk(req)) return json(res, 401, { ok: false, error: 'Falta el token del lector' });
   if (pathname === '/api/health') return json(res, 200, { ok: true, data: await health() });
   // Toda la API y los avisos piden sesión. Las rutas del lector (/jobs, /odds…) no: nginx no las publica,
   // sólo se llega a ellas desde este equipo y no tienen datos de ningún usuario

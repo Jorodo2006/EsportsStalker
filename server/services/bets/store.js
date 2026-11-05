@@ -120,10 +120,16 @@ async function deleteBet(userId, id) {
 
 // Añade las que no estén ya (por id); devuelve cuántas son nuevas
 async function importBets(userId, list) {
-  if (!Array.isArray(list)) throw new Error('Se esperaba una lista de apuestas');
+  if (!Array.isArray(list)) throw fail('Se esperaba una lista de apuestas');
+  if (list.length > MAX_IMPORT) throw fail(`Se pueden importar como máximo ${MAX_IMPORT} apuestas de una vez`);
+  // Las que no pasan la validación se saltan; no se pierde todo el fichero por una fila mala
+  const clean = [];
+  for (const b of list) {
+    try { clean.push(normalizeBet({ ...b, id: b?.id || undefined })); } catch (_) { /* fila no válida */ }
+  }
   return tx(async c => {
     let n = 0;
-    for (const b of list) if (await writeBet(c, userId, normalizeBet({ ...b, id: b.id || undefined }), true)) n++;
+    for (const b of clean) if (await writeBet(c, userId, b, true)) n++;
     return n;
   });
 }
@@ -137,36 +143,65 @@ const today = () => new Date().toISOString().slice(0, 10);
 // La columna es DATE: sólo vale 'AAAA-MM-DD' (si viene con hora, se corta)
 const day = v => (/^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : today());
 
+// Límites: lo que mande el cliente no es de fiar (ver tareas de seguridad). Si algo se sale, se rechaza la apuesta
+const MAX_MONEY = 1e6, MAX_ODDS = 1000, MAX_LEGS = 30, MAX_IMPORT = 5000;
+const MAX_TEXT = { id: 64, league: 120, event: 300, market: 120, selection: 300, bookmaker: 60, notes: 2000 };
+
 function normalizeBet(b) {
-  const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : 0; };
+  if (!b || typeof b !== 'object') throw fail('Apuesta no válida');
+  // Texto con tope de longitud; un número que no lo es (NaN, "abc") se rechaza en vez de guardarse como 0
+  const text = (v, key) => {
+    const s = String(v ?? '').trim();
+    if (s.length > MAX_TEXT[key]) throw fail(`El campo ${key} es demasiado largo (máximo ${MAX_TEXT[key]} caracteres)`);
+    return s;
+  };
+  const num = (v, what) => {
+    const raw = String(v ?? '').trim();
+    if (raw === '') return 0;
+    const n = Number(raw.replace(',', '.'));
+    if (!isFinite(n)) throw fail(`${what} no es un número`);
+    return n;
+  };
+  const money = (v, what) => {
+    const n = num(v, what);
+    if (n < 0 || n > MAX_MONEY) throw fail(`${what} fuera de rango (0 a ${MAX_MONEY})`);
+    return n;
+  };
+  // 0 = sin cuota todavía; si la hay, tiene que ser una cuota decimal real
+  const odds = (v, what) => {
+    const n = num(v, what);
+    if (n !== 0 && (n < 1 || n > MAX_ODDS)) throw fail(`${what} fuera de rango (1 a ${MAX_ODDS})`);
+    return n;
+  };
   let legs = b.legs;
   if (typeof legs === 'string') { try { legs = JSON.parse(legs); } catch (_) { legs = null; } } // desde CSV
-  legs = Array.isArray(legs) ? legs.map(l => ({
-    event: String(l.event || '').trim(), league: String(l.league || '').trim(), market: String(l.market || '').trim(),
-    selection: String(l.selection || '').trim(), odds: num(l.odds), status: LEG_STATUSES.includes(l.status) ? l.status : 'pending',
+  if (Array.isArray(legs) && legs.length > MAX_LEGS) throw fail(`Una combinada admite como máximo ${MAX_LEGS} selecciones`);
+  legs = Array.isArray(legs) ? legs.filter(l => l && typeof l === 'object').map(l => ({
+    event: text(l.event, 'event'), league: text(l.league, 'league'), market: text(l.market, 'market'),
+    selection: text(l.selection, 'selection'), odds: odds(l.odds, 'La cuota'), status: LEG_STATUSES.includes(l.status) ? l.status : 'pending',
     sport: sportOf(l.sport ?? b.sport)
   })).filter(l => l.selection || l.event) : [];
-  if (legs.length >= 2) return normalizeCombo(b, legs, num);
+  if (legs.length >= 2) return normalizeCombo(b, legs, money, text);
   return {
-    id: b.id || crypto.randomUUID(),
+    id: b.id ? text(b.id, 'id') : crypto.randomUUID(),
     date: day(b.date),
     sport: sportOf(b.sport),
-    league: String(b.league || '').trim(),
-    event: String(b.event || '').trim(),
-    market: String(b.market || 'Ganador del partido').trim(),
-    selection: String(b.selection || '').trim(),
-    bookmaker: String(b.bookmaker || '').trim(),
-    odds: num(b.odds),
-    stake: num(b.stake),
+    league: text(b.league, 'league'),
+    event: text(b.event, 'event'),
+    market: text(b.market || 'Ganador del partido', 'market'),
+    selection: text(b.selection, 'selection'),
+    bookmaker: text(b.bookmaker, 'bookmaker'),
+    odds: odds(b.odds, 'La cuota'),
+    stake: money(b.stake, 'La apuesta'),
     status: STATUSES.includes(b.status) ? b.status : 'pending',
-    cashout: num(b.cashout),
-    notes: String(b.notes || '').trim()
+    cashout: money(b.cashout, 'El cash out'),
+    notes: text(b.notes, 'notes')
   };
 }
 
 // Combinada: la cuota es el producto de las selecciones (las nulas cuentan 1) y el estado sale de ellas:
 // una perdida → perdida; todas resueltas → ganada (o nula si todas son nulas). El cash out se respeta.
-function normalizeCombo(b, legs, num) {
+function normalizeCombo(b, legs, money, text) {
   const odds = Math.round(legs.reduce((p, l) => p * (l.status === 'void' ? 1 : l.odds || 1), 1) * 100) / 100;
   let status = 'pending';
   if (legs.some(l => l.status === 'lost')) status = 'lost';
@@ -175,21 +210,21 @@ function normalizeCombo(b, legs, num) {
   const uniq = xs => [...new Set(xs.filter(Boolean))];
   const sports = uniq(legs.map(l => l.sport));
   return {
-    id: b.id || crypto.randomUUID(),
+    id: b.id ? text(b.id, 'id') : crypto.randomUUID(),
     date: day(b.date),
     sport: sports.length === 1 ? sports[0] : 'mix',
     league: uniq(legs.map(l => l.league)).join(' / '),
     event: legs.map(l => l.event).join(' + '),
     market: 'Combinada',
     selection: legs.map(l => l.selection).join(' + '),
-    bookmaker: String(b.bookmaker || '').trim(),
+    bookmaker: text(b.bookmaker, 'bookmaker'),
     odds,
-    stake: num(b.stake),
+    stake: money(b.stake, 'La apuesta'),
     status,
-    cashout: num(b.cashout),
-    notes: String(b.notes || '').trim(),
+    cashout: money(b.cashout, 'El cash out'),
+    notes: text(b.notes, 'notes'),
     legs
   };
 }
 
-module.exports = { getSettings, setSettings, claimExisting, listBets, saveBet, deleteBet, importBets, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };
+module.exports = { getSettings, setSettings, claimExisting, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

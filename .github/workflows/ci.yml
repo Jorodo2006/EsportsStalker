@@ -1,0 +1,24 @@
+# Se ejecuta en cada push y pull request: tipos, compilación, pruebas y dependencias con vulnerabilidades conocidas
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm ci --omit=dev --prefix server
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      # Sólo lo que llega a producción (el servidor); las herramientas de compilación no cuentan
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --prefix server --omit=dev --audit-level=high
