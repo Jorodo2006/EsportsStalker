@@ -128,6 +128,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Leaguepedia** limita mucho las peticiones anónimas: no quites la cola ni la caché de `leaguepedia.js`.
 - **Lecturas programadas** (`server/services/odds/scheduler.js`): LoL y baloncesto de las próximas N horas; el lector
   las hace de una en una. No subas mucho la frecuencia: las casas pueden bloquear.
+- **Escáner de líneas y puntos de equipo** (`scanLine` en `src/lib/basket-model.ts`, `src/lib/basket-teams.ts`): el escáner debe dar la misma probabilidad que el analizador, y los parámetros de los puntos están ajustados con datos (cifras y límites en `docs/specs/08-baloncesto.md`). No guardes logs de ESPN enteros en la caché: pesan 700 KB cada uno (`remember` y `bulk` en `cache.js`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.

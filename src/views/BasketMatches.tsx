@@ -9,6 +9,8 @@ import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxT
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
 import { CompetitionBlock, DayStrip, MatchRow, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
+import { BasketLineScanner } from '@/components/BasketLineScanner';
+import { GamePoints } from '@/components/BasketPoints';
 import { BasketTeamSheet, TeamsCompare } from '@/components/BasketTeamSheet';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 
@@ -90,7 +92,7 @@ export default function BasketMatches() {
 // El día de la tira va al centro: la semana que se pide empieza 3 días antes
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
-type Tab = 'stats' | 'odds' | 'teams' | 'rosters' | 'value';
+type Tab = 'stats' | 'odds' | 'points' | 'lines' | 'teams' | 'rosters' | 'value';
 
 // Ficha del partido (como la de LoL): estadísticas en juego o terminado, cuotas antes de empezar
 function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: BasketInjury[]; onClose: () => void }) {
@@ -117,15 +119,20 @@ function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: B
         <SheetTabs value={tab} onChange={setTab} items={[
           ['stats', 'Estadísticas'],
           ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
+          ['points', 'Puntos'],
+          ...(st === 'pre' ? [['lines', 'Líneas']] as [Tab, string][] : []),
           ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
-      {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} /> : tab === 'teams' ? <TeamsCompare game={game} onTeam={setSheet} /> : tab === 'rosters'
+      {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
+        : tab === 'points' ? <GamePoints game={game} odds={odds.data} />
+          : tab === 'lines' ? <BasketLineScanner games={[game]} injuries={injuries} onPick={p => { setPlayer(p); setTab('value'); }} />
+            : tab === 'teams' ? <TeamsCompare game={game} onTeam={setSheet} /> : tab === 'rosters'
         ? <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Roster game={game} side="away" injuries={injuries} current={player?.id} onPick={pick} />
           <Roster game={game} side="home" injuries={injuries} current={player?.id} onPick={pick} />
         </div>
-        : player ? <BasketAnalyzer key={player.id} player={player} games={[game]} injuries={injuries} odds={odds.data} />
+        : player ? <BasketAnalyzer key={`${player.id}:${player.market}:${player.line}`} player={player} games={[game]} injuries={injuries} odds={odds.data} />
           : <Empty>Pulsa un jugador en Plantillas para analizar sus líneas.</Empty>}
     </div>
   );

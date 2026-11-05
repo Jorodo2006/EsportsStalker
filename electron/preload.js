@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('api', {
     teamForm: (name, code) => call('stats:teamForm', name, code)
   },
   odds: {
-    match: m => call('odds:match', m), board: evs => call('odds:board', evs), auto: m => call('odds:auto', m),
+    match: (m, opts) => call('odds:match', m, opts), board: evs => call('odds:board', evs), auto: m => call('odds:auto', m),
     autoStatus: () => call('odds:autoStatus')
   },
   tennis: {
@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld('api', {
     roster: (league, team) => call('basket:roster', league, team),
     standings: league => call('basket:standings', league),
     team: (league, team) => call('basket:team', league, team),
+    leagueGames: league => call('basket:leagueGames', league),
+    teamLogs: (league, team) => call('basket:teamLogs', league, team),
     injuries: () => call('basket:injuries'),
     boxscore: id => call('basket:boxscore', id),
     search: q => call('basket:search', q),

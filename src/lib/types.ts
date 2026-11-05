@@ -230,7 +230,7 @@ export interface BasketTeamPlayer {
 }
 export interface BasketTeamInfo {
   id: string; league: BasketLeagueId; name: string; abbr: string; logo: string; color: string; coach: string; venue: string; capacity: number | null; city: string; country: string;
-  president: string; website: string; division: string; group: string; standing: BasketStanding | null; stats: { label: string; value: string }[];
+  president: string; website: string; division: string; group: string; standing: BasketStanding | null; stats: { label: string; value: string; group?: string }[];
   leaders: { label: string; players: { id: string; name: string; value: string }[] }[]; results: BasketTeamGame[]; upcoming: BasketTeamGame[]; roster: BasketTeamPlayer[];
 }
 export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null }
@@ -242,6 +242,12 @@ export interface BasketLogGame {
   min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number;
 }
 export interface BasketGamelog { currentSeason: number; games: BasketLogGame[] }
+// Plantilla con los partidos de cada jugador (escáner de líneas)
+export interface BasketTeamLogs { currentSeason: number; players: (BasketRosterPlayer & { games: BasketLogGame[] })[] }
+// Partidos terminados de una liga con sus parciales (q: un valor por cuarto y prórroga), de más reciente a más antiguo
+export interface BasketPointSide { id: string; pts: number; q: number[] }
+export interface BasketPointGame { id: string; date: string; season: number; type: 'reg' | 'post'; home: BasketPointSide; away: BasketPointSide }
+export interface BasketLeagueGames { currentSeason: number; teams: Record<string, { abbr: string; name: string; logo: string }>; games: BasketPointGame[] }
 // Estadísticas de un partido: por equipo, puntos por cuarto, jugadores y totales; series = enfrentamientos de la temporada
 export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string }
 export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
@@ -270,7 +276,8 @@ export interface Api {
     teamForm(name: string, code?: string): Promise<TeamForm>;
   };
   odds: {
-    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<MatchOdds>;
+    // quiet: sólo leer, sin apuntarlo como el último partido abierto (el marcador lo usa para repartir sus capturas)
+    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
@@ -295,6 +302,8 @@ export interface Api {
     roster(league: BasketLeagueId, teamId: string): Promise<BasketRosterPlayer[]>;
     standings(league: BasketLeagueId): Promise<BasketGroup[]>;
     team(league: BasketLeagueId, teamId: string): Promise<BasketTeamInfo>;
+    leagueGames(league: BasketLeagueId): Promise<BasketLeagueGames>;
+    teamLogs(league: BasketLeagueId, teamId: string): Promise<BasketTeamLogs>;
     injuries(): Promise<BasketInjury[]>;
     boxscore(gameId: string): Promise<BasketBox>;
     search(q: string): Promise<BasketPlayerHit[]>;

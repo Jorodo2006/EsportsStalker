@@ -66,6 +66,10 @@ const routes = [
   ['GET', '/api/basket/standings/:league', ({ params }) => league(params.league).src.standings(params.league)],
   ['GET', '/api/basket/team/:league/:team', ({ params }) => league(params.league).src.team(params.league, params.team)],
   ['GET', '/api/basket/roster/:league/:team', ({ params }) => league(params.league).src.roster(params.league, params.team)],
+  // Partidos terminados de toda la liga con sus parciales: de aquí salen los puntos de los equipos y la proyección del total
+  ['GET', '/api/basket/league-games/:league', ({ params }) => league(params.league).src.leagueGames(params.league)],
+  // Plantilla con los partidos de cada jugador, para el escáner de líneas
+  ['GET', '/api/basket/team-logs/:league/:team', ({ params }) => league(params.league).src.teamLogs(params.league, params.team)],
   ['GET', '/api/basket/injuries', () => espn.injuries('nba')],
   // id = "nba:401909912" o "euroleague:E2026_10" (el id del partido en la lista)
   ['GET', '/api/basket/boxscore/:id', ({ params }) => {

@@ -97,7 +97,7 @@ function registerIpc() {
   handle('stats:teamRoster', t => get('/api/stats/team-roster', { team: t }));
   handle('stats:teamForm', (name, code) => get('/api/stats/team-form', { name, code }));
 
-  handle('odds:match', match => call('POST', '/api/odds/match', { match: matchOf(match) }));
+  handle('odds:match', (match, opts) => call('POST', '/api/odds/match', { match: matchOf(match), quiet: !!opts?.quiet }));
   // Recibe [{ id, a, b, start }] del calendario y devuelve { id: { a, b } } con la cuota de ganador
   handle('odds:board', events => call('POST', '/api/odds/board', { events }));
   // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
@@ -115,6 +115,8 @@ function registerIpc() {
   handle('tennis:profile', (tour, id) => get(`/api/tennis/profile/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
   handle('basket:standings', league => get(`/api/basket/standings/${encodeURIComponent(league)}`));
   handle('basket:team', (league, team) => get(`/api/basket/team/${encodeURIComponent(league)}/${encodeURIComponent(team)}`));
+  handle('basket:leagueGames', league => get(`/api/basket/league-games/${encodeURIComponent(league)}`));
+  handle('basket:teamLogs', (league, team) => get(`/api/basket/team-logs/${encodeURIComponent(league)}/${encodeURIComponent(team)}`));
   handle('tennis:player', (tour, id) => get(`/api/tennis/player/${encodeURIComponent(tour)}/${encodeURIComponent(id)}`));
   handle('basket:leagues', () => get('/api/basket/leagues'));
   handle('basket:games', date => get('/api/basket/games', { date }));

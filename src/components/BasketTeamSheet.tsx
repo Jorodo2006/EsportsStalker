@@ -5,21 +5,17 @@ import { ArrowLeft } from 'lucide-react';
 import { cn, pct } from '@/lib/format';
 import type { BasketGame, BasketLeagueId, BasketTeamGame, BasketTeamInfo, BasketTeamPlayer } from '@/lib/types';
 import { LEAGUE_NAME, badInjury } from './BasketAnalyzer';
-import { Badge, Empty, ErrorBox, Loading, TeamLogo, th } from './ui';
+import { TeamPoints, dec, restart, signed } from './BasketPoints';
+import { Badge, Empty, Loading, TeamLogo, th } from './ui';
 import { FormChips, KpiStrip, Panel, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, panel, tdc } from './viz';
 
 const esDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 const esWhen = (iso: string) => new Date(iso).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const dec = (v: number | null | undefined, d = 1) => (v == null ? '–' : v.toFixed(d).replace('.', ','));
-const signed = (v: number | null | undefined) => (v == null ? '–' : `${v > 0 ? '+' : ''}${dec(v)}`);
 const POS: Record<string, string> = { PG: 'Base', SG: 'Escolta', SF: 'Alero', PF: 'Ala-pívot', C: 'Pívot', G: 'Exterior', F: 'Alero', Guard: 'Exterior', Forward: 'Alero', Center: 'Pívot' };
 const INJURY: Record<string, string> = { Out: 'Baja', 'Day-To-Day': 'Duda', Questionable: 'Duda', Doubtful: 'Muy dudoso', Probable: 'Probable', Suspension: 'Sanción' };
 const money = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M$` : `${Math.round(v / 1e3)} mil $`);
 const toNum = (s: string | undefined) => { const n = parseFloat(String(s ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
 
-const restart = (e: unknown) => /No handler registered|is not a function/.test(String(e))
-  ? <ErrorBox error="La app tiene que reiniciarse para ver los equipos">Para <code>npm run dev</code> (Ctrl+C) y vuelve a lanzarlo.</ErrorBox>
-  : <ErrorBox error={e} />;
 const streakCls = (s: string) => (s.startsWith('G') ? 'text-emerald-400' : s.startsWith('P') ? 'text-rose-400' : 'text-zinc-400');
 
 export function BasketStandings({ league, onTeam }: { league: BasketLeagueId; onTeam: (id: string) => void }) {
@@ -33,10 +29,11 @@ export function BasketStandings({ league, onTeam }: { league: BasketLeagueId; on
       {groups.map(g => (
         <Panel key={g.name} title={groups.length > 1 ? g.name : undefined}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[780px]">
               <thead className="bg-zinc-900/60"><tr>
                 <th className={th + ' w-8 text-right'}>#</th><th className={th}>Equipo</th><th className={th + ' text-right'}>G-P</th><th className={th + ' w-24'}>%</th>
                 <th className={th + ' text-right'}>Casa</th><th className={th + ' text-right'}>Fuera</th><th className={th + ' text-right'}>Últ. 10</th><th className={th + ' text-right'}>Racha</th>
+                <th className={th + ' text-right'} title="Puntos anotados por partido">Anot.</th><th className={th + ' text-right'} title="Puntos encajados por partido">Enc.</th>
                 <th className={th + ' text-right'} title="Diferencia de puntos por partido">Dif.</th>
               </tr></thead>
               <tbody className="divide-y divide-zinc-800/50">
@@ -48,6 +45,7 @@ export function BasketStandings({ league, onTeam }: { league: BasketLeagueId; on
                     <td className={tdc} title={pct(t.pct)}><span className="flex items-center gap-2"><span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800"><span className="block h-full rounded-full bg-amber-500" style={{ width: `${t.pct * 100}%` }} /></span><span className="w-7 text-right text-[11px] text-zinc-500 tnum">{Math.round(t.pct * 100)}</span></span></td>
                     <td className={tdc + ' text-right text-zinc-400 tnum'}>{t.home}</td><td className={tdc + ' text-right text-zinc-400 tnum'}>{t.road}</td><td className={tdc + ' text-right text-zinc-400 tnum'}>{t.last}</td>
                     <td className={cn(tdc, 'text-right font-medium tnum', streakCls(t.streak))}>{t.streak || '–'}</td>
+                    <td className={tdc + ' text-right tnum'}>{dec(t.pf)}</td><td className={tdc + ' text-right tnum'}>{dec(t.pa)}</td>
                     <td className={cn(tdc, 'text-right tnum', (t.diff ?? 0) > 0 ? 'text-emerald-400' : (t.diff ?? 0) < 0 ? 'text-rose-400' : 'text-zinc-400')}>{signed(t.diff)}</td>
                   </tr>
                 ))}
@@ -76,7 +74,7 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
   const meta = [LEAGUE_NAME[league], t.group, t.division, t.coach && `Entrenador: ${t.coach}`, t.venue && `${t.venue}${t.capacity ? ` (${t.capacity.toLocaleString('es-ES')})` : ''}`, [t.city, t.country].filter(Boolean).join(', ')].filter(Boolean);
   const out = t.roster.filter(p => p.injury);
   const form = t.results.slice(0, 10);
-  const statKpis = t.stats.filter(x => ['Rebotes', 'Asistencias', 'Tiros de campo %', 'Triples %', 'Tiros libres %', 'Pérdidas', 'Robos', 'Tapones'].includes(x.label));
+  const statKpis = t.stats.filter(x => ['Posesiones', 'Rating ofensivo', 'Rating defensivo', 'Tiros de campo %', 'Triples %', 'Tiros libres %', 'Rebotes', 'Asistencias'].includes(x.label));
   return (
     <div className="flex flex-col gap-2.5">
       {back}
@@ -116,6 +114,9 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
         <GameList title="Próximos" list={t.upcoming} empty="Sin partidos programados." />
       </div>
 
+      <TeamPoints league={league} teamId={t.id} />
+      <TeamStats team={t} />
+
       {!!out.length && (
         <Panel title={`Bajas y dudas (${out.length})`}>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5 px-3.5 py-2 text-[13px]">
@@ -131,6 +132,29 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
 
       <Roster team={t} onPlayer={p => onPlayer(p, t.id)} />
     </div>
+  );
+}
+
+// Todas las estadísticas del equipo, por grupos. Las avanzadas salen de los promedios de tiro y son estimaciones.
+function TeamStats({ team }: { team: BasketTeamInfo }) {
+  const groups = [...new Set(team.stats.map(s => s.group).filter(Boolean))] as string[];
+  if (!groups.length) return null;
+  return (
+    <Panel title="Estadísticas por partido">
+      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+        {groups.map(g => (
+          <div key={g} className="py-1.5">
+            <div className="px-3.5 pb-1 font-score text-[12px] font-semibold uppercase tracking-wider text-zinc-400">{g}</div>
+            {team.stats.filter(s => s.group === g).map(s => (
+              <div key={s.label} className="flex h-6 items-center justify-between gap-3 px-3.5 text-[13px]">
+                <span className="truncate text-zinc-300" title={s.label}>{s.label}</span>
+                <span className="font-semibold tnum">{s.value.replace('.', ',')}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -210,11 +234,13 @@ export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: 
   const stat = (t: BasketTeamInfo, l: string) => t.stats.find(s => s.label === l)?.value;
   const stand = (t: BasketTeamInfo, k: 'pct' | 'pf' | 'pa' | 'diff') => t.standing?.[k] ?? null;
   // Cada fila con la diferencia que lleva la línea al tope: en una liga, 15 puntos o 8 rebotes por partido es muchísimo
+  const total = (t: BasketTeamInfo) => (t.standing?.pf != null && t.standing.pa != null ? t.standing.pf + t.standing.pa : null);
   const bars: { label: string; a: number | null; b: number | null; aText: string; bText: string; better?: 'low'; spread: number }[] = [
     { label: 'Victorias', a: stand(x, 'pct'), b: stand(y, 'pct'), aText: x.standing ? pct(x.standing.pct) : '–', bText: y.standing ? pct(y.standing.pct) : '–', spread: 0.4 },
     { label: 'Puntos anotados', a: stand(x, 'pf'), b: stand(y, 'pf'), aText: dec(stand(x, 'pf')), bText: dec(stand(y, 'pf')), spread: 15 },
     { label: 'Puntos encajados', a: stand(x, 'pa'), b: stand(y, 'pa'), aText: dec(stand(x, 'pa')), bText: dec(stand(y, 'pa')), better: 'low', spread: 15 },
-    ...([['Rebotes', 8], ['Asistencias', 8], ['Pérdidas', 5, 'low'], ['Tiros de campo %', 8], ['Triples %', 8], ['Tiros libres %', 12]] as [string, number, 'low'?][]).map(([l, spread, better]) => ({
+    { label: 'Total de sus partidos', a: total(x), b: total(y), aText: dec(total(x)), bText: dec(total(y)), spread: 20 },
+    ...([['Posesiones', 6], ['Rating ofensivo', 10], ['Rating defensivo', 10, 'low'], ['Rebotes', 8], ['Rebotes ofensivos', 5], ['Asistencias', 8], ['Pérdidas', 5, 'low'], ['Tiros de campo %', 8], ['Triples anotados', 5], ['Triples %', 8], ['Tiros libres %', 12]] as [string, number, 'low'?][]).map(([l, spread, better]) => ({
       label: l, a: toNum(stat(x, l)), b: toNum(stat(y, l)), aText: stat(x, l)?.replace('.', ',') ?? '–', bText: stat(y, l)?.replace('.', ',') ?? '–', better, spread
     }))
   ];
@@ -237,9 +263,9 @@ export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: 
           <TvPortrait name={x.name} photo={x.logo} logo side="left" heroLabel="Puesto" hero={hero(x)} lead={px != null && py != null && px > py} />
           <div className="min-w-0 pb-2">
             <TvBand>Temporada</TvBand>
-            <div className="pb-1.5">{bars.slice(0, 3).map(r => <TvRow key={r.label} {...r} />)}</div>
+            <div className="pb-1.5">{bars.slice(0, 4).map(r => <TvRow key={r.label} {...r} />)}</div>
             <TvBand>Por partido</TvBand>
-            <div className="pb-1.5">{bars.slice(3).map(r => <TvRow key={r.label} {...r} />)}</div>
+            <div className="pb-1.5">{bars.slice(4).map(r => <TvRow key={r.label} {...r} />)}</div>
             <TvBand>Forma</TvBand>
             {([['En casa', 'home'], ['Fuera', 'road'], ['Últimos 10', 'last'], ['Racha', 'streak']] as const).map(([l, k]) => <TvRow key={k} label={l} a={null} b={null} aText={text(x, k)} bText={text(y, k)} />)}
           </div>

@@ -1,6 +1,7 @@
 // API pública de ESPN (sin clave) para las ligas de EE. UU.: partidos, plantillas, bajas, buscador y partidos de
 // cada jugador. Adaptado de courtside-edge. La NBA es la que tiene todo; la WNBA usa las mismas rutas.
-const { getJSON } = require('./cache');
+const { getJSON, remember, fetchJSON, bulk } = require('./cache');
+const { assemble, advanced } = require('./points');
 
 const LEAGUES = { nba: 'nba', wnba: 'wnba' };
 const site = lg => `https://site.api.espn.com/apis/site/v2/sports/basketball/${LEAGUES[lg]}`;
@@ -104,15 +105,23 @@ async function search(lg, q) {
     .map(i => ({ id: String(i.id), league: lg, name: i.displayName, team: i.teamRelationships?.[0]?.displayName || '', pos: i.position?.abbreviation || '', headshot: headshot(lg, i.id) }));
 }
 
-// Esta temporada y la anterior (al principio de temporada hay pocos partidos)
+// Esta temporada y la anterior (al principio de temporada hay pocos partidos). La anterior ya no cambia.
 async function gamelog(lg, id) {
   const y = seasonYear();
-  const logs = await Promise.all([y, y - 1].map(s =>
-    getJSON(`${WEB}/sports/basketball/${LEAGUES[lg]}/athletes/${id}/gamelog?season=${s}`, 10 * 60e3).then(j => parseGamelog(j, s)).catch(() => [])));
+  const logs = await Promise.all([[y, 15 * 60e3], [y - 1, 24 * 3600e3]].map(([s, ttl]) =>
+    remember(`log:${lg}:${id}:${s}`, ttl, async () => parseGamelog(await bulk(() => fetchJSON(`${WEB}/sports/basketball/${LEAGUES[lg]}/athletes/${id}/gamelog?season=${s}`)), s)).catch(() => [])));
   return { currentSeason: y, games: logs.flat().sort((a, b) => new Date(b.date) - new Date(a.date)) };
 }
 
-module.exports = { LEAGUES, games, roster, injuries, search, gamelog };
+// Toda la plantilla con sus partidos, para el escáner de líneas. El modelo mira 70 partidos sin contar la pretemporada: con
+// ese margen ve los mismos que el analizador y las dos pantallas dan la misma probabilidad.
+async function teamLogs(lg, team) {
+  const players = await roster(lg, team);
+  const logs = await Promise.all(players.map(p => gamelog(lg, p.id)));
+  return { currentSeason: seasonYear(), players: players.map((p, i) => ({ ...p, games: logs[i].games.slice(0, 90) })) };
+}
+
+module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs };
 
 // Estadísticas de un partido: jugadores de cada equipo, totales y puntos por cuarto
 async function boxscore(lg, eventId) {
@@ -171,8 +180,14 @@ async function standings(lg) {
   });
 }
 
-const TEAM_STATS = [['avgPoints', 'Puntos'], ['avgRebounds', 'Rebotes'], ['avgAssists', 'Asistencias'], ['avgSteals', 'Robos'], ['avgBlocks', 'Tapones'],
-  ['avgTurnovers', 'Pérdidas'], ['fieldGoalPct', 'Tiros de campo %'], ['threePointPct', 'Triples %'], ['freeThrowPct', 'Tiros libres %']];
+const TEAM_STATS = [
+  ['avgPoints', 'Puntos', 'Tiro'], ['avgFieldGoalsMade', 'Tiros anotados', 'Tiro'], ['avgFieldGoalsAttempted', 'Tiros intentados', 'Tiro'], ['fieldGoalPct', 'Tiros de campo %', 'Tiro'],
+  ['twoPointFieldGoalPct', 'Tiros de 2 %', 'Tiro'], ['avgThreePointFieldGoalsMade', 'Triples anotados', 'Tiro'], ['avgThreePointFieldGoalsAttempted', 'Triples intentados', 'Tiro'], ['threePointPct', 'Triples %', 'Tiro'],
+  ['avgFreeThrowsMade', 'Tiros libres anotados', 'Tiro'], ['avgFreeThrowsAttempted', 'Tiros libres intentados', 'Tiro'], ['freeThrowPct', 'Tiros libres %', 'Tiro'],
+  ['avgRebounds', 'Rebotes', 'Rebote y balón'], ['avgOffensiveRebounds', 'Rebotes ofensivos', 'Rebote y balón'], ['avgDefensiveRebounds', 'Rebotes defensivos', 'Rebote y balón'],
+  ['avgAssists', 'Asistencias', 'Rebote y balón'], ['avgTurnovers', 'Pérdidas', 'Rebote y balón'], ['assistTurnoverRatio', 'Asistencias por pérdida', 'Rebote y balón'],
+  ['avgSteals', 'Robos', 'Defensa'], ['avgBlocks', 'Tapones', 'Defensa'], ['avgFouls', 'Faltas', 'Defensa']
+];
 const LEADERS = [['pointsPerGame', 'Puntos', 'pts'], ['reboundsPerGame', 'Rebotes', 'reb'], ['assistsPerGame', 'Asistencias', 'ast'],
   ['3PointMadePerGame', 'Triples', null], ['stealsPerGame', 'Robos', null], ['blocksPerGame', 'Tapones', null], ['minutesPerGame', 'Minutos', 'min']];
 
@@ -199,6 +214,7 @@ async function team(lg, id) {
   ]);
   const t = info.team || {};
   const allStats = (stats?.results?.stats?.categories || []).flatMap(c => c.stats || []);
+  const raw = k => { const v = Number(allStats.find(x => x.name === k)?.value); return Number.isFinite(v) ? v : NaN; };
   const group = table.find(g => g.teams.some(x => x.id === String(id)));
   const row = group?.teams.find(x => x.id === String(id));
   const list = Array.isArray(rosterJ.athletes?.[0]?.items) ? rosterJ.athletes.flatMap(g => g.items) : rosterJ.athletes || [];
@@ -232,7 +248,10 @@ async function team(lg, id) {
     city: [venue.address?.city, venue.address?.state].filter(Boolean).join(', '), country: '', president: '', website: '',
     division: / Division$/i.test(t.standingSummary || '') ? String(t.standingSummary).replace(/^(\d+)(?:st|nd|rd|th) in (.+?) Division$/i, '$1.º de la división $2') : '',
     group: group?.name || '', standing: row || null,
-    stats: TEAM_STATS.flatMap(([k, label]) => { const x = allStats.find(v => v.name === k); return x ? [{ label, value: x.displayValue }] : []; }),
+    stats: [
+      ...TEAM_STATS.flatMap(([k, label, grp]) => { const x = allStats.find(v => v.name === k); return x ? [{ label, value: x.displayValue, group: grp }] : []; }),
+      ...advanced({ pts: raw('avgPoints'), pa: row?.pa ?? NaN, fgm: raw('avgFieldGoalsMade'), fga: raw('avgFieldGoalsAttempted'), fg3m: raw('avgThreePointFieldGoalsMade'), fg3a: raw('avgThreePointFieldGoalsAttempted'), fta: raw('avgFreeThrowsAttempted'), orb: raw('avgOffensiveRebounds'), tov: raw('avgTurnovers') })
+    ],
     leaders: LEADERS.flatMap(([cat, label]) => {
       const ls = (lead.find(c => c.name === cat)?.leaders || []).filter(l => names[idOf(l)]).slice(0, 3);
       return ls.length ? [{ label, players: ls.map(l => ({ id: idOf(l), name: names[idOf(l)], value: l.displayValue })) }] : [];
@@ -245,3 +264,46 @@ async function team(lg, id) {
 
 module.exports.standings = standings;
 module.exports.team = team;
+
+// ---------- Partidos de toda la liga con sus parciales ----------
+// ESPN no acepta rangos de fechas: un marcador por día. Cada uno trae todos los partidos de esa jornada, así que sale mucho más
+// barato que pedir partido a partido, y los días ya jugados no cambian: se piden una vez y se guarda sólo el resumen.
+// Un día cualquiera de la temporada sirve para pedir su calendario entero (sólo los días con partidos)
+const CALENDAR_DAY = { nba: '0115', wnba: '0715' };
+const dayKey = t => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
+
+const calendar = (lg, year) => remember(`cal:${lg}:${year}`, 24 * 3600e3, async () => {
+  const j = await bulk(() => fetchJSON(`${site(lg)}/scoreboard?dates=${year}${CALENDAR_DAY[lg]}`));
+  return (j.leagues?.[0]?.calendar || []).map(d => String(d).slice(0, 10).replace(/-/g, ''));
+});
+
+function dayGames(j) {
+  const side = c => ({
+    id: String(c.team?.id || ''), abbr: c.team?.abbreviation || '', name: c.team?.displayName || '', logo: c.team?.logo || '',
+    pts: Number(c.score) || 0, q: (c.linescores || []).map(l => Number(l.value) || 0)
+  });
+  return (j.events || []).flatMap(ev => {
+    const comp = ev.competitions?.[0];
+    const list = comp?.competitors || [];
+    const home = list.find(c => c.homeAway === 'home'), away = list.find(c => c.homeAway === 'away');
+    const type = ev.season?.type;
+    // Fuera la pretemporada (1) y el All-Star: no dicen nada de cómo anota un equipo
+    if (!home || !away || type === 1 || !ev.status?.type?.completed || comp.type?.abbreviation === 'ALLSTAR') return [];
+    return [{ id: `${ev.id}`, date: ev.date, season: ev.season?.year, type: type === 2 ? 'reg' : 'post', home: side(home), away: side(away) }];
+  });
+}
+
+// Los dos últimos días pueden tener partidos a medias o corregirse; a partir de ahí ya no cambian
+function day(lg, d) {
+  const load = async () => dayGames(await bulk(() => fetchJSON(`${site(lg)}/scoreboard?dates=${d}`)));
+  return d < dayKey(Date.now() - 2 * 864e5) ? remember(`keep:day:${lg}:${d}`, 0, load, { keep: true }) : remember(`day:${lg}:${d}`, 5 * 60e3, load);
+}
+
+async function leagueGames(lg) {
+  const y = seasonYear(), today = dayKey(Date.now());
+  const days = (await Promise.all([y, y - 1].map(s => calendar(lg, s).catch(() => [])))).flat();
+  const lists = await Promise.all([...new Set(days)].filter(d => d <= today).map(d => day(lg, d).catch(() => [])));
+  return assemble(lists.flat(), y);
+}
+
+module.exports.leagueGames = leagueGames;
