@@ -25,6 +25,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `odds` | `server/services/odds/` | 4002 (interno) | `odds` | Puente de los lectores, normalizador (LoL y baloncesto), trabajos, programador, histórico |
 | `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA y WNBA (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
 | `tennis` | `server/services/tennis/` | 4005 (interno) | `tennis` | Tenis ATP y WTA (ESPN): partidos de los torneos en juego, sets, rankings |
+| `football` | `server/services/football/` | 4006 (interno) | `football` | Fútbol (ESPN): partidos por día, ficha del partido, clasificaciones |
 | `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `chrome/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |
 | `db` | `postgres:17-alpine` | `127.0.0.1:55432` (para depurar) | — | Volumen `pgdata` |
 | `adminer` | `adminer` | `127.0.0.1:8080` (`ADMINER_PORT`) | — | Visor web de la base de datos (tema oscuro, servidor `db`) |
@@ -53,6 +54,7 @@ Reglas:
 | `/api/odds`, `/odds`, `/bet365`, `/snapshot`, `/auto`, `/jobs` | odds |
 | `/api/basket` | basket |
 | `/api/tennis` | tennis |
+| `/api/football` | football |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
 
 API de la web (la usa `src/lib/api.ts`):
@@ -87,7 +89,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 | `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt e `is_admin` |
 | `bets.sessions` | Sesiones de 30 días. Sólo se guarda el SHA-256 del token |
 | `bets.user_settings` | Preferencias de cada usuario |
-| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis` o `mix` (migraciones 002, 003 y 004) |
+| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football` o `mix` (migraciones 002, 003, 004 y 007) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes comunes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |
 | `esports.cache` | Caché de Leaguepedia (6 h) |

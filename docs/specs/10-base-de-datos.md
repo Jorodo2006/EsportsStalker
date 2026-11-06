@@ -6,7 +6,7 @@ servicios, ver [07-backend.md](07-backend.md).
 
 ## Reglas
 
-- **Un esquema por servicio**: `bets`, `esports`, `odds`, `basket`, `tennis`. Un servicio no toca las tablas de otro; si
+- **Un esquema por servicio**: `bets`, `esports`, `odds`, `basket`, `tennis`, `football`. Un servicio no toca las tablas de otro; si
   necesita datos de otro, llama a su API.
 - No hay claves foráneas entre esquemas. La única relación entre servicios es por valor (`odds.matches.key` es el
   `match_key` de `odds.imports`, `odds.price_history`, `odds.jobs` y `odds.book_urls`, sin restricción).
@@ -48,7 +48,7 @@ erDiagram
         bigserial seq "orden de alta"
         bigint user_id FK
         date date
-        text sport "lol, basket, tennis o mix"
+        text sport "lol, basket, tennis, football o mix"
         text league
         text event
         text market
@@ -180,7 +180,7 @@ Ajustes comunes a todos (sólo los cambia el administrador). Clave/valor:
 | `seq` | bigserial | Orden de alta |
 | `user_id` | bigint FK → `users` | `ON DELETE CASCADE`. Puede ser `NULL` sólo en apuestas anteriores a las cuentas, que reclama el primer usuario. Índice `bets_user_idx (user_id, seq)` |
 | `date` | date | Índice `bets_date_idx` |
-| `sport` | text | `CHECK` en `lol`, `basket`, `tennis`, `mix` (combinada que mezcla deportes) |
+| `sport` | text | `CHECK` en `lol`, `basket`, `tennis`, `football`, `mix` (combinada que mezcla deportes; migración 007) |
 | `league`, `event`, `market`, `selection`, `bookmaker`, `notes` | text | `NOT NULL DEFAULT ''` |
 | `odds`, `stake`, `cashout` | double precision | `NOT NULL DEFAULT 0`. Ver "Puntos a vigilar" |
 | `status` | text | `CHECK` en `pending`, `won`, `lost`, `void`, `cashout`, `halfwon`, `halflost` |
@@ -194,7 +194,7 @@ recalculan en `normalizeCombo` (`server/services/bets/store.js`).
 |---|---|---|
 | `bet_id` | text FK → `bets` | `ON DELETE CASCADE` |
 | `pos` | int | Posición dentro de la combinada |
-| `sport` | text | `CHECK` en `lol`, `basket`, `tennis` |
+| `sport` | text | `CHECK` en `lol`, `basket`, `tennis`, `football` |
 | `event`, `league`, `market`, `selection` | text | |
 | `odds` | double precision | |
 | `status` | text | `CHECK` en `pending`, `won`, `lost`, `void` |
@@ -265,15 +265,16 @@ Trabajos de lectura: los del botón "Actualizar cuotas" (`manual`) y los program
 Dirección de cada partido en cada casa, para ir directo la próxima vez. Clave primaria `(match_key, book)`;
 columnas `url` text y `updated_at` timestamptz.
 
-## Esquemas de caché: `esports`, `basket`, `tennis`
+## Esquemas de caché: `esports`, `basket`, `tennis`, `football`
 
-Los tres tienen una única tabla con la misma forma (migración `001` de cada uno):
+Los cuatro tienen una única tabla con la misma forma (migración `001` de cada uno):
 
 | Tabla | Columnas | Uso |
 |---|---|---|
 | `esports.cache` | `key` text PK, `value` jsonb, `t` timestamptz | Consultas a Leaguepedia (Fandom limita mucho las peticiones anónimas) |
 | `basket.cache` | igual | Respuestas de ESPN y de la API de la Euroliga. Los box scores terminados se guardan mucho tiempo |
 | `tennis.cache` | igual | Respuestas de ESPN (tenis), por si no responde |
+| `football.cache` | igual | Respuestas de ESPN (fútbol), por si no responde. Un mes de una liga pesa cientos de KB: se guarda como mucho cada 5 minutos |
 
 Cada una tiene un índice `cache_t_idx` sobre `t`. Son datos recuperables: se pueden vaciar sin perder nada del usuario.
 

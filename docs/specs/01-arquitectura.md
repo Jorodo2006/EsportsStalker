@@ -30,7 +30,7 @@ el móvil tampoco puede leer el portapapeles, de modo que *Pegar del marcador* s
 | `esports` | `leagues`, `schedule({leagueIds, pageToken})`, `live`, `eventDetails(id)`, `liveWindow(gameId)` | esports |
 | `stats` | `searchPlayers(q)`, `searchTeams(q)`, `resolveTeam(name, code)`, `playerGames(page)`, `teamGames(team)`, `teamRoster(team)` | esports |
 | `odds` | `match(m)`, `board(events)`, `auto(m)`, `autoStatus()` | odds |
-| `tennis`, `basket` | partidos, directo, rankings, plantillas y estadísticas | tennis, basket |
+| `tennis`, `basket`, `football` | partidos, directo, rankings, clasificaciones, plantillas y estadísticas | tennis, basket, football |
 | `marcador` | `url()`, `paste(match)` | el enlace se genera en el navegador; el pegado lee el portapapeles y va a odds |
 | `backend` | `status()` | gateway (`/api/health`) |
 | eventos | `onOddsImported(cb)`, `onOddsAuto(cb)`, `onBackendStatus(cb)` | SSE del gateway (`/events`), se reconecta solo |

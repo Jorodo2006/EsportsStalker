@@ -80,6 +80,11 @@ services:
     <<: *servicio
     command: ["node", "services/tennis/index.js"]
 
+  # Fútbol: LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas y Copa del Rey (ESPN)
+  football:
+    <<: *servicio
+    command: ["node", "services/football/index.js"]
+
   gateway:
     <<: *servicio
     command: ["node", "services/gateway/index.js"]

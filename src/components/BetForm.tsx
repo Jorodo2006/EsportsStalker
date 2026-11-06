@@ -32,6 +32,10 @@ const BASKET_MARKETS: Option[] = [
 // Mercados de tenis más habituales en Winamax y Betway
 const TENNIS_MARKETS: Option[] = ['Ganador', 'Hándicap de juegos', 'Total de juegos', 'Hándicap de sets', 'Resultado exacto', '1.er set · Ganador',
   '1.er set · Total de juegos', 'Gana al menos un set', 'Juegos de un jugador'].map(value => ({ value, group: 'Tenis' }));
+// Mercados de fútbol más habituales en Winamax y Betway
+const FOOTBALL_MARKETS: Option[] = ['1X2', 'Doble oportunidad', 'Empate no válido', 'Total de goles', 'Ambos marcan', 'Hándicap asiático',
+  'Hándicap europeo', 'Resultado exacto', 'Descanso / Final', '1.ª parte · 1X2', '1.ª parte · Total de goles', 'Goles de un equipo',
+  'Goleador', 'Total de córners', 'Total de tarjetas'].map(value => ({ value, group: 'Fútbol' }));
 const BOOKS = ['Winamax', 'Betway'];
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -78,11 +82,13 @@ export function BetFormDialog() {
   // Mercados: primero los que el comparador ya leyó de ese partido (si se abrió su ficha), después la lista completa
   const nba = f.sport === 'basket';
   // Fuera de LoL no hay calendario de lolesports para elegir el partido: se escribe a mano
-  const free = f.sport === 'basket' || f.sport === 'tennis';
+  const free = (f.sport || 'lol') !== 'lol';
+  const foot = f.sport === 'football';
   const sportNow = (f.sport || 'lol') as BetLeg['sport'];
   const marketsFor = (event: string, sport = f.sport): Option[] => {
     if (sport === 'basket') return [...BASKET_MARKETS, ...usedMarkets];
     if (sport === 'tennis') return [...TENNIS_MARKETS, ...usedMarkets];
+    if (sport === 'football') return [...FOOTBALL_MARKETS, ...usedMarkets];
     const read: Option[] = [];
     for (const [, d] of qc.getQueriesData<Schedule>({ queryKey: ['schedule'] }))
       for (const ev of d?.events ?? []) if (ev.teams.length === 2 && event && matchName(ev) === event)
@@ -144,8 +150,8 @@ export function BetFormDialog() {
             ))}
           </div>
           <div className={segWrap}
-            title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de LoL y de baloncesto'}>
-            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }].map(x => (
+            title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de cada app'}>
+            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }, { v: 'football', l: 'Fútbol' }].map(x => (
               <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
                 className={seg((f.sport || 'lol') === x.v)}>{x.l}</button>
             ))}
@@ -153,7 +159,7 @@ export function BetFormDialog() {
         </div>
         <div className={cn('grid grid-cols-1 gap-3', legs ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
           <Field label="Fecha"><Input type="date" required value={f.date || ''} onChange={set('date')} /></Field>
-          {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
+          {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : foot ? 'LaLiga, Champions…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
           <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Winamax, Betway…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
         </div>
         {legs ? (
@@ -165,8 +171,8 @@ export function BetFormDialog() {
               {legs.map((l, i) => (
                 <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 lg:grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] lg:border-0 lg:pb-0">
                   <div className="col-span-6 lg:col-span-1">
-                    {l.sport === 'basket' || l.sport === 'tennis'
-                      ? <Input list="dl-events" placeholder="LAL @ BOS" value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                    {(l.sport || 'lol') !== 'lol'
+                      ? <Input list="dl-events" placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
                       : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
                         onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
                   </div>
@@ -197,13 +203,13 @@ export function BetFormDialog() {
         ) : <>
           <Field label="Partido">
             {free
-              ? <Input required list="dl-events" placeholder="LAL @ BOS" value={f.event || ''} onChange={set('event')} />
+              ? <Input required list="dl-events" placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''} onChange={set('event')} />
               : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
                 onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
-            <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
+            <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
           </div>
         </>}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

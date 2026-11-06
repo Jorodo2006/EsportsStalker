@@ -16,6 +16,9 @@ import BasketMatches from '@/views/BasketMatches';
 import BasketPlayers from '@/views/BasketPlayers';
 import TennisMatches from '@/views/TennisMatches';
 import TennisPlayers from '@/views/TennisPlayers';
+import FootballMatches from '@/views/FootballMatches';
+import FootballStandings from '@/views/FootballStandings';
+import { FootballIcon } from '@/components/football';
 import BetsView from '@/views/BetsView';
 import SettingsView from '@/views/SettingsView';
 
@@ -29,6 +32,8 @@ const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'players', label: 'Jugadores', icon: Users },
   { view: 'bets', label: 'Apuestas', icon: Wallet }
 ];
+// En fútbol la segunda sección son las clasificaciones de las ligas
+const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : label);
 
 // Pelota de tenis (lucide no tiene): círculo con las dos curvas de la costura
 function TennisBall({ size = 16 }: { size?: number }) {
@@ -43,7 +48,8 @@ function TennisBall({ size = 16 }: { size?: number }) {
 const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords },
   { id: 'basket', label: 'Baloncesto', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
-  { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall }
+  { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall },
+  { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon }
 ];
 
 // Si la pantalla cumple una media query (para montar el cupón fijo o el flotante, no los dos)
@@ -68,12 +74,13 @@ export default function App() {
   const { data: lolLive } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
   const { data: basketLive } = useQuery({ queryKey: ['basket', 'live'], queryFn: () => window.api.basket.live(), refetchInterval: 60_000, enabled: !!window.api.basket });
   const { data: tennisLive } = useQuery({ queryKey: ['tennis', 'live'], queryFn: () => window.api.tennis.live(), refetchInterval: 60_000, enabled: !!window.api.tennis });
-  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0, tennis: tennisLive?.length ?? 0 };
+  const { data: footballLive } = useQuery({ queryKey: ['football', 'live'], queryFn: () => window.api.football.live(), refetchInterval: 60_000, enabled: !!window.api.football });
+  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0, tennis: tennisLive?.length ?? 0, football: footballLive?.length ?? 0 };
   // Cada sección empieza arriba (si no, se hereda el desplazamiento de la anterior)
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
 
-  // Los de baloncesto y tenis los abre su vista al recibir el id; los de LoL van directos al partido abierto
+  // Los de baloncesto, tenis y fútbol los abre su vista al recibir el id; los de LoL van directos al partido abierto
   const focus = (id: string) => { setFocusId(id); go('matches'); };
   const liveItems: LiveItem[] = app === 'lol'
     ? (lolLive ?? []).filter(m => m.teams.length === 2).map(m => ({
@@ -85,20 +92,25 @@ export default function App() {
         id: g.id, a: g.away.abbr, b: g.home.abbr, sa: g.away.score ?? 0, sb: g.home.score ?? 0,
         info: [LEAGUE_NAME[g.league], g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
       }))
-      : (tennisLive ?? []).map(t => ({
-        id: t.id, a: surname(t.a.name), b: surname(t.b.name), sa: t.a.setWins.filter(Boolean).length, sb: t.b.setWins.filter(Boolean).length,
-        info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id)
-      }));
+      : app === 'tennis'
+        ? (tennisLive ?? []).map(t => ({
+          id: t.id, a: surname(t.a.name), b: surname(t.b.name), sa: t.a.setWins.filter(Boolean).length, sb: t.b.setWins.filter(Boolean).length,
+          info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id)
+        }))
+        : (footballLive ?? []).map(g => ({
+          id: g.id, a: g.home.short || g.home.name, b: g.away.short || g.away.name, sa: g.home.score ?? 0, sb: g.away.score ?? 0,
+          info: [g.leagueName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+        }));
 
   // Selector de app del móvil: control segmentado; la elegida en gris claro y cada una con el punto de su color
   const appTabs = (
-    <div className="grid grid-cols-3 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
+    <div className="grid grid-cols-4 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
       {APPS.map(({ id, label, color }) => (
         <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
-          className={cn('flex h-8 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-medium transition',
+          className={cn('flex h-8 min-w-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-md px-1 text-xs font-medium transition sm:gap-1.5 sm:px-2 sm:text-[13px]',
             app === id ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
-          {label}
+          <span className="truncate">{label}</span>
           {!!live[id] && <span className="text-[11px] font-semibold text-rose-300 tnum">{live[id]}</span>}
         </button>
       ))}
@@ -127,8 +139,8 @@ export default function App() {
           <div className="mx-auto flex max-w-[1680px] items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
             <div className="min-w-0 flex-1">
               <BackendBanner />
-              {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : <TennisMatches />)}
-              {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : <TennisPlayers />)}
+              {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : <FootballMatches />)}
+              {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : <FootballStandings />)}
               {view === 'bets' && <BetsView key={app} />}
               {view === 'settings' && <SettingsView />}
             </div>
@@ -146,7 +158,7 @@ export default function App() {
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
               <span className={cn('grid h-7 place-items-center transition', view === v ? 'text-amber-400' : '')}><Icon size={19} /></span>
-              {label}
+              {navLabel(app, v, label)}
             </button>
           ))}
         </nav>
@@ -197,7 +209,7 @@ function Sidebar({ live }: { live: Record<AppId, number> }) {
           <nav className="flex flex-col gap-1">
             {NAV.map(({ view: v, label: l, icon: Icon }) => (
               <button key={v} onClick={() => go(v)} aria-current={view === v} className={navRow(view === v)}>
-                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : l}
+                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}
               </button>
             ))}
             <button onClick={() => go('settings')} aria-current={view === 'settings'} className={navRow(view === 'settings')}>

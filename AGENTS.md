@@ -5,10 +5,11 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 
 ## Qué es
 
-Web con login, para el ordenador y el móvil, con backend en Docker, que son **tres apps en una**, con un selector arriba:
-**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP, Challengers y WTA, verde).
+Web con login, para el ordenador y el móvil, con backend en Docker, que son **cuatro apps en una**, con un selector arriba:
+**LoL** (esports, verde azulado), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja), **Tenis** (ATP, Challengers y WTA, verde) y
+**Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas y Copa del Rey, azul).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
-apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las tres apps**, y las cuotas que se pulsan van a un **cupón** desde
+apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las cuatro apps**, y las cuotas que se pulsan van a un **cupón** desde
 el que se registran como simples o combinada. La interfaz es React en el navegador; la lógica y los datos están en
 microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas las lee solo, cada pocos minutos,
 un Chromium sin cabeza dentro de Docker (contenedor `lector`).
@@ -30,7 +31,7 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 5. **Las peticiones a internet las hace el backend** (`server/`). La interfaz (`src/`) sólo habla con `window.api`
    (`src/lib/api.ts`), que llama al gateway por el mismo origen. Sólo la web se abre a la red (puerto 8090); el gateway, PostgreSQL y
    Adminer se quedan en `127.0.0.1`.
-6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`). Si necesita datos de otro, llama a
+6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`, `football`). Si necesita datos de otro, llama a
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Los datos de cada usuario son suyos.** Toda consulta de `bets.bets` y `bets.user_settings` filtra por `user_id`, que sale
    de la cabecera `x-user-id` que pone el gateway tras comprobar la sesión; nunca de lo que mande el cliente. Toda ruta `/api`
@@ -80,6 +81,8 @@ Docker Compose (docker-compose.yml)
   │                                                     (API de la Euroliga), días en hora de España → esquema basket
   ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings. Puntos del juego (WTA, LiveScore)
   │                                                     y Challengers (LiveScore) → esquema tennis
+  ├─ football :4006          server/services/football/  fútbol (ESPN): partidos por día en hora de España, ficha (goles, tarjetas,
+  │                                                     estadísticas, alineaciones, forma), clasificaciones → esquema football
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -112,10 +115,10 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   pestañas en selector segmentado con la elegida en gris claro (`segWrap` + `seg`, `Tabs`), las de la ficha del partido
   subrayadas y partiéndose en dos líneas si no caben (`SheetTabs`), filtros con contorno (`chip`, `TvTabs`) y cuotas en ficha
   rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css` (grises neutros) y el acento por app va con las clases
-  `amber` (verde azulado en LoL, naranja en baloncesto, verde en tenis, apagados, según `data-app`); verde `emerald` para lo
+  `amber` (verde azulado en LoL, naranja en baloncesto, verde en tenis, azul en fútbol, apagados, según `data-app`); verde `emerald` para lo
   positivo, `rose` para lo negativo y lo que está en juego. Una sola letra, Inter: `font-score` y `font-mono` apuntan a ella
   con cifras tabulares, para cifras, cuotas y dinero. Las etiquetas van en minúsculas normales (`label-data`, `th`), nunca en
-  mayúsculas espaciadas. Piezas de partidos comunes a las tres apps en `src/components/sport.tsx` (tira de días, filtros, bloque de
+  mayúsculas espaciadas. Piezas de partidos comunes a las apps de deporte en `src/components/sport.tsx` (tira de días, filtros, bloque de
   competición con tarjetas `MatchCard`, sección `LiveSection` de partidos en juego, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
 - Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,
@@ -123,7 +126,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
-- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
+- Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
@@ -166,4 +169,5 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/07-backend.md`](docs/specs/07-backend.md) | Microservicios, gateway, PostgreSQL, migraciones, avisos en vivo |
 | [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
 | [`docs/specs/09-tenis.md`](docs/specs/09-tenis.md) | App de tenis: datos de ESPN, cuotas por sets y juegos, modelo y recomendaciones |
+| [`docs/specs/11-futbol.md`](docs/specs/11-futbol.md) | App de fútbol: ligas de ESPN, ficha del partido, clasificaciones y lo que falta (cuotas y modelo) |
 | [`docs/specs/10-base-de-datos.md`](docs/specs/10-base-de-datos.md) | Esquema de PostgreSQL: tablas, relaciones, diagramas y puntos a vigilar |

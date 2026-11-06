@@ -144,6 +144,14 @@ export const api: Api = {
     auto: m => call('POST', '/api/odds/jobs', { match: matchOf(m) }),
     autoStatus: () => get('/api/odds/auto/status')
   },
+  football: {
+    leagues: () => get('/api/football/leagues'),
+    games: date => get('/api/football/games', { date }),
+    days: (from, n) => get('/api/football/days', { from, n }),
+    live: () => get('/api/football/live'),
+    match: id => get('/api/football/match', { id }),
+    standings: league => get(`/api/football/standings/${part(league)}`)
+  },
   tennis: {
     games: date => get('/api/tennis/games', { date }),
     days: (from, n) => get('/api/tennis/days', { from, n }),
