@@ -157,7 +157,7 @@ function TeamPanel({ team, onPlayer, onTeam }: { team: string; onPlayer: (p: str
             {[...players].sort((a, b) => rank(a.role) - rank(b.role)).map(p => (
               <button key={p.page || p.id} onClick={() => onPlayer(p.page || p.id)}
                 className="cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-left transition hover:border-amber-500/50">
-                <div className="text-[11px] uppercase tracking-wider text-zinc-500">{p.role || '—'}</div>
+                <div className="text-[11px] text-zinc-500">{p.role || '—'}</div>
                 <div className="font-semibold">{p.id}</div>
               </button>
             ))}

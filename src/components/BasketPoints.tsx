@@ -65,7 +65,7 @@ export function LeaguePoints({ league, onTeam }: { league: BasketLeagueId; onTea
   if (!rows.length) return <Empty>Todavía no hay partidos terminados de esta liga.</Empty>;
   const H = ({ k, children, title }: { k: SortKey; children: ReactNode; title?: string }) => (
     <th className={th + ' text-right'} title={title} aria-sort={sort.key === k ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
-      <button onClick={() => setSort(s => ({ key: k, desc: s.key === k ? !s.desc : true }))} className={cn('cursor-pointer uppercase hover:text-zinc-200', sort.key === k && 'text-amber-400')}>
+      <button onClick={() => setSort(s => ({ key: k, desc: s.key === k ? !s.desc : true }))} className={cn('cursor-pointer hover:text-zinc-200', sort.key === k && 'text-amber-400')}>
         {children}{sort.key === k ? (sort.desc ? ' ↓' : ' ↑') : ''}
       </button>
     </th>
@@ -316,7 +316,7 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
               <button key={c.id} onClick={() => setKind(c.id)} aria-pressed={kind === c.id} className={cn('flex cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition', kind === c.id ? 'bg-amber-500/10 shadow-[inset_0_-2px_0_var(--acc-500)]' : 'hover:bg-zinc-900')}>
                 {c.abbr && <TeamLogo src={c.logo} name={c.abbr} size={30} />}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{c.title}</span>
+                  <span className="block truncate font-mono text-xs font-medium text-zinc-400">{c.title}</span>
                   <span className="block font-mono text-[26px] font-bold leading-tight text-zinc-50">{dec(x.mu)}</span>
                   <span className="block font-score text-[12px] text-zinc-400 tnum" title="Entre estos valores cae el 80 % de las veces, según el modelo">{dec(x.mu - 1.2816 * x.sd, 0)}–{dec(x.mu + 1.2816 * x.sd, 0)}{main ? ` · casas: ${fmtLine(main.line)}` : ''}</span>
                 </span>

@@ -79,13 +79,13 @@ export function Coupon({ docked }: { docked?: boolean }) {
       <button onClick={() => !docked && setOpen(!open)} className={cn('flex w-full items-center gap-2 bg-zinc-900 px-3 py-2.5 text-left', !docked && 'cursor-pointer')}>
         <Ticket size={16} className="text-amber-400" />
         <span className="text-[15px] font-semibold">Cupón</span>
-        <span className="rounded-full bg-amber-500 px-2 font-mono text-[11px] font-bold text-zinc-950">{slip.length}</span>
+        <span className="rounded bg-amber-500 px-1.5 text-[11px] font-semibold text-zinc-950 tnum">{slip.length}</span>
         {m === 'combo' && <span className="font-mono text-[13px] font-semibold text-amber-400 tnum">@ {odd(comboOdds(slip))}</span>}
-        <span className="ml-auto rounded-full bg-zinc-950 px-2.5 py-1 font-mono text-[11px] text-zinc-400 ring-1 ring-inset ring-zinc-800">Saldo <span className="text-zinc-100 tnum">{money(w.balance, cur)}</span></span>
+        <span className="ml-auto text-xs text-zinc-500">Saldo <span className="text-zinc-100 tnum">{money(w.balance, cur)}</span></span>
         {!docked && <ChevronDown size={15} className={cn('text-zinc-400 transition', !open && 'rotate-180')} />}
       </button>
       {open && <>
-        <div className="mx-3 my-2.5 grid grid-cols-2 gap-0.5 rounded-full bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800">
+        <div className="mx-3 my-2.5 grid grid-cols-2 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800">
           {([['single', `Simples (${slip.length})`], ['combo', 'Combinada']] as const).map(([v, label]) => (
             <button key={v} onClick={() => setMode(v)} disabled={v === 'combo' && !canCombo}
               title={v === 'combo' && clash ? 'Hay dos selecciones del mismo mercado y partido' : v === 'combo' && slip.length < 2 ? 'Añade al menos dos selecciones' : undefined}
@@ -105,7 +105,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
                   <div className="mt-0.5 truncate text-sm font-semibold text-zinc-50">{l.selection}</div>
                   <div className="truncate font-mono text-[11px] text-zinc-500">{[SPORT_TAG[l.sport || 'lol'], l.event].filter(Boolean).join(' · ')}</div>
                 </div>
-                <button title="Quitar" onClick={() => removeFromSlip(i)} className="grid h-6 w-6 cursor-pointer place-items-center rounded-full text-zinc-500 transition hover:bg-rose-500/15 hover:text-rose-300"><X size={14} /></button>
+                <button title="Quitar" onClick={() => removeFromSlip(i)} className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-rose-500/15 hover:text-rose-300"><X size={14} /></button>
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-amber-400 tnum">@ {odd(l.odds)}</span>
@@ -150,18 +150,17 @@ export function Coupon({ docked }: { docked?: boolean }) {
 // Cupón fijo sin selecciones: explica cómo se llena
 function EmptyCoupon({ balance }: { balance: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-700/80 bg-surface px-5 py-6 text-center">
-      <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-zinc-900 text-amber-400"><Ticket size={18} /></div>
-      <div className="text-sm font-semibold text-zinc-100">Cupón vacío</div>
-      <p className="mt-1 text-xs leading-relaxed text-zinc-500">Pulsa una cuota en la ficha de un partido para añadirla. Aquí eliges simples o combinada y la registras.</p>
-      <div className="mt-3 inline-flex rounded-full bg-zinc-900 px-3 py-1 font-mono text-[11px] text-zinc-400">Saldo <span className="ml-1 text-zinc-100 tnum">{balance}</span></div>
+    <div className="rounded-2xl border border-zinc-800 bg-surface px-4 py-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Ticket size={15} className="text-zinc-500" />Cupón</div>
+      <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">Pulsa una cuota en la ficha de un partido para añadirla. Aquí eliges simples o combinada y la registras.</p>
+      <div className="mt-3 flex justify-between border-t border-zinc-800 pt-2.5 text-xs text-zinc-500">Saldo <span className="text-zinc-200 tnum">{balance}</span></div>
     </div>
   );
 }
 
 function StakeInput({ value, onChange, cur }: { value: string; onChange: (v: string) => void; cur: string }) {
   return (
-    <label className="flex h-8 w-28 items-center gap-1 rounded-full border border-zinc-700/70 bg-zinc-950 px-3 transition focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20">
+    <label className="flex h-8 w-28 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-950 px-2.5 transition focus-within:border-zinc-500">
       <input inputMode="decimal" placeholder="Importe" value={value} onChange={e => onChange(e.target.value)} className="w-full bg-transparent text-right font-mono text-sm tnum outline-none placeholder:text-zinc-600" />
       <span className="font-mono text-xs text-zinc-500">{cur}</span>
     </label>

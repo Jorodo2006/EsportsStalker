@@ -68,7 +68,7 @@ export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: Tour
   const score = dominance(b);
   const row = (m: Metric) => <TvRow key={m.key} label={m.label} a={num(b, m.key)} b={num(avg, m.key)} aText={fmt(m, num(b, m.key))} bText={fmt(m, num(avg, m.key))} better={m.better} spread={m.spread} muted dim={dim} title={`${m.label}: ${fmt(m, num(b, m.key))}. Media del circuito: ${fmt(m, num(avg, m.key))}`} />;
   const count = (label: string, r: { won: number; lost: number }) => <TvRow key={label} label={label} a={r.won} b={r.lost} aText={n0(r.won)} bText={n0(r.lost)} spread={r.won + r.lost || 1} muted title={`${label}: ${r.won} ganados, ${r.lost} perdidos`} />;
-  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tour.toUpperCase()}</span></div>;
+  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-mono text-xs font-medium text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tour.toUpperCase()}</span></div>;
   const rivals = ([['Top 10', p.vs.top10], ['Puestos 11 a 50', p.vs.top11to50], ['Resto del ranking', p.vs.rest], ['Grand Slam', p.levels.grandSlam], ['Masters / WTA 1000', p.levels.masters], ['Torneos 250 y 500', p.levels.others]] as const).filter(([, r]) => r.won + r.lost);
 
   return (
@@ -127,7 +127,7 @@ function FullTable({ p }: { p: TennisStatPeriod }) {
         </tr></thead>
         {TABLE.map(g => (
           <tbody key={g.title} className="divide-y divide-zinc-800/50">
-            <tr><td colSpan={cols.length + 3} className="px-3 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400">{g.title}</td></tr>
+            <tr><td colSpan={cols.length + 3} className="px-3 pb-1 pt-2.5 text-[11px] font-semibold text-amber-400">{g.title}</td></tr>
             {g.rows.map(([l, f]) => (
               <tr key={l} className="hover:bg-zinc-800/30">
                 <td className={tdc + ' text-zinc-300'}>{l}</td>
@@ -175,7 +175,7 @@ export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a:
   const row = (m: Metric) => <TvRow key={m.key} label={m.label} a={num(x, m.key)} b={num(y, m.key)} aText={fmt(m, num(x, m.key))} bText={fmt(m, num(y, m.key))} better={m.better} spread={m.spread} />;
   const line = (s: Side, r: Block) => (
     <div className="grid h-[22px] grid-cols-[minmax(0,9rem)_1.25rem_3rem] items-center gap-2 font-score">
-      <span className="truncate text-[17px] font-bold uppercase tracking-wide">{surname(s.name)}</span>
+      <span className="truncate text-[17px] font-bold">{surname(s.name)}</span>
       {s.flag ? <img src={s.flag} alt="" className="h-3 w-5 object-cover" /> : <span />}
       <span className="text-right text-[17px] font-bold tnum">{r.won}-{r.lost}</span>
     </div>
@@ -185,8 +185,8 @@ export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a:
       <TvHeader title="Estadísticas" sub={`${cur.label} · ${pick === 'all' ? 'Todas las superficies' : SURFACE_ES[pick]}`}>
         <div className="flex flex-col">{line(a, x)}{line(b, y)}</div>
         <div className="hidden min-w-0 flex-1 basis-40 text-right font-score lg:block">
-          <div className="truncate text-[17px] font-bold uppercase tracking-wide">{tournament}</div>
-          <div className="text-[12px] font-medium uppercase tracking-wider text-white/80">{tour.toUpperCase()}{city ? ` · ${city}` : ''}</div>
+          <div className="truncate text-[17px] font-bold">{tournament}</div>
+          <div className="text-[12px] font-medium text-white/80">{tour.toUpperCase()}{city ? ` · ${city}` : ''}</div>
         </div>
       </TvHeader>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2">

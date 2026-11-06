@@ -43,7 +43,7 @@ function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => 
           <ValueChip pick={pick} />
         </div>
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
-          className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)] active:scale-[.97]">
+          className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
           <span className="text-[9px] leading-tight opacity-75">{pick.book}</span>
         </button>
@@ -92,14 +92,14 @@ export function TennisPicksPanel({ m, date, onOdds }: { m: TennisMatch; date: st
           </div>
           <div className="text-center" title={`Modelo ${p0(top.pModel)}, casa ${p0(top.pMarket)}`}>
             <div className="font-mono text-[44px] font-bold leading-[46px] text-[var(--tv-mark)] tnum">{p0(top.p)}</div>
-            <div className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">Probabilidad</div>
+            <div className="font-mono text-xs font-medium text-zinc-400">Probabilidad</div>
           </div>
           <div className="min-w-32">
-            <div className="mb-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400"><span>Fiabilidad</span><span>{top.rel.label}</span></div>
+            <div className="mb-1 flex justify-between font-mono text-xs font-medium text-zinc-400"><span>Fiabilidad</span><span>{top.rel.label}</span></div>
             <ReliabilityMeter rel={top.rel} />
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
-          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-2xl bg-[var(--tv-mark)] text-black shadow-md shadow-black/30 transition hover:opacity-90 active:scale-[.97]">
+          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
             <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
             <span className="text-[11px] font-medium">{top.book}</span>
           </button>
@@ -128,14 +128,16 @@ export function TennisDayPicks({ date, onOpen }: { date: string; onOpen: (id: st
   const q = useQuery({ queryKey: ['tennis', 'picks-day', date], queryFn: () => window.api.tennis.picksDay(date), enabled: !!window.api.tennis?.picksDay, staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const list = (q.data ?? []).slice(0, 4);
   if (!list.length) return null;
+  // La apuesta arriba y el partido debajo, en dos líneas: en una sola fila el móvil cortaba las dos hasta no leerse
   const row = (d: TennisDayPick) => (
-    <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="grid w-full cursor-pointer grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1.2fr)_3rem_3rem_1rem] items-center gap-2 border-b border-white/10 px-3 py-1.5 text-left transition last:border-0 hover:bg-white/[.05]">
-      <span className="font-score text-[14px] text-zinc-400 tnum">{esTime(d.date)}</span>
-      <span className="truncate text-[13px] font-medium text-zinc-200">{surname(d.a.name)} - {surname(d.b.name)}</span>
-      <span className="truncate text-[14px] font-semibold text-zinc-50">{d.top.title}</span>
-      <span className="text-right font-score text-[17px] font-bold text-[var(--tv-mark)] tnum">{p0(d.top.p)}</span>
-      <span className="text-right font-score text-[17px] font-bold text-white tnum">{odd(d.top.price)}</span>
-      <ChevronRight size={14} className="text-zinc-500" />
+    <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition last:border-0 hover:bg-zinc-800/40">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-semibold text-zinc-50">{d.top.title}</span>
+        <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(d.date)}</span> · {surname(d.a.name)} - {surname(d.b.name)}</span>
+      </span>
+      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-[var(--tv-mark)] tnum">{p0(d.top.p)}</span><span className="block text-[11px] text-zinc-500">prob.</span></span>
+      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-zinc-50 tnum">{odd(d.top.price)}</span><span className="block text-[11px] text-zinc-500">cuota</span></span>
+      <ChevronRight size={14} className="shrink-0 text-zinc-600" />
     </button>
   );
   return <TvFrame><TvBand>Las más fiables del día</TvBand>{list.map(row)}</TvFrame>;

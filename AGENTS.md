@@ -98,18 +98,20 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 ## Convenciones de código
 
 - **TypeScript estricto** con `noUnusedLocals` y `noUnusedParameters`: nada de imports o variables sin usar.
-- Alias `@/` → `src/`. Piezas de las fichas, paneles planos de terminal de datos (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
-  `src/components/viz.tsx`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Mark`, `Dialog`, `Field`, `Input`,
+- Alias `@/` → `src/`. Piezas de las fichas, paneles planos (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
+  `src/components/viz.tsx`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Dialog`, `Field`, `Input`,
   `Select`, `Badge`, `Tabs`, `Empty`, `Loading`, `th`/`td`…). Úsalos en vez de crear otros.
-- Estilo (diseño de Stitch suavizado): fondo casi negro, paneles `panelCls` (superficie `bg-surface`, borde fino, esquinas
-  de 12 px) y sin degradados, cristal ni brillos. Cada sección abre con la marca del acento (`Mark`). Cada tipo de control
-  tiene su forma, con los estilos de `ui.tsx`: acción principal en píldora del acento (`Button`), secundaria en píldora
-  gris, pestañas en selector segmentado con la elegida en blanco (`segWrap` + `seg`, `Tabs`, `SheetTabs`), filtros en
-  píldora con contorno (`chip`, `TvTabs`) y cuotas en ficha rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css`
-  y el acento por app va con las clases `amber` (turquesa en LoL, naranja en baloncesto, verde en tenis, según `data-app`);
-  verde `emerald` para lo positivo, `rose` para lo negativo y lo que está en juego. Inter para el texto y `font-score` /
-  `font-mono` (JetBrains Mono) para cifras, cuotas, dinero y etiquetas; la clase `label-data` es la etiqueta pequeña en mono
-  y mayúsculas. Piezas de partidos comunes a las tres apps en `src/components/sport.tsx` (tira de días, filtros, bloque de
+- Estilo sobrio, que no parezca hecho con una IA: fondo oscuro neutro, paneles `panelCls` (superficie `bg-surface`, borde
+  fino, esquinas de 10 px; controles a 6 px) y sin degradados, neones, brillos, sombras de color ni puntos que laten. Nada de
+  barritas de color delante de los títulos, cajas con borde discontinuo e icono en un círculo, ni todo en píldoras. Cada tipo
+  de control tiene su forma, con los estilos de `ui.tsx`: acción principal rellena del acento (`Button`), secundaria gris,
+  pestañas en selector segmentado con la elegida en gris claro (`segWrap` + `seg`, `Tabs`), las de la ficha del partido
+  subrayadas y partiéndose en dos líneas si no caben (`SheetTabs`), filtros con contorno (`chip`, `TvTabs`) y cuotas en ficha
+  rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css` (grises neutros) y el acento por app va con las clases
+  `amber` (verde azulado en LoL, naranja en baloncesto, verde en tenis, apagados, según `data-app`); verde `emerald` para lo
+  positivo, `rose` para lo negativo y lo que está en juego. Una sola letra, Inter: `font-score` y `font-mono` apuntan a ella
+  con cifras tabulares, para cifras, cuotas y dinero. Las etiquetas van en minúsculas normales (`label-data`, `th`), nunca en
+  mayúsculas espaciadas. Piezas de partidos comunes a las tres apps en `src/components/sport.tsx` (tira de días, filtros, bloque de
   competición con tarjetas `MatchCard`, sección `LiveSection` de partidos en juego, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
 - Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,

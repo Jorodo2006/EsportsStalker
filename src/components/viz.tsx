@@ -3,16 +3,15 @@
 // El acento sale de --tv-mark (index.css), según la app.
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/format';
-import { Mark, chip } from './ui';
+import { chip } from './ui';
 
 export const panel = 'rounded-xl border border-zinc-800 bg-[var(--tv-bg)]';
 export const tdc = 'px-3 py-1.5 text-[13px]';
 
-// Cabecera de sección: marca, título y, a la derecha, un dato de contexto
+// Cabecera de sección: título y, a la derecha, un dato de contexto
 export function TvBand({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <div className="flex items-center gap-2 border-b border-zinc-800/70 px-4 py-2.5">
-      <Mark className="bg-[var(--tv-mark)]" />
       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50">{children}</span>
       {aside && <span className="label-data hidden shrink-0 text-zinc-500 sm:block">{aside}</span>}
     </div>
@@ -35,7 +34,7 @@ export function TvFrame({ children, className }: { children: ReactNode; classNam
 // Cabecera de la ficha: título grande a la izquierda y lo que toque a la derecha
 export function TvHeader({ title, sub, media, children }: { title: ReactNode; sub?: ReactNode; media?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-zinc-800/70 bg-zinc-900/60 px-4 py-3.5 shadow-[inset_3px_0_0_var(--tv-mark)]">
+    <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-zinc-800 bg-zinc-900/60 px-4 py-3.5">
       {media}
       <div className="min-w-0 flex-1 basis-56">
         <div className="truncate text-2xl font-bold leading-tight tracking-tight text-zinc-50">{title}</div>
@@ -102,7 +101,7 @@ export function TvRow({ label, a, b, aText, bText, better, spread, muted, dim, t
     <div tabIndex={0} title={title ?? `${label}: ${aText} / ${bText}`} className={cn('px-4 py-0.5 outline-none transition hover:bg-zinc-900 focus-visible:bg-zinc-900', dim && 'opacity-50')}>
       <div className="grid h-[25px] grid-cols-[4.5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
         <span className={cn('font-mono text-[14px] tnum', aTop ? 'font-bold text-zinc-50' : 'font-medium text-zinc-400')}>{aText}</span>
-        <span className="truncate text-center font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">{label}</span>
+        <span className="truncate text-center font-mono text-xs font-medium text-zinc-400">{label}</span>
         <span className={cn('text-right font-mono text-[14px] tnum', bTop && !muted ? 'font-bold text-zinc-50' : 'font-medium text-zinc-400')}>{bText}</span>
       </div>
       <div className="relative h-[3px] rounded-full bg-zinc-800">
@@ -129,7 +128,7 @@ export function TvPortrait({ name, photo, logo, side, heroLabel, hero, lead, her
   const right = side === 'right';
   const vertical = (
     <div className="shrink-0 rotate-180 uppercase leading-none text-zinc-50 [writing-mode:vertical-rl]">
-      <div className="font-mono text-[11px] font-medium tracking-wider text-zinc-400">{first}</div>
+      <div className="font-mono text-[11px] font-medium text-zinc-400">{first}</div>
       <div className="max-h-44 truncate text-[22px] font-bold tracking-tight">{last}</div>
     </div>
   );
@@ -158,7 +157,7 @@ export function TvPortrait({ name, photo, logo, side, heroLabel, hero, lead, her
 export function FormChips({ list }: { list: { win: boolean; title?: string }[] }) {
   return (
     <span className="flex gap-0.5">
-      {list.map((m, i) => <span key={i} title={m.title} className={cn('grid h-[18px] w-[18px] place-items-center rounded-md font-mono text-[10px] font-bold', m.win ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300')}>{m.win ? 'G' : 'P'}</span>)}
+      {list.map((m, i) => <span key={i} title={m.title} className={cn('grid h-[18px] w-[18px] place-items-center rounded font-mono text-[10px] font-semibold', m.win ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300')}>{m.win ? 'G' : 'P'}</span>)}
     </span>
   );
 }

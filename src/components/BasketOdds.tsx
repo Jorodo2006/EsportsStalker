@@ -84,7 +84,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
           const busy = running && step && ['esperando', 'buscando', 'leyendo'].includes(step.estado);
           return (
             <span key={name} title={step?.msg || st?.msg || 'Sin cuotas todavía'}
-              className={cn('inline-flex h-8 items-center gap-2 rounded-full border px-3 font-mono text-[11px] font-medium',
+              className={cn('inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium',
                 step?.estado === 'error' ? 'border-rose-500/40 text-rose-300' : st?.ok ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-dashed border-zinc-700 text-zinc-500')}>
               {busy ? <Loader2 size={12} className="animate-spin text-amber-400" /> : <BookIcon name={name} size={16} className={cn(!st?.ok && 'opacity-40 grayscale')} />}
               {name}{busy && step?.msg && <span className="max-w-40 truncate font-normal text-zinc-500">{step.msg}</span>}
@@ -130,7 +130,6 @@ function OddsCard({ group, lines, books, onPick }: {
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
       <div className="flex items-center gap-2 border-b border-zinc-800/70 px-4 py-2.5">
-        <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />
         <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{group}</h4>
         <span className="label-data w-11 text-right text-zinc-500" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
         {books.map(bk => <BookHead key={bk} name={bk} className="w-[72px]" />)}

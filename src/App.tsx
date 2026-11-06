@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Dribbble, ServerCrash, Settings as Cog, SquareTerminal, Swords, Users, Wallet } from 'lucide-react';
+import { CalendarDays, Dribbble, ServerCrash, Settings as Cog, Swords, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -41,9 +41,9 @@ function TennisBall({ size = 16 }: { size?: number }) {
 
 // color: el acento de cada app (el mismo que --acc-500 en index.css), para el punto del selector aunque no esté elegida
 const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: { size?: number }) => ReactNode }[] = [
-  { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#46efcf', icon: Swords },
-  { id: 'basket', label: 'Baloncesto', long: 'Baloncesto', color: '#ff8a3d', icon: Dribbble },
-  { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#55f28c', icon: TennisBall }
+  { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords },
+  { id: 'basket', label: 'Baloncesto', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
+  { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall }
 ];
 
 // Si la pantalla cumple una media query (para montar el cupón fijo o el flotante, no los dos)
@@ -90,18 +90,16 @@ export default function App() {
         info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id)
       }));
 
-  // Selector de app del móvil: control segmentado; la elegida rellena con su color y el resto con el punto de su color
+  // Selector de app del móvil: control segmentado; la elegida en gris claro y cada una con el punto de su color
   const appTabs = (
-    <div className="grid grid-cols-3 gap-0.5 rounded-full bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
-      {APPS.map(({ id, label, color, icon: Icon }) => (
+    <div className="grid grid-cols-3 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
+      {APPS.map(({ id, label, color }) => (
         <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
-          className={cn('flex h-8 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[13px] font-medium transition',
-            app === id ? 'bg-amber-500 font-semibold text-zinc-950 shadow-md shadow-amber-500/15' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100')}>
-          {app === id ? <Icon size={14} /> : <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />}
+          className={cn('flex h-8 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-medium transition',
+            app === id ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
           {label}
-          {!!live[id] && <span className={cn('flex items-center gap-1 rounded-full px-1.5 font-mono text-[10px] font-semibold', app === id ? 'bg-zinc-950/20 text-zinc-950' : 'bg-[#93000a] text-rose-200')}>
-            <span className={cn('h-1 w-1 animate-pulse rounded-full', app === id ? 'bg-zinc-950' : 'bg-rose-300')} />{live[id]}
-          </span>}
+          {!!live[id] && <span className="text-[11px] font-semibold text-rose-300 tnum">{live[id]}</span>}
         </button>
       ))}
     </div>
@@ -117,8 +115,8 @@ export default function App() {
             <Logo />
             <WalletChip onClick={() => go('bets')} />
             <button onClick={() => go('settings')} title="Ajustes" aria-label="Ajustes" aria-current={view === 'settings'}
-              className={cn('grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-full transition',
-                view === 'settings' ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-800 hover:text-zinc-100')}>
+              className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md transition',
+                view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
               <Cog size={16} />
             </button>
           </div>
@@ -147,7 +145,7 @@ export default function App() {
           {NAV.map(({ view: v, label, icon: Icon }) => (
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
-              <span className={cn('grid h-7 w-14 place-items-center rounded-full transition', view === v ? 'bg-amber-500/15 text-amber-400' : '')}><Icon size={19} /></span>
+              <span className={cn('grid h-7 place-items-center transition', view === v ? 'text-amber-400' : '')}><Icon size={19} /></span>
               {label}
             </button>
           ))}
@@ -157,7 +155,7 @@ export default function App() {
       <BetFormDialog />
       {!wide && <Coupon />}
       {toastMsg && (
-        <div className="fixed bottom-20 left-1/2 z-[60] w-max max-w-[90vw] -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-5 py-2.5 text-sm shadow-2xl shadow-black/60 lg:bottom-5">{toastMsg}</div>
+        <div className="fixed bottom-20 left-1/2 z-[60] w-max max-w-[90vw] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm shadow-lg shadow-black/40 lg:bottom-5">{toastMsg}</div>
       )}
     </div>
   );
@@ -165,51 +163,45 @@ export default function App() {
 
 function Logo({ big }: { big?: boolean }) {
   return (
-    <div className={cn('flex shrink-0 items-center gap-2 font-bold tracking-tight', big ? 'text-[17px]' : 'text-base')}>
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-500/15 text-amber-400"><SquareTerminal size={17} /></span>
-      <span>Esports<span className="text-amber-400">Stalker</span></span>
-    </div>
+    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>EsportsStalker</div>
   );
 }
 
 // Menú lateral de escritorio: deportes, navegación, competiciones de la lista de partidos y la cartera abajo
 function Sidebar({ live }: { live: Record<AppId, number> }) {
   const { app, switchApp, view, go, sections } = useApp();
-  const label = (t: string) => <div className="label-data mb-1.5 px-3 text-zinc-500">{t}</div>;
-  const navRow = (on: boolean) => cn('flex h-10 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-sm transition',
-    on ? 'bg-zinc-800 font-semibold text-zinc-50 ring-1 ring-inset ring-white/5' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100');
+  const label = (t: string) => <div className="mb-1 px-3 text-xs font-medium text-zinc-500">{t}</div>;
+  const navRow = (on: boolean) => cn('flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm transition',
+    on ? 'bg-zinc-800 font-medium text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100');
   const jump = (id: string) => { go('matches'); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); };
   return (
-    <aside className="m-3 mr-0 hidden w-[248px] shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-surface lg:flex">
-      <div className="px-4 pb-4 pt-5"><Logo big /></div>
+    <aside className="hidden w-[232px] shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-surface lg:flex">
+      <div className="px-5 pb-4 pt-5"><Logo big /></div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-2.5 pb-3 no-scrollbar">
         <div>
           {label('Deportes')}
           <div className="flex flex-col gap-1">
             {APPS.map(({ id, long, color, icon: Icon }) => (
               <button key={id} onClick={() => switchApp(id)} aria-pressed={app === id} data-app={id}
-                className={cn('flex h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-sm transition',
-                  app === id ? 'bg-amber-500/15 font-semibold text-amber-300 ring-1 ring-inset ring-amber-500/30' : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-50')}>
-                {app === id ? <Icon size={16} /> : <span className="grid w-4 place-items-center"><span className="h-2 w-2 rounded-full" style={{ background: color }} /></span>}
+                className={cn('flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm transition',
+                  app === id ? 'bg-zinc-800 font-medium text-zinc-50' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-100')}>
+                <span className="grid w-4 place-items-center" style={{ color }}><Icon size={16} /></span>
                 <span className="min-w-0 flex-1 truncate">{long}</span>
-                {!!live[id] && <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#93000a] px-2 py-0.5 font-mono text-[10px] font-semibold text-rose-200">
-                  <span className="h-1 w-1 animate-pulse rounded-full bg-rose-300" />{live[id]} en vivo
-                </span>}
+                {!!live[id] && <span className="shrink-0 text-xs text-rose-300 tnum" title="Partidos en juego">{live[id]} en juego</span>}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          {label('Navegación')}
           <nav className="flex flex-col gap-1">
             {NAV.map(({ view: v, label: l, icon: Icon }) => (
               <button key={v} onClick={() => go(v)} aria-current={view === v} className={navRow(view === v)}>
-                <Icon size={16} className={view === v ? 'text-amber-400' : ''} />{v === 'bets' ? 'Mis apuestas' : l}
+                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : l}
               </button>
             ))}
             <button onClick={() => go('settings')} aria-current={view === 'settings'} className={navRow(view === 'settings')}>
-              <Cog size={16} className={view === 'settings' ? 'text-amber-400' : ''} />Ajustes
+              <Cog size={16} className={view === 'settings' ? 'text-zinc-50' : ''} />Ajustes
             </button>
           </nav>
         </div>
@@ -220,10 +212,10 @@ function Sidebar({ live }: { live: Record<AppId, number> }) {
             <div className="flex flex-col gap-0.5">
               {sections.map(s => (
                 <button key={s.id} onClick={() => jump(s.id)}
-                  className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 text-left text-[13px] text-zinc-300 transition hover:bg-zinc-800/60 hover:text-zinc-50">
-                  {s.live ? <LiveDot className="h-2 w-2" /> : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600" />}
+                  className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md px-3 text-left text-[13px] text-zinc-400 transition hover:bg-zinc-800/50 hover:text-zinc-100">
                   <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-zinc-800 px-1.5 font-mono text-[10px] text-zinc-400 tnum">{s.count}</span>
+                  {!!s.live && <LiveDot />}
+                  <span className="text-xs text-zinc-600 tnum">{s.count}</span>
                 </button>
               ))}
             </div>
@@ -240,13 +232,13 @@ function SidebarWallet({ onClick }: { onClick: () => void }) {
   const w = useWallet();
   const cur = useCurrency();
   return (
-    <button onClick={onClick} className="m-2.5 mt-0 cursor-pointer rounded-xl bg-zinc-900 p-4 text-left ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-800/70">
-      <div className="label-data flex items-center justify-between text-zinc-500">
-        <span className="flex items-center gap-1.5"><Wallet size={12} />Cartera</span>
-        <span className={cn('font-semibold normal-case tracking-normal', tone(w.profit))}>{money(w.profit, cur, true)}</span>
+    <button onClick={onClick} className="cursor-pointer border-t border-zinc-800 px-5 py-4 text-left transition hover:bg-zinc-800/40">
+      <div className="flex items-center justify-between text-xs text-zinc-500">
+        <span>Cartera</span>
+        <span className={cn('font-medium tnum', tone(w.profit))}>{money(w.profit, cur, true)}</span>
       </div>
-      <div className="mt-1.5 font-mono text-xl font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</div>
-      <div className="mt-1.5 flex justify-between border-t border-zinc-800 pt-1.5 font-mono text-[11px] text-zinc-500">
+      <div className="mt-1 text-xl font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</div>
+      <div className="mt-1 flex justify-between text-xs text-zinc-500">
         <span>En juego</span><span className="text-zinc-300 tnum">{money(w.inPlay, cur)}</span>
       </div>
     </button>
@@ -259,11 +251,11 @@ function WalletChip({ onClick }: { onClick: () => void }) {
   const cur = useCurrency();
   return (
     <button onClick={onClick} title={`Beneficio total ${money(w.profit, cur, true)} · en juego ${money(w.inPlay, cur)}`}
-      className="ml-auto flex h-10 cursor-pointer items-center gap-2.5 rounded-full bg-zinc-900 px-3.5 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-800/70">
-      <Wallet size={15} className="text-amber-400" />
+      className="ml-auto flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900">
+      <Wallet size={15} className="text-zinc-400" />
       <span className="flex flex-col items-start leading-tight">
-        <span className="label-data text-zinc-500">Saldo</span>
-        <span className="whitespace-nowrap font-mono text-[12px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>
+        <span className="text-[11px] text-zinc-500">Saldo</span>
+        <span className="whitespace-nowrap text-[13px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>
       </span>
     </button>
   );
@@ -277,18 +269,18 @@ function LiveNow({ items, onAll }: { items: LiveItem[]; onAll: () => void }) {
       <div className="mb-3 flex items-center gap-2">
         <LiveDot className="h-2 w-2" />
         <span className="text-sm font-semibold text-zinc-50">En directo</span>
-        <span className="ml-auto grid h-6 min-w-6 place-items-center rounded-full bg-zinc-800 px-1.5 font-mono text-[11px] text-zinc-300 tnum">{items.length}</span>
+        <span className="ml-auto text-xs text-zinc-500 tnum">{items.length}</span>
       </div>
       {!items.length ? <p className="text-xs text-zinc-500">Ahora mismo no hay partidos en juego.</p> : (
         <div className="flex flex-col gap-1.5">
           {items.slice(0, MAX).map(it => (
             <button key={it.id} onClick={it.open}
-              className="flex w-full cursor-pointer items-center gap-3 rounded-xl bg-zinc-900/70 px-3 py-2.5 text-left ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-800">
+              className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left transition hover:bg-zinc-800/60">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium text-zinc-100">{it.a} <span className="text-zinc-500">vs</span> {it.b}</span>
-                <span className="block truncate font-mono text-[10px] text-zinc-500">{it.info}</span>
+                <span className="block truncate text-[11px] text-zinc-500">{it.info}</span>
               </span>
-              <span className="shrink-0 rounded-lg bg-zinc-950 px-2 py-1 font-mono text-sm font-semibold text-amber-400 tnum">{it.sa}–{it.sb}</span>
+              <span className="shrink-0 text-sm font-semibold text-zinc-50 tnum">{it.sa}–{it.sb}</span>
             </button>
           ))}
           {items.length > MAX && <button onClick={onAll} className="mt-1 cursor-pointer text-xs text-zinc-400 hover:text-zinc-100">Ver los {items.length} partidos</button>}

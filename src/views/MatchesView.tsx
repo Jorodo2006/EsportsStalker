@@ -89,7 +89,7 @@ export default function MatchesView() {
       <DayStrip value={date} onChange={setDate} counts={counts} />
       <StateFilterBar value={filter} onChange={setFilter} counts={stateCounts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('lol-odds', v); }} label="Cuotas" />
-        <Select className="h-9 w-52 rounded-full" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
+        <Select className="h-9 w-52" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
           <option value="">Todas las ligas</option>
           {leagues.data?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </Select>

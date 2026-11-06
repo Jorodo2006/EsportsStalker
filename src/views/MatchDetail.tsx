@@ -63,9 +63,9 @@ export default function MatchDetail({ match, onClose }: { match: MatchEvent; onC
               {games.map(g => (
                 <button key={g.id} onClick={() => setGameId(g.id)}
                   className={cn(chip(g.id === gameId), 'h-9 px-4 text-[13px]')}>
-                  {g.state === 'inProgress' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />}
+                  {g.state === 'inProgress' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
                   Mapa {g.number}
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">{g.state === 'inProgress' ? 'en juego' : g.state === 'completed' ? 'final' : 'pendiente'}</span>
+                  <span className="font-mono text-xs text-zinc-500">{g.state === 'inProgress' ? 'en juego' : g.state === 'completed' ? 'final' : 'pendiente'}</span>
                 </button>
               ))}
             </div>
@@ -119,7 +119,7 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
         const failed = step?.estado === 'error';
         return (
           <span key={name} title={step?.msg || st?.msg || 'Sin cuotas todavía'}
-            className={cn('inline-flex h-8 items-center gap-2 rounded-full border px-3 font-mono text-[11px] font-medium',
+            className={cn('inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium',
               failed ? 'border-rose-500/40 bg-rose-500/5 text-rose-300'
                 : st?.ok ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-dashed border-zinc-700 text-zinc-500')}>
             {busy ? <Loader2 size={12} className="animate-spin text-amber-400" />
@@ -310,7 +310,6 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
       <button onClick={onToggle} className={cn('flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left transition hover:bg-zinc-900/60', open && 'border-b border-zinc-800/70')}>
-        <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />
         <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{title}</h4>
         {open ? <>
           <span className="label-data hidden w-11 text-right text-zinc-500 sm:inline" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
@@ -412,7 +411,7 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
     <div className={cn(panelCls, 'overflow-hidden')}>
       <div className={cn('flex flex-wrap items-center gap-2 px-4 py-2.5', open && 'border-b border-zinc-800/70')}>
         <button onClick={onToggle} className="mr-2 flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-zinc-50">
-          <span className="h-3.5 w-1 shrink-0 rounded-full bg-amber-500" />Líneas de jugador
+          Líneas de jugador
           {!open && <span className="font-mono text-[11px] font-normal text-zinc-500">{markets.length} líneas</span>}
           <ChevronDown size={14} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />
         </button>
@@ -427,12 +426,12 @@ function PlayerLines({ markets, books, value, onPick, open, onToggle }: {
           Sólo con valor
         </label>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar jugador…"
-          className="h-8 w-44 rounded-full border border-zinc-700/70 bg-zinc-950 px-3.5 text-xs outline-none transition placeholder:text-zinc-600 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" /></>}
+          className="h-8 w-44 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none transition placeholder:text-zinc-600 focus:border-zinc-500" /></>}
       </div>
       {open && <div className="overflow-x-auto">
         <table className="w-full table-fixed" style={{ minWidth: 640 + cols.length * 170 }}>
           <thead>
-            <tr className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <tr className="font-mono text-xs font-medium text-zinc-500">
               <th className="px-4 py-2 text-left">Jugador</th>
               <th className="w-20 px-2 py-2 text-center">Línea</th>
               <th className="w-24 px-2 py-2 text-center" title="Probabilidad de Más / Menos estimada con sus últimas partidas (Leaguepedia)">Estimado</th>

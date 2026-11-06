@@ -14,7 +14,7 @@ const VERDICT_TONE: Record<VerdictCode, string> = {
 };
 
 export function VerdictBadge({ code, className }: { code: VerdictCode; className?: string }) {
-  return <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider', VERDICT_TONE[code], className)}>{VERDICT_LABEL[code]}</span>;
+  return <span className={cn('inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold', VERDICT_TONE[code], className)}>{VERDICT_LABEL[code]}</span>;
 }
 
 const relColor = (s: number) => (s >= 70 ? 'bg-emerald-400' : s >= 50 ? 'bg-amber-400' : 'bg-rose-400');

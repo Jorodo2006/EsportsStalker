@@ -212,7 +212,7 @@ function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour'];
   const wins = done.filter(x => (x.a.id === p.id ? x.a : x.b).winner).length;
   return (
     <div className={cn(panel, 'overflow-hidden')}>
-      <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50 shadow-[inset_2px_0_0_var(--tv-mark)]">
+      <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50">
         {p.flag && <img src={p.flag} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
         <div className="min-w-0 flex-1">
           <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate text-[15px] font-semibold hover:text-amber-400">{p.name}</button>

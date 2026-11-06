@@ -112,9 +112,9 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
         </div>
         <div className="flex gap-5">
           {([['PTS', avg(g => g.pts)], ['REB', avg(g => g.reb)], ['AST', avg(g => g.ast)], ['MIN', avg(g => g.min)]] as const).map(([k, v]) => (
-            <div key={k} className="text-center"><div className="text-lg font-bold tabular-nums">{fx(v)}</div><div className="text-[10px] uppercase text-zinc-500">{k} {label}</div></div>
+            <div key={k} className="text-center"><div className="text-lg font-bold tabular-nums">{fx(v)}</div><div className="text-xs text-zinc-500">{k} {label}</div></div>
           ))}
-          <div className="text-center"><div className="text-lg font-bold tabular-nums">{base.length}</div><div className="text-[10px] uppercase text-zinc-500">PJ {label}</div></div>
+          <div className="text-center"><div className="text-lg font-bold tabular-nums">{base.length}</div><div className="text-xs text-zinc-500">PJ {label}</div></div>
         </div>
       </div>
 
@@ -259,7 +259,7 @@ function Injuries({ teamId, team, opp, injuries }: { teamId?: string; team: stri
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {groups.map(g => (
           <div key={g.title}>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{g.title}</div>
+            <div className="mb-2 text-xs font-semibold text-zinc-500">{g.title}</div>
             {!g.list.length ? <div className="text-sm text-zinc-600">Sin bajas</div> : g.list.map(i => (
               <div key={i.name} className="flex items-center gap-2 py-1 text-sm">
                 <span className="flex-1 truncate">{i.name}</span>

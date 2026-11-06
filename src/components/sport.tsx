@@ -3,12 +3,12 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
-import { Mark, TeamLogo, chip, oddBtn, panelCls, seg, segWrap } from './ui';
+import { TeamLogo, chip, oddBtn, panelCls } from './ui';
 
 export type MatchState = 'pre' | 'live' | 'post';
 
 // Punto rojo de "en juego"
-export const LiveDot = ({ className }: { className?: string }) => <span aria-hidden className={cn('inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-rose-400', className)} />;
+export const LiveDot = ({ className }: { className?: string }) => <span aria-hidden className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400', className)} />;
 
 // ---------- días ----------
 export const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -29,14 +29,14 @@ export function MatchesTitle({ date }: { date: string }) {
   const long = new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return (
     <div>
-      <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight"><Mark className="h-6" />Partidos</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Partidos</h1>
       <p className="mt-1 text-sm text-zinc-400 first-letter:uppercase">{long}</p>
     </div>
   );
 }
 
-// Tira de días en píldoras: la semana alrededor del día elegido, con cuántos partidos hay y si alguno está en juego.
-// El día elegido va relleno del acento. En el móvil se desliza de lado
+// Tira de días: la semana alrededor del día elegido, con cuántos partidos hay y si alguno está en juego.
+// El día elegido va sobre gris. En el móvil se desliza de lado
 export function DayStrip({ value, onChange, counts, span = 7 }: {
   value: string; onChange: (d: string) => void; counts?: Record<string, { total: number; live: number }>; span?: number;
 }) {
@@ -44,21 +44,21 @@ export function DayStrip({ value, onChange, counts, span = 7 }: {
   const days = Array.from({ length: span }, (_, i) => addDays(value, i - half));
   const selRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { selRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' }); }, [value]);
-  const arrow = 'grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-full bg-zinc-900 text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-800 hover:text-zinc-100';
+  const arrow = 'grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100';
   return (
     <div className="flex items-center gap-2">
       <button className={arrow} onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
-      <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto no-scrollbar">
         {days.map(d => {
           const c = counts?.[d];
           const sel = d === value;
           return (
             <button key={d} ref={sel ? selRef : undefined} onClick={() => onChange(d)} aria-pressed={sel}
-              className={cn('relative flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full px-4 text-sm font-medium transition',
-                sel ? 'bg-amber-500 font-semibold text-zinc-950 shadow-md shadow-amber-500/15' : 'bg-zinc-900 text-zinc-300 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-800 hover:text-zinc-50')}>
+              className={cn('relative flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-3.5 text-sm font-medium transition',
+                sel ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
               <span className="first-letter:uppercase">{dayName(d)}</span>
-              {!!c?.total && <span className={cn('font-mono text-xs tnum', sel ? 'text-zinc-950/70' : 'text-zinc-500')}>{c.total}</span>}
-              {!!c?.live && <LiveDot className={cn('absolute right-2 top-1.5', sel && 'bg-zinc-950')} />}
+              {!!c?.total && <span className={cn('text-xs tnum', sel ? 'text-zinc-400' : 'text-zinc-600')}>{c.total}</span>}
+              {!!c?.live && <LiveDot className="absolute right-1.5 top-1.5" />}
             </button>
           );
         })}
@@ -75,7 +75,7 @@ export function StateFilterBar({ value, onChange, counts, children }: {
   value: StateFilter; onChange: (v: StateFilter) => void; counts: Record<StateFilter, number>; children?: ReactNode;
 }) {
   const items: [StateFilter, string][] = [['all', 'Todos'], ['live', 'En juego'], ['pre', 'Próximos'], ['post', 'Terminados']];
-  // En el móvil las píldoras se deslizan de lado en vez de partirse en dos líneas
+  // En el móvil los filtros se deslizan de lado en vez de partirse en dos líneas
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="-mx-3 flex min-w-0 max-w-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 no-scrollbar sm:mx-0 sm:max-w-none sm:px-0">
@@ -83,7 +83,7 @@ export function StateFilterBar({ value, onChange, counts, children }: {
           <button key={v} onClick={() => onChange(v)} disabled={v !== 'all' && !counts[v]} aria-pressed={value === v} className={chip(value === v)}>
             {v === 'live' && (counts.live ? <LiveDot /> : <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />)}
             {label}
-            <span className={cn('font-mono font-semibold tnum', v === 'live' && counts.live ? 'text-rose-300' : value === v ? 'text-amber-200' : 'text-zinc-500')}>{counts[v]}</span>
+            <span className={cn('tnum', v === 'live' && counts.live ? 'text-rose-300' : value === v ? 'text-amber-300' : 'text-zinc-500')}>{counts[v]}</span>
           </button>
         ))}
       </div>
@@ -96,9 +96,9 @@ export function StateFilterBar({ value, onChange, counts, children }: {
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button role="switch" aria-checked={on} onClick={() => onChange(!on)}
-      className="flex h-8 cursor-pointer items-center gap-2 rounded-full px-1.5 text-xs font-medium text-zinc-300 transition hover:text-zinc-50">
+      className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs font-medium text-zinc-300 transition hover:text-zinc-50">
       <span className={cn('relative h-5 w-9 rounded-full transition', on ? 'bg-amber-500' : 'bg-zinc-700')}>
-        <span className={cn('absolute top-0.5 h-4 w-4 rounded-full shadow transition-all', on ? 'left-[18px] bg-zinc-950' : 'left-0.5 bg-zinc-300')} />
+        <span className={cn('absolute top-0.5 h-4 w-4 rounded-full transition-all', on ? 'left-[18px] bg-zinc-950' : 'left-0.5 bg-zinc-300')} />
       </span>
       {label}
     </button>
@@ -113,15 +113,14 @@ export function CompetitionBlock({ id, name, sub, logo, count, live, open, onTog
 }) {
   return (
     <section id={id} className="scroll-mt-4">
-      <button onClick={onToggle} aria-expanded={open} className="mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-1 py-1 text-left transition hover:bg-zinc-900/60">
-        <Mark />
-        {logo ? <img src={logo} alt="" className="h-6 w-6 object-contain" /> : <span className="grid h-6 w-6 place-items-center rounded-lg bg-zinc-800 font-mono text-[9px] font-bold text-zinc-300">{name.slice(0, 2).toUpperCase()}</span>}
+      <button onClick={onToggle} aria-expanded={open} className="mb-2.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md px-1 py-1 text-left transition hover:bg-zinc-900/60">
+        {logo ? <img src={logo} alt="" className="h-5 w-5 object-contain" /> : <span className="grid h-5 w-5 place-items-center rounded bg-zinc-800 text-[9px] font-semibold text-zinc-400">{name.slice(0, 2).toUpperCase()}</span>}
         <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
           <span className="truncate text-[15px] font-semibold text-zinc-50">{name}</span>
           {sub && <span className="label-data truncate text-zinc-500">{sub}</span>}
         </div>
-        {!!live && <span className="flex items-center gap-1 rounded-full bg-[#93000a] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase text-rose-200">{live} en juego</span>}
-        <span className="grid h-6 min-w-6 place-items-center rounded-full bg-zinc-800 px-1.5 font-mono text-[11px] text-zinc-300 tnum">{count}</span>
+        {!!live && <span className="text-xs font-medium text-rose-300">{live} en juego</span>}
+        <span className="text-xs text-zinc-500 tnum">{count}</span>
         <ChevronDown size={16} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />
       </button>
       {open && <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">{children}</div>}
@@ -136,7 +135,7 @@ export function LiveSection({ count, children }: { count: number; children: Reac
       <div className="mb-3 flex items-center gap-2.5 px-1 py-1">
         <LiveDot className="h-2 w-2" />
         <span className="text-[15px] font-semibold text-zinc-50">En directo</span>
-        <span className="label-data text-zinc-500">{count} {count === 1 ? 'partido' : 'partidos'}</span>
+        <span className="text-xs text-zinc-500">{count} {count === 1 ? 'partido' : 'partidos'}</span>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
@@ -173,23 +172,23 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
   const best = odds ? Math.min(odds.a || 99, odds.b || 99) : 0;
   const oddChip = (o: number, t: RowTeam) => (
     <span className={cn(oddBtn(!!o && o === best), 'flex h-10 items-center justify-between gap-2 px-3 text-sm', !o && 'bg-zinc-900 text-zinc-600')}>
-      <span className="min-w-0 truncate font-mono text-[11px] font-medium opacity-75">{oddsTag(t)}</span>
+      <span className="min-w-0 truncate text-xs font-medium opacity-70">{oddsTag(t)}</span>
       <span>{o ? odd(o) : '–'}</span>
     </span>
   );
   const info = [competition, status].filter(Boolean).join(' · ');
   return (
     <button onClick={onClick} aria-current={active}
-      className={cn('flex h-full w-full cursor-pointer flex-col items-stretch gap-3 rounded-2xl border bg-surface text-left transition hover:-translate-y-px hover:bg-zinc-900/60',
-        featured ? 'p-5' : 'p-4', active ? 'border-amber-500/60' : state === 'live' ? 'border-rose-500/30 hover:border-rose-500/50' : 'border-zinc-800 hover:border-zinc-600')}>
+      className={cn('flex h-full w-full cursor-pointer flex-col items-stretch gap-3 rounded-2xl border bg-surface text-left transition hover:bg-zinc-900',
+        featured ? 'p-4' : 'p-3.5', active ? 'border-amber-500/60' : 'border-zinc-800 hover:border-zinc-700')}>
       <div className="flex min-w-0 items-center gap-2">
         {state === 'live'
-          ? <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-300"><LiveDot />{time}</span>
+          ? <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-rose-300"><LiveDot />{time}</span>
           : state === 'pre'
-            ? <span className="shrink-0 font-mono text-[13px] font-semibold text-zinc-100 tnum">{time}</span>
-            : <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-zinc-400">{time}</span>}
-        {info && <span className="min-w-0 truncate font-mono text-[11px] text-zinc-500">{info}</span>}
-        {tag && <span className="ml-auto shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-400">{tag}</span>}
+            ? <span className="shrink-0 text-[13px] font-semibold text-zinc-100 tnum">{time}</span>
+            : <span className="shrink-0 text-xs text-zinc-500">{time}</span>}
+        {info && <span className="min-w-0 truncate text-xs text-zinc-500">{info}</span>}
+        {tag && <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">{tag}</span>}
       </div>
       <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
       {odds && <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, a)}{oddChip(odds.b, b)}</div>}
@@ -202,7 +201,7 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
 // grande en el centro, con el acento en quien va por delante. Lo importante de la ficha son los datos que hay debajo
 // Colores de los equipos en el marcador grande: cada mitad, plana, teñida del suyo
 const tint = (x?: string, y?: string) => (x || y ? {
-  background: `linear-gradient(90deg, ${x ? `color-mix(in oklab, ${x} 30%, transparent)` : 'transparent'} 0 50%, ${y ? `color-mix(in oklab, ${y} 30%, transparent)` : 'transparent'} 50% 100%)`
+  background: `linear-gradient(90deg, ${x ? `color-mix(in oklab, ${x} 22%, transparent)` : 'transparent'} 0 50%, ${y ? `color-mix(in oklab, ${y} 22%, transparent)` : 'transparent'} 50% 100%)`
 } : undefined);
 
 export function Scoreboard({ competition, detail, a, b, state, center, centerSub, children }: {
@@ -215,7 +214,7 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
       <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
       <div className="min-w-0 max-w-full">
         <div className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</div>
-        {t.short && t.short !== t.name && <div className="hidden font-mono text-[11px] uppercase tracking-wider text-zinc-500 sm:block">{t.short}</div>}
+        {t.short && t.short !== t.name && <div className="hidden text-xs text-zinc-500 sm:block">{t.short}</div>}
       </div>
     </div>
   );
@@ -225,12 +224,11 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pt-3 sm:px-5">
-        <Mark />
         <span className="text-sm font-semibold text-zinc-100">{competition}</span>
-        {detail && <span className="font-mono text-[11px] text-zinc-500">· {detail}</span>}
+        {detail && <span className="text-xs text-zinc-500">· {detail}</span>}
         {centerSub && (
-          <span className={cn('ml-auto flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
-            state === 'live' ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-800 text-zinc-300')}>
+          <span className={cn('ml-auto flex items-center gap-1.5 text-xs font-medium first-letter:uppercase',
+            state === 'live' ? 'text-rose-300' : 'text-zinc-400')}>
             {state === 'live' && <LiveDot />}{centerSub}
           </span>
         )}
@@ -239,8 +237,8 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
         {side(a, 'a')}
         <div className="flex flex-col items-center gap-1.5">
           {state === 'pre'
-            ? <span className="rounded-xl bg-zinc-900 px-4 py-2 font-score text-3xl font-semibold leading-none tnum text-zinc-100">{center}</span>
-            : <div className="flex items-center gap-3 rounded-xl bg-zinc-900 px-4 py-2 sm:gap-4">{num(a, 'a')}<span className="text-2xl font-light text-zinc-700">–</span>{num(b, 'b')}</div>}
+            ? <span className="font-score text-3xl font-semibold leading-none tnum text-zinc-100">{center}</span>
+            : <div className="flex items-center gap-3 sm:gap-4">{num(a, 'a')}<span className="text-2xl font-light text-zinc-600">–</span>{num(b, 'b')}</div>}
         </div>
         {side(b, 'b')}
       </div>
@@ -249,16 +247,19 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   );
 }
 
-// Pestañas bajo el marcador: selector segmentado (la elegida en blanco) y, a la derecha, las acciones
+// Pestañas bajo el marcador: subrayadas, y si no caben se parten en dos líneas en vez de esconderse de lado.
+// A la derecha, las acciones
 export function SheetTabs<T extends string>({ value, onChange, items, right }: { value: T; onChange: (v: T) => void; items: [T, string][]; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800/70 px-3 py-3 sm:px-4">
-      <div className={segWrap}>
+    <div className="flex flex-wrap items-end gap-x-2 gap-y-2 border-t border-zinc-800 px-3 pt-1 sm:px-4">
+      <div className="flex min-w-0 flex-wrap gap-x-4">
         {items.map(([v, label]) => (
-          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v} className={seg(value === v)}>{label}</button>
+          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v}
+            className={cn('-mb-px cursor-pointer whitespace-nowrap border-b-2 py-2.5 text-[13px] font-medium transition',
+              value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-100')}>{label}</button>
         ))}
       </div>
-      {right && <div className="ml-auto flex flex-wrap gap-2">{right}</div>}
+      {right && <div className="ml-auto flex flex-wrap gap-2 pb-2">{right}</div>}
     </div>
   );
 }

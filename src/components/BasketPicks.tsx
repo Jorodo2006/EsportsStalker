@@ -103,7 +103,7 @@ function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
     <div className="px-3 py-1.5 transition hover:bg-white/[.04]">
       <div className="flex items-center gap-2.5">
         <button onClick={() => onOpen(pick)} title={tip(pick)} className="min-w-0 flex-1 cursor-pointer text-left">
-          <div className="line-clamp-2 font-score text-[15px] font-semibold uppercase leading-[18px] tracking-wide text-white">{pick.title}</div>
+          <div className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white">{pick.title}</div>
           <div className="line-clamp-2 text-[11px] leading-[14px] text-zinc-400">
             {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
             {pick.injury && <span className="text-amber-300">{pick.injury} · </span>}
@@ -141,7 +141,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
       <button onClick={() => onOpen(pick)} title={tip(pick)} className="col-span-2 min-w-0 cursor-pointer text-left md:col-span-1">
-        <div className="font-score text-[26px] font-bold uppercase leading-[28px] tracking-wide text-white md:text-[30px] md:leading-[32px]">{pick.title}</div>
+        <div className="font-score text-[26px] font-bold leading-[28px] text-white md:text-[30px] md:leading-[32px]">{pick.title}</div>
         <div className="mt-1.5 text-[13px] text-zinc-300">
           {!oneGame && <>{eventOf(pick.game)}, {esTime(pick.game.date)} · </>}
           {pick.injury && <span className="text-amber-300">{pick.injury} · </span>}
@@ -150,10 +150,10 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
       </button>
       <div className="text-center" title={`Modelo ${p0(pick.pModel)}${pick.pMarket != null ? `, casa ${p0(pick.pMarket)}` : ''}`}>
         <div className="font-score text-[44px] font-bold leading-[42px] text-[var(--tv-mark)] tnum">{p0(pick.p)}</div>
-        <div className="font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Probabilidad</div>
+        <div className="font-score text-[11px] font-semibold text-zinc-400">Probabilidad</div>
       </div>
       <div className="col-span-2 min-w-32 md:order-none md:col-span-1">
-        <div className="mb-1 flex justify-between font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400"><span>Fiabilidad</span><span>{pick.rel.label}</span></div>
+        <div className="mb-1 flex justify-between font-score text-[11px] font-semibold text-zinc-400"><span>Fiabilidad</span><span>{pick.rel.label}</span></div>
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><span className={cn('font-semibold tnum', hasValue(pick) ? 'text-[var(--tv-mark)]' : 'text-zinc-200')}>{hasValue(pick) ? 'Con valor ' : 'Valor '}{signed(pick.ev)}</span></div>
       </div>
@@ -263,7 +263,7 @@ export function BasketDayPicks({ games, injuries, onOpen, onAll }: { games: Bask
       {list.map(p => (
         <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_2.75rem_3rem_1rem] items-center gap-2 border-b border-white/10 px-3 py-1.5 text-left transition hover:bg-white/[.05]">
           <span className="min-w-0">
-            <span className="block truncate font-score text-[15px] font-bold uppercase tracking-wide text-white">{p.title}</span>
+            <span className="block truncate font-score text-[15px] font-bold text-white">{p.title}</span>
             <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {signed(p.ev)}</span>
           </span>
           <span className="text-right font-score text-[17px] font-bold text-[var(--tv-mark)] tnum">{p0(p.p)}</span>

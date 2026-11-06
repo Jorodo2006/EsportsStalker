@@ -56,7 +56,7 @@ export function OptionInput({ value, onChange, options, placeholder, required }:
             lastGroup = o.group;
             return (
               <div key={o.value}>
-                {head && <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">{head}</div>}
+                {head && <div className="px-3 pb-1 pt-2 text-xs font-semibold text-zinc-600">{head}</div>}
                 <button type="button" data-hi={i === hi ? '1' : undefined} onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); choose(o.value); }}
                   className={cn('flex w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-sm', i === hi ? 'bg-zinc-800/80' : 'hover:bg-zinc-900',
                     o.value === value && 'text-amber-300')}>
