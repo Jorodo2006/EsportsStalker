@@ -69,6 +69,7 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
                 <span className="font-mono text-xl font-bold tabular-nums">{pct(p)}</span>
               </div>
               <div className="mt-1 font-mono text-[11px] text-zinc-500">Cuota justa <span className="tabular-nums text-zinc-200">{odd(fair)}</span></div>
+              {s && Math.abs(s.p - p) >= 0.005 && <div className="mt-0.5 font-mono text-[11px] text-zinc-500" title="Mezcla del modelo con la probabilidad de la casa sin margen. Con ella se calcula el valor.">Con la casa <span className="tabular-nums text-zinc-200">{pct(s.p)}</span></div>}
               {s ? <>
                 <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[11px]">
                   <div><div className="text-zinc-500">Cuota{s.book ? ` ${s.book}` : ''}</div><div className="font-semibold tabular-nums">{odd(s.price)}</div></div>

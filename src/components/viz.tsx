@@ -1,7 +1,7 @@
 // Piezas de las fichas, con el aspecto de terminal de datos del diseño: paneles planos con borde fino, cabecera con la
 // marca del acento, cifras en mono y una línea fina debajo de cada comparación que se inclina hacia quien va por delante.
 // El acento sale de --tv-mark (index.css), según la app.
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/format';
 import { Mark, chip } from './ui';
 
@@ -60,9 +60,9 @@ export function TvStat({ label, value, sub, title }: { label: string; value: Rea
 export type Kpi = { label: string; value: ReactNode; sub?: ReactNode; title?: string };
 export function KpiStrip({ items, className }: { items: Kpi[]; className?: string }) {
   return (
-    <div className={cn('grid divide-x divide-zinc-800', className)} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+    <div className={cn('grid [grid-template-columns:repeat(var(--kpi-sm),minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--kpi),minmax(0,1fr))]', className)} style={{ '--kpi': items.length, '--kpi-sm': items.length > 4 ? 3 : items.length } as CSSProperties}>
       {items.map(k => (
-        <div key={k.label} title={k.title} className="min-w-0 px-3 py-2 text-center">
+        <div key={k.label} title={k.title} className="min-w-0 border-b border-l border-zinc-800 px-3 py-2 text-center first:border-l-0 sm:border-b-0">
           <div className="label-data truncate text-zinc-500">{k.label}</div>
           <div className="mt-0.5 truncate font-score text-lg font-semibold leading-tight text-zinc-50 tnum">{k.value}</div>
           {k.sub != null && k.sub !== '' && <div className="truncate font-mono text-[11px] text-zinc-500 tnum">{k.sub}</div>}
@@ -89,8 +89,9 @@ export function TvTabs<T extends string>({ value, onChange, items }: { value: T;
 // Una estadística entre dos: a a la izquierda y b a la derecha. La línea parte del centro y se va hacia quien va por delante;
 // spread es la diferencia que la lleva al tope, porque cada dato se mueve en un rango distinto (6 puntos de primer saque es
 // muchísimo y 6 de juegos al resto, normal). muted: b es sólo una referencia (la media), no un rival al que resaltar.
-export function TvRow({ label, a, b, aText, bText, better, spread, muted, dim, title }: {
-  label: string; a: number | null; b: number | null; aText: string; bText: string; better?: 'low'; spread?: number; muted?: boolean; dim?: boolean; title?: string;
+// aMark y bMark: el color de la línea cuando va por delante cada uno (por ejemplo, el de su equipo).
+export function TvRow({ label, a, b, aText, bText, better, spread, muted, dim, title, aMark, bMark }: {
+  label: string; a: number | null; b: number | null; aText: string; bText: string; better?: 'low'; spread?: number; muted?: boolean; dim?: boolean; title?: string; aMark?: string; bMark?: string;
 }) {
   const ok = a != null && b != null;
   const lead = ok ? (better === 'low' ? b! - a! : a! - b!) : 0;
@@ -105,12 +106,15 @@ export function TvRow({ label, a, b, aText, bText, better, spread, muted, dim, t
         <span className={cn('text-right font-mono text-[14px] tnum', bTop && !muted ? 'font-bold text-zinc-50' : 'font-medium text-zinc-400')}>{bText}</span>
       </div>
       <div className="relative h-[3px] rounded-full bg-zinc-800">
-        {!!size && <span className={cn('absolute top-0 h-full rounded-full', bTop && muted ? 'bg-zinc-500' : 'bg-[var(--tv-mark)]')} style={aTop ? { right: '50%', width: `${Math.max(size, 0.04) * 50}%` } : { left: '50%', width: `${Math.max(size, 0.04) * 50}%` }} />}
+        {!!size && <span className={cn('absolute top-0 h-full rounded-full', bTop && muted ? 'bg-zinc-500' : 'bg-[var(--tv-mark)]')} style={{ ...(aTop ? { right: '50%' } : { left: '50%' }), width: `${Math.max(size, 0.04) * 50}%`, ...(aTop && aMark ? { background: aMark } : bTop && bMark ? { background: bMark } : {}) }} />}
         <span className="absolute -top-[2px] left-1/2 h-[6px] w-px bg-zinc-500" />
       </div>
     </div>
   );
 }
+
+// Un escudo negro no se vería sobre un fondo oscuro: este halo lo separa sin notarse en los demás
+export const logoGlow = 'drop-shadow-[0_0_4px_rgb(255_255_255_/_.4)]';
 
 const split = (name: string) => { const [first, ...rest] = name.split(' '); return rest.length ? { first, last: rest.join(' ') } : { first: '', last: first }; };
 export const surname = (name: string) => split(name).last;
@@ -130,10 +134,11 @@ export function TvPortrait({ name, photo, logo, side, heroLabel, hero, lead, her
     </div>
   );
   return (
-    <div className={cn('relative hidden min-h-80 overflow-hidden bg-zinc-900 md:block', right ? 'border-l' : 'border-r', 'border-zinc-800')}>
+    <div className={cn('relative hidden min-h-80 overflow-hidden bg-zinc-900 md:block', right ? 'border-l' : 'border-r', 'border-zinc-800')}
+      style={{ backgroundColor: 'color-mix(in oklab, var(--tv-glow, var(--color-zinc-900)) 22%, var(--color-zinc-900))' }}>
       {photo && !broken ? (
         <img src={photo} alt="" onError={() => setBroken(true)}
-          className={cn('absolute inset-x-0 top-0 w-full', logo ? 'h-[58%] object-contain p-9' : 'h-[74%] object-cover object-top')}
+          className={cn('absolute inset-x-0 top-0 w-full', logo ? `h-[58%] object-contain p-9 ${logoGlow}` : 'h-[74%] object-cover object-top')}
           style={logo ? undefined : { maskImage: 'linear-gradient(to bottom, #000 66%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, #000 66%, transparent 100%)' }} />
       ) : (
         <div className="absolute inset-x-0 top-10 text-center font-mono text-[72px] font-bold uppercase leading-none text-zinc-800">{(first[0] ?? '') + (last[0] ?? '')}</div>

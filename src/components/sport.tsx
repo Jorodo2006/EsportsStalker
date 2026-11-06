@@ -138,28 +138,35 @@ export function LiveSection({ count, children }: { count: number; children: Reac
         <span className="text-[15px] font-semibold text-zinc-50">En directo</span>
         <span className="label-data text-zinc-500">{count} {count === 1 ? 'partido' : 'partidos'}</span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">{children}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
   );
 }
 
-export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean }
+// games y points: los juegos del set y los puntos del juego en curso (tenis en juego); serving: saca él; color: el del equipo, de fondo en el marcador grande; plate: su escudo necesita una placa clara para verse
+export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
 
 // Rótulo de la ficha de cuota: el código del equipo (G2, LAL) o, si el "corto" no es un código (en tenis es el país),
 // el apellido del jugador
 const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.name.replace(/\s*\(\d+\)$/, '').split(' ').pop() || t.name);
 
 // Tarjeta de partido: estado y hora arriba, los dos equipos con su marcador y, si se piden, las cuotas de ganador en dos
-// fichas (la del favorito teñida del acento). featured: más grande, para "En directo", con la competición en la cabecera
+// fichas (la del favorito teñida del acento). featured: más grande, para "En directo", con la competición en la cabecera.
+// En tenis en juego, tras los sets van los juegos del set y los puntos del juego.
+// items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
 export function MatchCard({ state, time, status, a, b, odds, active, onClick, tag, competition, featured }: {
   state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number } | null;
   active?: boolean; onClick: () => void; tag?: string; competition?: string; featured?: boolean;
 }) {
+  const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
   const team = (t: RowTeam) => (
     <div className="flex min-w-0 items-center gap-2.5">
       <TeamLogo src={t.logo} name={t.short || t.name} size={featured ? 36 : 26} />
       <span className={cn('min-w-0 flex-1 truncate', featured ? 'text-base' : 'text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'font-medium text-zinc-100')} title={t.name}>{t.name}</span>
-      {state !== 'pre' && <span className={cn('font-score font-semibold tnum', featured ? 'text-2xl' : 'text-lg', t.lose ? 'text-zinc-500' : t.win || state === 'live' ? 'text-amber-400' : 'text-zinc-50')}>{t.score ?? ''}</span>}
+      {t.serving && <span title="Saca" aria-label="Saca" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+      {state !== 'pre' && <span className={cn('font-score font-semibold tnum', featured ? 'text-2xl' : 'text-lg', t.lose ? 'text-zinc-500' : games ? 'text-zinc-50' : t.win || state === 'live' ? 'text-amber-400' : 'text-zinc-50')} title={games ? 'Sets' : undefined}>{t.score ?? ''}</span>}
+      {games && <span className={cn('w-5 text-right font-score tnum text-zinc-400', featured ? 'text-xl' : 'text-base')} title="Juegos de este set">{t.games ?? ''}</span>}
+      {points && <span className={cn('w-7 text-right font-score font-semibold tnum text-amber-400', featured ? 'text-xl' : 'text-base')} title="Puntos del juego">{t.points ?? ''}</span>}
     </div>
   );
   // Se resalta el favorito (la cuota más baja), como antes
@@ -173,7 +180,7 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
   const info = [competition, status].filter(Boolean).join(' · ');
   return (
     <button onClick={onClick} aria-current={active}
-      className={cn('flex h-full w-full cursor-pointer flex-col gap-3 rounded-2xl border bg-surface text-left transition hover:-translate-y-px hover:bg-zinc-900/60',
+      className={cn('flex h-full w-full cursor-pointer flex-col items-stretch gap-3 rounded-2xl border bg-surface text-left transition hover:-translate-y-px hover:bg-zinc-900/60',
         featured ? 'p-5' : 'p-4', active ? 'border-amber-500/60' : state === 'live' ? 'border-rose-500/30 hover:border-rose-500/50' : 'border-zinc-800 hover:border-zinc-600')}>
       <div className="flex min-w-0 items-center gap-2">
         {state === 'live'
@@ -193,6 +200,11 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
 // ---------- marcador grande ----------
 // El marcador del partido abierto: la competición y el estado arriba, los dos equipos a los lados y el resultado en
 // grande en el centro, con el acento en quien va por delante. Lo importante de la ficha son los datos que hay debajo
+// Colores de los equipos en el marcador grande: cada mitad, plana, teñida del suyo
+const tint = (x?: string, y?: string) => (x || y ? {
+  background: `linear-gradient(90deg, ${x ? `color-mix(in oklab, ${x} 30%, transparent)` : 'transparent'} 0 50%, ${y ? `color-mix(in oklab, ${y} 30%, transparent)` : 'transparent'} 50% 100%)`
+} : undefined);
+
 export function Scoreboard({ competition, detail, a, b, state, center, centerSub, children }: {
   competition: string; detail?: string; a: RowTeam; b: RowTeam; state: MatchState; center?: ReactNode; centerSub?: string; children?: ReactNode;
 }) {
@@ -200,7 +212,7 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
     <div className={cn('flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
-      <TeamLogo src={t.logo} name={t.short || t.name} size={44} />
+      <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
       <div className="min-w-0 max-w-full">
         <div className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</div>
         {t.short && t.short !== t.name && <div className="hidden font-mono text-[11px] uppercase tracking-wider text-zinc-500 sm:block">{t.short}</div>}
@@ -223,7 +235,7 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
           </span>
         )}
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 py-5 sm:gap-6 sm:px-5">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 py-5 sm:gap-6 sm:px-5" style={tint(a.color, b.color)}>
         {side(a, 'a')}
         <div className="flex flex-col items-center gap-1.5">
           {state === 'pre'

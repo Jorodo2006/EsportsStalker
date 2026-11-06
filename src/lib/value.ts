@@ -23,17 +23,43 @@ export interface SideValue {
   price: number;
   book?: string;
   p: number; // probabilidad estimada de ganar (sin contar la nula)
+  pModel: number; // la del modelo, antes de mezclarla con la casa y sin la nula
   ev: number; // valor esperado por unidad: p·cuota + nula − 1
   edge: number | null; // probabilidad estimada − probabilidad de la casa sin margen
+  gap: number | null; // lo mismo con la del modelo: cuánto discrepa de la casa antes de mezclar
   kelly: number; // fracción del bank: ¼ de Kelly con tope del 3 %
 }
 
-// p y push sobre el total (p + p del otro lado + push = 1); fair = probabilidad sin margen de la casa
-export function sideValue(side: Side, p: number, push: number, price: number, fair: number | null, book?: string): SideValue {
-  const pNoPush = p / Math.max(1e-9, 1 - push);
+const logit = (p: number) => Math.log(p / (1 - p));
+const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
+const inBounds = (p: number) => clamp(p, 0.002, 0.998);
+
+// Probabilidad final: el modelo mezclado en logit con la casa sin margen. Ordenar por valor con el modelo a secas
+// sube a la cabeza sus propios errores (una baja que no conoce, un cambio de rol), con EV de +30 % que no existen.
+// Hacia los extremos pesa menos: ahí el modelo sale optimista (docs/specs/08-baloncesto.md) y una diferencia pequeña de
+// probabilidad se convierte en un EV enorme con cuotas altas.
+export function blendWithMarket(p: number, fair: number, modelWeight: number) {
+  const w = modelWeight * 4 * fair * (1 - fair);
+  return sigmoid(w * logit(inBounds(p)) + (1 - w) * logit(inBounds(fair)));
+}
+
+// Tanta diferencia con la casa suele ser que al modelo le falta algo (una baja, un cambio de rol) o un mercado mal leído. Se mide en
+// logit porque 10 % frente a 29 % es mucho más grave que 50 % frente a 69 %: 0,85 es 50 % frente a 70 %, o 10 % frente a 21 %
+const TOO_FAR = 0.85;
+export const tooFar = (pModel: number, fair: number) => Math.abs(logit(inBounds(pModel)) - logit(inBounds(fair))) >= TOO_FAR;
+
+// p y push sobre el total (p + p del otro lado + push = 1); fair = probabilidad sin margen de la casa.
+// modelWeight: cuánto pesa el modelo frente a la casa (1 = sólo el modelo, sin mezclar)
+export function sideValue(side: Side, p: number, push: number, price: number, fair: number | null, book?: string, modelWeight = 1): SideValue {
+  const pModel = p / Math.max(1e-9, 1 - push);
+  const pNoPush = fair != null && modelWeight < 1 ? blendWithMarket(pModel, fair, modelWeight) : pModel;
+  const final = pNoPush * (1 - push);
   const b = price - 1;
   const kelly = b > 0 ? clamp((b * pNoPush - (1 - pNoPush)) / b, 0, 1) : 0;
-  return { side, price, book, p, ev: p * price + push - 1, edge: fair != null ? pNoPush - fair : null, kelly: Math.min(kelly / 4, 0.03) };
+  return {
+    side, price, book, p: final, pModel, ev: final * price + push - 1,
+    edge: fair != null ? pNoPush - fair : null, gap: fair != null ? pModel - fair : null, kelly: Math.min(kelly / 4, 0.03)
+  };
 }
 
 // ---------- fiabilidad ----------

@@ -1,6 +1,6 @@
 // Puntos de los equipos de baloncesto: tabla de toda la liga, puntos de un equipo por tramos y cuartos, y el partido con la
 // proyección del total y de los puntos de cada uno, la probabilidad de la línea que se elija y el valor frente a las casas.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '@/lib/app-context';
@@ -257,13 +257,15 @@ function RowsTable({ rows, value, line }: { rows: TeamRow[]; value: (r: TeamRow)
 }
 
 // ---------- Un partido: total y puntos de cada equipo ----------
-export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds }) {
+// initial: con qué abrir (lo mandan las recomendaciones)
+export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: MatchOdds; initial?: { period: PointPeriod; kind: PointKind; line: number } }) {
   const { addToSlip, settings } = useApp();
   const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
   const q = useLeagueGames(game.league);
-  const [period, setPeriod] = useState<PointPeriod>('game');
-  const [kind, setKind] = useState<PointKind>('total');
+  const [period, setPeriod] = useState<PointPeriod>(initial?.period ?? 'game');
+  const [kind, setKind] = useState<PointKind>(initial?.kind ?? 'total');
+  const wanted = useRef(initial?.line ?? null);
   const [line, setLine] = useState('');
   const [over, setOver] = useState('');
   const [under, setUnder] = useState('');
@@ -278,7 +280,9 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
   // Al cambiar de mercado: la línea principal de las casas si la hay; si no, la proyección redondeada a x,5
   useEffect(() => {
     if (!P) return;
-    const main = mainLine(lines);
+    const asked = lines.find(l => l.line === wanted.current);
+    if (asked) wanted.current = null;
+    const main = asked ?? mainLine(lines);
     if (main) { applyLine(main); return; }
     setLine(fmtLine(Math.floor(P[kind].mu) + 0.5)); setOver(''); setUnder(''); setBooks({});
   }, [kind, period, !!P, lines.length]); // eslint-disable-line react-hooks/exhaustive-deps

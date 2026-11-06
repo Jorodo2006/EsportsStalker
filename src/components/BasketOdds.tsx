@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, fmtTime, odd, pct } from '@/lib/format';
-import type { AutoJob, BasketGame, MarketLine, MatchOdds, Sport, TeamRef } from '@/lib/types';
+import type { AutoJob, BasketGame, MarketLine, Sport, TeamRef } from '@/lib/types';
 import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
@@ -160,25 +160,4 @@ function OddsCard({ group, lines, books, onPick }: {
       {many && <button onClick={() => setAll(!all)} className="w-full cursor-pointer border-t border-zinc-800 py-2 font-mono text-[11px] text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100">{all ? 'Ver sólo las líneas más igualadas' : `Ver las ${lines.length} líneas`}</button>}
     </div>
   );
-}
-
-// Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, book }] }
-export function playerLines(odds: MatchOdds | undefined, name: string) {
-  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
-  const n = norm(name), last = norm(name.split(' ').slice(-1)[0] || '');
-  const out: Record<string, { line: number; over?: number; under?: number; overBook?: string; underBook?: string }[]> = {};
-  for (const m of odds?.markets ?? []) {
-    if (!m.key.startsWith('player|') || m.line == null) continue;
-    const [, stat, who] = m.key.split('|');
-    const w = norm(who);
-    if (w !== n && !(last.length >= 4 && w.endsWith(last) && w[0] === n[0])) continue;
-    const best = (id: string) => {
-      const p = m.outcomes.find(o => o.id === id)?.prices ?? {};
-      const [book, price] = Object.entries(p).sort((x, y) => y[1] - x[1])[0] ?? [];
-      return { price, book };
-    };
-    const o = best('over'), u = best('under');
-    (out[stat] ??= []).push({ line: m.line, over: o.price, under: u.price, overBook: o.book, underBook: u.book });
-  }
-  return out;
 }

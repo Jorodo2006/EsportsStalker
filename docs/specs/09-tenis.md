@@ -25,6 +25,32 @@ Cada jugador lleva `alt` con los nombres que usan las casas ("Sinner", "J. Sinne
 El historial de la ficha sale de `eventlog` (API core de ESPN), que sólo da referencias: se pide el cuadro de cada torneo
 (12 como mucho, con caché) y se buscan ahí sus partidos.
 
+## ATP Challenger (`server/services/tennis/livescore.js`)
+
+ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la app de LiveScore (`prod-public-api.livescore.com/v1/api/app/date/tennis/<AAAAMMDD>/0`) y entran en
+`GET /api/tennis/games`, `/days` y `/live` con `level: 'challenger'`, `tour: 'atp'` e id `ch:<Eid>`. Se pueden ocultar con el interruptor *Challenger*.
+
+- **Por qué esta fuente:** el `robots.txt` de la web de LiveScore prohíbe `/api/` y sus condiciones no se pudieron leer (la página no se carga sin JavaScript). Su servidor de datos no tiene `robots.txt`. **Se decidió usarla el 5/11/2026, a petición del usuario y para uso personal**, a sabiendas de que
+  Tennis Abstract y tennis-data.co.uk se descartaron por su `robots.txt`. Las peticiones van sin disfrazar. **Si la app se fuese a vender o a publicar, hay que volver a mirarlo.**
+- **Sólo marcador y cuotas:** sin *Recomendaciones* ni *Forma de los jugadores*, porque ni el modelo (TennisMyLife) ni las fichas (ESPN) tienen sus datos. No hay banderas, ranking ni cabezas de serie.
+- **Cuotas:** las lecturas programadas no los miran (`scheduler.js`): son decenas al día y leer de más puede hacer que las casas bloqueen. Se pueden pedir con *Actualizar cuotas*, si las casas los tienen.
+- **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. La previa va en el nombre (`: Qualification`).
+
+## Puntos del juego (`server/services/tennis/points.js`)
+
+ESPN sólo da los juegos de cada set. Los puntos (15-30, 40-AD) y quién saca van en `points` de `GET /api/tennis/games` y `/live`:
+
+- **WTA y WTA 125:** API de la web oficial de la WTA (`api.wtatennis.com/tennis/tournaments/<id>/<año>/matches?states=L`), cuyo `robots.txt` no pone límites.
+- **ATP:** LiveScore (`Tr1G`, `Tr2G`, `Esrv`), cruzado por nombre con el partido de ESPN. `app.atptour.com` y Sofascore responden 403 y no se intenta saltar.
+- **Challenger:** LiveScore, de donde sale el partido entero.
+- **0-0 en LiveScore:** no trae los puntos. Se enseña 0-0 sólo si ese partido ya ha dado puntos alguna vez; si no, nada, porque también podría no tener datos.
+- **Sólo si cuadra:** si los juegos no coinciden con los de ESPN, `points` es `null`. Una fuente puede ir por detrás: al acabar un tie-break, ESPN daba 6-7 y la WTA seguía en 6-6
+  con 5-6. Tampoco se enseña si lleva 5 minutos sin cambiar (lluvia, lesión).
+- **Nombres:** se cruzan por palabras, porque ESPN escribe "Li Zongyu" y la WTA, nombre "Zongyu" y apellido "Li".
+- **Frescura:** caché de 15 s (la lista de torneos, 6 h) y la interfaz pregunta cada 15 s con partidos en juego. Por eso el marcador de ESPN pasó de 60 a 20 s de caché, con
+  la copia en `tennis.cache` limitada a una por minuto. Puede ir por detrás del partido, y no se ha medido cuánto: no hay que fiarse de él para apostar punto a punto.
+- Es la API que usa su web, sin documentar: puede cambiar sin aviso. Si falla, el marcador sale igual, sin puntos.
+
 ## Estadísticas de juego (`server/services/tennis/tml.js`)
 
 ESPN no da saque, resto ni superficie. Salen de los **CSV gratuitos de TennisMyLife** (`stats.tennismylife.org/data/`: un
@@ -61,8 +87,8 @@ fichero por año y por circuito, más los torneos en curso), que se bajan cada 6
 ## Interfaz
 
 - *Partidos*: tira de días, filtro por estado, interruptores *Previa* (oculta la previa por defecto) y *Cuotas*,
-  partidos agrupados por torneo (los Grand Slam primero). La ficha tiene marcador grande (sets ganados) y las pestañas
-  *Marcador* (set a set con tie-breaks), *Cuotas* y *Forma de los jugadores* (ranking y últimos partidos).
+  partidos agrupados por torneo (los Grand Slam primero). En juego, cada fila enseña sets ganados, juegos del set y puntos del juego. La ficha tiene marcador grande (sets ganados) y las pestañas
+  *Marcador* (set a set con tie-breaks, puntos del juego y quién saca), *Cuotas* y *Forma de los jugadores* (ranking y últimos partidos).
 - *Jugadores*: rankings de la ATP y la WTA con buscador por nombre o país y la subida o bajada de cada jugador. Al pulsar
   uno se abre su ficha (`src/components/TennisPlayerSheet.tsx`), que también se abre desde *Forma de los jugadores*.
   Esa pestaña enseña además los enfrentamientos recientes entre los dos.

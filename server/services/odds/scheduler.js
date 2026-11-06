@@ -77,13 +77,13 @@ async function upcomingBasket(hours) {
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'basket', a: team(g.away), b: team(g.home) }));
 }
 
-// Tenis: sólo los del cuadro final (no la previa)
+// Tenis: sólo los del cuadro final (no la previa) y sin los Challenger: son decenas al día, y leer de más puede hacer que las casas bloqueen
 async function upcomingTennis(hours) {
   const until = Date.now() + hours * 3600e3;
   const days = daysUntil(until);
   const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
   const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
-  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.a?.name && g.b?.name; })
+  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.level !== 'challenger' && g.a?.name && g.b?.name; })
     .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
 }
 

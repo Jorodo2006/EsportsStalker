@@ -1,10 +1,16 @@
 // Modelo de props de jugador de baloncesto (adaptado de courtside-edge): proyección ponderada por recencia y minutos,
 // ajuste local / visitante y por rival, probabilidad de la línea mezclada con la frecuencia histórica,
 // y el valor, la fiabilidad y el veredicto con las funciones comunes de value.ts.
-import type { BasketLogGame } from './types';
-import { devig, lineProbs, relCommon, reliability, sideValue, verdict, type Side, type SideValue } from './value';
+import type { BasketLogGame, BasketTeamLogs, MatchOdds } from './types';
+import { devig, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue } from './value';
 
 type G = BasketLogGame;
+
+// Cuánto pesa el modelo frente a la casa sin margen al calcular el valor. Es una decisión, no una medida: no hay cuotas
+// históricas de baloncesto con las que ajustarlo. Las líneas de jugador son más blandas que un ganador de tenis (ahí es 0,25)
+const MODEL_WEIGHT = 0.4;
+const THIN_WEIGHT = 0.2; // con poca muestra, todavía menos
+const THIN_GAMES = 10;
 export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (g: G) => number }> = {
   pts: { label: 'Puntos', short: 'PTS', f: g => g.pts },
   reb: { label: 'Rebotes', short: 'REB', f: g => g.reb },
@@ -117,9 +123,10 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: { 
   pUnder = clamp(pUnder / norm, 0.02, 0.98);
 
   const mk = devig(odds.over, odds.under);
+  const w = pool.length < THIN_GAMES ? THIN_WEIGHT : MODEL_WEIGHT;
   const sides: SideValue[] = [];
-  if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.book));
-  if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.book));
+  if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.book, w));
+  if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.book, w));
 
   const cur = pool.filter(g => g.season === ctx.currentSeason && g.type === 'reg');
   const recentMins = pool.slice(0, 10).map(g => g.min);
@@ -129,6 +136,8 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: { 
   if (P.wMin > 0 && Math.abs(P.last5Min - P.wMin) / P.wMin > 0.18)
     penalties.push({ pts: 8, warning: `Cambio de rol: ${P.last5Min.toFixed(1)} min en los últimos 5 frente a ${P.wMin.toFixed(1)} de media` });
   if (P.usedPreseason) penalties.push({ pts: 15, warning: 'La muestra incluye partidos de pretemporada' });
+  const far = sides.find(s => s.gap != null && tooFar(s.pModel, s.pModel - s.gap));
+  if (far) penalties.push({ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(far.pModel * 100)} % frente a ${Math.round((far.pModel - far.gap!) * 100)} %): lo normal es que ella sepa algo que él no` });
   const rel = reliability([
     { label: 'Muestra esta temporada', value01: cur.length / 10, max: 25, note: `${cur.length} partido${cur.length === 1 ? '' : 's'} de liga regular` },
     { label: 'Historial total', value01: pool.length / 40, max: 15, note: `${pool.length} partidos analizados` },
@@ -207,3 +216,43 @@ export const suggestedLine = (games: G[], market: BasketMarket, ctx: BasketCtx) 
   const P = project(games, market, ctx);
   return P ? Math.floor(P.mu) + 0.5 : null;
 };
+
+export const fmtLine = (n: number) => String(n).replace('.', ',');
+// "+4,5" es Más de 4,5 y "-4.5", Menos de 4,5: el signo se traduce a lado y aquí sólo queda el número
+export const parseLine = (s: string) => { const n = parseFloat(s.trim().replace(/^[+-]\s*/, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : null; };
+
+// Los que faltan a los últimos partidos de su equipo: es el único aviso de baja en la Euroliga, donde la API no las da
+export function missedByPlayer(t: BasketTeamLogs) {
+  const season = t.players.flatMap(p => p.games).filter(g => g.season === t.currentSeason && g.type !== 'pre');
+  const games = [...new Map(season.map(g => [g.id, g.date])).entries()].sort((a, b) => +new Date(b[1]) - +new Date(a[1])).map(([id]) => id);
+  return new Map(t.players.map(p => {
+    const own = new Set(p.games.map(g => g.id));
+    let n = 0;
+    while (n < games.length && !own.has(games[n])) n++;
+    return [p.id, n];
+  }));
+}
+
+// Baja segura: lesionado, sancionado o sin jugar los últimos 3 partidos de su equipo
+export const playerOut = (injury: string | null | undefined, missed: number) => (!!injury && /out|suspen/i.test(injury)) || missed >= 3;
+
+// Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, book }] }
+export function playerLines(odds: MatchOdds | undefined, name: string) {
+  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+  const n = norm(name), last = norm(name.split(' ').slice(-1)[0] || '');
+  const out: Record<string, { line: number; over?: number; under?: number; overBook?: string; underBook?: string }[]> = {};
+  for (const m of odds?.markets ?? []) {
+    if (!m.key.startsWith('player|') || m.line == null) continue;
+    const [, stat, who] = m.key.split('|');
+    const w = norm(who);
+    if (w !== n && !(last.length >= 4 && w.endsWith(last) && w[0] === n[0])) continue;
+    const best = (id: string) => {
+      const p = m.outcomes.find(o => o.id === id)?.prices ?? {};
+      const [book, price] = Object.entries(p).sort((x, y) => y[1] - x[1])[0] ?? [];
+      return { price, book };
+    };
+    const o = best('over'), u = best('under');
+    (out[stat] ??= []).push({ line: m.line, over: o.price, under: u.price, overBook: o.book, underBook: u.book });
+  }
+  return out;
+}

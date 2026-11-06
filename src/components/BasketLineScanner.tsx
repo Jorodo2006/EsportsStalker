@@ -1,14 +1,15 @@
-// Escáner de líneas: se elige un mercado y una línea (por ejemplo Más de 4,5 asistencias) y salen los jugadores de los partidos
-// elegidos de más a menos probabilidad, con su cuota si las casas tienen esa línea. Usa el mismo cálculo que el analizador.
+// Escáner de líneas: se elige un mercado y una línea (por ejemplo Más de 2,5 asistencias) y salen los jugadores de los partidos
+// elegidos, primero los más rentables, con su cuota si las casas tienen esa línea. Lo que paga menos de la cuota mínima no sale.
+// Usa el mismo cálculo que el analizador.
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
-import { BASKET_MARKETS, scanLine, type BasketMarket } from '@/lib/basket-model';
+import { BASKET_MARKETS, fmtLine, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
 import { SIDE_LABEL, type Side } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketSide, BasketTeamLogs } from '@/lib/types';
 import { LEAGUE_NAME, badInjury, esTime, type Picked } from './BasketAnalyzer';
-import { playerLines, targetOfGame } from './BasketOdds';
+import { targetOfGame } from './BasketOdds';
 import { BookIcon } from './BookIcon';
 import { restart } from './BasketPoints';
 import { Toggle } from './sport';
@@ -18,31 +19,18 @@ import { Panel, TvTabs, panel, tdc } from './viz';
 
 const PREFS = 'basket-scan';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
-const fmtLine = (n: number) => String(n).replace('.', ',');
-// "+4,5" es Más de 4,5 y "-4.5", Menos de 4,5: el signo se traduce a lado y aquí sólo queda el número
-const parseLine = (s: string) => { const n = parseFloat(s.trim().replace(/^[+-]\s*/, '').replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : null; };
 const rateCls = (h: { won: number; n: number }) => (!h.n ? 'text-zinc-600' : h.won / h.n >= 0.6 ? 'text-emerald-400' : h.won / h.n <= 0.4 ? 'text-rose-400' : 'text-zinc-300');
 
 type SortKey = 'p' | 'ev' | 'rel' | 'mu';
-const SORTS: { value: SortKey; label: string }[] = [{ value: 'p', label: 'Probabilidad' }, { value: 'ev', label: 'Valor (EV)' }, { value: 'rel', label: 'Fiabilidad' }, { value: 'mu', label: 'Proyección' }];
+const SORTS: { value: SortKey; label: string }[] = [{ value: 'ev', label: 'Rentabilidad (EV)' }, { value: 'p', label: 'Probabilidad' }, { value: 'rel', label: 'Fiabilidad' }, { value: 'mu', label: 'Proyección' }];
+// 1 = sin mínimo. Una cuota de 1,11 arriesga mucho para ganar casi nada
+const MIN_ODDS = [1, 1.3, 1.5, 1.7, 2, 2.5];
 const PAGE = 50;
 
 type Row = NonNullable<ReturnType<typeof scanLine>> & {
   key: string; player: BasketTeamLogs['players'][number]; game: BasketGame; team: BasketSide; opp: BasketSide; home: boolean;
   injury: string | null; miss: number; out: boolean; book?: string; near: { line: number; over?: number; under?: number } | null;
 };
-
-// Los que faltan a los últimos partidos de su equipo: es el único aviso de baja en la Euroliga, donde la API no las da
-function missedByPlayer(t: BasketTeamLogs) {
-  const season = t.players.flatMap(p => p.games).filter(g => g.season === t.currentSeason && g.type !== 'pre');
-  const games = [...new Map(season.map(g => [g.id, g.date])).entries()].sort((a, b) => +new Date(b[1]) - +new Date(a[1])).map(([id]) => id);
-  return new Map(t.players.map(p => {
-    const own = new Set(p.games.map(g => g.id));
-    let n = 0;
-    while (n < games.length && !own.has(games[n])) n++;
-    return [p.id, n];
-  }));
-}
 
 export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGame[]; injuries: BasketInjury[]; onPick: (p: Picked) => void }) {
   const { addToSlip } = useApp();
@@ -51,11 +39,12 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
   const [side, setSide] = useState<Side>(prefs.side === 'under' ? 'under' : 'over');
   const [line, setLine] = useState<string>(typeof prefs.line === 'string' ? prefs.line : '4,5');
   const [minMin, setMinMin] = useState<number>(typeof prefs.minMin === 'number' ? prefs.minMin : 15);
-  const [sort, setSort] = useState<SortKey>('p');
+  const [minOdds, setMinOdds] = useState<number>(MIN_ODDS.includes(prefs.minOdds) ? prefs.minOdds : 1.5);
+  const [sort, setSort] = useState<SortKey>(SORTS.some(s => s.value === prefs.sort) ? prefs.sort : 'ev');
   const [onlyOdds, setOnlyOdds] = useState(false);
   const [hideOut, setHideOut] = useState(true);
   const [all, setAll] = useState(false);
-  useEffect(() => { try { localStorage.setItem(PREFS, JSON.stringify({ market, side, line, minMin })); } catch { /* sin almacenamiento */ } }, [market, side, line, minMin]);
+  useEffect(() => { try { localStorage.setItem(PREFS, JSON.stringify({ market, side, line, minMin, minOdds, sort })); } catch { /* sin almacenamiento */ } }, [market, side, line, minMin, minOdds, sort]);
 
   const teams = useMemo(() => games.flatMap(g => [{ game: g, team: g.away, home: false, opp: g.home }, { game: g, team: g.home, home: true, opp: g.away }]), [games]);
   const logs = useQueries({
@@ -80,10 +69,10 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
   }, [logsKey, oddsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const L = useDeferredValue(parseLine(line));
-  const { rows, hidden, shortMin } = useMemo(() => {
+  const { rows, hidden, shortMin, lowOdds } = useMemo(() => {
     const out: Row[] = [];
-    let hidden = 0, shortMin = 0;
-    if (L == null) return { rows: out, hidden, shortMin };
+    let hidden = 0, shortMin = 0, lowOdds = 0;
+    if (L == null) return { rows: out, hidden, shortMin, lowOdds };
     for (let i = 0; i < teams.length; i++) {
       const t = teams[i], data = logs[i]?.data;
       if (!data) continue;
@@ -99,7 +88,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
         const near = exact ? null : book.slice().sort((a, b) => Math.abs(a.line - L) - Math.abs(b.line - L))[0] ?? null;
         out.push({
           key: `${t.game.id}:${p.id}`, player: p, ...r, game: t.game, team: t.team, opp: t.opp, home: t.home, injury: ctx.injury, miss,
-          out: (!!ctx.injury && (badInjury(ctx.injury) || /suspen/i.test(ctx.injury))) || miss >= 3,
+          out: playerOut(ctx.injury, miss),
           book: side === 'over' ? exact?.overBook : exact?.underBook, near
         });
       }
@@ -107,12 +96,16 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
     const shown = out.filter(r => {
       if (hideOut && r.out) { hidden++; return false; }
       if (r.projMin < minMin) { shortMin++; return false; }
-      return !onlyOdds || !!r.value;
+      if (onlyOdds && !r.value) return false;
+      // Sin cuota de la casa se mira la justa: si la justa ya es baja, lo que paguen será menos todavía
+      if ((r.value?.price ?? r.fair) < minOdds) { lowOdds++; return false; }
+      return true;
     });
+    // Sin cuotas todos empatan en valor y quedan por probabilidad
     const val = (r: Row) => (sort === 'p' ? r.p : sort === 'ev' ? r.value?.ev ?? -Infinity : sort === 'rel' ? r.rel.score : r.mu);
     shown.sort((a, b) => val(b) - val(a) || b.p - a.p);
-    return { rows: shown, hidden, shortMin };
-  }, [logsKey, linesOf, market, L, side, minMin, sort, onlyOdds, hideOut, injuries, teams]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { rows: shown, hidden, shortMin, lowOdds };
+  }, [logsKey, linesOf, market, L, side, minMin, minOdds, sort, onlyOdds, hideOut, injuries, teams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const M = BASKET_MARKETS[market];
   const loaded = logs.filter(q => q.data).length, failed = logs.find(q => q.error);
@@ -125,13 +118,14 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <div className="flex flex-wrap items-center gap-2">
           <TvTabs value={side} onChange={setSide} items={[{ value: 'over', label: 'Más de' }, { value: 'under', label: 'Menos de' }]} />
-          <Input aria-label="Línea" autoFocus inputMode="decimal" className="h-7 w-20 text-center font-semibold" placeholder="4,5" value={line} onChange={e => onLine(e.target.value)} />
+          <Input aria-label="Línea" autoFocus inputMode="decimal" className="h-7 w-20 text-center font-semibold lg:h-7" placeholder="2,5" value={line} onChange={e => onLine(e.target.value)} />
           <span className="text-[14px] font-semibold text-zinc-100">{M.label}</span>
         </div>
         <TvTabs value={market} onChange={setMarket} items={(Object.keys(BASKET_MARKETS) as BasketMarket[]).map(k => ({ value: k, label: BASKET_MARKETS[k].short, title: BASKET_MARKETS[k].label }))} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
-          <label className="flex items-center gap-2">Ordenar por<Select className="h-7 w-36 text-xs" value={sort} onChange={e => setSort(e.target.value as SortKey)}>{SORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</Select></label>
-          <label className="flex items-center gap-2" title="Minutos previstos según sus últimos partidos">Minutos, al menos<Select className="h-7 w-20 text-xs" value={minMin} onChange={e => setMinMin(Number(e.target.value))}>{[0, 10, 15, 20, 25, 30].map(m => <option key={m} value={m}>{m}</option>)}</Select></label>
+          <label className="flex items-center gap-2">Ordenar por<Select className="h-7 w-44 text-xs lg:h-7 lg:text-xs" value={sort} onChange={e => setSort(e.target.value as SortKey)}>{SORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</Select></label>
+          <label className="flex items-center gap-2" title="Fuera lo que paga menos. Si la casa no tiene esa línea, se mira la cuota justa">Cuota mínima<Select className="h-7 w-28 text-xs lg:h-7 lg:text-xs" value={minOdds} onChange={e => setMinOdds(Number(e.target.value))}>{MIN_ODDS.map(m => <option key={m} value={m}>{m === 1 ? 'Sin mínimo' : odd(m).replace('.', ',')}</option>)}</Select></label>
+          <label className="flex items-center gap-2" title="Minutos previstos según sus últimos partidos">Minutos, al menos<Select className="h-7 w-20 text-xs lg:h-7 lg:text-xs" value={minMin} onChange={e => setMinMin(Number(e.target.value))}>{[0, 10, 15, 20, 25, 30].map(m => <option key={m} value={m}>{m}</option>)}</Select></label>
           <Toggle on={hideOut} onChange={setHideOut} label="Ocultar bajas" />
           <Toggle on={onlyOdds} onChange={setOnlyOdds} label="Sólo con cuota" />
         </div>
@@ -145,10 +139,10 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
         </div>
       )}
 
-      {L == null ? <Empty>Escribe una línea, por ejemplo 4,5.</Empty> : !rows.length ? (
-        loaded < teams.length ? null : <Empty>Ningún jugador cumple esos filtros. {onlyOdds ? 'Prueba sin «Sólo con cuota»: las casas pueden no tener esta línea.' : 'Prueba con menos minutos.'}</Empty>
+      {L == null ? <Empty>Escribe una línea, por ejemplo 2,5.</Empty> : !rows.length ? (
+        loaded < teams.length ? null : <Empty>Ningún jugador cumple esos filtros. {onlyOdds ? 'Prueba sin «Sólo con cuota»: las casas pueden no tener esta línea.' : lowOdds ? 'Prueba a bajar la cuota mínima o con otra línea.' : 'Prueba con menos minutos.'}</Empty>
       ) : (
-        <Panel title={`${SIDE_LABEL[side]} de ${fmtLine(L)}: ${M.label.toLowerCase()}`} aside={`${rows.length} jugadores${sort === 'p' ? ', de más a menos probabilidad' : ''}`}>
+        <Panel title={`${SIDE_LABEL[side]} de ${fmtLine(L)}: ${M.label.toLowerCase()}`} aside={`${rows.length} jugadores, ${sort === 'p' || (sort === 'ev' && !rows.some(r => r.value)) ? 'de más a menos probabilidad' : sort === 'ev' ? 'primero los más rentables' : `por ${SORTS.find(s => s.value === sort)!.label.toLowerCase()}`}`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1040px]">
               <thead className="bg-zinc-900/60"><tr>
@@ -158,7 +152,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
                 <th className={th + ' text-right'} title="La cuota a la que la apuesta no ganaría ni perdería a la larga">Justa</th>
                 <th className={th + ' text-right'}>Últ. 5</th><th className={th + ' text-right'}>Últ. 10</th><th className={th + ' text-right'} title="Veces que se cumplió esta temporada">Temp.</th>
                 <th className={th} title="Muestra, regularidad, minutos estables y margen sobre la línea">Fiabilidad</th>
-                <th className={th + ' text-right'} title="La mejor cuota de las casas para esta línea. Clic: al cupón">Cuota</th><th className={th + ' text-right'} title="Valor esperado con esa cuota">EV</th>
+                <th className={th + ' text-right'} title="La mejor cuota de las casas para esta línea. Clic: al cupón">Cuota</th><th className={th + ' text-right'} title="Valor esperado con esa cuota, mezclando el modelo con la casa sin margen">EV</th>
               </tr></thead>
               <tbody className="divide-y divide-zinc-800/50">
                 {list.map((r, i) => (
@@ -205,9 +199,9 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
         </Panel>
       )}
       <div className="flex flex-col gap-1 px-1 text-xs text-zinc-500">
-        {(hidden > 0 || shortMin > 0) && <p>{hidden > 0 && `${hidden} ocultos por baja o por no jugar los últimos 3 partidos de su equipo. `}{shortMin > 0 && `${shortMin} ocultos por jugar menos de ${minMin} minutos.`}</p>}
+        {(hidden > 0 || shortMin > 0 || lowOdds > 0) && <p>{hidden > 0 && `${hidden} ocultos por baja o por no jugar los últimos 3 partidos de su equipo. `}{shortMin > 0 && `${shortMin} ocultos por jugar menos de ${minMin} minutos. `}{lowOdds > 0 && `${lowOdds} ocultos por pagar menos de ${odd(minOdds).replace('.', ',')} (sin cuota de la casa, por tener una justa menor).`}</p>}
         <p>Probabilidad del modelo, la misma que en Valor de jugador. Cuidado con los primeros de la lista: en la NBA (25-26) el 1.º de cada jornada decía un 77 % y se cumplió un 71 %, y los 5 primeros, un 68 % y un 63 %. En robos y tapones se desvía más. No tiene en cuenta las bajas de los compañeros.</p>
-        <p>Una probabilidad alta no quiere decir que la apuesta valga la pena: eso lo dice el EV, comparándola con la cuota.</p>
+        <p>Una probabilidad alta no quiere decir que la apuesta valga la pena: eso lo dice el EV, que mezcla el modelo con la casa sin margen. Si no hay cuota de la casa, la columna Justa es lo mínimo que tendrían que pagar para que saliera rentable.</p>
       </div>
     </div>
   );

@@ -10,12 +10,19 @@ import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/c
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
+import { BasketDayPicks, BasketPicksBoard } from '@/components/BasketPicks';
 import { GamePoints } from '@/components/BasketPoints';
+import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
 import { BasketTeamSheet, TeamsCompare } from '@/components/BasketTeamSheet';
+import type { BasketPick } from '@/lib/basket-picks';
+import { useTeamThemes } from '@/lib/team-colors';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
+import { TvTabs } from '@/components/viz';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
+type Mode = 'games' | 'picks';
+const pickedOf = (p: BasketPick): Picked => ({ id: p.who!.id, name: p.who!.name, league: p.game.league, headshot: p.who!.headshot, teamId: p.who!.teamId, game: p.game, market: p.marketKey ?? undefined, line: p.line });
 
 function loadSet(key: string) { try { return new Set<string>(JSON.parse(localStorage.getItem(key) || '[]')); } catch { return new Set<string>(); } }
 function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, JSON.stringify([...s])); } catch { /* sin almacenamiento */ } }
@@ -23,7 +30,11 @@ function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, 
 export default function BasketMatches() {
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
+  const [mode, setMode] = useState<Mode>(() => { try { return localStorage.getItem('basket-mode') === 'picks' ? 'picks' : 'games'; } catch { return 'games'; } });
+  const pickMode = (m: Mode) => { setMode(m); try { localStorage.setItem('basket-mode', m); } catch { /* sin almacenamiento */ } };
   const [openId, setOpenId] = useState<string | null>(null);
+  // La recomendación puede ser de otro día que el de la tira: se guarda el partido que abre
+  const [fromPick, setFromPick] = useState<BasketPick | null>(null);
   const [closed, setClosed] = useState(() => loadSet('basket-closed'));
   const [showOdds, setShowOdds] = useState(() => { try { return localStorage.getItem('basket-odds') !== '0'; } catch { return true; } });
   const ok = !!window.api.basket;
@@ -50,8 +61,8 @@ export default function BasketMatches() {
   // Los que están en juego van arriba, destacados; el resto por competición
   const liveNow = shown.filter(g => g.state === 'in');
   const byLeague = ORDER.map(id => ({ id, list: shown.filter(g => g.league === id && g.state !== 'in') })).filter(x => x.list.length);
-  const open = all.find(g => g.id === openId) ?? null;
-  useSections(open ? [] : [
+  const open = all.find(g => g.id === openId) ?? (fromPick?.game.id === openId ? fromPick?.game : null) ?? null;
+  useSections(open || mode === 'picks' ? [] : [
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(({ id, list }) => ({ id: sectionId(LEAGUE_NAME[id]), label: LEAGUE_NAME[id], count: list.length, live: 0 }))
   ]);
@@ -61,8 +72,12 @@ export default function BasketMatches() {
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el baloncesto hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
 
   const toggle = (id: string) => { const s = new Set(closed); if (s.has(id)) s.delete(id); else s.add(id); setClosed(s); saveSet('basket-closed', s); };
+  const openPick = (p: BasketPick) => { setFromPick(p); setOpenId(p.game.id); };
 
-  if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} onClose={() => setOpenId(null)} />;
+  if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} from={fromPick?.game.id === open.id ? fromPick : null} onClose={() => { setOpenId(null); setFromPick(null); }} />;
+
+  const modes = <TvTabs value={mode} onChange={pickMode} items={[{ value: 'games' as const, label: 'Partidos' }, { value: 'picks' as const, label: 'Recomendaciones' }]} />;
+  if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<PicksPage onOpen={openPick} /></div>;
 
   const card = (g: BasketGame, featured?: boolean) => {
     const st = stateOf(g), done = st === 'post';
@@ -80,10 +95,12 @@ export default function BasketMatches() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
+      {modes}
       <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
       </StateFilterBar>
+      <DayBand onOpen={openPick} onAll={() => pickMode('picks')} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
         : !all.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de NBA, Euroliga, EuroCup ni WNBA. Prueba otro día de la tira.</Empty>
           : <>
@@ -102,20 +119,44 @@ export default function BasketMatches() {
   );
 }
 
+// Las recomendaciones de los partidos que aún no han empezado, de las próximas 24 horas o del día que se elija
+function PicksPage({ onOpen }: { onOpen: (p: BasketPick) => void }) {
+  const u = useUpcomingGames();
+  return (
+    <div className="flex flex-col gap-2.5">
+      <RangeFilters u={u} />
+      {u.loading ? <Loading label="Cargando partidos…" /> : u.error ? <ErrorBox error={u.error} /> : !u.games.length
+        ? <Empty icon={<CalendarX size={26} />}>No quedan partidos por empezar en ese intervalo. Prueba con otro día.</Empty>
+        : <BasketPicksBoard games={u.games} injuries={u.injuries} onOpen={onOpen} />}
+    </div>
+  );
+}
+
+function DayBand({ onOpen, onAll }: { onOpen: (p: BasketPick) => void; onAll: () => void }) {
+  const u = useUpcomingGames();
+  return <BasketDayPicks games={u.games} injuries={u.injuries} onOpen={onOpen} onAll={onAll} />;
+}
+
 // El día de la tira va al centro: la semana que se pide empieza 3 días antes
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
-type Tab = 'stats' | 'odds' | 'points' | 'lines' | 'teams' | 'rosters' | 'value';
+type Tab = 'stats' | 'odds' | 'picks' | 'points' | 'lines' | 'teams' | 'rosters' | 'value';
 
-// Ficha del partido (como la de LoL): estadísticas en juego o terminado, cuotas antes de empezar
-function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: BasketInjury[]; onClose: () => void }) {
+// Ficha del partido (como la de LoL): estadísticas en juego o terminado, recomendaciones y cuotas antes de empezar.
+// from: la recomendación con la que se abrió, para ir directo a su análisis
+function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injuries: BasketInjury[]; from?: BasketPick | null; onClose: () => void }) {
   const { openBet } = useApp();
   const st = stateOf(game);
-  const [tab, setTab] = useState<Tab>(st === 'pre' ? 'odds' : 'stats');
+  const [tab, setTab] = useState<Tab>(from ? (from.who ? 'value' : 'points') : st === 'pre' ? 'picks' : 'stats');
   const odds = useBasketOdds(game);
-  const [player, setPlayer] = useState<Picked | null>(null);
+  const [player, setPlayer] = useState<Picked | null>(from?.who ? pickedOf(from) : null);
+  const [teamPick, setTeamPick] = useState<BasketPick | null>(from && !from.who ? from : null);
   const pick = (p: { id: string; name: string; headshot?: string }, teamId: string) => { setPlayer({ id: p.id, name: p.name, league: game.league, headshot: p.headshot, teamId, game }); setTab('value'); };
+  const openPick = (p: BasketPick) => {
+    if (p.who) { setPlayer(pickedOf(p)); setTab('value'); } else { setTeamPick(p); setTab('points'); }
+  };
   const event = `${game.away.abbr} @ ${game.home.abbr}`;
+  const themeOf = useTeamThemes(game.league);
   const [sheet, setSheet] = useState<string | null>(null);
   if (sheet) return <BasketTeamSheet key={sheet} league={game.league} teamId={sheet} backLabel="Volver al partido" onBack={() => setSheet(null)}
     onPlayer={(p, teamId) => { setSheet(null); pick(p, teamId); }} />;
@@ -125,12 +166,13 @@ function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: B
         <ArrowLeft size={16} />Volver a partidos
       </button>
       <Scoreboard competition={LEAGUE_NAME[game.league]} detail={game.round || undefined} state={st}
-        a={{ name: game.away.name, short: game.away.abbr, logo: game.away.logo, score: game.away.score }}
-        b={{ name: game.home.name, short: game.home.abbr, logo: game.home.logo, score: game.home.score }}
+        a={{ name: game.away.name, short: game.away.abbr, logo: game.away.logo, score: game.away.score, color: themeOf(game.away.id)?.glow, plate: themeOf(game.away.id)?.plate }}
+        b={{ name: game.home.name, short: game.home.abbr, logo: game.home.logo, score: game.home.score, color: themeOf(game.home.id)?.glow, plate: themeOf(game.home.id)?.plate }}
         center={esTime(game.date)}
         centerSub={st === 'pre' ? new Date(game.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? game.status : 'Final'}>
         <SheetTabs value={tab} onChange={setTab} items={[
           ['stats', 'Estadísticas'],
+          ...(st === 'pre' ? [['picks', 'Recomendaciones']] as [Tab, string][] : []),
           ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
           ['points', 'Puntos'],
           ...(st === 'pre' ? [['lines', 'Líneas']] as [Tab, string][] : []),
@@ -138,7 +180,8 @@ function GameDetail({ game, injuries, onClose }: { game: BasketGame; injuries: B
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
       {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
-        : tab === 'points' ? <GamePoints game={game} odds={odds.data} />
+        : tab === 'picks' ? <BasketPicksBoard games={[game]} injuries={injuries} onOpen={openPick} onOdds={() => setTab('odds')} />
+        : tab === 'points' ? <GamePoints key={teamPick?.id} game={game} odds={odds.data} initial={teamPick?.period && teamPick.pointKind ? { period: teamPick.period, kind: teamPick.pointKind, line: teamPick.line } : undefined} />
           : tab === 'lines' ? <BasketLineScanner games={[game]} injuries={injuries} onPick={p => { setPlayer(p); setTab('value'); }} />
             : tab === 'teams' ? <TeamsCompare game={game} onTeam={setSheet} /> : tab === 'rosters'
         ? <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
