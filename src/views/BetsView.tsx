@@ -45,7 +45,7 @@ export default function BetsView() {
         <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
         <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
           sub={`${money(w.inPlay, cur)} en juego · beneficio total ${money(w.profit, cur, true)}`} />
         <Stat label={`Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
@@ -57,7 +57,7 @@ export default function BetsView() {
 
       <ProfitChart bets={bets} />
 
-      <div className="my-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <div className="my-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <Breakdown title="Por casa de apuestas" bets={bets} keyFn={b => b.bookmaker || 'Sin casa'} />
         <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
       </div>
@@ -78,7 +78,7 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
     return points.length ? [{ date: 'Inicio', event: '', profit: 0 }, ...points] : points;
   }, [bets, range]);
   const last = data.at(-1)?.profit ?? 0;
-  const color = last >= 0 ? '#34d399' : '#fb7185';
+  const color = last >= 0 ? '#55f28c' : '#ff8a7f';
 
   return (
     <Card title="Evolución del beneficio" action={<Tabs value={range} onChange={setRange} items={[{ value: 'all', label: 'Todo' }, { value: '30', label: '30 días' }, { value: '7', label: '7 días' }]} />}>
@@ -92,13 +92,13 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
                   <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#222a3b" vertical={false} />
-              <XAxis dataKey="date" stroke="#637089" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
-              <YAxis stroke="#637089" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
-              <ReferenceLine y={0} stroke="#47536b" strokeDasharray="4 4" />
+              <CartesianGrid stroke="#2b3034" vertical={false} />
+              <XAxis dataKey="date" stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
+              <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
+              <ReferenceLine y={0} stroke="#5e6c68" strokeDasharray="4 4" />
               <Tooltip
-                contentStyle={{ background: '#161d2b', border: '1px solid #313b51', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#8590a8' }}
+                contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }}
+                labelStyle={{ color: '#9aaaa4' }}
                 formatter={v => [money(Number(v), cur, true), 'Beneficio acumulado']}
                 labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} · ${p[0].payload.event}` : ''} />
               <Area type="monotone" dataKey="profit" stroke={color} strokeWidth={2} fill="url(#pg)" />

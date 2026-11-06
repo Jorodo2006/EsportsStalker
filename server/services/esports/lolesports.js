@@ -9,10 +9,13 @@ function api(path, params, key, ttl) {
   return getJson(`${API}/${path}?${qs({ hl: 'es-ES', ...params })}`, { headers: { 'x-api-key': key }, ttl });
 }
 
+// La API da los escudos con http://, y static.lolesports.com ahora sólo los sirve por https (por http devuelve 403)
+const img = u => (typeof u === 'string' ? u.replace(/^http:\/\//, 'https://') : u);
+
 async function getLeagues(key) {
   const j = await api('getLeagues', {}, key, 6 * 3600e3);
   return (j?.data?.leagues || [])
-    .map(l => ({ id: l.id, slug: l.slug, name: l.name, region: l.region, image: l.image, priority: l.displayPriority?.position ?? 999 }))
+    .map(l => ({ id: l.id, slug: l.slug, name: l.name, region: l.region, image: img(l.image), priority: l.displayPriority?.position ?? 999 }))
     .sort((a, b) => a.priority - b.priority);
 }
 
@@ -29,7 +32,7 @@ function normEvent(e) {
     teams: (m.teams || []).map(t => ({
       name: t.name,
       code: t.code,
-      image: t.image,
+      image: img(t.image),
       wins: t.result?.gameWins ?? null,
       outcome: t.result?.outcome ?? null,
       record: t.record ? `${t.record.wins}-${t.record.losses}` : ''
@@ -59,7 +62,7 @@ async function getEventDetails(key, matchId) {
   return {
     id: ev.id,
     league: ev.league?.name || '',
-    teams: (ev.match?.teams || []).map(t => ({ id: t.id, name: t.name, code: t.code, image: t.image, wins: t.result?.gameWins ?? 0 })),
+    teams: (ev.match?.teams || []).map(t => ({ id: t.id, name: t.name, code: t.code, image: img(t.image), wins: t.result?.gameWins ?? 0 })),
     games: (ev.match?.games || []).map(g => ({ id: g.id, number: g.number, state: g.state, vods: g.vods?.length || 0 }))
   };
 }

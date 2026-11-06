@@ -6,12 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct, summarize } from '@/lib/format';
-import { BASKET_MARKETS, analyze, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket } from '@/lib/basket-model';
+import { BASKET_MARKETS, analyze, playerLines, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket } from '@/lib/basket-model';
 import { SIDE_LABEL, type SideValue } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketLogGame, MatchOdds } from '@/lib/types';
-import { playerLines } from './BasketOdds';
 import { ValuePanel } from './ValuePanel';
-import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, td, th } from './ui';
+import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, chip, td, th } from './ui';
 
 const BOOKS = ['Winamax', 'Betway'];
 export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup' };
@@ -105,7 +104,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-surface p-4">
         {player.headshot && <img src={player.headshot} alt="" className="h-16 w-16 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xl font-bold">{player.name}{injury && <Badge tone={badInjury(injury) ? 'danger' : 'warning'}>{injury}</Badge>}</div>
@@ -113,9 +112,9 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
         </div>
         <div className="flex gap-5">
           {([['PTS', avg(g => g.pts)], ['REB', avg(g => g.reb)], ['AST', avg(g => g.ast)], ['MIN', avg(g => g.min)]] as const).map(([k, v]) => (
-            <div key={k} className="text-center"><div className="text-lg font-bold tabular-nums">{fx(v)}</div><div className="text-[10px] uppercase text-zinc-500">{k} {label}</div></div>
+            <div key={k} className="text-center"><div className="text-lg font-bold tabular-nums">{fx(v)}</div><div className="text-xs text-zinc-500">{k} {label}</div></div>
           ))}
-          <div className="text-center"><div className="text-lg font-bold tabular-nums">{base.length}</div><div className="text-[10px] uppercase text-zinc-500">PJ {label}</div></div>
+          <div className="text-center"><div className="text-lg font-bold tabular-nums">{base.length}</div><div className="text-xs text-zinc-500">PJ {label}</div></div>
         </div>
       </div>
 
@@ -139,7 +138,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
           <span className="mr-1 text-zinc-500">En las casas:</span>
           {casa.slice().sort((x, y) => x.line - y.line).map(c => (
             <button key={c.line} onClick={() => useLine(c)} title={`Más ${odd(c.over)} (${c.overBook ?? '–'}) · Menos ${odd(c.under)} (${c.underBook ?? '–'})`}
-              className={cn('cursor-pointer rounded-full border px-2.5 py-1 tnum transition', L === c.line ? 'border-amber-500/60 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700')}>
+              className={cn(chip(L === c.line), 'font-mono tnum')}>
               {c.line} <span className="text-zinc-500">{odd(c.over)} / {odd(c.under)}</span>
             </button>
           ))}
@@ -165,7 +164,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
           <Card className="overflow-hidden" title="Tramos">
             <table className="-m-5 w-[calc(100%+2.5rem)]">
               <thead className="bg-zinc-900/60"><tr><th className={th}>Tramo</th><th className={th + ' text-right'}>PJ</th><th className={th + ' text-right'}>Media</th><th className={th + ' text-right'}>Min</th><th className={th + ' text-right'}>% Más</th></tr></thead>
@@ -234,15 +233,15 @@ function LastGames({ games, market, line, mu }: { games: BasketLogGame[]; market
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
-            <CartesianGrid stroke="#222a3b" vertical={false} />
-            <XAxis dataKey="x" stroke="#637089" fontSize={10} tickLine={false} axisLine={false} interval={0} />
-            <YAxis stroke="#637089" fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip cursor={{ fill: '#222a3b88' }} contentStyle={{ background: '#161d2b', border: '1px solid #313b51', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#8590a8' }} labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : ''} formatter={v => [v, M.short]} />
+            <CartesianGrid stroke="#2b3034" vertical={false} />
+            <XAxis dataKey="x" stroke="#85948f" fontSize={10} tickLine={false} axisLine={false} interval={0} />
+            <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} />
+            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }}
+              labelStyle={{ color: '#9aaaa4' }} labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : ''} formatter={v => [v, M.short]} />
             <ReferenceLine y={line} stroke="var(--acc-400)" strokeDasharray="4 4" />
-            <ReferenceLine y={mu} stroke="#8590a8" strokeDasharray="2 4" />
+            <ReferenceLine y={mu} stroke="#9aaaa4" strokeDasharray="2 4" />
             <Bar dataKey="v" radius={[3, 3, 0, 0]}>
-              {data.map((d, i) => <Cell key={i} fill={d.v > line ? '#34d399' : d.v < line ? '#fb7185' : '#637089'} />)}
+              {data.map((d, i) => <Cell key={i} fill={d.v > line ? '#55f28c' : d.v < line ? '#ff8a7f' : '#85948f'} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -260,7 +259,7 @@ function Injuries({ teamId, team, opp, injuries }: { teamId?: string; team: stri
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {groups.map(g => (
           <div key={g.title}>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{g.title}</div>
+            <div className="mb-2 text-xs font-semibold text-zinc-500">{g.title}</div>
             {!g.list.length ? <div className="text-sm text-zinc-600">Sin bajas</div> : g.list.map(i => (
               <div key={i.name} className="flex items-center gap-2 py-1 text-sm">
                 <span className="flex-1 truncate">{i.name}</span>

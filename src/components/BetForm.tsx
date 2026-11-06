@@ -4,7 +4,7 @@ import { Ban, Check, Clock, Layers, Plus, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
 import type { BetDraft, BetLeg, BetStatus, LegStatus, MatchOdds, Schedule } from '@/lib/types';
-import { Button, Dialog, Field, Input, Select, inputCls } from './ui';
+import { Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
 import { MatchPicker, matchName } from './MatchPicker';
 import { OptionInput, type Option } from './OptionInput';
 
@@ -137,17 +137,17 @@ export function BetFormDialog() {
     <Dialog open={!!betDraft} onClose={closeBet} title={title} wide={!!legs}>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm">
+          <div className={segWrap}>
             {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
               <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
-                className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', !!legs === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
+                className={seg(!!legs === x.v)}>{x.l}</button>
             ))}
           </div>
-          <div className="flex w-fit rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-sm"
+          <div className={segWrap}
             title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de LoL y de baloncesto'}>
             {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }].map(x => (
               <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
-                className={cn('cursor-pointer rounded-md px-3 py-1 font-medium transition', (f.sport || 'lol') === x.v ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>{x.l}</button>
+                className={seg((f.sport || 'lol') === x.v)}>{x.l}</button>
             ))}
           </div>
         </div>

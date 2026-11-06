@@ -106,6 +106,9 @@ export function leagueTable(d: BasketLeagueGames, win: TableWindow, period: Poin
 export const POINT_PARAMS = { halfLife: 15, thisSeason: 1.6, modelWeight: 80, sdScale: 0.9, effect: 0.8 };
 // A partir de qué ventaja sobre la casa el modelo deja de ser creíble: sabe menos que ella (bajas, descanso, alineaciones)
 const TOO_FAR = 0.12;
+// Peso del modelo frente a la casa al calcular el valor: un total se ajusta mucho más que una línea de jugador. Es una
+// decisión, no una medida (no hay cuotas históricas)
+const MODEL_WEIGHT = 0.25;
 
 function sample(rows: TeamRow[], season: number) {
   const pool = rows.slice(0, 60);
@@ -186,10 +189,10 @@ export function analyzePoints(P: PointProjection, kind: PointKind, line: number,
 
   const mk = devig(odds.over, odds.under);
   const sides: SideValue[] = [];
-  if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.overBook));
-  if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.underBook));
+  if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.overBook, MODEL_WEIGHT));
+  if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.underBook, MODEL_WEIGHT));
   const cur = Math.min(P.a.cur, P.b.cur), all = Math.min(P.a.pool.length, P.b.pool.length);
-  const gap = Math.max(0, ...sides.map(s => Math.abs(s.edge ?? 0)));
+  const gap = Math.max(0, ...sides.map(s => Math.abs(s.gap ?? 0)));
   const rel = reliability([
     { label: 'Muestra esta temporada', value01: cur / 15, max: 30, note: `${cur} partido${cur === 1 ? '' : 's'} del equipo con menos` },
     { label: 'Historial total', value01: all / 40, max: 15, note: `${all} partidos analizados del equipo con menos` },

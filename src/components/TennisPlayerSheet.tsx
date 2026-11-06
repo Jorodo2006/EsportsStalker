@@ -61,7 +61,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
           <TvTabs value={tab} onChange={setTab} items={[{ value: 'stats', label: 'Estadísticas' }, { value: 'results', label: `Resultados (${p.matches.length})` }]} />
           {!!last.length && (
             <div className="flex items-center gap-2" title="Últimos 10 partidos, del más reciente al más antiguo">
-              <span className="font-score text-[12px] font-semibold uppercase tracking-wider text-zinc-300">Racha: {streak} {p.matches[0].win ? (streak === 1 ? 'ganado' : 'ganados') : (streak === 1 ? 'perdido' : 'perdidos')}</span>
+              <span className="font-mono text-xs font-medium text-zinc-300">Racha: {streak} {p.matches[0].win ? (streak === 1 ? 'ganado' : 'ganados') : (streak === 1 ? 'perdido' : 'perdidos')}</span>
               <FormChips list={last.map(m => ({ win: m.win, title: `${m.win ? 'Ganó a' : 'Perdió con'} ${m.opponent.name}: ${m.score}` }))} />
             </div>
           )}

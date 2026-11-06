@@ -50,13 +50,13 @@ export function OptionInput({ value, onChange, options, placeholder, required }:
           else if (e.key === 'Tab') setOpen(false);
         }} />
       {open && items.length > 0 && (
-        <div ref={list} className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-full min-w-[18rem] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl shadow-black/60">
+        <div ref={list} className="absolute left-0 top-full z-40 mt-1.5 max-h-80 w-full min-w-[18rem] overflow-y-auto rounded-xl border border-zinc-700/70 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60">
           {items.map((o, i) => {
             const head = o.group && o.group !== lastGroup ? o.group : null;
             lastGroup = o.group;
             return (
               <div key={o.value}>
-                {head && <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">{head}</div>}
+                {head && <div className="px-3 pb-1 pt-2 text-xs font-semibold text-zinc-600">{head}</div>}
                 <button type="button" data-hi={i === hi ? '1' : undefined} onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); choose(o.value); }}
                   className={cn('flex w-full cursor-pointer rounded-lg px-3 py-1.5 text-left text-sm', i === hi ? 'bg-zinc-800/80' : 'hover:bg-zinc-900',
                     o.value === value && 'text-amber-300')}>

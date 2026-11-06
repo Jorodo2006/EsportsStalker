@@ -1,50 +1,76 @@
 @import "tailwindcss";
-@import "@fontsource/barlow/400.css";
-@import "@fontsource/barlow/500.css";
-@import "@fontsource/barlow/600.css";
-@import "@fontsource/barlow/700.css";
-@import "@fontsource/barlow-condensed/500.css";
-@import "@fontsource/barlow-condensed/600.css";
-@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 
-/* Tema: tinta azul de pabellón de noche en vez de gris. Toda la app usa las clases zinc, así que se cambia la escala
-   entera aquí. El acento (las clases amber) depende de la app: verde azulado hextech en LoL, naranja de balón en
-   baloncesto. Barlow para leer, Barlow Condensed para marcadores y cifras (como un videomarcador). */
+/* Tema sobrio: fondo oscuro neutro, superficies planas con borde fino y esquinas pequeñas (6-10 px), sin brillos ni neones.
+   Toda la app usa las clases zinc, así que se cambia la escala entera aquí (grises neutros, un punto fríos):
+   950 fondo · 900 superficie elevada · 800 separadores · 700 bordes marcados · 500-300 textos secundarios.
+   El acento (las clases amber) depende de la app: verde azulado en LoL, naranja en baloncesto y verde en tenis, apagados para
+   que no parezcan de neón. Una sola letra, Inter: font-mono y font-score apuntan a ella con cifras tabulares, para que las
+   columnas de cuotas y dinero sigan alineadas sin la letra de máquina. */
 @theme {
-  --font-sans: "Barlow", "Segoe UI", system-ui, sans-serif;
-  --font-score: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-score: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Inter", "Segoe UI", system-ui, sans-serif;
 
-  --color-zinc-50: #f3f5fa;
-  --color-zinc-100: #e6eaf2;
-  --color-zinc-200: #cbd2e0;
-  --color-zinc-300: #a9b3c7;
-  --color-zinc-400: #8590a8;
-  --color-zinc-500: #637089;
-  --color-zinc-600: #47536b;
-  --color-zinc-700: #313b51;
-  --color-zinc-800: #222a3b;
-  --color-zinc-900: #161d2b;
-  --color-zinc-950: #0c111c;
+  --color-zinc-50: #f4f4f6;
+  --color-zinc-100: #e6e6ea;
+  --color-zinc-200: #d0d0d6;
+  --color-zinc-300: #b3b3bb;
+  --color-zinc-400: #94949d;
+  --color-zinc-500: #76767f;
+  --color-zinc-600: #5a5a62;
+  --color-zinc-700: #3d3d44;
+  --color-zinc-800: #2a2a30;
+  --color-zinc-900: #1d1d22;
+  --color-zinc-950: #121215;
+
+  /* Positivo (beneficio, ganada) y negativo o en juego (pérdida, directo) */
+  --color-emerald-200: #c6ecd5;
+  --color-emerald-300: #8fd9ac;
+  --color-emerald-400: #5cc78a;
+  --color-emerald-500: #3fae70;
+  --color-emerald-600: #2f8f5a;
+  --color-rose-200: #f6d0cd;
+  --color-rose-300: #eea39d;
+  --color-rose-400: #e5776f;
+  --color-rose-500: #d4564d;
+  --color-rose-600: #b03f37;
+
+  /* Superficie de paneles y tarjetas: un punto por encima del fondo (zinc-950) */
+  --color-surface: #18181c;
 
   --color-amber-200: var(--acc-200);
   --color-amber-300: var(--acc-300);
   --color-amber-400: var(--acc-400);
   --color-amber-500: var(--acc-500);
   --color-amber-600: var(--acc-600);
+
+  /* Esquinas pequeñas: paneles y tarjetas a 10 px, cajas internas a 8 px y botones, fichas y campos a 6 px */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
 }
 
-/* --tv-*: los rótulos de retransmisión de las fichas (src/components/viz.tsx): banda, final de su degradado, línea y fondo */
+/* --tv-*: las fichas (src/components/viz.tsx): franja de cabecera, marca de acento y fondo de los paneles */
 :root, [data-app="lol"] {
-  --acc-200: #b4f3ec; --acc-300: #7be8de; --acc-400: #3fd9cb; --acc-500: #19c2b3; --acc-600: #0e9c90;
-  --tv-band: #0b7f76; --tv-band-2: #0a5a5c; --tv-mark: #7be8de; --tv-bg: #070b13;
+  --acc-200: #b9e6dd; --acc-300: #84d3c4; --acc-400: #55bfac; --acc-500: #3aa894; --acc-600: #2e8c7b;
+  --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #55bfac; --tv-bg: #18181c;
 }
 [data-app="basket"] {
-  --acc-200: #ffd2b0; --acc-300: #ffb079; --acc-400: #ff8f4d; --acc-500: #ff7a2f; --acc-600: #e05e14;
-  --tv-band: #c2410c; --tv-band-2: #8f2c0a; --tv-mark: #ffd23f; --tv-bg: #0a0a10;
+  --acc-200: #f6d5bf; --acc-300: #efb38c; --acc-400: #e8955f; --acc-500: #dc7d41; --acc-600: #bf6631;
+  --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #e8955f; --tv-bg: #18181c;
 }
 [data-app="tennis"] {
-  --acc-200: #bbf7d0; --acc-300: #86efac; --acc-400: #4ade80; --acc-500: #22c55e; --acc-600: #16a34a;
-  --tv-band: #15803d; --tv-band-2: #0f5e55; --tv-mark: #4ade80; --tv-bg: #070c12;
+  --acc-200: #cdeac4; --acc-300: #a6d898; --acc-400: #82c56f; --acc-500: #67ad53; --acc-600: #528f41;
+  --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #82c56f; --tv-bg: #18181c;
 }
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {
@@ -56,13 +82,22 @@ html { color-scheme: dark; }
 html, body, #root { height: 100%; }
 /* En el móvil la barra del navegador aparece y desaparece: dvh es el alto que queda de verdad */
 #root { height: 100dvh; }
-body { @apply bg-zinc-950 text-zinc-100 antialiased; }
-#root > div { background-image: radial-gradient(ellipse 70% 40% at 50% -10%, color-mix(in oklab, var(--acc-500) 9%, transparent), transparent); }
+body { @apply bg-zinc-950 text-zinc-100 antialiased; font-feature-settings: "cv11", "ss01"; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #313b51; border-radius: 99px; border: 2px solid #0c111c; }
+::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 99px; border: 2px solid #121215; }
+/* Tiras que se desplazan de lado (pestañas, filtros) sin barra visible */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+::-webkit-scrollbar-thumb:hover { background: #3d3d44; }
 ::-webkit-scrollbar-track { background: transparent; }
-select option { background: #161d2b; }
+select option { background: #1d1d22; }
 input[type=number]::-webkit-inner-spin-button { opacity: .4; }
-:focus-visible { outline: 2px solid var(--acc-400); outline-offset: 2px; }
+:focus-visible { outline: 1px solid var(--acc-500); outline-offset: 1px; }
 .tnum { font-variant-numeric: tabular-nums; }
+/* Cifras alineadas en columna donde antes iba la letra de máquina */
+.font-mono, .font-score { font-variant-numeric: tabular-nums; }
+/* Etiqueta pequeña (cabeceras de tabla, rótulos de cifras): en minúsculas normales, sin espaciar */
+.label-data { font-size: 12px; line-height: 16px; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* Gráficas (Recharts): cifras de los ejes con números tabulares */
+.recharts-cartesian-axis-tick-value, .recharts-tooltip-wrapper { font-variant-numeric: tabular-nums; }

@@ -1,179 +1,244 @@
-// Piezas comunes de las dos apps (LoL y baloncesto) para ver partidos: tira de días, filtro por estado,
-// bloque de competición, fila de partido y el marcador grande del partido abierto.
-import type { ReactNode } from 'react';
+// Piezas comunes de las tres apps (LoL, baloncesto y tenis) para ver partidos: título, tira de días, filtro por estado,
+// bloque de competición con sus tarjetas, la sección En directo y el marcador grande del partido abierto.
+import { useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
-import { TeamLogo } from './ui';
+import { TeamLogo, chip, oddBtn, panelCls } from './ui';
 
 export type MatchState = 'pre' | 'live' | 'post';
+
+// Punto rojo de "en juego"
+export const LiveDot = ({ className }: { className?: string }) => <span aria-hidden className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400', className)} />;
 
 // ---------- días ----------
 export const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const addDays = (iso: string, n: number) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoDay(d); };
 export const today = () => isoDay(new Date());
+// "Hoy", "Ayer", "Mañana" o "sáb 7"
+export const dayName = (iso: string) => {
+  const now = today();
+  if (iso === now) return 'Hoy';
+  if (iso === addDays(now, -1)) return 'Ayer';
+  if (iso === addDays(now, 1)) return 'Mañana';
+  const d = new Date(iso + 'T12:00:00');
+  return `${d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')} ${d.getDate()}`;
+};
 
-// Tira de días: la semana alrededor del día elegido, con cuántos partidos hay y si alguno está en juego
+// Título de la lista de partidos con el día elegido en largo
+export function MatchesTitle({ date }: { date: string }) {
+  const long = new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">Partidos</h1>
+      <p className="mt-1 text-sm text-zinc-400 first-letter:uppercase">{long}</p>
+    </div>
+  );
+}
+
+// Tira de días: la semana alrededor del día elegido, con cuántos partidos hay y si alguno está en juego.
+// El día elegido va sobre gris. En el móvil se desliza de lado
 export function DayStrip({ value, onChange, counts, span = 7 }: {
   value: string; onChange: (d: string) => void; counts?: Record<string, { total: number; live: number }>; span?: number;
 }) {
   const half = Math.floor(span / 2);
   const days = Array.from({ length: span }, (_, i) => addDays(value, i - half));
-  const now = today();
+  const selRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { selRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' }); }, [value]);
+  const arrow = 'grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100';
   return (
-    <div className="flex items-stretch gap-1">
-      <button className="grid w-6 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 sm:w-8" onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
-      <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` }}>
+    <div className="flex items-center gap-2">
+      <button className={arrow} onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
+      <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto no-scrollbar">
         {days.map(d => {
-          const dt = new Date(d + 'T12:00:00');
           const c = counts?.[d];
           const sel = d === value;
           return (
-            <button key={d} onClick={() => onChange(d)} aria-pressed={sel}
-              className={cn('relative flex cursor-pointer flex-col items-center rounded-xl px-1 py-2 transition',
-                sel ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
-              <span className="text-[11px] font-medium first-letter:uppercase">{d === now ? 'Hoy' : dt.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')}</span>
-              <span className="font-score text-2xl leading-none font-semibold">{dt.getDate()}</span>
-              <span className={cn('mt-0.5 hidden text-[10px] tnum sm:block', sel ? 'text-zinc-900/70' : 'text-zinc-600')}>{c ? (c.total ? `${c.total} partidos` : 'sin partidos') : ' '}</span>
-              <span className={cn('mt-0.5 text-[10px] tnum sm:hidden', sel ? 'text-zinc-900/70' : 'text-zinc-600')}>{c?.total || ' '}</span>
-              {!!c?.live && <span className="absolute right-2 top-2 h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" title={`${c.live} en juego`} />}
+            <button key={d} ref={sel ? selRef : undefined} onClick={() => onChange(d)} aria-pressed={sel}
+              className={cn('relative flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-3.5 text-sm font-medium transition',
+                sel ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
+              <span className="first-letter:uppercase">{dayName(d)}</span>
+              {!!c?.total && <span className={cn('text-xs tnum', sel ? 'text-zinc-400' : 'text-zinc-600')}>{c.total}</span>}
+              {!!c?.live && <LiveDot className="absolute right-1.5 top-1.5" />}
             </button>
           );
         })}
       </div>
-      <button className="grid w-6 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 sm:w-8" onClick={() => onChange(addDays(value, span))} aria-label="Semana siguiente"><ChevronRight size={16} /></button>
+      <button className={arrow} onClick={() => onChange(addDays(value, span))} aria-label="Semana siguiente"><ChevronRight size={16} /></button>
     </div>
   );
 }
 
 // ---------- filtros ----------
 export type StateFilter = 'all' | MatchState;
+
 export function StateFilterBar({ value, onChange, counts, children }: {
   value: StateFilter; onChange: (v: StateFilter) => void; counts: Record<StateFilter, number>; children?: ReactNode;
 }) {
   const items: [StateFilter, string][] = [['all', 'Todos'], ['live', 'En juego'], ['pre', 'Próximos'], ['post', 'Terminados']];
+  // En el móvil los filtros se deslizan de lado en vez de partirse en dos líneas
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {items.map(([v, label]) => (
-        <button key={v} onClick={() => onChange(v)} disabled={v !== 'all' && !counts[v]}
-          className={cn('flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition disabled:cursor-default disabled:opacity-35',
-            value === v ? 'border-zinc-200 bg-zinc-100 text-zinc-950' : 'border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100')}>
-          {v === 'live' && <span className={cn('h-1.5 w-1.5 rounded-full', counts.live ? 'animate-pulse bg-rose-400' : 'bg-zinc-600')} />}
-          {label}<span className={cn('tnum text-xs', value === v ? 'text-zinc-600' : 'text-zinc-600')}>{counts[v]}</span>
-        </button>
-      ))}
-      <div className="ml-auto flex items-center gap-3">{children}</div>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="-mx-3 flex min-w-0 max-w-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 no-scrollbar sm:mx-0 sm:max-w-none sm:px-0">
+        {items.map(([v, label]) => (
+          <button key={v} onClick={() => onChange(v)} disabled={v !== 'all' && !counts[v]} aria-pressed={value === v} className={chip(value === v)}>
+            {v === 'live' && (counts.live ? <LiveDot /> : <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />)}
+            {label}
+            <span className={cn('tnum', v === 'live' && counts.live ? 'text-rose-300' : value === v ? 'text-amber-300' : 'text-zinc-500')}>{counts[v]}</span>
+          </button>
+        ))}
+      </div>
+      <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
 }
 
-// Interruptor pequeño (por ejemplo, "Cuotas")
+// Interruptor (por ejemplo, "Cuotas"): pista redonda con su bola, para que no se confunda con un botón
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <button role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200">
-      <span className={cn('relative h-5 w-9 rounded-full transition', on ? 'bg-amber-500' : 'bg-zinc-800')}>
-        <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-zinc-50 shadow transition-all', on ? 'left-[18px]' : 'left-0.5')} />
+    <button role="switch" aria-checked={on} onClick={() => onChange(!on)}
+      className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs font-medium text-zinc-300 transition hover:text-zinc-50">
+      <span className={cn('relative h-5 w-9 rounded-full transition', on ? 'bg-amber-500' : 'bg-zinc-700')}>
+        <span className={cn('absolute top-0.5 h-4 w-4 rounded-full transition-all', on ? 'left-[18px] bg-zinc-950' : 'left-0.5 bg-zinc-300')} />
       </span>
       {label}
     </button>
   );
 }
 
-// ---------- competición y fila de partido ----------
-export function CompetitionBlock({ name, sub, logo, count, live, open, onToggle, children }: {
-  name: string; sub?: string; logo?: string; count: number; live?: number; open: boolean; onToggle: () => void; children: ReactNode;
+// ---------- competición y tarjeta de partido ----------
+// Una competición: cabecera (se pliega al pulsarla) y sus partidos en una cuadrícula de tarjetas.
+// id: el ancla para el menú lateral
+export function CompetitionBlock({ id, name, sub, logo, count, live, open, onToggle, children }: {
+  id?: string; name: string; sub?: string; logo?: string; count: number; live?: number; open: boolean; onToggle: () => void; children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50">
-      <button onClick={onToggle} aria-expanded={open} className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-zinc-900">
-        {logo ? <img src={logo} alt="" className="h-6 w-6 object-contain" /> : <span className="grid h-6 w-6 place-items-center rounded-md bg-zinc-800 text-[10px] font-bold text-zinc-400">{name.slice(0, 2)}</span>}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-zinc-100">{name}</div>
-          {sub && <div className="truncate text-xs text-zinc-500">{sub}</div>}
+    <section id={id} className="scroll-mt-4">
+      <button onClick={onToggle} aria-expanded={open} className="mb-2.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md px-1 py-1 text-left transition hover:bg-zinc-900/60">
+        {logo ? <img src={logo} alt="" className="h-5 w-5 object-contain" /> : <span className="grid h-5 w-5 place-items-center rounded bg-zinc-800 text-[9px] font-semibold text-zinc-400">{name.slice(0, 2).toUpperCase()}</span>}
+        <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+          <span className="truncate text-[15px] font-semibold text-zinc-50">{name}</span>
+          {sub && <span className="label-data truncate text-zinc-500">{sub}</span>}
         </div>
-        {!!live && <span className="flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />{live}</span>}
-        <span className="text-xs tnum text-zinc-500">{count}</span>
-        <ChevronDown size={15} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />
+        {!!live && <span className="text-xs font-medium text-rose-300">{live} en juego</span>}
+        <span className="text-xs text-zinc-500 tnum">{count}</span>
+        <ChevronDown size={16} className={cn('text-zinc-500 transition-transform', !open && '-rotate-90')} />
       </button>
-      {open && <div className="divide-y divide-zinc-800/60 border-t border-zinc-800/60">{children}</div>}
+      {open && <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">{children}</div>}
     </section>
   );
 }
 
-export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean }
+// Los partidos en juego, destacados arriba en tarjetas grandes
+export function LiveSection({ count, children }: { count: number; children: ReactNode }) {
+  return (
+    <section id="comp-en-directo" className="scroll-mt-4">
+      <div className="mb-3 flex items-center gap-2.5 px-1 py-1">
+        <LiveDot className="h-2 w-2" />
+        <span className="text-[15px] font-semibold text-zinc-50">En directo</span>
+        <span className="text-xs text-zinc-500">{count} {count === 1 ? 'partido' : 'partidos'}</span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
 
-// Fila de partido: hora o estado a la izquierda, los dos equipos uno encima de otro con su marcador,
-// y la mejor cuota de cada uno si se piden
-export function MatchRow({ state, time, status, a, b, odds, active, onClick, tag }: {
+// games y points: los juegos del set y los puntos del juego en curso (tenis en juego); serving: saca él; color: el del equipo, de fondo en el marcador grande; plate: su escudo necesita una placa clara para verse
+export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
+
+// Rótulo de la ficha de cuota: el código del equipo (G2, LAL) o, si el "corto" no es un código (en tenis es el país),
+// el apellido del jugador
+const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.name.replace(/\s*\(\d+\)$/, '').split(' ').pop() || t.name);
+
+// Tarjeta de partido: estado y hora arriba, los dos equipos con su marcador y, si se piden, las cuotas de ganador en dos
+// fichas (la del favorito teñida del acento). featured: más grande, para "En directo", con la competición en la cabecera.
+// En tenis en juego, tras los sets van los juegos del set y los puntos del juego.
+// items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
+export function MatchCard({ state, time, status, a, b, odds, active, onClick, tag, competition, featured }: {
   state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number } | null;
-  active?: boolean; onClick: () => void; tag?: string;
+  active?: boolean; onClick: () => void; tag?: string; competition?: string; featured?: boolean;
 }) {
+  const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
   const team = (t: RowTeam) => (
-    <div className="flex h-6 min-w-0 items-center gap-2.5">
-      <TeamLogo src={t.logo} name={t.short || t.name} size={20} />
-      <span className={cn('truncate text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'text-zinc-200')} title={t.name}>{t.name}</span>
+    <div className="flex min-w-0 items-center gap-2.5">
+      <TeamLogo src={t.logo} name={t.short || t.name} size={featured ? 36 : 26} />
+      <span className={cn('min-w-0 flex-1 truncate', featured ? 'text-base' : 'text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'font-medium text-zinc-100')} title={t.name}>{t.name}</span>
+      {t.serving && <span title="Saca" aria-label="Saca" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+      {state !== 'pre' && <span className={cn('font-score font-semibold tnum', featured ? 'text-2xl' : 'text-lg', t.lose ? 'text-zinc-500' : games ? 'text-zinc-50' : t.win || state === 'live' ? 'text-amber-400' : 'text-zinc-50')} title={games ? 'Sets' : undefined}>{t.score ?? ''}</span>}
+      {games && <span className={cn('w-5 text-right font-score tnum text-zinc-400', featured ? 'text-xl' : 'text-base')} title="Juegos de este set">{t.games ?? ''}</span>}
+      {points && <span className={cn('w-7 text-right font-score font-semibold tnum text-amber-400', featured ? 'text-xl' : 'text-base')} title="Puntos del juego">{t.points ?? ''}</span>}
     </div>
   );
-  const score = (t: RowTeam) => <span className={cn('h-6 font-score text-lg leading-6 font-semibold tnum', t.lose ? 'text-zinc-500' : state === 'live' ? 'text-rose-300' : 'text-zinc-50')}>{t.score ?? ''}</span>;
+  // Se resalta el favorito (la cuota más baja), como antes
+  const best = odds ? Math.min(odds.a || 99, odds.b || 99) : 0;
+  const oddChip = (o: number, t: RowTeam) => (
+    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 items-center justify-between gap-2 px-3 text-sm', !o && 'bg-zinc-900 text-zinc-600')}>
+      <span className="min-w-0 truncate text-xs font-medium opacity-70">{oddsTag(t)}</span>
+      <span>{o ? odd(o) : '–'}</span>
+    </span>
+  );
+  const info = [competition, status].filter(Boolean).join(' · ');
   return (
     <button onClick={onClick} aria-current={active}
-      className={cn('grid w-full cursor-pointer grid-cols-[52px_1fr_auto] items-center gap-2 px-3 py-2 text-left transition sm:grid-cols-[64px_1fr_auto] sm:gap-3 sm:px-4',
-        active ? 'bg-amber-500/10 shadow-[inset_3px_0_0_var(--acc-500)]' : 'hover:bg-zinc-800/30')}>
-      <div className="flex flex-col items-start leading-tight">
-        <span className={cn('text-xs tnum', state === 'live' ? 'font-semibold text-rose-300' : 'text-zinc-400')}>{time}</span>
-        {status && <span className={cn('truncate text-[11px]', state === 'live' ? 'text-rose-300/80' : 'text-zinc-600')}>{status}</span>}
+      className={cn('flex h-full w-full cursor-pointer flex-col items-stretch gap-3 rounded-2xl border bg-surface text-left transition hover:bg-zinc-900',
+        featured ? 'p-4' : 'p-3.5', active ? 'border-amber-500/60' : 'border-zinc-800 hover:border-zinc-700')}>
+      <div className="flex min-w-0 items-center gap-2">
+        {state === 'live'
+          ? <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-rose-300"><LiveDot />{time}</span>
+          : state === 'pre'
+            ? <span className="shrink-0 text-[13px] font-semibold text-zinc-100 tnum">{time}</span>
+            : <span className="shrink-0 text-xs text-zinc-500">{time}</span>}
+        {info && <span className="min-w-0 truncate text-xs text-zinc-500">{info}</span>}
+        {tag && <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">{tag}</span>}
       </div>
-      <div className="flex min-w-0 flex-col gap-1">{team(a)}{team(b)}</div>
-      <div className="flex items-center gap-3">
-        {tag && <span className="hidden text-[11px] text-zinc-500 xl:inline">{tag}</span>}
-        {odds && (
-          <div className="flex flex-col gap-1">
-            {[odds.a, odds.b].map((o, i) => (
-              <span key={i} className={cn('h-6 w-12 rounded-md text-center text-xs leading-6 font-semibold tnum',
-                o && o <= Math.min(odds.a || 99, odds.b || 99) ? 'bg-amber-500/15 text-amber-300' : 'bg-zinc-800/70 text-zinc-300')}>{odd(o)}</span>
-            ))}
-          </div>
-        )}
-        {state !== 'pre' && <div className="flex w-8 flex-col items-end gap-1">{score(a)}{score(b)}</div>}
-      </div>
+      <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
+      {odds && <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, a)}{oddChip(odds.b, b)}</div>}
     </button>
   );
 }
 
 // ---------- marcador grande ----------
-// El marcador del partido abierto, con cifras condensadas de videomarcador y una línea de acento bajo el que va ganando.
-// Es una sola franja: lo importante de la ficha son los datos que hay debajo
+// El marcador del partido abierto: la competición y el estado arriba, los dos equipos a los lados y el resultado en
+// grande en el centro, con el acento en quien va por delante. Lo importante de la ficha son los datos que hay debajo
+// Colores de los equipos en el marcador grande: cada mitad, plana, teñida del suyo
+const tint = (x?: string, y?: string) => (x || y ? {
+  background: `linear-gradient(90deg, ${x ? `color-mix(in oklab, ${x} 22%, transparent)` : 'transparent'} 0 50%, ${y ? `color-mix(in oklab, ${y} 22%, transparent)` : 'transparent'} 50% 100%)`
+} : undefined);
+
 export function Scoreboard({ competition, detail, a, b, state, center, centerSub, children }: {
   competition: string; detail?: string; a: RowTeam; b: RowTeam; state: MatchState; center?: ReactNode; centerSub?: string; children?: ReactNode;
 }) {
   const sa = Number(a.score), sb = Number(b.score);
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
-    <div className={cn('flex w-full min-w-0 flex-col items-center gap-1 text-center sm:w-auto sm:flex-row sm:gap-2.5 sm:text-left', which === 'a' ? 'sm:flex-row-reverse sm:justify-self-end sm:text-right' : 'sm:justify-self-start')}>
-      <TeamLogo src={t.logo} name={t.short || t.name} size={34} />
-      <div className="max-w-full truncate text-sm font-semibold sm:min-w-0 sm:text-lg" title={t.name}>{t.name}</div>
+    <div className={cn('flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
+      <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
+      <div className="min-w-0 max-w-full">
+        <div className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</div>
+        {t.short && t.short !== t.name && <div className="hidden text-xs text-zinc-500 sm:block">{t.short}</div>}
+      </div>
     </div>
   );
   const num = (t: RowTeam, which: 'a' | 'b') => (
-    <span className={cn('relative font-score text-[40px] leading-none font-bold tnum', lead && lead !== which ? 'text-zinc-500' : state === 'live' ? 'text-zinc-50' : 'text-zinc-100')}>
-      {t.score ?? 0}
-      {lead === which && <span className="absolute -bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-amber-500" />}
-    </span>
+    <span className={cn('text-4xl font-bold leading-none tracking-tight tnum sm:text-5xl', lead === which ? 'text-amber-400' : lead ? 'text-zinc-500' : 'text-zinc-50')}>{t.score ?? 0}</span>
   );
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/50">
-      <div className="flex items-center justify-center gap-2 px-4 pt-2 text-[11px] text-zinc-500">
-        <span className="font-medium text-zinc-300">{competition}</span>
-        {detail && <span>{detail}</span>}
-      </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-2.5 pt-1 sm:gap-5 sm:px-4">
-        {side(a, 'a')}
-        <div className="flex flex-col items-center gap-1">
-          {state === 'pre'
-            ? <span className="font-score text-[32px] font-semibold leading-none tnum text-zinc-100">{center}</span>
-            : <div className="flex items-center gap-2 sm:gap-3">{num(a, 'a')}<span className="font-score text-2xl text-zinc-700">–</span>{num(b, 'b')}</div>}
-          <span className={cn('whitespace-nowrap rounded-full px-2 py-px text-[11px] font-medium', state === 'live' ? 'bg-rose-500/15 text-rose-300' : 'bg-zinc-800/80 text-zinc-400')}>
-            {state === 'live' && <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400 align-middle" />}{centerSub}
+    <div className={cn(panelCls, 'overflow-hidden')}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pt-3 sm:px-5">
+        <span className="text-sm font-semibold text-zinc-100">{competition}</span>
+        {detail && <span className="text-xs text-zinc-500">· {detail}</span>}
+        {centerSub && (
+          <span className={cn('ml-auto flex items-center gap-1.5 text-xs font-medium first-letter:uppercase',
+            state === 'live' ? 'text-rose-300' : 'text-zinc-400')}>
+            {state === 'live' && <LiveDot />}{centerSub}
           </span>
+        )}
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 py-5 sm:gap-6 sm:px-5" style={tint(a.color, b.color)}>
+        {side(a, 'a')}
+        <div className="flex flex-col items-center gap-1.5">
+          {state === 'pre'
+            ? <span className="font-score text-3xl font-semibold leading-none tnum text-zinc-100">{center}</span>
+            : <div className="flex items-center gap-3 sm:gap-4">{num(a, 'a')}<span className="text-2xl font-light text-zinc-600">–</span>{num(b, 'b')}</div>}
         </div>
         {side(b, 'b')}
       </div>
@@ -182,16 +247,19 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   );
 }
 
-// Pestañas bajo el marcador
+// Pestañas bajo el marcador: subrayadas, y si no caben se parten en dos líneas en vez de esconderse de lado.
+// A la derecha, las acciones
 export function SheetTabs<T extends string>({ value, onChange, items, right }: { value: T; onChange: (v: T) => void; items: [T, string][]; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-1 border-t border-zinc-800/70 px-1 sm:px-3">
-      {items.map(([v, label]) => (
-        <button key={v} onClick={() => onChange(v)}
-          className={cn('-mb-px cursor-pointer whitespace-nowrap border-b-2 px-2 py-3 text-sm font-medium transition sm:px-3',
-            value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-200')}>{label}</button>
-      ))}
-      {right && <div className="ml-auto flex gap-2 py-2">{right}</div>}
+    <div className="flex flex-wrap items-end gap-x-2 gap-y-2 border-t border-zinc-800 px-3 pt-1 sm:px-4">
+      <div className="flex min-w-0 flex-wrap gap-x-4">
+        {items.map(([v, label]) => (
+          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v}
+            className={cn('-mb-px cursor-pointer whitespace-nowrap border-b-2 py-2.5 text-[13px] font-medium transition',
+              value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-100')}>{label}</button>
+        ))}
+      </div>
+      {right && <div className="ml-auto flex flex-wrap gap-2 pb-2">{right}</div>}
     </div>
   );
 }

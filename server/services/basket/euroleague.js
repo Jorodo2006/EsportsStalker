@@ -3,6 +3,7 @@
 // jugador se monta con los box scores de su equipo (los terminados se guardan y no se vuelven a pedir).
 const { getJSON, bulk } = require('./cache');
 const { assemble, advanced } = require('./points');
+const { fromCrests } = require('./colors');
 
 const API = 'https://api-live.euroleague.net';
 const COMPS = { euroleague: 'E', eurocup: 'U' };
@@ -299,5 +300,12 @@ async function team(lg, id) {
   };
 }
 
+// Su API no da colores: salen del escudo de cada club
+async function colors(lg) {
+  const j = await getJSON(`${API}/v2/competitions/${COMPS[lg]}/seasons/${code(lg, seasonStart())}/clubs`, 24 * 3600e3);
+  return fromCrests((j.data || j || []).filter(c => !c.isVirtual && c.images?.crest).map(c => ({ id: c.code, crest: c.images.crest })));
+}
+
 module.exports.standings = standings;
 module.exports.team = team;
+module.exports.colors = colors;

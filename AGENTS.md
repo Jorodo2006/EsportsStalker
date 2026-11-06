@@ -6,7 +6,7 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 ## Qué es
 
 Web con login, para el ordenador y el móvil, con backend en Docker, que son **tres apps en una**, con un selector arriba:
-**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP y WTA, verde).
+**LoL** (esports, turquesa), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja) y **Tenis** (ATP, Challengers y WTA, verde).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
 apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las tres apps**, y las cuotas que se pulsan van a un **cupón** desde
 el que se registran como simples o combinada. La interfaz es React en el navegador; la lógica y los datos están en
@@ -78,7 +78,8 @@ Docker Compose (docker-compose.yml)
   │                                                     programador cada X min, histórico     → esquema odds
   ├─ basket   :4004          server/services/basket/    NBA y WNBA (ESPN), Euroliga y EuroCup
   │                                                     (API de la Euroliga), días en hora de España → esquema basket
-  ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings → esquema tennis
+  ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings. Puntos del juego (WTA, LiveScore)
+  │                                                     y Challengers (LiveScore) → esquema tennis
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -101,15 +102,28 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 ## Convenciones de código
 
 - **TypeScript estricto** con `noUnusedLocals` y `noUnusedParameters`: nada de imports o variables sin usar.
-- Alias `@/` → `src/`. Piezas de las fichas, con aspecto de rótulo de retransmisión (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
+- Alias `@/` → `src/`. Piezas de las fichas, paneles planos (`TvFrame`, `TvHeader`, `TvBand`, `TvRow`, `TvPortrait`, `TvTabs`, `Panel`, `KpiStrip`; colores `--tv-*` en `src/index.css`) en
   `src/components/viz.tsx`. Componentes base en `src/components/ui.tsx` (`Button`, `Card`, `Dialog`, `Field`, `Input`,
   `Select`, `Badge`, `Tabs`, `Empty`, `Loading`, `th`/`td`…). Úsalos en vez de crear otros.
-- Estilo: tema azul tinta (la escala `zinc` está redefinida en `src/index.css`) y acento por app con las clases
-  `amber` (turquesa en LoL, naranja en baloncesto, según `data-app`); verde `emerald` para lo positivo, `rose` para lo
-  negativo. Barlow para el texto y `font-score` (Barlow Condensed) para marcadores y cifras. Piezas de partidos comunes
-  a las dos apps en `src/components/sport.tsx` (tira de días, filtros, bloque de competición, fila, marcador).
+- Estilo sobrio, que no parezca hecho con una IA: fondo oscuro neutro, paneles `panelCls` (superficie `bg-surface`, borde
+  fino, esquinas de 10 px; controles a 6 px) y sin degradados, neones, brillos, sombras de color ni puntos que laten. Nada de
+  barritas de color delante de los títulos, cajas con borde discontinuo e icono en un círculo, ni todo en píldoras. Cada tipo
+  de control tiene su forma, con los estilos de `ui.tsx`: acción principal rellena del acento (`Button`), secundaria gris,
+  pestañas en selector segmentado con la elegida en gris claro (`segWrap` + `seg`, `Tabs`), las de la ficha del partido
+  subrayadas y partiéndose en dos líneas si no caben (`SheetTabs`), filtros con contorno (`chip`, `TvTabs`) y cuotas en ficha
+  rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css` (grises neutros) y el acento por app va con las clases
+  `amber` (verde azulado en LoL, naranja en baloncesto, verde en tenis, apagados, según `data-app`); verde `emerald` para lo
+  positivo, `rose` para lo negativo y lo que está en juego. Una sola letra, Inter: `font-score` y `font-mono` apuntan a ella
+  con cifras tabulares, para cifras, cuotas y dinero. Las etiquetas van en minúsculas normales (`label-data`, `th`), nunca en
+  mayúsculas espaciadas. Piezas de partidos comunes a las tres apps en `src/components/sport.tsx` (tira de días, filtros, bloque de
+  competición con tarjetas `MatchCard`, sección `LiveSection` de partidos en juego, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
-- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos) en `src/lib/app-context.tsx`.
+- Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,
+  competiciones del día y cartera); desde 1400 px además una columna derecha con el cupón fijo (`<Coupon docked />`) y
+  los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
+  sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
+  Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
+- Estado global (app activa `lol` | `basket` | `tennis`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
@@ -133,6 +147,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   está el partido; el lector las hace de una en una, primero las más cercanas. No subas mucho la frecuencia: las casas
   pueden bloquear.
 - **Escáner de líneas y puntos de equipo** (`scanLine` en `src/lib/basket-model.ts`, `src/lib/basket-teams.ts`): el escáner debe dar la misma probabilidad que el analizador, y los parámetros de los puntos están ajustados con datos (cifras y límites en `docs/specs/08-baloncesto.md`). No guardes logs de ESPN enteros en la caché: pesan 700 KB cada uno (`remember` y `bulk` en `cache.js`).
+- **Recomendaciones de baloncesto** (`src/lib/basket-picks.ts`, `blendWithMarket` y `tooFar` en `src/lib/value.ts`): no ordenes por el EV del modelo a secas. Sube a la cabeza sus propios errores: en la prueba salían EV de +65 % con el modelo diciendo 29 % y la casa 10 %. Los pesos frente a la casa son una decisión, no una medida (`docs/specs/08-baloncesto.md`).
+- **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.

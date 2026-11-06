@@ -1,8 +1,7 @@
 // Puerta de entrada: sin sesión sólo se ve la pantalla de entrar o crear cuenta. Cada usuario tiene su cartera.
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cn } from '@/lib/format';
-import { Button, ErrorBox, Field, Input, Loading } from './ui';
+import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
 
 // Usuario conectado (ya cargado por AuthGate cuando se usa dentro de la app)
 export function useUser() {
@@ -54,15 +53,21 @@ function LoginScreen() {
   return (
     <div className="flex h-full items-start justify-center overflow-y-auto px-4 py-10 sm:items-center">
       <div className="w-full max-w-sm">
-        <div className="mb-6 text-center font-score text-3xl font-bold tracking-tight">Esports<span className="text-amber-400">Stalker</span></div>
-        <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="mb-6 flex items-center justify-center gap-2 text-2xl font-semibold tracking-tight">
+          <span>EsportsStalker</span>
+        </div>
+        <form onSubmit={submit} className="overflow-hidden rounded-2xl border border-zinc-800 bg-surface">
+          <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-5 py-2.5 text-sm font-semibold">
+            {mode === 'register' ? 'Crear cuenta' : 'Entrar'}
+          </div>
+          <div className="space-y-4 p-5">
           {cfg?.first
             ? <p className="text-sm text-zinc-300">Crea la primera cuenta. Será la de <b>administrador</b> y se quedará con las apuestas y la cartera que ya hay guardadas.</p>
             : cfg?.signupOpen && (
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-zinc-950/60 p-1">
+              <div className="grid grid-cols-2 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800">
                 {(['login', 'register'] as const).map(m => (
-                  <button key={m} type="button" onClick={() => { setMode(m); setError(''); }}
-                    className={cn('cursor-pointer rounded-md py-2 text-sm font-medium transition', mode === m ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200')}>
+                  <button key={m} type="button" onClick={() => { setMode(m); setError(''); }} aria-pressed={mode === m}
+                    className={seg(mode === m)}>
                     {m === 'login' ? 'Entrar' : 'Crear cuenta'}
                   </button>
                 ))}
@@ -75,6 +80,7 @@ function LoginScreen() {
           {mode === 'register' && <Field label="Repite la contraseña"><Input required type="password" autoComplete="new-password" value={repeat} onChange={e => setRepeat(e.target.value)} /></Field>}
           {error && <div className="text-sm text-rose-300" role="alert">{error}</div>}
           <Button type="submit" className="h-11 w-full" disabled={busy || !cfg}>{mode === 'register' ? 'Crear cuenta' : 'Entrar'}</Button>
+          </div>
         </form>
       </div>
     </div>

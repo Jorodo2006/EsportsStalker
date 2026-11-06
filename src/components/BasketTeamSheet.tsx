@@ -1,13 +1,15 @@
 // Equipos de baloncesto: clasificación de cada liga, ficha de un equipo y los dos de un partido frente a frente.
 // NBA y WNBA salen de ESPN; Euroliga y EuroCup, de la API de la Euroliga (por eso algunos datos sólo están en unas ligas).
+import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { cn, pct } from '@/lib/format';
+import { useTeamThemes } from '@/lib/team-colors';
 import type { BasketGame, BasketLeagueId, BasketTeamGame, BasketTeamInfo, BasketTeamPlayer } from '@/lib/types';
 import { LEAGUE_NAME, badInjury } from './BasketAnalyzer';
 import { TeamPoints, dec, restart, signed } from './BasketPoints';
 import { Badge, Empty, Loading, TeamLogo, th } from './ui';
-import { FormChips, KpiStrip, Panel, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, panel, tdc } from './viz';
+import { FormChips, KpiStrip, Panel, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, logoGlow, panel, tdc } from './viz';
 
 const esDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 const esWhen = (iso: string) => new Date(iso).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -67,6 +69,7 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
   onPlayer: (p: { id: string; name: string; headshot?: string }, teamId: string) => void; backLabel?: string;
 }) {
   const { data: t, error, isLoading } = useTeam(league, teamId);
+  const themeOf = useTeamThemes(league);
   const back = <button onClick={onBack} className="flex w-fit cursor-pointer items-center gap-1.5 text-[13px] text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={15} />{backLabel}</button>;
   if (isLoading) return <div className="flex flex-col gap-3">{back}<Loading label="Cargando el equipo…" /></div>;
   if (error || !t) return <div className="flex flex-col gap-3">{back}{restart(error ?? 'Sin datos de este equipo')}</div>;
@@ -75,11 +78,13 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
   const out = t.roster.filter(p => p.injury);
   const form = t.results.slice(0, 10);
   const statKpis = t.stats.filter(x => ['Posesiones', 'Rating ofensivo', 'Rating defensivo', 'Tiros de campo %', 'Triples %', 'Tiros libres %', 'Rebotes', 'Asistencias'].includes(x.label));
+  const theme = themeOf(t.id);
+  // Toda la ficha con los colores del equipo: las piezas de viz.tsx los leen de estas variables
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2.5" style={theme?.vars}>
       {back}
       <TvFrame>
-        <TvHeader media={<TeamLogo src={t.logo} name={t.abbr} size={44} />} title={t.name} sub={<span title={meta.join(' · ')}>{meta.join(' · ')}</span>}>
+        <TvHeader media={<span className={theme?.plate ? 'rounded-md bg-white/90 p-0.5' : logoGlow}><TeamLogo src={t.logo} name={t.abbr} size={44} /></span>} title={t.name} sub={<span title={meta.join(' · ')}>{meta.join(' · ')}</span>}>
           {!!form.length && <div className="shrink-0" title="Últimos partidos, del más reciente al más antiguo"><FormChips list={form.map(g => ({ win: g.us.winner, title: `${g.home ? 'vs' : '@'} ${g.them.name}: ${g.us.score}-${g.them.score}` }))} /></div>}
         </TvHeader>
         {s && <KpiStrip items={[
@@ -92,7 +97,7 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
 
       {!!statKpis.length && (
         <div className={cn(panel, 'grid grid-cols-4 gap-x-4 gap-y-1 px-3.5 py-2 md:grid-cols-8')}>
-          {statKpis.map(x => <div key={x.label} className="min-w-0"><div className="truncate font-score text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{x.label.replace('Tiros de campo %', 'T. campo %').replace('Tiros libres %', 'T. libres %')}</div><div className="font-score text-[18px] font-bold leading-tight text-white tnum">{x.value.replace('.', ',')}</div></div>)}
+          {statKpis.map(x => <div key={x.label} className="min-w-0"><div className="truncate font-mono text-xs font-medium text-zinc-400">{x.label.replace('Tiros de campo %', 'T. campo %').replace('Tiros libres %', 'T. libres %')}</div><div className="font-score text-[18px] font-bold leading-tight text-white tnum">{x.value.replace('.', ',')}</div></div>)}
         </div>
       )}
 
@@ -141,10 +146,10 @@ function TeamStats({ team }: { team: BasketTeamInfo }) {
   if (!groups.length) return null;
   return (
     <Panel title="Estadísticas por partido">
-      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 2xl:grid-cols-4">
         {groups.map(g => (
           <div key={g} className="py-1.5">
-            <div className="px-3.5 pb-1 font-score text-[12px] font-semibold uppercase tracking-wider text-zinc-400">{g}</div>
+            <div className="px-3.5 pb-1 font-mono text-xs font-medium text-zinc-400">{g}</div>
             {team.stats.filter(s => s.group === g).map(s => (
               <div key={s.label} className="flex h-6 items-center justify-between gap-3 px-3.5 text-[13px]">
                 <span className="truncate text-zinc-300" title={s.label}>{s.label}</span>
@@ -228,6 +233,7 @@ function Roster({ team, onPlayer }: { team: BasketTeamInfo; onPlayer: (p: Basket
 // Los dos equipos de un partido, uno frente al otro
 export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: string) => void }) {
   const a = useTeam(game.league, game.away.id), b = useTeam(game.league, game.home.id);
+  const themeOf = useTeamThemes(game.league);
   if (a.isLoading || b.isLoading) return <Loading label="Cargando los equipos…" />;
   if (a.error || b.error || !a.data || !b.data) return restart(a.error ?? b.error ?? 'Sin datos de estos equipos');
   const x = a.data, y = b.data;
@@ -247,41 +253,46 @@ export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: 
   const text = (t: BasketTeamInfo, k: 'home' | 'road' | 'last' | 'streak') => t.standing?.[k] || '–';
   const name = (t: BasketTeamInfo) => (
     <button onClick={() => onTeam(t.id)} title="Ver la ficha del equipo" className="grid h-[22px] w-full cursor-pointer grid-cols-[1.25rem_minmax(0,11rem)_3rem] items-center gap-2 font-score hover:opacity-80">
-      <TeamLogo src={t.logo} name={t.abbr} size={18} />
-      <span className="truncate text-left text-[17px] font-bold uppercase tracking-wide">{t.name}</span>
+      <span className={themeOf(t.id)?.plate ? 'rounded-sm bg-white/90' : logoGlow}><TeamLogo src={t.logo} name={t.abbr} size={18} /></span>
+      <span className="truncate text-left text-[17px] font-bold">{t.name}</span>
       <span className="text-right text-[17px] font-bold tnum">{t.standing ? `${t.standing.w}-${t.standing.l}` : ''}</span>
     </button>
   );
   const out = (t: BasketTeamInfo) => t.roster.filter(p => p.injury);
   const hero = (t: BasketTeamInfo) => (t.standing ? `${t.standing.pos}.º` : '–');
   const px = x.standing?.pct ?? null, py = y.standing?.pct ?? null;
+  const tx = themeOf(x.id), ty = themeOf(y.id);
+  // La cabecera va de un equipo al otro. Las bandas del centro, neutras: no son de ninguno de los dos
+  const header = tx && ty ? { '--tv-band': tx.band, '--tv-band-2': ty.band, '--tv-mark': 'rgb(255 255 255 / .35)' } as CSSProperties : undefined;
+  const neutral = tx && ty ? { '--tv-band': '#2b3346', '--tv-band-2': '#1a2030' } as CSSProperties : undefined;
+  const marks = { aMark: tx?.mark, bMark: ty?.mark };
   return (
     <div className="flex flex-col gap-2.5">
       <TvFrame>
-        <TvHeader title="Frente a frente" sub={LEAGUE_NAME[game.league]}><div className="flex min-w-64 flex-col">{name(x)}{name(y)}</div></TvHeader>
+        <div style={header}><TvHeader title="Frente a frente" sub={LEAGUE_NAME[game.league]}><div className="flex min-w-64 flex-col">{name(x)}{name(y)}</div></TvHeader></div>
         <div className="grid grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)_200px] lg:grid-cols-[230px_minmax(0,1fr)_230px]">
-          <TvPortrait name={x.name} photo={x.logo} logo side="left" heroLabel="Puesto" hero={hero(x)} lead={px != null && py != null && px > py} />
-          <div className="min-w-0 pb-2">
+          <div className="contents" style={tx?.vars}><TvPortrait name={x.name} photo={x.logo} logo side="left" heroLabel="Puesto" hero={hero(x)} lead={px != null && py != null && px > py} /></div>
+          <div className="min-w-0 pb-2" style={neutral}>
             <TvBand>Temporada</TvBand>
-            <div className="pb-1.5">{bars.slice(0, 4).map(r => <TvRow key={r.label} {...r} />)}</div>
+            <div className="pb-1.5">{bars.slice(0, 4).map(r => <TvRow key={r.label} {...r} {...marks} />)}</div>
             <TvBand>Por partido</TvBand>
-            <div className="pb-1.5">{bars.slice(4).map(r => <TvRow key={r.label} {...r} />)}</div>
+            <div className="pb-1.5">{bars.slice(4).map(r => <TvRow key={r.label} {...r} {...marks} />)}</div>
             <TvBand>Forma</TvBand>
             {([['En casa', 'home'], ['Fuera', 'road'], ['Últimos 10', 'last'], ['Racha', 'streak']] as const).map(([l, k]) => <TvRow key={k} label={l} a={null} b={null} aText={text(x, k)} bText={text(y, k)} />)}
           </div>
-          <TvPortrait name={y.name} photo={y.logo} logo side="right" heroLabel="Puesto" hero={hero(y)} lead={px != null && py != null && py > px} />
+          <div className="contents" style={ty?.vars}><TvPortrait name={y.name} photo={y.logo} logo side="right" heroLabel="Puesto" hero={hero(y)} lead={px != null && py != null && py > px} /></div>
         </div>
       </TvFrame>
       {!!(out(x).length + out(y).length) && (
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
           {[x, y].map(t => (
-            <Panel key={t.id} title={`Bajas y dudas: ${t.abbr}`}>
+            <div key={t.id} style={themeOf(t.id)?.vars}><Panel title={`Bajas y dudas: ${t.abbr}`}>
               {!out(t).length ? <p className="px-3.5 py-2 text-[13px] text-zinc-500">Ninguna conocida.</p> : (
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-3.5 py-2 text-[13px]">
                   {out(t).map(p => <span key={p.id} className="flex items-center gap-1.5"><Badge tone={badInjury(p.injury!) ? 'danger' : 'warning'}>{INJURY[p.injury!] ?? p.injury}</Badge>{p.name}</span>)}
                 </div>
               )}
-            </Panel>
+            </Panel></div>
           ))}
         </div>
       )}

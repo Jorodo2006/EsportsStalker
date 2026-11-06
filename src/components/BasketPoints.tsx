@@ -1,6 +1,6 @@
 // Puntos de los equipos de baloncesto: tabla de toda la liga, puntos de un equipo por tramos y cuartos, y el partido con la
 // proyección del total y de los puntos de cada uno, la probabilidad de la línea que se elija y el valor frente a las casas.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '@/lib/app-context';
@@ -13,7 +13,7 @@ import { SIDE_LABEL } from '@/lib/value';
 import type { BasketGame, BasketLeagueId, MatchOdds } from '@/lib/types';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { ValuePanel } from './ValuePanel';
-import { Empty, ErrorBox, Input, Loading, TeamLogo, th } from './ui';
+import { Empty, ErrorBox, Input, Loading, TeamLogo, chip, th } from './ui';
 import { Panel, TvBand, TvFrame, TvHeader, TvTabs, panel, tdc } from './viz';
 
 export const dec = (v: number | null | undefined, d = 1) => (v == null ? '–' : v.toFixed(d).replace('.', ','));
@@ -65,7 +65,7 @@ export function LeaguePoints({ league, onTeam }: { league: BasketLeagueId; onTea
   if (!rows.length) return <Empty>Todavía no hay partidos terminados de esta liga.</Empty>;
   const H = ({ k, children, title }: { k: SortKey; children: ReactNode; title?: string }) => (
     <th className={th + ' text-right'} title={title} aria-sort={sort.key === k ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
-      <button onClick={() => setSort(s => ({ key: k, desc: s.key === k ? !s.desc : true }))} className={cn('cursor-pointer uppercase hover:text-zinc-200', sort.key === k && 'text-amber-400')}>
+      <button onClick={() => setSort(s => ({ key: k, desc: s.key === k ? !s.desc : true }))} className={cn('cursor-pointer hover:text-zinc-200', sort.key === k && 'text-amber-400')}>
         {children}{sort.key === k ? (sort.desc ? ' ↓' : ' ↑') : ''}
       </button>
     </th>
@@ -162,15 +162,15 @@ function LineChart({ title, rows, value, line }: { title: string; rows: TeamRow[
       <div className="h-44 px-1 pb-1">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -14, bottom: 0 }} barCategoryGap={2}>
-            <CartesianGrid stroke="#222a3b" vertical={false} />
-            <XAxis dataKey="x" stroke="#637089" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
-            <YAxis stroke="#637089" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
-            <Tooltip cursor={{ fill: '#222a3b88' }} contentStyle={{ background: '#161d2b', border: '1px solid #313b51', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#8590a8' }}
+            <CartesianGrid stroke="#2b3034" vertical={false} />
+            <XAxis dataKey="x" stroke="#85948f" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
+            <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
+            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }} labelStyle={{ color: '#9aaaa4' }}
               labelFormatter={(_, p) => (p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : '')}
               formatter={(_, __, p) => [`${p.payload.v} (${p.payload.d > 0 ? '+' : ''}${fmtLine(p.payload.d)})`, 'Puntos']} />
-            <ReferenceLine y={0} stroke="#c7cedb" />
+            <ReferenceLine y={0} stroke="#cdd6d2" />
             <Bar dataKey="d" radius={[3, 3, 0, 0]} maxBarSize={18}>
-              {data.map((d, i) => <Cell key={i} fill={d.d > 0 ? '#34d399' : d.d < 0 ? '#fb7185' : '#637089'} />)}
+              {data.map((d, i) => <Cell key={i} fill={d.d > 0 ? '#55f28c' : d.d < 0 ? '#ff8a7f' : '#85948f'} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -257,13 +257,15 @@ function RowsTable({ rows, value, line }: { rows: TeamRow[]; value: (r: TeamRow)
 }
 
 // ---------- Un partido: total y puntos de cada equipo ----------
-export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds }) {
+// initial: con qué abrir (lo mandan las recomendaciones)
+export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: MatchOdds; initial?: { period: PointPeriod; kind: PointKind; line: number } }) {
   const { addToSlip, settings } = useApp();
   const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
   const q = useLeagueGames(game.league);
-  const [period, setPeriod] = useState<PointPeriod>('game');
-  const [kind, setKind] = useState<PointKind>('total');
+  const [period, setPeriod] = useState<PointPeriod>(initial?.period ?? 'game');
+  const [kind, setKind] = useState<PointKind>(initial?.kind ?? 'total');
+  const wanted = useRef(initial?.line ?? null);
   const [line, setLine] = useState('');
   const [over, setOver] = useState('');
   const [under, setUnder] = useState('');
@@ -278,7 +280,9 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
   // Al cambiar de mercado: la línea principal de las casas si la hay; si no, la proyección redondeada a x,5
   useEffect(() => {
     if (!P) return;
-    const main = mainLine(lines);
+    const asked = lines.find(l => l.line === wanted.current);
+    if (asked) wanted.current = null;
+    const main = asked ?? mainLine(lines);
     if (main) { applyLine(main); return; }
     setLine(fmtLine(Math.floor(P[kind].mu) + 0.5)); setOver(''); setUnder(''); setBooks({});
   }, [kind, period, !!P, lines.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -309,11 +313,11 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
           {cards.map(c => {
             const x = P[c.id], main = mainLine(pointLines(odds, c.id, period));
             return (
-              <button key={c.id} onClick={() => setKind(c.id)} aria-pressed={kind === c.id} className={cn('flex cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition', kind === c.id ? 'bg-amber-500/10 shadow-[inset_0_-2px_0_var(--acc-500)]' : 'hover:bg-white/[.04]')}>
+              <button key={c.id} onClick={() => setKind(c.id)} aria-pressed={kind === c.id} className={cn('flex cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition', kind === c.id ? 'bg-amber-500/10 shadow-[inset_0_-2px_0_var(--acc-500)]' : 'hover:bg-zinc-900')}>
                 {c.abbr && <TeamLogo src={c.logo} name={c.abbr} size={30} />}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-score text-[13px] font-semibold uppercase tracking-wide text-zinc-300">{c.title}</span>
-                  <span className="block font-score text-[30px] font-bold leading-none text-white">{dec(x.mu)}</span>
+                  <span className="block truncate font-mono text-xs font-medium text-zinc-400">{c.title}</span>
+                  <span className="block font-mono text-[26px] font-bold leading-tight text-zinc-50">{dec(x.mu)}</span>
                   <span className="block font-score text-[12px] text-zinc-400 tnum" title="Entre estos valores cae el 80 % de las veces, según el modelo">{dec(x.mu - 1.2816 * x.sd, 0)}–{dec(x.mu + 1.2816 * x.sd, 0)}{main ? ` · casas: ${fmtLine(main.line)}` : ''}</span>
                 </span>
               </button>
@@ -333,7 +337,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
             <span className="mr-1 text-zinc-500">En las casas:</span>
             {lines.map(l => (
               <button key={l.line} onClick={() => applyLine(l)} title={`Más ${odd(l.over)} (${l.overBook ?? '–'}) · Menos ${odd(l.under)} (${l.underBook ?? '–'})`}
-                className={cn('cursor-pointer rounded-full border px-2.5 py-1 tnum transition', L === l.line ? 'border-amber-500/60 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700')}>
+                className={cn(chip(L === l.line), 'font-mono tnum')}>
                 {fmtLine(l.line)} <span className="text-zinc-500">{odd(l.over)} / {odd(l.under)}</span>
               </button>
             ))}
@@ -342,7 +346,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
       </div>
 
       {!A || L == null ? <Empty>Escribe una línea válida (por ejemplo 225,5)</Empty> : (
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-2.5 2xl:grid-cols-2">
           <ValuePanel bank={bank} v={A} onSlip={s => addToSlip({
             sport: 'basket', status: 'pending', league: LEAGUE_NAME[game.league], event: `${away.abbr} @ ${home.abbr}`, market, selection: `${SIDE_LABEL[s.side]} de ${L}`, odds: s.price, bookmaker: s.book
           })} />
@@ -363,7 +367,7 @@ export function GamePoints({ game, odds }: { game: BasketGame; odds?: MatchOdds 
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-2.5 2xl:grid-cols-2">
         <Panel title={`${away.name}: ${label.toLowerCase()}`}><SplitsTable splits={pointSplits(P.rowsAway, season)} value={f.a} line={L} /></Panel>
         <Panel title={`${home.name}: ${label.toLowerCase()}`}><SplitsTable splits={pointSplits(P.rowsHome, season)} value={f.b} line={L} /></Panel>
       </div>

@@ -165,6 +165,7 @@ export const api: Api = {
     standings: league => get(`/api/basket/standings/${part(league)}`),
     team: (league, t) => get(`/api/basket/team/${part(league)}/${part(t)}`),
     leagueGames: league => get(`/api/basket/league-games/${part(league)}`),
+    colors: league => get(`/api/basket/colors/${part(league)}`),
     teamLogs: (league, t) => get(`/api/basket/team-logs/${part(league)}/${part(t)}`),
     injuries: () => get('/api/basket/injuries'),
     boxscore: id => get(`/api/basket/boxscore/${part(id)}`),

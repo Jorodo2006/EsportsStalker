@@ -54,7 +54,7 @@ function PlayerPanel({ page, onTeam }: { page: string; onTeam: (t: string) => vo
         <span className="text-sm text-zinc-400">{last.role} · <button className="cursor-pointer text-amber-400 hover:underline" onClick={() => onTeam(last.team)}>{last.team}</button></span>
         <span className="ml-auto text-xs text-zinc-500">Últimas {games.length} partidas</span>
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Stat label="Victorias" value={pct(s.wr)} sub={`${s.wins}V - ${games.length - s.wins}D`} valueClass={s.wr >= .5 ? 'text-emerald-400' : 'text-rose-400'} />
         <Stat label="KDA" value={s.kda.toFixed(2)} />
         <Stat label="K / D / A" value={<span className="text-xl">{s.k.toFixed(1)} / {s.d.toFixed(1)} / {s.a.toFixed(1)}</span>} />
@@ -144,7 +144,7 @@ function TeamPanel({ team, onPlayer, onTeam }: { team: string; onPlayer: (p: str
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Victorias (mapas)" value={pct(wins / (list.length || 1))} sub={`${wins}V - ${list.length - wins}D`} valueClass={wins / (list.length || 1) >= .5 ? 'text-emerald-400' : 'text-rose-400'} />
         <Stat label="Racha actual" value={list.length ? `${streak}${won(list[0]) ? 'V' : 'D'}` : '–'} valueClass={list.length && won(list[0]) ? 'text-emerald-400' : 'text-rose-400'} />
-        <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+        <div className="col-span-2 rounded-xl border border-zinc-800 bg-surface p-4">
           <div className="text-xs font-medium text-zinc-400">Forma (últimos 10 mapas)</div>
           <div className="mt-2.5 flex gap-1.5">
             {form.map((g, i) => <div key={i} title={`${g.team1} vs ${g.team2}`} className={cn('grid h-7 w-7 place-items-center rounded-md text-xs font-bold', won(g) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300')}>{won(g) ? 'V' : 'D'}</div>)}
@@ -157,7 +157,7 @@ function TeamPanel({ team, onPlayer, onTeam }: { team: string; onPlayer: (p: str
             {[...players].sort((a, b) => rank(a.role) - rank(b.role)).map(p => (
               <button key={p.page || p.id} onClick={() => onPlayer(p.page || p.id)}
                 className="cursor-pointer rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-left transition hover:border-amber-500/50">
-                <div className="text-[11px] uppercase tracking-wider text-zinc-500">{p.role || '—'}</div>
+                <div className="text-[11px] text-zinc-500">{p.role || '—'}</div>
                 <div className="font-semibold">{p.id}</div>
               </button>
             ))}

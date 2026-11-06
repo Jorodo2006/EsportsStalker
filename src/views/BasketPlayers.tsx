@@ -64,7 +64,7 @@ export default function BasketPlayers() {
           {!r.isFetching && !r.data?.length && <span className="text-sm text-zinc-500">Nadie con ese nombre en las plantillas de esta temporada</span>}
           {r.data?.map(p => (
             <button key={`${p.league}:${p.id}`} onClick={() => { setPlayer({ id: p.id, name: p.name, league: p.league, headshot: p.headshot, teamId: p.teamId }); setQ(''); }}
-              className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 py-1.5 pl-1.5 pr-3 text-left transition hover:border-zinc-700">
+              className="flex cursor-pointer items-center gap-2.5 rounded-md bg-zinc-800 py-1.5 pl-1.5 pr-4 text-left transition hover:bg-zinc-700">
               {p.headshot ? <img src={p.headshot} alt="" className="h-8 w-8 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-8 w-8 rounded-full bg-zinc-800" />}
               <div className="leading-tight"><div className="text-sm font-medium">{p.name}</div><div className="text-xs text-zinc-500">{LEAGUE_NAME[p.league]}, {p.team}</div></div>
             </button>
