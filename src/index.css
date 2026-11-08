@@ -7,7 +7,7 @@
 /* Tema sobrio: fondo oscuro neutro, superficies planas con borde fino y esquinas pequeñas (6-10 px), sin brillos ni neones.
    Toda la app usa las clases zinc, así que se cambia la escala entera aquí (grises neutros, un punto fríos):
    950 fondo · 900 superficie elevada · 800 separadores · 700 bordes marcados · 500-300 textos secundarios.
-   El acento (las clases amber) depende de la app: verde azulado en LoL, naranja en baloncesto y verde en tenis, apagados para
+   El acento (las clases amber) depende de la app: verde azulado en LoL, naranja en baloncesto, verde en tenis y azul en fútbol, apagados para
    que no parezcan de neón. Una sola letra, Inter: font-mono y font-score apuntan a ella con cifras tabulares, para que las
    columnas de cuotas y dinero sigan alineadas sin la letra de máquina. */
 @theme {
@@ -71,6 +71,10 @@
 [data-app="tennis"] {
   --acc-200: #cdeac4; --acc-300: #a6d898; --acc-400: #82c56f; --acc-500: #67ad53; --acc-600: #528f41;
   --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #82c56f; --tv-bg: #18181c;
+}
+[data-app="football"] {
+  --acc-200: #cad7f1; --acc-300: #a2b9e6; --acc-400: #7d9bd9; --acc-500: #5f84cc; --acc-600: #4b6cb0;
+  --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #7d9bd9; --tv-bg: #18181c;
 }
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {

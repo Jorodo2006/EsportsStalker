@@ -5,7 +5,7 @@ import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 import { wallet } from './format';
 
 export type View = 'matches' | 'players' | 'bets' | 'settings';
-// Dos apps en una: LoL y baloncesto, cada una con sus partidos, sus jugadores y sus apuestas
+// Cuatro apps en una: LoL, baloncesto, tenis y fútbol, cada una con sus partidos, sus jugadores y sus apuestas
 export type AppId = Sport;
 
 interface Ctx {
@@ -32,7 +32,7 @@ interface Ctx {
   // Competiciones de la lista de partidos que se está viendo, para el menú lateral
   sections: Section[];
   setSections(s: Section[]): void;
-  // Partido de baloncesto o tenis que hay que abrir (p. ej. desde la lista de directo); la vista lo recoge y lo borra
+  // Partido de baloncesto, tenis o fútbol que hay que abrir (p. ej. desde la lista de directo); la vista lo recoge y lo borra
   focusId: string | null;
   setFocusId(id: string | null): void;
 }
@@ -45,7 +45,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
-  const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' ? a : 'lol'; } catch { return 'lol'; } });
+  const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' || a === 'football' ? a : 'lol'; } catch { return 'lol'; } });
   const [view, setView] = useState<View>('matches');
   const [viewParam, setViewParam] = useState<string>();
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);

@@ -13,7 +13,7 @@ import { comboOdds } from './BetForm';
 import { Button, chip, seg } from './ui';
 
 const QUICK = [5, 10, 25, 50];
-const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis' };
+const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol' };
 const num = (v: string) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) && n > 0 ? n : 0; };
 const today = () => new Date().toISOString().slice(0, 10);
 const keyOf = (l: SlipLeg) => `${l.event}|${l.market}|${l.selection}`;

@@ -12,7 +12,7 @@ const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning
 };
 
 
-const APP_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis' };
+const APP_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol' };
 
 export default function BetsView() {
   const { openBet, toast, app } = useApp();

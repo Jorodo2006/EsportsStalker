@@ -136,7 +136,7 @@ async function importBets(userId, list) {
 
 const STATUSES = ['pending', 'won', 'lost', 'void', 'cashout', 'halfwon', 'halflost'];
 const LEG_STATUSES = ['pending', 'won', 'lost', 'void'];
-const SPORTS = ['lol', 'basket', 'tennis'];
+const SPORTS = ['lol', 'basket', 'tennis', 'football'];
 // Sin deporte (apuestas de antes o importadas) es LoL
 const sportOf = v => (v === 'nba' ? 'basket' : SPORTS.includes(v) ? v : 'lol');
 const today = () => new Date().toISOString().slice(0, 10);

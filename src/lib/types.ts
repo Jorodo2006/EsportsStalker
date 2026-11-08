@@ -5,7 +5,7 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfw
 
 // Selección de una combinada
 export type LegStatus = 'pending' | 'won' | 'lost' | 'void';
-export type Sport = 'lol' | 'basket' | 'tennis';
+export type Sport = 'lol' | 'basket' | 'tennis' | 'football';
 export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport }
 // En el boleto se guarda también la casa de donde salió la cuota
 export type SlipLeg = BetLeg & { bookmaker?: string };
@@ -155,7 +155,35 @@ export interface AutoStatus {
 }
 
 // true si responde cada pieza del backend
-export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean };
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean };
+
+// ---------- Fútbol (servicio football: ESPN) ----------
+export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa';
+export interface FootballLeague { id: FootballLeagueId; name: string; country: string; logo: string }
+// form: últimos resultados (G, E o P); record: ganados-empatados-perdidos en la competición; color y alt: los del equipo, sin #
+export interface FootballTeam {
+  id: string; name: string; short: string; abbr: string; logo: string; color: string | null; alt: string | null;
+  score: number | null; winner: boolean; form: string; record: string; alts: string[];
+}
+export type FootballEventKind = 'goal' | 'penalty' | 'owngoal' | 'missed' | 'yellow' | 'red' | 'sub';
+// other: en los goles, quien da la asistencia; en los cambios, el que sale
+export interface FootballEvent { kind: FootballEventKind; minute: string; team: string; player: string; other?: string }
+export interface FootballMatch {
+  id: string; league: FootballLeagueId; leagueName: string; date: string; state: 'pre' | 'in' | 'post'; status: string; off: boolean;
+  stage: string; venue: string; city: string; home: FootballTeam; away: FootballTeam; incidents: FootballEvent[];
+}
+export interface FootballPlayer { id: string; name: string; number: string; pos: string; starter: boolean; subIn: boolean; subOut: boolean; place: number | null }
+export interface FootballLineup { team: string; formation: string; players: FootballPlayer[] }
+export interface FootballPastGame { id: string; date: string; result: 'G' | 'E' | 'P' | ''; score: string; home: boolean; league: string; opponent: { id: string; name: string; logo: string }; team?: string }
+export interface FootballDetail {
+  match: FootballMatch; timeline: FootballEvent[]; stats: Record<string, Record<string, number | null>>; lineups: FootballLineup[];
+  form: Record<string, FootballPastGame[]>; h2h: FootballPastGame[]; attendance: number | null; hasStandings: boolean;
+}
+export interface FootballStandingRow {
+  rank: number | null; team: { id: string; name: string; abbr: string; logo: string }; played: number; won: number; drawn: number; lost: number;
+  gf: number; ga: number; gd: number; points: number; zone: { color: string; text: string } | null;
+}
+export interface FootballGroup { name: string; rows: FootballStandingRow[] }
 
 // ---------- Tenis (servicio tennis: ESPN, ATP y WTA individuales) ----------
 export type Tour = 'atp' | 'wta';
@@ -300,6 +328,14 @@ export interface Api {
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
+  };
+  football: {
+    leagues(): Promise<FootballLeague[]>;
+    games(date: string): Promise<FootballMatch[]>;
+    days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
+    live(): Promise<FootballMatch[]>;
+    match(id: string): Promise<FootballDetail>;
+    standings(league: FootballLeagueId): Promise<FootballGroup[]>;
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;
