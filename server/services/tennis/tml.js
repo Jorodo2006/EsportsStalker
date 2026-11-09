@@ -5,8 +5,9 @@ const { query } = require('../../shared/db');
 
 const BASE = 'https://stats.tennismylife.org/data';
 const YEARS = 3;
-const SOURCES = { atp: y => `${y}.csv`, wta: y => `${y}_wta.csv` };
-const ONGOING = { atp: 'ongoing_tourneys.csv', wta: 'wta_ongoing_tourneys.csv' };
+// Los Challenger van con la ATP: sus jugadores pasan de un circuito a otro, y por separado el Elo de cada uno no se podría comparar
+const SOURCES = { atp: [y => `${y}.csv`], wta: [y => `${y}_wta.csv`], challenger: [y => `${y}.csv`, y => `${y}_challenger.csv`] };
+const ONGOING = { atp: ['ongoing_tourneys.csv'], wta: ['wta_ongoing_tourneys.csv'], challenger: ['ongoing_tourneys.csv', 'challenger_ongoing_tourneys.csv'] };
 const KEEP = ['tourney_id', 'tourney_name', 'surface', 'indoor', 'tourney_level', 'tourney_date', 'match_num', 'winner_name', 'winner_rank', 'loser_name', 'loser_rank', 'score', 'round', 'minutes',
   'w_ace', 'w_df', 'w_svpt', 'w_1stIn', 'w_1stWon', 'w_2ndWon', 'w_SvGms', 'w_bpSaved', 'w_bpFaced', 'l_ace', 'l_df', 'l_svpt', 'l_1stIn', 'l_1stWon', 'l_2ndWon', 'l_SvGms', 'l_bpSaved', 'l_bpFaced'];
 const SURFACES = ['Hard', 'Clay', 'Grass'];
@@ -57,8 +58,9 @@ const built = new Map();
 async function dataset(tour) {
   const year = new Date().getFullYear();
   const parts = await Promise.all([
-    ...Array.from({ length: YEARS }, (_, i) => getCsv(SOURCES[tour](year - i), i === 0 ? 6 * 3600e3 : 7 * 24 * 3600e3).catch(e => { if (i === 0 && new Date().getMonth() > 0) throw e; return []; })),
-    getCsv(ONGOING[tour], 30 * 60e3)
+    ...Array.from({ length: YEARS }, (_, i) => i).flatMap(i => SOURCES[tour].map(file => getCsv(file(year - i), i === 0 ? 6 * 3600e3 : 7 * 24 * 3600e3)
+      .catch(e => { if (i === 0 && new Date().getMonth() > 0) throw e; return []; }))),
+    ...ONGOING[tour].map(file => getCsv(file, 30 * 60e3))
   ]);
   const prev = built.get(tour);
   if (prev && prev.parts.length === parts.length && prev.parts.every((p, i) => p === parts[i])) return prev;
@@ -193,10 +195,15 @@ const wordsOf = s => norm(s).split(' ').filter(w => w.length >= 3 && !GENERIC.ha
 
 // Superficie de un torneo. Los nombres de ESPN y TennisMyLife no coinciden ("Rolex Paris Masters" / "Paris Masters"; Viena es
 // "Erste Bank Open" en uno y "Vienna" en otro). El nombre pesa más que la ciudad: en París se juegan Roland Garros y el Masters
+// En los Challenger sólo se buscan torneos Challenger: si no, "Brisbane 3" acabaría en el torneo de la ATP de Brisbane
 async function tournamentEdition(tour, name, city) {
   const data = await dataset(tour);
   const latest = new Map(); // nombre del torneo → su edición más reciente
-  for (const m of data.rows) { const k = norm(m.tourney_name); if (!latest.has(k) || m.tourney_date > latest.get(k).tourney_date) latest.set(k, m); }
+  for (const m of data.rows) {
+    if (tour === 'challenger' && m.tourney_level !== 'C') continue;
+    const k = norm(m.tourney_name);
+    if (!latest.has(k) || m.tourney_date > latest.get(k).tourney_date) latest.set(k, m);
+  }
   const exact = latest.get(norm(name));
   if (exact) return exact;
   const inName = wordsOf(name), inCity = wordsOf(String(city || '').split(',')[0]);

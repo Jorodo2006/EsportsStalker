@@ -65,6 +65,9 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
   | Hasta 48 h (tenis: no entra) | 180 min |
 
   Los dos tramos lejanos se apagan con `oddsFarEnabled`. Si `oddsRefreshMinutes` es mayor, manda ese valor.
+- **Challenger de tenis** (`oddsChallengerEnabled`, `CH_*`): sólo el cuadro final, desde 8 h antes cada 240 min y en la última hora y media
+  una vez más si la anterior tiene más de 120 min. Son dos o tres lecturas por partido, unos 60 partidos al día. Van al final de la cola,
+  detrás de los lejanos, para no quitar sitio a nada. No subas la frecuencia: las casas pueden bloquear.
 - Crea un trabajo `auto` para cada uno que no tenga un trabajo abierto ni uno (manual o programado) de hace menos de
   lo que le toque, sin pasar de **10 en cola**. Entran primero los cercanos y luego los lejanos, y en cada grupo por
   turnos entre deportes, para que el tenis no deje sin sitio al baloncesto, que suele jugarse de noche.

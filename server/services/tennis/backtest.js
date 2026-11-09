@@ -1,7 +1,8 @@
 'use strict';
 // Comprobación del modelo con partidos pasados: para cada partido predice sólo con lo que se sabía ese día y lo compara con lo
 // que pasó. No es parte del servicio: se lanza a mano y no guarda nada en el repo.
-//   node server/services/tennis/backtest.js <carpeta con los CSV de TennisMyLife> [atp|wta] [desde AAAAMMDD]
+//   node server/services/tennis/backtest.js <carpeta con los CSV de TennisMyLife> [atp|wta|challenger] [desde AAAAMMDD]
+// challenger aprende con los partidos de la ATP y de los Challenger juntos (los jugadores pasan de uno a otro) y sólo evalúa los Challenger.
 // No hay cuotas históricas gratuitas que se puedan usar, así que dice si las probabilidades son correctas, no si se gana dinero.
 const fs = require('fs');
 const path = require('path');
@@ -23,7 +24,8 @@ function parseCsv(text) {
 }
 
 function load(dir, tour) {
-  const files = fs.readdirSync(dir).filter(f => (tour === 'wta' ? /^\d{4}_wta\.csv$/ : /^\d{4}\.csv$/).test(f)).sort();
+  const re = tour === 'wta' ? /^\d{4}_wta\.csv$/ : tour === 'challenger' ? /^\d{4}(_challenger)?\.csv$/ : /^\d{4}\.csv$/;
+  const files = fs.readdirSync(dir).filter(f => re.test(f)).sort();
   return files.flatMap(f => parseCsv(fs.readFileSync(path.join(dir, f), 'utf8')));
 }
 
@@ -56,11 +58,14 @@ function run(rows, from, params, opts = {}, until = '99999999') {
   const r = {
     elo: new Calib('Elo'), stats: new Calib('Estadísticas'), model: new Calib('Modelo'), rank: new Calib('Ranking'), fives: new Calib('Modelo a 5 sets'),
     total: new Calib('Total de juegos (más de)'), hcap: new Calib('Hándicap de juegos'), straight: new Calib('Ganar en dos/tres sets'), anySet: new Calib('Gana al menos un set'),
-    tb: new Calib('Hay tie-break'), set1: new Calib('Primer set'), playerG: new Calib('Juegos de un jugador (más de)'), xs: []
+    tb: new Calib('Hay tie-break'), set1: new Calib('Primer set'), playerG: new Calib('Juegos de un jugador (más de)'),
+    bagel: new Calib('Algún set a cero'), odd: new Calib('Total de juegos impar'),
+    acesP: new Calib('Aces de un jugador (k o más)'), acesT: new Calib('Aces entre los dos (k o más)'), xs: []
   };
-  let sumT = 0, sumTm = 0, nT = 0;
+  let sumT = 0, sumTm = 0, nT = 0, sumA = 0, sumAm = 0, nA = 0;
   M.replay(rows, (m, w, l, s, day, avg) => {
     if (String(m.tourney_date) < from || String(m.tourney_date) > until || !M.finishedClean(m) || (w.n < 5 && l.n < 5)) return;
+    if (opts.level && m.tourney_level !== opts.level) return;
     const bo = num(m.best_of) === 5 ? 5 : 3;
     // Se mira siempre desde el orden alfabético, para que el ganador no esté siempre al mismo lado
     const flip = norm(m.winner_name) > norm(m.loser_name);
@@ -106,8 +111,19 @@ function run(rows, from, params, opts = {}, until = '99999999') {
       const me = favA ? ga : gb;
       r.playerG.add(prob(x => (favA ? x.ga : x.gb) > line), me > line ? 1 : 0);
     }
+    r.bagel.add(prob(x => x.z === 1), sets.some(x => x[0] === 0 || x[1] === 0) ? 1 : 0);
+    r.odd.add(prob(x => (x.ga + x.gb) % 2 === 1), tot % 2);
+    if (m.w_ace !== '' && m.l_ace !== '' && m.w_ace != null && m.l_ace != null) {
+      const acA = num(flip ? m.l_ace : m.w_ace), acB = num(flip ? m.w_ace : m.l_ace);
+      const tail = who => M.acesTail(dist, f.serveA, f.serveB, f.aces.a, f.aces.b, who, P);
+      const ta = tail('a'), tb = tail('b'), tt = tail('both');
+      for (const k of bo === 5 ? [5, 10, 15, 20] : [3, 5, 8, 10, 15]) { r.acesP.add(ta[k], acA >= k ? 1 : 0); r.acesP.add(tb[k], acB >= k ? 1 : 0); }
+      for (const k of bo === 5 ? [15, 20, 25, 30, 40] : [6, 8, 12, 16, 20, 25]) r.acesT.add(tt[k], acA + acB >= k ? 1 : 0);
+      sumA += acA + acB; sumAm += [ta, tb].reduce((t, x) => t + x.slice(1).reduce((s, v) => s + v, 0), 0); nA++;
+    }
   }, P);
   r.meanTotal = nT ? { real: sumT / nT, model: sumTm / nT } : null;
+  r.meanAces = nA ? { real: sumA / nA, model: sumAm / nA } : null;
   return r;
 }
 
@@ -131,14 +147,16 @@ if (require.main === module) {
   if (!dir) { console.error('Falta la carpeta con los CSV'); process.exit(1); }
   const rows = load(dir, tour);
   console.log(`${tour.toUpperCase()}: ${rows.length} partidos en los CSV, se predice desde ${from}`);
-  const train = run(rows, '20240101', {}, { fast: true }, '20241231'); // sólo datos anteriores a lo que se va a evaluar
+  const level = tour === 'challenger' ? 'C' : undefined;
+  const train = run(rows, '20240101', {}, { fast: true, level }, '20241231'); // sólo datos anteriores a lo que se va a evaluar
   const part = train.xs;
   console.log('Pesos ajustados con 2024:', fit(part));
-  const r = run(rows, from, M.paramsOf(tour));
+  const r = run(rows, from, M.paramsOf(tour), { level });
   for (const k of ['rank', 'elo', 'stats', 'model', 'fives']) console.log(r[k].summary());
   console.log('\nModelo (predicho → real):\n' + r.model.table());
-  for (const k of ['total', 'hcap', 'straight', 'anySet', 'tb', 'set1', 'playerG']) console.log(`\n${r[k].summary()}\n${r[k].table()}`);
+  for (const k of ['total', 'hcap', 'straight', 'anySet', 'tb', 'set1', 'playerG', 'bagel', 'odd', 'acesP', 'acesT']) console.log(`\n${r[k].summary()}\n${r[k].table()}`);
   if (r.meanTotal) console.log(`\nJuegos por partido: real ${r.meanTotal.real.toFixed(2)}, modelo ${r.meanTotal.model.toFixed(2)}`);
+  if (r.meanAces) console.log(`Aces por partido: real ${r.meanAces.real.toFixed(2)}, modelo ${r.meanAces.model.toFixed(2)}`);
 }
 
 module.exports = { run, load, fit, Calib };

@@ -270,9 +270,27 @@ const BASKET_BOOKS = {
       page = await openTab(ctx, `https://betway.es/es/es/sports/${list || cfgOf(job).bwCat}`);
       ev = await look(12000);
       if (!ev && list) { await goTo(page, `https://betway.es/es/es/sports/${cfgOf(job).bwCat}`); ev = await look(10000); }
+      // Tenis: los Challenger y los torneos pequeños no salen en la portada, sino en la página de su torneo
+      // (grp/tennis/challenger/orleans---france). Se busca entre los enlaces de la portada por las palabras del nombre del torneo y,
+      // si el nombre es de LiveScore ("Orleans, France", "Hersonissos 3, Greece"), se prueba también la dirección que le toca
+      if (!ev && job.match.sport === 'tennis') {
+        const plain = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const words = plain(job.match.league).split(/[^a-z]+/).filter(w => w.length >= 4 && !/^(open|tennis|challenger|international|presentado|cup)$/.test(w));
+        const tours = () => run(page, w => [...new Set([...document.querySelectorAll('a[href*="/sports/grp/tennis/"]')].map(a => a.href.split('?')[0]))]
+          .filter(u => !/doubles/i.test(u) && w.some(x => u.toLowerCase().includes(x))), [words]);
+        const comps = words.length ? (await tours()) || [] : [];
+        const [city, country] = plain(job.match.league).split(',').map(s => s.replace(/\d+/g, '').trim().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, ''));
+        if (city && country) comps.push(`https://betway.es/es/es/sports/grp/tennis/challenger/${city}---${country}`);
+        for (const u of [...new Set(comps)].slice(0, 3)) {
+          if (ev) break;
+          say('buscando', 'Mirando ' + u.replace(/^https:\/\/betway\.es\/es\/es\/sports\//, '') + '…');
+          await goTo(page, u);
+          ev = await look(8000);
+        }
+      }
       if (!ev) {
         const snap = await run(page, snapshotOf);
-        if (snap) await post('/snapshot', { ...snap, book: 'betway', nombre: 'lista-basket', motivo: 'lector: no encuentro el partido de baloncesto' });
+        if (snap) await post('/snapshot', { ...snap, book: 'betway', nombre: 'lista-basket', motivo: `lector: no encuentro el partido de ${job.match.sport === 'tennis' ? 'tenis' : 'baloncesto'}` });
         throw new Error('No encuentro el partido en Betway (he guardado una foto de la lista)');
       }
     }

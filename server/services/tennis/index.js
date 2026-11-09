@@ -123,7 +123,8 @@ async function between(from, to) {
     .sort((x, y) => new Date(x.date) - new Date(y.date));
 }
 
-// Los Challenger sólo entran en las pantallas de partidos: el modelo, las recomendaciones y las fichas de jugador no tienen sus datos
+// Los Challenger de LiveScore, para las pantallas de partidos y las recomendaciones (el modelo los saca de los CSV Challenger de
+// TennisMyLife). Las fichas de jugador no, porque son de ESPN
 async function withChallengers(list, from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
@@ -194,8 +195,28 @@ async function profile(tour, id) {
   };
 }
 
-// Mirar todo el día cuesta: dos pantallas seguidas no deben repetirlo
-const dayPicks = new Map();
+// Recomendaciones de todos los partidos sin empezar de un día, Challenger incluidos. Sin la previa: casi nadie la apuesta y el lector no la mira.
+// Mirar todo el día cuesta: se guarda un minuto, y las pantallas que lo piden a la vez esperan al mismo cálculo
+const boards = new Map();
+function boardOf(date) {
+  const hit = boards.get(date);
+  if (hit && Date.now() - hit.t < 60e3) return hit.v;
+  const v = (async () => {
+    // Sin los cruces que aún no tienen rival ("TBD"): no pueden tener cuotas
+    const known = p => p.name && !/^(tbd|por determinar)$/i.test(p.name);
+    const list = (await withChallengers(await between(date, date), date, date)).filter(m => m.state === 'pre' && !/^previa/i.test(m.round) && known(m.a) && known(m.b));
+    const matches = [], noOdds = [];
+    for (const m of list) {
+      const r = await picksFor(m).catch(e => { console.error('[tennis] recomendaciones:', m.id, e.message); return null; });
+      if (r?.ready) matches.push({ m, day: date, ...r });
+      else if (r?.reason === 'noodds') noOdds.push({ id: m.id, date: m.date, a: m.a.name, b: m.b.name });
+    }
+    return { matches, noOdds };
+  })();
+  boards.set(date, { t: Date.now(), v });
+  v.catch(() => boards.delete(date));
+  return v;
+}
 
 const routes = [
   // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
@@ -212,25 +233,14 @@ const routes = [
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     return profile(params.tour, params.id);
   }],
-  // Recomendaciones de un partido, o las mejores de un día entre los partidos con cuotas leídas
+  // Recomendaciones de un partido, o las de todos los partidos de un día que tienen cuotas leídas
   ['GET', '/api/tennis/picks', async ({ query: q }) => {
-    const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
+    const d = valid(q.date), list = await between(d, d);
+    const m = (String(q.id).startsWith('ch:') ? await withChallengers(list, d, d) : list).find(x => x.id === q.id);
     if (!m) throw fail('Partido no encontrado');
     return picksFor(m);
   }],
-  ['GET', '/api/tennis/picks/day', async ({ query: q }) => {
-    const hit = dayPicks.get(q.date);
-    if (hit && Date.now() - hit.t < 60e3) return hit.v;
-    const list = (await between(valid(q.date), valid(q.date))).filter(m => m.state === 'pre' && !/^previa/i.test(m.round));
-    const out = [];
-    for (const m of list) {
-      const r = await picksFor(m).catch(e => { console.error('[tennis] recomendaciones:', m.id, e.message); return null; });
-      if (r?.ready && r.top) out.push({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top: r.top, hard: r.hard[0] ?? null });
-    }
-    out.sort((x, y) => y.top.p - x.top.p);
-    dayPicks.set(q.date, { t: Date.now(), v: out });
-    return out;
-  }],
+  ['GET', '/api/tennis/picks/board', ({ query: q }) => boardOf(valid(q.date))],
   ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await between(valid(q.date), valid(q.date)), q.date, q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));

@@ -174,9 +174,9 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
 // Lecturas programadas: el backend crea un trabajo por partido según lo que falte para que empiece y el lector de Docker lo recoge solo
 function AutoOddsCard() {
   const { settings, saveSettings, toast } = useApp();
-  const [f, setF] = useState({ on: true, far: true, min: '5', hours: '6' });
+  const [f, setF] = useState({ on: true, far: true, ch: true, min: '5', hours: '6' });
   useEffect(() => {
-    if (settings) setF({ on: settings.oddsAutoEnabled !== false, far: settings.oddsFarEnabled !== false, min: String(settings.oddsRefreshMinutes ?? 5), hours: String(settings.oddsAutoHours ?? 6) });
+    if (settings) setF({ on: settings.oddsAutoEnabled !== false, far: settings.oddsFarEnabled !== false, ch: settings.oddsChallengerEnabled !== false, min: String(settings.oddsRefreshMinutes ?? 5), hours: String(settings.oddsAutoHours ?? 6) });
   }, [settings]);
   const { data: st } = useQuery({
     queryKey: ['autoStatus'],
@@ -188,6 +188,7 @@ function AutoOddsCard() {
     await saveSettings({
       oddsAutoEnabled: f.on,
       oddsFarEnabled: f.far,
+      oddsChallengerEnabled: f.ch,
       oddsRefreshMinutes: Math.min(240, Math.max(2, parseInt(f.min, 10) || 5)),
       oddsAutoHours: Math.min(48, Math.max(1, parseInt(f.hours, 10) || 6))
     });
@@ -208,11 +209,15 @@ function AutoOddsCard() {
           <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.far} onChange={e => setF(p => ({ ...p, far: e.target.checked }))} />
           Leer también los de más adelante
         </label>
+        <label className="flex h-9 cursor-pointer items-center gap-2 text-sm" title="Unos 60 partidos al día: si una casa bloquea el lector, apágalo">
+          <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.ch} onChange={e => setF(p => ({ ...p, ch: e.target.checked }))} />
+          Leer también los Challenger de tenis
+        </label>
         <Button type="submit" size="sm" className="h-9">Guardar</Button>
       </form>
       <p className="mt-3 text-xs text-zinc-500">
         El lector de Docker lee los partidos de uno en uno, primero los más cercanos, y guarda cada cambio de cuota en el histórico.
-        Los de más adelante se leen cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (el tenis, cada 3 h y sólo desde 24 h antes). Cuantas más lecturas, más fácil es que una casa bloquee.
+        Los de más adelante se leen cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (el tenis, cada 3 h y sólo desde 24 h antes). Los Challenger se leen dos o tres veces el día del partido (cada 4 h desde 8 h antes y una última en la hora y media antes), detrás de todo lo demás. Cuantas más lecturas, más fácil es que una casa bloquee.
       </p>
       {st && (
         <div className="mt-4 space-y-2 border-t border-zinc-800 pt-4 text-sm">

@@ -32,8 +32,10 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 
 - **Por qué esta fuente:** el `robots.txt` de la web de LiveScore prohíbe `/api/` y sus condiciones no se pudieron leer (la página no se carga sin JavaScript). Su servidor de datos no tiene `robots.txt`. **Se decidió usarla el 5/11/2026, a petición del usuario y para uso personal**, a sabiendas de que
   Tennis Abstract y tennis-data.co.uk se descartaron por su `robots.txt`. Las peticiones van sin disfrazar. **Si la app se fuese a vender o a publicar, hay que volver a mirarlo.**
-- **Sólo marcador y cuotas:** sin *Recomendaciones* ni *Forma de los jugadores*, porque ni el modelo (TennisMyLife) ni las fichas (ESPN) tienen sus datos. No hay banderas, ranking ni cabezas de serie.
-- **Cuotas:** las lecturas programadas no los miran (`scheduler.js`): son decenas al día y leer de más puede hacer que las casas bloqueen. Se pueden pedir con *Actualizar cuotas*, si las casas los tienen.
+- **Recomendaciones sí, fichas no:** el modelo usa los CSV Challenger de TennisMyLife (abajo). *Forma de los jugadores* no sale, porque las fichas son de ESPN. No hay banderas, ranking ni cabezas de serie.
+- **Cuotas:** las lecturas programadas los leen dos o tres veces el día del partido, detrás de todo lo demás (`docs/specs/03-cuotas.md`). Se apagan en *Ajustes → Cuotas automáticas*.
+  Winamax los tiene todos. En Betway no están en la portada de tenis, sino en la página de su torneo (`grp/tennis/challenger/orleans---france`): si el lector no encuentra el partido en la portada, busca esa página por las palabras del nombre del torneo, primero en la portada y luego en *Todos*.
+- **Previas:** no salen. Ni LiveScore ni TennisMyLife tienen las previas de los Challenger; la única fuente serían las propias casas. Queda pendiente.
 - **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. La previa va en el nombre (`: Qualification`).
 
 ## Puntos del juego (`server/services/tennis/points.js`)
@@ -95,26 +97,57 @@ fichero por año y por circuito, más los torneos en curso), que se bajan cada 6
 
 ## Pendiente
 
-- No hay modelo de valor para el tenis (habría que estimar la probabilidad de ganar con el ranking o un Elo).
 - Dobles: no se muestran.
 
-## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/components/TennisPicks.tsx`)
+## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/lib/tennis-picks.ts`, `src/components/TennisPicks.tsx`)
 
-Pestaña *Recomendaciones* de cada partido sin empezar y banda *Las más fiables del día* en la lista. `GET /api/tennis/picks?date=&id=` y `GET /api/tennis/picks/day?date=`; el servicio pide las cuotas a `odds` (`quiet: true`: sólo lee).
+Igual que en el baloncesto, en la ATP, la WTA y los Challenger. Hay tres sitios:
+
+- La pestaña *Recomendaciones* de cada partido sin empezar.
+- La pantalla *Recomendaciones*, que se abre con el selector *Partidos / Recomendaciones* de arriba. Junta los partidos con cuotas de las próximas 24 horas o de un día, y se puede quedar en la ATP, en la WTA o en un solo partido.
+- La banda *Las más fiables del día* de la lista, con la más fiable de cada partido y el enlace a la pantalla.
+
+Las tres usan el mismo tablero:
+
+- **Filtros:** tipo de apuesta (ganador, hándicap de juegos, total de juegos, sets, saque y primeros juegos, aces u otras), partido entero o un set suelto, cuota mínima (1,15 por defecto) y *Sólo con valor*. Se guardan en `localStorage` (`tennis-picks`).
+- **Orden:** por probabilidad (por defecto) o por valor.
+- **Contenido:** la más fiable y tres listas.
+- **Al pulsar:** una recomendación de la pantalla abre su partido, y la cuota la manda al cupón.
+
+Rutas:
+
+- `GET /api/tennis/picks?date=&id=`: un partido.
+- `GET /api/tennis/picks/board?date=`: los partidos sin empezar de un día, Challenger incluidos, sin la previa ni los cruces sin rival. Devuelve también los que aún no tienen cuotas. Se guarda un minuto.
+
+El servicio pide las cuotas a `odds` (`quiet: true`: sólo lee) y devuelve todas las líneas que no descarta. La interfaz las filtra y las reparte (`src/lib/tennis-picks.ts`).
 
 **Modelo.** Sale de los CSV de TennisMyLife, reproducidos en orden y sin mirar nunca al futuro:
 
 - Elo general y por superficie (la retirada no cuenta) y puntos al saque y al resto *por encima de la media de cada condición*, con los partidos recientes pesando más y corregidos por el rival. Pista dura bajo techo es una condición propia: mezclarlas daba 0,7 juegos de menos bajo techo y 1,4 en hierba.
 - `logit(p) = wElo·logit(Elo) + wStats·logit(estadísticas)`, con pesos por circuito aprendidos con 2024.
-- Punto → juego → set → partido se calcula exacto, promediando la forma del día (`formSd`). De esa distribución salen ganador, sets, hándicaps, totales, juegos de cada jugador, sets sueltos, tie-break y combinaciones.
+- Punto → juego → set → partido se calcula exacto, promediando la forma del día (`formSd`). De esa distribución salen ganador, sets, hándicaps, totales, juegos de cada jugador, sets sueltos, tie-break, resultado exacto, set a cero, par o impar y combinaciones.
+- Con el saque de cada uno (`holdProb`, `gameScores`, `afterGames`, `firstBreakA`) salen el primer juego al saque de cada jugador y su marcador exacto, cómo van tras 2, 4 o 6 juegos y quién rompe primero. Quién saca primero no se sabe: mitad y mitad.
+- **Challenger:** el circuito `challenger` reproduce los partidos de la ATP y los Challenger juntos (los jugadores pasan de uno a otro y así el Elo se puede comparar), con sus propios pesos y una corrección del saque (`paramsOf`). En los Challenger no hay previas en los CSV.
+- **Aces** (`aceRates`, `acesTail`): aces por punto al saque de cada jugador frente a los esperados ante sus rivales, y los que le hacen al resto, sobre la media de la pista; los partidos recientes pesan más (`aceHalfLife`) y con poca muestra manda la media (`acePrior`). Los puntos al saque salen del largo del partido. Para cada largo, una binomial negativa (`aceSize`), y una corrección de la media por circuito (`aceScale`). Los "Total de aces (logros)" de Winamax no se usan: sus cuotas no son las de un partido (a Sabalenka, que hace 4 o 5 de media, le daban un 58 % de llegar a 10), y parecen del torneo entero.
 
 **Mezcla con la casa.** La probabilidad final mezcla modelo y casa sin margen en logit: 25 % el modelo (10 % con poca muestra), y menos cuanto mayor es la discrepancia. Ese 25 % es una decisión, no una medida: no hay cuotas históricas gratuitas con las que ajustarlo. Los partidos se recalculan con la probabilidad final para que todos los mercados cuadren.
 
-**Selección.**
+**Selección.** El servicio descarta lo que nunca se recomienda:
 
-- *La más fiable*: probabilidad ≥ 60 %, cuota ≥ 1,15, fiabilidad ≥ 50, valor ≥ −7 %. Se ordena por probabilidad + valor. Puede no haber ninguna.
-- *Más fáciles*: probabilidad ≥ 60 %, por valor, sin repetir tipo de mercado.
-- *Más complicadas*: probabilidad entre 15 y 45 %, cuota de 2,20 a 15. Contra el favorito sólo con valor ≥ 3 %.
+- discrepa de la casa en más de 20 puntos;
+- cuota fuera de 1,15-15;
+- probabilidad < 15 %;
+- valor < −12 %;
+- fiabilidad < 35.
+
+Del resto, en la interfaz:
+
+- *La más fiable*: probabilidad ≥ 60 %, fiabilidad ≥ 50, valor ≥ −7 %. Se ordena por probabilidad + valor, y un set suelto cuenta algo menos. Puede no haber ninguna.
+- *Más fáciles*: probabilidad ≥ 60 %, valor ≥ −10 % y fiabilidad ≥ 40.
+- *Equilibradas*: probabilidad de 45 a 60 %, con los mismos mínimos.
+- *Más complicadas*: probabilidad < 45 % y cuota ≥ 2,20. Contra el favorito, sólo con valor ≥ 3 %.
+- *Con valor*: valor ≥ 2 % y fiabilidad ≥ 55, lo mismo que en el baloncesto.
+- Repeticiones: con *Todo* sale una línea por tipo de mercado y partido. Con un tipo elegido salen todas sus líneas, para compararlas. En la pantalla de varios partidos, como mucho dos de cada partido por lista.
 - Fiabilidad 0-100: datos de los jugadores, acuerdo modelo-casa sobre el ganador, tipo de mercado y cuotas. Se descarta lo que discrepa más de 20 puntos de la casa: suele ser un mercado mal leído o algo que el modelo no sabe.
 
 **Comprobación** (`node server/services/tennis/backtest.js <carpeta CSV> atp|wta 20250101`). Sobre partidos de 2025 y 2026, no usados para ajustar:
@@ -128,6 +161,18 @@ Pestaña *Recomendaciones* de cada partido sin empezar y banda *Las más fiables
 | Dice 84 % → pasa | 82,4 % | 84,9 % |
 | Juegos por partido: real / modelo | 26,05 / 26,11 | 22,04 / 22,11 |
 
+Challenger (`node server/services/tennis/backtest.js <carpeta> challenger 20250101`, con los CSV de la ATP y los Challenger en la carpeta): 12.562 partidos de 2025 y 2026. Brier 0,2248 (ranking 0,2299, Elo 0,2285); dice 74 % → pasa 75,4 %; 22,93 juegos por partido frente a 22,84 reales. Los pesos (`wElo` 0,42, `wStats` 0,45) y la corrección del saque (−0,016) se ajustaron con 2024.
+
+Aces (2025-2026; los parámetros, con 2024):
+
+| | ATP | WTA | Challenger |
+|---|---|---|---|
+| Aces por partido: real / modelo | 13,65 / 13,87 | 5,82 / 5,98 | 8,36 / 8,30 |
+| Un jugador, "k o más": dice 55 % → pasa | 56,5 % | 54,9 % | 54,6 % |
+| Entre los dos: dice 75 % → pasa | 75,5 % | 71,9 % | 73,3 % |
+
+En la WTA se pasa algo de confiado en lo más alto. Set a cero (ATP): dice 13 % → pasa 12 %.
+
 Los pesos y `formSd` se ajustaron sólo con 2024, pero el sesgo bajo techo y en hierba se vio mirando 2025-26, así que esta comprobación no es del todo ciega. Queda algo de sesgo en hierba (ATP: 24,97 juegos reales, 24,34 del modelo).
 
-Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: aces, roturas, primeros juegos, lesiones y cansancio. Sólo hay partidos del circuito principal: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.
+Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: dobles faltas, lesiones y cansancio. El primer juego al saque, los primeros juegos y el primer break no se pueden comprobar con el marcador final de los CSV: en la fiabilidad cuentan menos (`trustOf`). Sólo hay partidos del circuito principal y de los Challenger de la ATP: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.

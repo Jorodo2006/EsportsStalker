@@ -154,7 +154,7 @@ export const api: Api = {
     stats: (tour, id) => get(`/api/tennis/stats/${part(tour)}/${part(id)}`),
     surface: (tour, name, city) => get(`/api/tennis/surface/${part(tour)}`, { name, city }),
     picks: (date, id) => get('/api/tennis/picks', { date, id }),
-    picksDay: date => get('/api/tennis/picks/day', { date })
+    picksBoard: date => get('/api/tennis/picks/board', { date })
   },
   basket: {
     leagues: () => get('/api/basket/leagues'),

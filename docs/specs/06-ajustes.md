@@ -15,6 +15,7 @@ los ve y los cambia el administrador (a los demás no les llegan las claves, y l
 | `oddsRefreshMinutes` | 5 | Cada cuántos minutos se vuelve a leer cada partido cercano (2–240) |
 | `oddsAutoHours` | 6 | Son cercanos los partidos que empiezan en las próximas N horas (1–48) |
 | `oddsFarEnabled` | `true` | Leer también los de más adelante: cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (tenis: cada 3 h y sólo desde 24 h antes) |
+| `oddsChallengerEnabled` | `true` | Leer también los Challenger de tenis: dos o tres veces el día del partido, detrás de todo lo demás. Si una casa bloquea el lector, se apaga aquí |
 | `favoriteLeagues` | `[]` | Ligas que salen primero |
 | `signupOpen` | `true` | Si se pueden crear cuentas desde la pantalla de entrada |
 | `lolesportsKey` | clave pública de lolesports.com | Cabecera `x-api-key` |

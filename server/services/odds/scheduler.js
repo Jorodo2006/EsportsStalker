@@ -9,6 +9,9 @@ const FAR_HOURS = 48; // hasta dónde llegan las lecturas espaciadas
 // El tenis tiene decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
 const TENNIS_NEAR_HOURS = 3;
 const TENNIS_FAR_HOURS = 24;
+// Los Challenger, sólo dos o tres veces el día del partido: cada 4 h desde 8 h antes y una última en la hora y media antes.
+// Son unos 60 al día y van detrás de todo lo demás en la cola; se apagan con oddsChallengerEnabled
+const CH_HOURS = 8, CH_EVERY = 240, CH_LAST_HOURS = 1.5, CH_LAST_EVERY = 120;
 const MAX_QUEUE = 10; // unos 6 min de trabajo: así la cola no llega a caducar y un partido cercano entra enseguida
 const clamp = (v, lo, hi, def) => Math.min(hi, Math.max(lo, Number(v) || def));
 const TBD = /^(tbd|tba|por determinar)$/i;
@@ -77,14 +80,22 @@ async function upcomingBasket(hours) {
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'basket', a: team(g.away), b: team(g.home) }));
 }
 
-// Tenis: sólo los del cuadro final (no la previa) y sin los Challenger: son decenas al día, y leer de más puede hacer que las casas bloqueen
-async function upcomingTennis(hours) {
-  const until = Date.now() + hours * 3600e3;
+// Tenis: sólo los del cuadro final (no la previa). Los Challenger van aparte (ch), hasta chHours: son decenas al día, y leer de más
+// puede hacer que las casas bloqueen
+async function upcomingTennis(hours, chHours) {
+  const until = Date.now() + Math.max(hours, chHours) * 3600e3;
   const days = daysUntil(until);
   const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
   const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
-  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.level !== 'challenger' && g.a?.name && g.b?.name; })
-    .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
+  const ok = (g, h) => {
+    const t = new Date(g.date).getTime();
+    return g.state === 'pre' && t >= Date.now() && t <= Date.now() + h * 3600e3 && !/^previa/i.test(g.round) && g.a?.name && g.b?.name && !TBD.test(g.a.name) && !TBD.test(g.b.name);
+  };
+  const to = g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) });
+  return {
+    main: games.filter(g => g.level !== 'challenger' && ok(g, hours)).map(to),
+    ch: chHours ? games.filter(g => g.level === 'challenger' && ok(g, chHours)).map(to) : []
+  };
 }
 
 // ¿Toca leerlo? No si tiene un trabajo abierto o uno (manual o programado) de hace menos de `minutes`
@@ -107,22 +118,27 @@ async function tick() {
     const [lol, basket, tennis] = await Promise.all([
       upcoming(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
       upcomingBasket(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
-      upcomingTennis(far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS)).catch(e => { console.error('Programador (tenis):', e.message); return []; })
+      upcomingTennis(far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS), s.oddsChallengerEnabled !== false ? CH_HOURS : 0)
+        .catch(e => { console.error('Programador (tenis):', e.message); return { main: [], ch: [] }; })
     ]);
-    const matches = [...lol, ...basket, ...tennis].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const matches = [...lol, ...basket, ...tennis.main].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const challengers = tennis.ch.sort((x, y) => new Date(x.start) - new Date(y.start));
     const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
     let queued = rows[0].n;
     // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes
-    const order = [...byTurns(matches.filter(m => isNear(m, hours))), ...byTurns(matches.filter(m => !isNear(m, hours)))];
+    // Y los Challenger al final, sólo si queda sitio en la cola
+    const order = [...byTurns(matches.filter(m => isNear(m, hours))), ...byTurns(matches.filter(m => !isNear(m, hours))), ...challengers];
+    const isCh = new Set(challengers);
     for (const m of order) {
       if (queued >= MAX_QUEUE) break;
-      if (!(await due(bridge.keyOf(m), everyMinutes(m, minutes, hours)))) continue;
+      const every = isCh.has(m) ? (hoursLeft(m) <= CH_LAST_HOURS ? CH_LAST_EVERY : CH_EVERY) : everyMinutes(m, minutes, hours);
+      if (!(await due(bridge.keyOf(m), every))) continue;
       await bridge.noteMatch(m);
       await bridge.newJob(m, 'auto');
       queued++;
     }
     const near = matches.filter(m => isNear(m, hours));
-    last = { at: Date.now(), matches: near, far: matches.length - near.length, error: null };
+    last = { at: Date.now(), matches: near, far: matches.length - near.length + challengers.length, error: null };
   } catch (e) {
     console.error('Programador de cuotas:', e.message);
     last = { ...last, at: Date.now(), error: e.message };
