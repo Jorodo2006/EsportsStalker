@@ -252,10 +252,10 @@ export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: 
   ];
   const text = (t: BasketTeamInfo, k: 'home' | 'road' | 'last' | 'streak') => t.standing?.[k] || '–';
   const name = (t: BasketTeamInfo) => (
-    <button onClick={() => onTeam(t.id)} title="Ver la ficha del equipo" className="grid h-[22px] w-full cursor-pointer grid-cols-[1.25rem_minmax(0,11rem)_3rem] items-center gap-2 font-score hover:opacity-80">
+    <button onClick={() => onTeam(t.id)} title="Ver la ficha del equipo" className="grid h-[22px] w-full cursor-pointer grid-cols-[1.25rem_minmax(0,11rem)_3.75rem] items-center gap-2 font-score hover:opacity-80">
       <span className={themeOf(t.id)?.plate ? 'rounded-sm bg-white/90' : logoGlow}><TeamLogo src={t.logo} name={t.abbr} size={18} /></span>
       <span className="truncate text-left text-[17px] font-bold">{t.name}</span>
-      <span className="text-right text-[17px] font-bold tnum">{t.standing ? `${t.standing.w}-${t.standing.l}` : ''}</span>
+      <span className="whitespace-nowrap text-right text-[17px] font-bold tnum">{t.standing ? `${t.standing.w}-${t.standing.l}` : ''}</span>
     </button>
   );
   const out = (t: BasketTeamInfo) => t.roster.filter(p => p.injury);

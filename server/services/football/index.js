@@ -6,6 +6,7 @@
 const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
+const { photoOf, photosOf } = require('./photos');
 
 // En este orden salen en la lista de partidos
 const LEAGUES = [
@@ -243,10 +244,24 @@ async function detail(id) {
       starter: !!p.starter, subIn: !!p.subbedIn, subOut: !!p.subbedOut, place: num(p.formationPlace)
     }))
   })).filter(r => r.players.length);
+  // Tiros con su sitio, del comentario de ESPN: x de 0 a 100 hacia la portería rival (100 es su línea de gol), y de 0 a 100
+  // a lo ancho (lo bajo es la derecha del que tira), y x2/y2 hasta dónde llegó. Los goles en propia puerta no son tiros
+  const teamByName = new Map((j.rosters || []).map(r => [r.team?.displayName, String(r.team?.id || '')]));
+  const shots = (j.commentary || []).map(c => c.play).filter(p => p && p.fieldPositionX != null && p.fieldPositionY != null).flatMap(p => {
+    const t = p.type?.text || '';
+    const kind = /own goal/i.test(t) ? null : /^goal|penalty - scored/i.test(t) ? 'goal' : /on target|penalty - saved/i.test(t) ? 'saved'
+      : /blocked/i.test(t) ? 'blocked' : /off target|woodwork|post|penalty - missed/i.test(t) ? 'off' : null;
+    if (!kind) return [];
+    return [{
+      kind, team: teamByName.get(p.team?.displayName) || String(p.team?.id || ''), player: p.participants?.[0]?.athlete?.displayName || '',
+      minute: p.clock?.displayValue || '', header: /header/i.test(`${t} ${p.text || ''}`), penalty: /penalty/i.test(t),
+      x: Number(p.fieldPositionX), y: Number(p.fieldPositionY), x2: num(p.fieldPosition2X), y2: num(p.fieldPosition2Y)
+    }];
+  });
   const form = Object.fromEntries((j.lastFiveGames || []).map(x => [String(x.team?.id || ''), (x.events || []).map(pastGame).sort((p, q) => q.date.localeCompare(p.date))]));
   const h2h = (j.headToHeadGames || []).flatMap(x => (x.events || []).map(v => ({ ...pastGame(v), team: String(x.team?.id || '') })))
     .sort((p, q) => q.date.localeCompare(p.date)).slice(0, 10);
-  return { match, timeline, stats, lineups, form, h2h, attendance: num(j.gameInfo?.attendance) || null, hasStandings: !!j.standings?.groups?.length };
+  return { match, timeline, stats, lineups, shots, form, h2h, attendance: num(j.gameInfo?.attendance) || null, hasStandings: !!j.standings?.groups?.length };
 }
 
 // ---------- clasificaciones ----------
@@ -276,6 +291,23 @@ async function standings(lgId) {
   })).filter(g => g.rows.length);
 }
 
+// Estadísticas de un jugador en un partido: la ficha (summary) sólo trae goles, tiros y tarjetas; la API "core" de ESPN, también
+// pública y gratuita, trae el resto (entradas, intercepciones, regates, duelos, pases, xG, paradas…). Se devuelven tal cual,
+// { nombre: valor }; la interfaz elige cuáles enseña. Un suplente que no jugó no tiene: ESPN responde 404
+const coreStatsUrl = (espn, ev, team, player) =>
+  `https://sports.core.api.espn.com/v2/sports/soccer/leagues/${espn}/events/${ev}/competitions/${ev}/competitors/${team}/roster/${player}/statistics/0`;
+async function playerStats(q) {
+  const [lgId, ev] = String(q.match || '').split(':');
+  const lg = league(lgId);
+  if (!/^\d+$/.test(ev || '') || !/^\d+$/.test(q.team || '') || !/^\d+$/.test(q.player || '')) throw fail('Jugador desconocido');
+  let j;
+  try { j = await getJSON(coreStatsUrl(lg.espn, ev, q.team, q.player), 25e3); } // en juego cambian cada poco: como mucho 25 s de retraso
+  catch (e) { throw fail(/404/.test(e.message) ? 'ESPN no tiene estadísticas de este jugador en este partido (puede que no llegara a jugar).' : e.message, 404); }
+  const out = {};
+  for (const c of j.splits?.categories || []) for (const s of c.stats || []) if (typeof s.value === 'number' && isFinite(s.value)) out[s.name] = s.value;
+  return out;
+}
+
 const routes = [
   ['GET', '/api/football/leagues', () => leagues()],
   ['GET', '/api/football/games', ({ query: q }) => between(valid(q.date), valid(q.date))],
@@ -289,10 +321,19 @@ const routes = [
   }],
   ['GET', '/api/football/live', () => live()],
   ['GET', '/api/football/match', ({ query: q }) => detail(q.id)],
+  ['GET', '/api/football/player-stats', ({ query: q }) => playerStats(q)],
+  ['GET', '/api/football/photo', ({ query: q }) => {
+    const name = String(q.name || '').trim();
+    if (!name || name.length > 80 || !/^\d*$/.test(String(q.id || ''))) throw fail('Jugador desconocido');
+    return photoOf(String(q.id || ''), name, String(q.team || '').slice(0, 60));
+  }],
+  // Las de una alineación entera: { players: [{ id, name, team }] } → { id: { url, from } | null (aún buscándola) }
+  ['POST', '/api/football/photos', ({ body }) => photosOf(body?.players)],
   ['GET', '/api/football/standings/:league', ({ params }) => standings(params.league)]
 ];
 
 migrate('football', path.join(__dirname, 'migrations'))
-  .then(() => query(`DELETE FROM football.cache WHERE t < now() - interval '7 days'`))
+  // Las fotos de jugadores duran más: buscarlas cuesta (Wikipedia, de una en una) y casi no cambian
+  .then(() => query(`DELETE FROM football.cache WHERE t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
   .then(() => start({ name: 'football', port: Number(process.env.PORT) || 4006, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

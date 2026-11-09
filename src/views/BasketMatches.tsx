@@ -2,7 +2,7 @@
 // competición y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, Plus } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam } from '@/lib/types';
@@ -10,6 +10,7 @@ import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/c
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
+import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
 import { BasketDayPicks, BasketPicksBoard } from '@/components/BasketPicks';
 import { GamePoints } from '@/components/BasketPoints';
 import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
@@ -251,7 +252,7 @@ function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: strin
       {played && <Periods teams={teams} />}
       {played && <Compare teams={teams} />}
       {!played && <Empty>El partido aún no ha empezado: las estadísticas salen en cuanto arranque. Mientras, mira las cuotas o el valor de los jugadores.</Empty>}
-      {teams.filter(t => t.players.length).map(t => <BoxTable key={t.side} team={t} onPick={p => onPick(p, t.id)} />)}
+      {teams.filter(t => t.players.length).map(t => <BoxTable key={t.side} team={t} game={game} onPick={p => onPick(p, t.id)} />)}
       {!!box.data!.series.length && <Series series={box.data!.series} />}
     </div>
   );
@@ -312,23 +313,56 @@ function Compare({ teams }: { teams: BoxTeam[] }) {
   );
 }
 
-// Tabla de anotadores de un equipo: titulares primero; pulsar un jugador abre su valor
-function BoxTable({ team, onPick }: { team: BoxTeam; onPick: (p: { id: string; name: string }) => void }) {
-  const list = team.players.slice().sort((x, y) => Number(y.starter) - Number(x.starter) || y.min - x.min);
+type StatKey = keyof BoxTeam['totals'];
+// Valor para ordenar una columna: los tiros ("7-15") por los metidos y, a igualdad, por los intentados; el +/- por su número
+const sortValue = (p: BoxTeam['players'][number], k: StatKey) => {
+  const v = p[k];
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '');
+  if (/^\d+-\d+$/.test(s)) { const [m, a] = s.split('-').map(Number); return m + a / 1000; }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : -Infinity;
+};
+
+// Tabla de anotadores de un equipo: titulares primero; pulsar un jugador abre su partido (tiros y estadísticas, como en
+// fútbol), y desde ahí el valor de sus líneas. Pulsar una columna ordena por ella de más a menos; otra vez, de menos a más;
+// y otra, vuelta al orden de titulares
+function BoxTable({ team, game, onPick }: { team: BoxTeam; game: BasketGame; onPick: (p: { id: string; name: string }) => void }) {
+  const [sort, setSort] = useState<{ k: StatKey; dir: 'desc' | 'asc' } | null>(null);
+  const [sel, setSel] = useState<BoxTeam['players'][number] | null>(null);
+  const byDefault = team.players.slice().sort((x, y) => Number(y.starter) - Number(x.starter) || y.min - x.min);
+  // Los que no jugaron van siempre al final, ordenes como ordenes
+  const list = sort
+    ? byDefault.slice().sort((x, y) => Number(!y.min) - Number(!x.min) || (sort.dir === 'desc' ? 1 : -1) * (sortValue(y, sort.k) - sortValue(x, sort.k)))
+    : byDefault;
+  const click = (k: StatKey) => setSort(s => (!s || s.k !== k ? { k, dir: 'desc' } : s.dir === 'desc' ? { k, dir: 'asc' } : null));
   const top = Math.max(...list.map(p => p.pts));
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <div className="flex items-center gap-2.5 border-b border-zinc-800/60 px-4 py-2.5">
         {team.logo && <img src={team.logo} alt="" className="h-6 w-6 object-contain" />}
         <span className="font-semibold">{team.name}</span>
-        <span className="ml-auto text-xs text-zinc-500">Pulsa un jugador para ver el valor de sus líneas</span>
+        <span className="ml-auto text-xs text-zinc-500">Pulsa un jugador para ver su partido</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px]">
-          <thead className="bg-zinc-900/60"><tr><th className={th}>Jugador</th>{STAT_COLS.map(([k, l]) => <th key={k} className={th + ' text-right'}>{l}</th>)}</tr></thead>
+          <thead className="bg-zinc-900/60"><tr>
+            <th className={th}>Jugador</th>
+            {STAT_COLS.map(([k, l]) => {
+              const on = sort?.k === k;
+              return (
+                <th key={k} className={cn(th, 'text-right')} aria-sort={on ? (sort!.dir === 'desc' ? 'descending' : 'ascending') : undefined}>
+                  <button type="button" onClick={() => click(k)} title={on && sort!.dir === 'desc' ? 'Ordenar de menos a más' : on ? 'Quitar el orden' : 'Ordenar de más a menos'}
+                    className={cn('inline-flex cursor-pointer items-center gap-0.5 transition hover:text-zinc-100', on && 'text-amber-300')}>
+                    {l}{on ? (sort!.dir === 'desc' ? <ArrowDown size={11} /> : <ArrowUp size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                  </button>
+                </th>
+              );
+            })}
+          </tr></thead>
           <tbody className="divide-y divide-zinc-800/60">
             {list.map(p => (
-              <tr key={p.id || p.name} onClick={() => onPick(p)} className="cursor-pointer hover:bg-zinc-800/30">
+              <tr key={p.id || p.name} onClick={() => setSel(p)} className="cursor-pointer hover:bg-zinc-800/30" title="Su partido: tiros y estadísticas">
                 <td className={td}><span className="flex items-center gap-2">{p.name}{p.starter && <span className="text-[10px] text-zinc-500" title="Titular">T</span>}</span></td>
                 {STAT_COLS.map(([k]) => (
                   <td key={k} className={cn(td, 'text-right tnum', k === 'pts' ? cn('font-semibold', p.pts === top && top > 0 ? 'text-amber-300' : 'text-zinc-100') : 'text-zinc-300')}>
@@ -344,6 +378,8 @@ function BoxTable({ team, onPick }: { team: BoxTeam; onPick: (p: { id: string; n
           </tbody>
         </table>
       </div>
+      {sel && <BasketPlayerGameDialog key={sel.id || sel.name} game={game} team={team} player={sel} onClose={() => setSel(null)}
+        onLines={() => { const p = sel; setSel(null); onPick(p); }} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, Download, Layers, Pencil, Percent, Plus, Search, Target, Upload, Wallet, X } from 'lucide-react';
+import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Target, Upload, Wallet, X, Zap } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
@@ -25,6 +25,8 @@ export default function BetsView() {
   // La cartera es común a todas las apps; las estadísticas de abajo son sólo de esta
   const w = useWallet();
 
+  const [checking, setChecking] = useState(false);
+
   async function quickSettle(b: Bet, status: BetStatus) {
     // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
     const legs = b.legs && status === 'won' ? b.legs.map(l => l.status === 'pending' ? { ...l, status: 'won' as LegStatus } : l) : b.legs;
@@ -42,6 +44,15 @@ export default function BetsView() {
           catch (e) { toast('Error al importar: ' + (e as Error).message); }
         }}><Upload size={15} />Importar</Button>
         <Button variant="secondary" onClick={async () => { const p = await window.api.bets.export(); if (p) toast('Exportado a ' + p); }}><Download size={15} />Exportar</Button>
+        <Button variant="secondary" disabled={checking} title="Mira ya el resultado de los partidos de las pendientes (el servidor también lo hace solo cada 5 minutos)"
+          onClick={async () => {
+            setChecking(true);
+            try {
+              const { changed } = await window.api.bets.settle();
+              qc.invalidateQueries({ queryKey: ['bets'] });
+              toast(changed ? `${changed} apuesta${changed === 1 ? '' : 's'} resuelta${changed === 1 ? '' : 's'} con el resultado` : 'Nada nuevo: los partidos aún no han acabado o hay que resolverlas a mano');
+            } catch (e) { toast((e as Error).message); } finally { setChecking(false); }
+          }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} />Comprobar resultados</Button>
         <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
@@ -97,8 +108,8 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
               <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
               <ReferenceLine y={0} stroke="#5e6c68" strokeDasharray="4 4" />
               <Tooltip
-                contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }}
-                labelStyle={{ color: '#9aaaa4' }}
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} itemStyle={{ color: '#fafafa', fontWeight: 600 }}
+                labelStyle={{ color: '#d4d4d8' }}
                 formatter={v => [money(Number(v), cur, true), 'Beneficio acumulado']}
                 labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} · ${p[0].payload.event}` : ''} />
               <Area type="monotone" dataKey="profit" stroke={color} strokeWidth={2} fill="url(#pg)" />
@@ -202,7 +213,9 @@ function History({ bets, onEdit, onSettle }: {
                     <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.bookmaker}</td>
                     <td className={td + ' text-right tabular-nums'}>{odd(b.odds)}</td>
                     <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{money(b.stake, cur)}</td>
-                    <td className={td + ' whitespace-nowrap'}><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge></td>
+                    <td className={td + ' whitespace-nowrap'}>
+                      <span className="flex items-center gap-1.5"><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge><AutoMark bet={b} /></span>
+                    </td>
                     <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
                       {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}
                     </td>
@@ -226,6 +239,27 @@ function History({ bets, onEdit, onSettle }: {
   );
 }
 
+// Si la apuesta se resuelve sola (sabe su partido y mercado) o ya se resolvió, con lo que pasó en el partido al pasar el ratón.
+// En una combinada puede que sólo algunas selecciones lo sean: las demás se marcan a mano
+function AutoMark({ bet: b }: { bet: Bet }) {
+  const items = b.legs?.length ? b.legs : [b];
+  const auto = items.filter(i => i.ref);
+  if (!auto.length) return null;
+  const texts = items.map(i => i.ref?.settled?.text).filter(Boolean) as string[];
+  const settled = texts.length > 0 && b.status !== 'pending';
+  const title = [
+    settled ? 'Resuelta sola con el resultado del partido' : 'Se resolverá sola cuando acabe el partido',
+    ...texts,
+    auto.length < items.length ? `${items.length - auto.length} selección(es) hay que marcarla(s) a mano` : ''
+  ].filter(Boolean).join('\n');
+  return (
+    <span title={title} className="inline-flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
+      <Zap size={11} className={settled ? 'text-amber-400' : ''} />
+      {settled ? 'resuelta sola' : auto.length < items.length ? `${auto.length} de ${items.length} automáticas` : 'se resuelve sola'}
+    </span>
+  );
+}
+
 // El historial en el móvil: once columnas no caben, así que cada apuesta es una tarjeta
 function BetCard({ bet: b, onEdit, onSettle }: { bet: Bet; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void }) {
   const cur = useCurrency();
@@ -244,6 +278,7 @@ function BetCard({ bet: b, onEdit, onSettle }: { bet: Bet; onEdit: (b: Bet) => v
       </div>
       <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
         <Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge>
+        <AutoMark bet={b} />
         <span className="min-w-0 truncate tabular-nums">{[fmtDate(b.date), b.bookmaker, `${money(b.stake, cur)} a ${odd(b.odds)}`].filter(Boolean).join(' · ')}</span>
         <div className="ml-auto flex shrink-0 gap-1">
           {b.status === 'pending' && !combo && <>

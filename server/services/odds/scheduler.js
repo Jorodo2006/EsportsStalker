@@ -6,9 +6,10 @@ const bridge = require('./bridge');
 
 const TICK = 60e3;
 const FAR_HOURS = 48; // hasta dónde llegan las lecturas espaciadas
-// El tenis tiene decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
+// El tenis y el fútbol tienen decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
 const TENNIS_NEAR_HOURS = 3;
 const TENNIS_FAR_HOURS = 24;
+const CROWDED = ['tennis', 'football'];
 const MAX_QUEUE = 10; // unos 6 min de trabajo: así la cola no llega a caducar y un partido cercano entra enseguida
 const clamp = (v, lo, hi, def) => Math.min(hi, Math.max(lo, Number(v) || def));
 const TBD = /^(tbd|tba|por determinar)$/i;
@@ -26,13 +27,13 @@ function byTurns(list) {
 }
 
 const hoursLeft = m => (new Date(m.start).getTime() - Date.now()) / 3600e3;
-const isNear = (m, hours) => hoursLeft(m) <= (m.sport === 'tennis' ? Math.min(hours, TENNIS_NEAR_HOURS) : hours);
+const isNear = (m, hours) => hoursLeft(m) <= (CROWDED.includes(m.sport) ? Math.min(hours, TENNIS_NEAR_HOURS) : hours);
 
 // Cada cuántos minutos se lee un partido: lo cercano cada X min (ajuste), lo lejano cada hora o cada 3 horas.
-// El tenis lejano siempre cada 3 horas: con una hora, sus partidos solos llenarían las ~100 lecturas por hora del lector
+// El tenis y el fútbol lejanos siempre cada 3 horas: con una hora, sus partidos solos llenarían las ~100 lecturas por hora del lector
 function everyMinutes(m, minutes, hours) {
   if (isNear(m, hours)) return minutes;
-  return Math.max(minutes, hoursLeft(m) <= 24 && m.sport !== 'tennis' ? 60 : 180);
+  return Math.max(minutes, hoursLeft(m) <= 24 && !CROWDED.includes(m.sport) ? 60 : 180);
 }
 
 // Días de España entre ahora y `until`, los dos incluidos
@@ -87,6 +88,21 @@ async function upcomingTennis(hours) {
     .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
 }
 
+// Fútbol: local (a) contra visitante (b), como en la app. Sin los aplazados. Los otros nombres de ESPN ayudan a encontrarlo
+// en las casas ("UE Tavernes"), pero no la abreviatura: "VAL" está dentro de "Valladolid". Los filiales de ESPN ("Real
+// Sociedad II") en las casas son "Real Sociedad B"
+async function upcomingFootball(hours) {
+  const until = Date.now() + hours * 3600e3;
+  const days = daysUntil(until);
+  const games = (await Promise.all(days.map(d => client.call('football', 'GET', `/api/football/games?date=${d}`).catch(() => [])))).flat();
+  const team = s => ({
+    name: s.name, code: '',
+    alt: [...new Set([...(/\sII$/.test(s.name) ? [s.name.replace(/\sII$/, ' B')] : []), ...(s.alts || []).filter(x => x && x !== s.name && x !== s.abbr)])]
+  });
+  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && !g.off && t >= Date.now() && t <= until && g.home?.name && g.away?.name; })
+    .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'football', a: team(g.home), b: team(g.away) }));
+}
+
 // ¿Toca leerlo? No si tiene un trabajo abierto o uno (manual o programado) de hace menos de `minutes`
 async function due(key, minutes) {
   const { rowCount } = await query(`SELECT 1 FROM odds.jobs WHERE match_key = $1
@@ -104,12 +120,14 @@ async function tick() {
     // Con las lecturas espaciadas apagadas sólo se miran los partidos cercanos
     const far = s.oddsFarEnabled !== false;
     // Si una de las fuentes falla, las otras siguen
-    const [lol, basket, tennis] = await Promise.all([
+    const crowdedHours = far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS);
+    const [lol, basket, tennis, football] = await Promise.all([
       upcoming(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
       upcomingBasket(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
-      upcomingTennis(far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS)).catch(e => { console.error('Programador (tenis):', e.message); return []; })
+      upcomingTennis(crowdedHours).catch(e => { console.error('Programador (tenis):', e.message); return []; }),
+      upcomingFootball(crowdedHours).catch(e => { console.error('Programador (fútbol):', e.message); return []; })
     ]);
-    const matches = [...lol, ...basket, ...tennis].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const matches = [...lol, ...basket, ...tennis, ...football].sort((x, y) => new Date(x.start) - new Date(y.start));
     const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
     let queued = rows[0].n;
     // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes

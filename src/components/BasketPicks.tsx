@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
-import { parseLine } from '@/lib/basket-model';
+import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
 import { PICK_GROUPS, arrangePicks, bestPicks, hasValue, playerPicks, saneLine, teamPicks, type BasketPick, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
 import type { Side } from '@/lib/value';
@@ -92,7 +92,13 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
 
 const usePickAdd = () => {
   const { addToSlip } = useApp();
-  return (p: BasketPick) => addToSlip({ sport: 'basket', status: 'pending', league: LEAGUE_NAME[p.game.league], event: eventOf(p.game), market: p.market, selection: p.selection, odds: p.price, bookmaker: p.book });
+  // Las de jugador llevan su línea (para resolverse solas); las de equipo las reconoce el servidor por el texto si puede
+  return (p: BasketPick) => addToSlip({
+    sport: 'basket', status: 'pending', league: LEAGUE_NAME[p.game.league], event: eventOf(p.game), market: p.market, selection: p.selection, odds: p.price, bookmaker: p.book,
+    ...(p.kind === 'player' && p.who && p.marketKey
+      ? { ref: { sport: 'basket' as const, match: p.game.id, start: p.game.date, key: `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}`, out: p.side } }
+      : {})
+  });
 };
 
 const tip = (p: BasketPick) => `${p.market}: ${p.selection}. Modelo ${p0(p.pModel)}${p.pMarket != null ? `, casa ${p0(p.pMarket)}` : ''}. Fiabilidad ${p.rel.score}/100. Cuota justa ${odd(p.fair)}`;

@@ -6,7 +6,14 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfw
 // Selección de una combinada
 export type LegStatus = 'pending' | 'won' | 'lost' | 'void';
 export type Sport = 'lol' | 'basket' | 'tennis' | 'football';
-export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport }
+// A qué partido y mercado pertenece una apuesta o selección, para que el servidor la resuelva sola (server/services/bets/settle.js).
+// key: la clave del comparador ("total|0||212.5", "player|Asistencias|naji marshall|2.5"); out: la selección ("over", "a", "x"…).
+// settled: lo puso el servidor al resolverla; guessed: la reconoció por el texto (apuestas de antes)
+export interface BetRef {
+  sport: Sport; match: string; key: string; out: string; start?: string;
+  guessed?: boolean; settled?: { at: string; text: string };
+}
+export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport; ref?: BetRef }
 // En el boleto se guarda también la casa de donde salió la cuota
 export type SlipLeg = BetLeg & { bookmaker?: string };
 
@@ -25,6 +32,7 @@ export interface Bet {
   cashout: number;
   notes: string;
   legs?: BetLeg[]; // combinada: 2 o más selecciones (cuota = producto, estado según las selecciones)
+  ref?: BetRef; // simple: su partido y mercado, para resolverla sola
 }
 
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
@@ -175,8 +183,14 @@ export interface FootballMatch {
 export interface FootballPlayer { id: string; name: string; number: string; pos: string; starter: boolean; subIn: boolean; subOut: boolean; place: number | null }
 export interface FootballLineup { team: string; formation: string; players: FootballPlayer[] }
 export interface FootballPastGame { id: string; date: string; result: 'G' | 'E' | 'P' | ''; score: string; home: boolean; league: string; opponent: { id: string; name: string; logo: string }; team?: string }
+// Un tiro: x de 0 a 100 hacia la portería rival (100 es su línea de gol), y de 0 a 100 a lo ancho (lo bajo es la derecha
+// del que tira); x2/y2, hasta dónde llegó. kind: gol, parado (a puerta), fuera o bloqueado
+export interface FootballShot {
+  kind: 'goal' | 'saved' | 'off' | 'blocked'; team: string; player: string; minute: string; header: boolean; penalty: boolean;
+  x: number; y: number; x2: number | null; y2: number | null;
+}
 export interface FootballDetail {
-  match: FootballMatch; timeline: FootballEvent[]; stats: Record<string, Record<string, number | null>>; lineups: FootballLineup[];
+  match: FootballMatch; timeline: FootballEvent[]; stats: Record<string, Record<string, number | null>>; lineups: FootballLineup[]; shots: FootballShot[];
   form: Record<string, FootballPastGame[]>; h2h: FootballPastGame[]; attendance: number | null; hasStandings: boolean;
 }
 export interface FootballStandingRow {
@@ -286,7 +300,16 @@ export interface BasketPointSide { id: string; pts: number; q: number[] }
 export interface BasketPointGame { id: string; date: string; season: number; type: 'reg' | 'post'; home: BasketPointSide; away: BasketPointSide }
 export interface BasketLeagueGames { currentSeason: number; teams: Record<string, { abbr: string; name: string; logo: string }>; games: BasketPointGame[] }
 // Estadísticas de un partido: por equipo, puntos por cuarto, jugadores y totales; series = enfrentamientos de la temporada
-export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string }
+// oreb/dreb: rebotes ofensivos y defensivos; pf: faltas personales
+export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string; oreb?: number; dreb?: number; pf?: number }
+// El partido de un jugador por cuartos (de las jugadas de ESPN) y sus tiros. x, y: pies desde el aro (x a lo ancho, 0 en el
+// centro; y hacia el medio campo). period 0 = todo el partido. available: false si la fuente no da jugada a jugada (Euroliga)
+export interface BasketShot { period: number; clock: string; x: number; y: number; made: boolean; value: 2 | 3; text: string }
+export interface BasketPlayerGame {
+  available: boolean; periods: number[];
+  byPeriod: Record<string, { pts: number; fgm: number; fga: number; tpm: number; tpa: number; ftm: number; fta: number; oreb: number; dreb: number; ast: number; stl: number; blk: number; tov: number; pf: number }>;
+  shots: BasketShot[];
+}
 export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
 export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
@@ -304,6 +327,8 @@ export interface Api {
   settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings> };
   bets: {
     list(): Promise<Bet[]>; save(b: BetDraft): Promise<Bet>; delete(id: string): Promise<void>;
+    // Mira ya los resultados de las pendientes (el servidor también lo hace solo cada 5 minutos)
+    settle(): Promise<{ changed: number }>;
     export(): Promise<string | null>; import(): Promise<number>;
   };
   esports: {
@@ -325,7 +350,7 @@ export interface Api {
   odds: {
     // quiet: sólo leer, sin apuntarlo como el último partido abierto (el marcador lo usa para repartir sus capturas)
     match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
-    board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number }>>;
+    board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number; x?: number }>>; // x: empate (fútbol)
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
   };
@@ -335,6 +360,12 @@ export interface Api {
     days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
     live(): Promise<FootballMatch[]>;
     match(id: string): Promise<FootballDetail>;
+    // Estadísticas de un jugador en un partido (API core de ESPN), { nombre de ESPN: valor }
+    playerStats(match: string, team: string, player: string): Promise<Record<string, number>>;
+    // Foto del jugador: ESPN o, si no tiene, Wikipedia; url vacía si no hay
+    photo(id: string, name: string, team: string): Promise<{ url: string; from: string }>;
+    // Las de una alineación entera: null en las que aún se están buscando (hay que volver a preguntar)
+    photos(players: { id: string; name: string; team: string }[]): Promise<Record<string, { url: string; from: string } | null>>;
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
   };
   tennis: {
@@ -362,12 +393,16 @@ export interface Api {
     teamLogs(league: BasketLeagueId, teamId: string): Promise<BasketTeamLogs>;
     injuries(): Promise<BasketInjury[]>;
     boxscore(gameId: string): Promise<BasketBox>;
+    // El partido de un jugador por cuartos y sus tiros (sólo NBA y WNBA)
+    playerGame(gameId: string, playerId: string): Promise<BasketPlayerGame>;
     search(q: string): Promise<BasketPlayerHit[]>;
     gamelog(league: BasketLeagueId, playerId: string, teamId?: string): Promise<BasketGamelog>;
   };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;
   marcador: { url(): Promise<string>; paste(m?: { a: TeamRef; b: TeamRef }): Promise<{ ok: boolean; partido: string | null }> };
   onOddsImported(cb: () => void): () => void;
+  // El servidor ha resuelto alguna apuesta sola
+  onBetsSettled(cb: () => void): () => void;
   backend: { status(): Promise<BackendStatus> };
   onBackendStatus(cb: (up: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;

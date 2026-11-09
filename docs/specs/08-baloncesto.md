@@ -86,8 +86,14 @@ vuelven a pedir.
   salir): marcador grande, botón *Apuesta* y pestañas *Estadísticas*, *Recomendaciones* (la primera si no ha empezado), *Cuotas* (si no ha
   terminado), *Puntos*, *Líneas*, *Equipos*, *Plantillas* y *Valor de jugador*.
 - *Estadísticas* (`GET /api/basket/boxscore/:id`, se refresca cada 20 s en juego): puntos por cuarto, comparación de
-  equipo (tiros, rebotes, asistencias, robos, tapones, pérdidas), tabla de cada equipo con titulares (pulsar un jugador
-  abre su valor) y enfrentamientos de la temporada.
+  equipo (tiros, rebotes, asistencias, robos, tapones, pérdidas), tabla de cada equipo con titulares y enfrentamientos de
+  la temporada. Las columnas de la tabla se ordenan al pulsarlas (de más a menos, de menos a más, orden normal).
+  Pulsar un jugador abre su partido (`BasketPlayerGameDialog`, como en fútbol): foto de ESPN, filtro Todos / Q1… / Pr,
+  media pista con sus tiros (dentro y fallados) y sus estadísticas, y un botón *Sus líneas* que lleva al analizador.
+  "Todos" sale del boxscore (oficial); cada cuarto y los tiros, de las jugadas de ESPN
+  (`GET /api/basket/player-game/:id/:jugador`, `playerGame` en `espn.js`: el primer participante de cada jugada es quien la
+  hace y el segundo quien asiste, roba o tapona; coordenadas en pies desde el aro). Sólo NBA y WNBA: la Euroliga no da
+  jugada a jugada y su ficha sale sin pista ni cuartos.
 - *Cuotas* (`BasketOdds`): estado de cada casa, botón *Actualizar cuotas* y mercados por Partido / Jugadores /
   Mitades / Cuartos / Otros. En hándicaps y totales salen primero las tres líneas más igualadas. Clic: apuesta; clic
   derecho: combinada.

@@ -198,8 +198,13 @@ recalculan en `normalizeCombo` (`server/services/bets/store.js`).
 | `event`, `league`, `market`, `selection` | text | |
 | `odds` | double precision | |
 | `status` | text | `CHECK` en `pending`, `won`, `lost`, `void` |
+| `ref` | jsonb | Partido y mercado para resolverla sola (migración `008`); igual en `bets.bets` para las simples |
 
 Clave primaria `(bet_id, pos)`.
+
+`ref` (en `bets.bets` y `bets.bet_legs`): `{ sport, match, start, key, out, guessed?, settled? }`. `key` es la clave del
+comparador de cuotas (`total|0||212.5`, `player|Asistencias|naji marshall|2.5`) y `out` la selección (`over`, `a`, `x`…).
+La valida `cleanRef` en `store.js`; lo que no cuadra se descarta y la apuesta se guarda sin resolución automática.
 
 ## Esquema `odds` (servicio odds)
 

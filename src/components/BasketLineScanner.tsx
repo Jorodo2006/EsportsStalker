@@ -181,7 +181,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
                     <td className={tdc}><ReliabilityMeter rel={r.rel} compact /></td>
                     <td className={tdc + ' text-right'}>
                       {r.value ? (
-                        <button onClick={e => { e.stopPropagation(); addToSlip({ sport: 'basket', status: 'pending', league: LEAGUE_NAME[r.game.league], event: `${r.game.away.abbr} @ ${r.game.home.abbr}`, market: `${M.label} · ${r.player.name}`, selection: `${SIDE_LABEL[side]} de ${L}`, odds: r.value!.price, bookmaker: r.book }); }}
+                        <button onClick={e => { e.stopPropagation(); addToSlip({ sport: 'basket', status: 'pending', league: LEAGUE_NAME[r.game.league], event: `${r.game.away.abbr} @ ${r.game.home.abbr}`, market: `${M.label} · ${r.player.name}`, selection: `${SIDE_LABEL[side]} de ${L}`, odds: r.value!.price, bookmaker: r.book, ref: { sport: 'basket', match: r.game.id, start: r.game.date, key: `player|${M.label}|${r.player.name.toLowerCase()}|${L}`, out: side } }); }}
                           title={`${r.book ?? ''}: añadir al cupón (otra vez para quitarla)`} className="ml-auto inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md bg-zinc-800/70 px-2 text-sm font-semibold tnum transition hover:bg-zinc-700">
                           {r.book && <BookIcon name={r.book} size={14} />}{odd(r.value.price)}
                         </button>

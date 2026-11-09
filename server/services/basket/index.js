@@ -79,6 +79,14 @@ const routes = [
     const l = league(lg);
     return l.src.boxscore(l.id, rest.join(':'));
   }],
+  // El partido de un jugador por cuartos y sus tiros. Sólo NBA y WNBA (ESPN da jugada a jugada con coordenadas); la Euroliga, no
+  ['GET', '/api/basket/player-game/:id/:player', ({ params }) => {
+    const [lg, ...rest] = String(params.id).split(':');
+    const l = league(lg);
+    if (!/^\d+$/.test(String(params.player))) throw fail('Jugador desconocido');
+    if (!l.src.playerGame) return { available: false, periods: [], byPeriod: {}, shots: [] };
+    return l.src.playerGame(l.id, rest.join(':'), params.player);
+  }],
   ['GET', '/api/basket/search', async ({ query: q }) => {
     const lists = await Promise.all(LEAGUES.filter(l => l.id !== 'wnba').map(l => l.src.search(l.id, q.q).catch(() => [])));
     return lists.flat().slice(0, 30);

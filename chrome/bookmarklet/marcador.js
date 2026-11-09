@@ -111,8 +111,10 @@
     var readBw = function () {
       var groups = {}, pending = 0, otros = [];
       bwSecs().forEach(function (sec) {
-        var title = titleOf(sec); if (!title) return;
         var btns = sec.querySelectorAll('button[data-testid="outcome"]');
+        // En fútbol el 1-X-2 del partido va arriba, sin cabecera: tres selecciones y una es el empate
+        var untitled1x2 = btns.length === 3 && [].some.call(btns, function (b) { return /^empate$/i.test((b.getAttribute('data-outcomename') || '').trim()); });
+        var title = titleOf(sec) || (untitled1x2 ? '1-X-2' : ''); if (!title) return;
         if (!btns.length) { pending++; return; }
         var m = title.match(BW_TITLE);
         // "Total de kills - Gen G" es de un equipo, no de un jugador: va con los demás mercados

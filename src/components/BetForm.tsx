@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, Clock, Layers, Plus, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
-import type { BetDraft, BetLeg, BetStatus, LegStatus, MatchOdds, Schedule } from '@/lib/types';
+import type { BetDraft, BetLeg, BetRef, BetStatus, LegStatus, MatchOdds, Schedule } from '@/lib/types';
 import { Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
 import { MatchPicker, matchName } from './MatchPicker';
 import { OptionInput, type Option } from './OptionInput';
@@ -64,10 +64,13 @@ export function BetFormDialog() {
   const [f, setF] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [legs, setLegs] = useState<BetLeg[] | null>(null); // null = apuesta simple
+  // El partido y mercado de una simple (para que se resuelva sola) va aparte: f sólo guarda textos
+  const [ref, setRef] = useState<BetRef | undefined>(undefined);
 
   useEffect(() => {
     if (!betDraft) return;
-    const { legs: dl, fromSlip: _, ...rest } = betDraft;
+    const { legs: dl, fromSlip: _, ref: r, ...rest } = betDraft;
+    setRef(r);
     const d: BetDraft = { date: today(), market: 'Ganador del partido', status: 'pending', sport: 'lol', ...rest };
     setF(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v == null || v === 0 && k === 'cashout' ? '' : String(v)])));
     setLegs(dl?.length ? dl.map(l => ({ ...emptyLeg(), ...l, status: l.status || 'pending' })) : null);
@@ -120,7 +123,7 @@ export function BetFormDialog() {
         await window.api.bets.save({ ...f, id: betDraft?.id, odds: comboOdds(ok), legs: ok, status: f.status === 'cashout' ? 'cashout' : 'pending' } as unknown as BetDraft);
         if (betDraft?.fromSlip) clearSlip();
       } else {
-        await window.api.bets.save({ ...f, id: betDraft?.id } as unknown as BetDraft);
+        await window.api.bets.save({ ...f, id: betDraft?.id, ...(ref ? { ref } : {}) } as unknown as BetDraft);
       }
       await qc.invalidateQueries({ queryKey: ['bets'] });
       toast(legs ? 'Combinada guardada' : 'Apuesta guardada');

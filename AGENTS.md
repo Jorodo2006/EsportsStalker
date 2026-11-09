@@ -142,6 +142,10 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
   salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
   clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`.
+- **Fútbol en las casas** (`winamaxFootballInto` y `betwayFootballInto` en `odds.js`): el periodo sale sólo del título,
+  nunca de la pestaña (la "1er Tiempo" de Betway repite los mercados del partido). El 1X2 lleva empate (`x`). Los nombres
+  del partido (`targetOfFootball` y `upcomingFootball`) tienen que coincidir, porque son la clave en `odds`
+  (`docs/specs/11-futbol.md`).
 - **Emparejar equipos** entre lolesports / ESPN / la Euroliga y las casas (`orient`/`teamScore` en
   `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
   "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.
@@ -155,6 +159,10 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.
+- **Resolución automática** (`server/services/bets/settle.js`): depende de que las claves de mercado del comparador
+  (`odds.js`) y los nombres de estadística de jugador no cambien; si cambias una, ajusta `evaluate` y repite `npm test`
+  (`resolver.test.js`). Ante la duda, que devuelva `null` (se resuelve a mano): una apuesta mal resuelta mueve dinero.
+  Es lo único que lee las apuestas de todos los usuarios (`getBet`): nunca lo expongas en una ruta.
 
 ## Especificaciones
 

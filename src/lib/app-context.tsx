@@ -69,6 +69,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toastTimer.current = window.setTimeout(() => setToast(null), 2800);
   }, []);
 
+  // El servidor ha resuelto apuestas solas: se recargan. El aviso llega a todos los conectados (no dice de quién son, para
+  // no repartir datos de nadie), así que no se saca mensaje: cada uno ve en su lista lo suyo
+  useEffect(() => window.api.onBetsSettled(() => { qc.invalidateQueries({ queryKey: ['bets'] }); }), [qc]);
+
   const value: Ctx = {
     settings,
     async saveSettings(p) {

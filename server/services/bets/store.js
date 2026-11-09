@@ -68,15 +68,23 @@ async function claimExisting(c, userId) {
 
 // ---------- Apuestas ----------
 const LEGS_SQL = `(SELECT json_agg(json_build_object('event', l.event, 'league', l.league, 'market', l.market,
-  'selection', l.selection, 'odds', l.odds, 'status', l.status, 'sport', l.sport) ORDER BY l.pos) FROM bets.bet_legs l WHERE l.bet_id = b.id) AS legs`;
+  'selection', l.selection, 'odds', l.odds, 'status', l.status, 'sport', l.sport, 'ref', l.ref) ORDER BY l.pos) FROM bets.bet_legs l WHERE l.bet_id = b.id) AS legs`;
 
 function fromRow(r) {
   const bet = {
     id: r.id, date: r.date, sport: r.sport, league: r.league, event: r.event, market: r.market, selection: r.selection,
     bookmaker: r.bookmaker, odds: r.odds, stake: r.stake, status: r.status, cashout: r.cashout, notes: r.notes
   };
-  if (r.legs && r.legs.length) bet.legs = r.legs;
+  if (r.ref) bet.ref = r.ref;
+  if (r.legs && r.legs.length) bet.legs = r.legs.map(l => (l.ref ? l : (({ ref: _, ...x }) => x)(l)));
   return bet;
+}
+
+// Sólo para el resolvedor (settle.js): una apuesta por su id, sin filtrar por usuario. Nunca se expone en una ruta;
+// el resolvedor la vuelve a guardar con el user_id de su fila
+async function getBet(id) {
+  const { rows } = await query(`SELECT b.*, ${LEGS_SQL} FROM bets.bets b WHERE b.id = $1`, [String(id)]);
+  return rows[0] ? fromRow(rows[0]) : null;
 }
 
 async function listBets(userId) {
@@ -92,18 +100,19 @@ async function writeBet(c, userId, b, onlyNew) {
     if (rows[0] && String(rows[0].user_id) === String(userId)) return false;
     if (rows[0]) b = { ...b, id: crypto.randomUUID() }; // el CSV de otro usuario: para éste es una apuesta nueva
   }
-  const vals = [b.id, b.date, b.league, b.event, b.market, b.selection, b.bookmaker, b.odds, b.stake, b.status, b.cashout, b.notes, b.sport, userId];
-  const r = await c.query(`INSERT INTO bets.bets (id, date, league, event, market, selection, bookmaker, odds, stake, status, cashout, notes, sport, user_id)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+  const vals = [b.id, b.date, b.league, b.event, b.market, b.selection, b.bookmaker, b.odds, b.stake, b.status, b.cashout, b.notes, b.sport, userId,
+    b.ref ? JSON.stringify(b.ref) : null];
+  const r = await c.query(`INSERT INTO bets.bets (id, date, league, event, market, selection, bookmaker, odds, stake, status, cashout, notes, sport, user_id, ref)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
     ON CONFLICT (id) DO UPDATE SET date = EXCLUDED.date, sport = EXCLUDED.sport, league = EXCLUDED.league, event = EXCLUDED.event,
       market = EXCLUDED.market, selection = EXCLUDED.selection, bookmaker = EXCLUDED.bookmaker, odds = EXCLUDED.odds,
-      stake = EXCLUDED.stake, status = EXCLUDED.status, cashout = EXCLUDED.cashout, notes = EXCLUDED.notes, updated_at = now()
+      stake = EXCLUDED.stake, status = EXCLUDED.status, cashout = EXCLUDED.cashout, notes = EXCLUDED.notes, ref = EXCLUDED.ref, updated_at = now()
     WHERE bets.bets.user_id = EXCLUDED.user_id`, vals);
   if (!r.rowCount) throw fail('Esa apuesta no existe', 404);
   await c.query('DELETE FROM bets.bet_legs WHERE bet_id = $1', [b.id]);
   for (const [i, l] of (b.legs || []).entries()) {
-    await c.query(`INSERT INTO bets.bet_legs (bet_id, pos, event, league, market, selection, odds, status, sport)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [b.id, i, l.event, l.league, l.market, l.selection, l.odds, l.status, l.sport]);
+    await c.query(`INSERT INTO bets.bet_legs (bet_id, pos, event, league, market, selection, odds, status, sport, ref)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`, [b.id, i, l.event, l.league, l.market, l.selection, l.odds, l.status, l.sport, l.ref ? JSON.stringify(l.ref) : null]);
   }
   return true;
 }
@@ -147,6 +156,23 @@ const day = v => (/^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0
 const MAX_MONEY = 1e6, MAX_ODDS = 1000, MAX_LEGS = 30, MAX_IMPORT = 5000;
 const MAX_TEXT = { id: 64, league: 120, event: 300, market: 120, selection: 300, bookmaker: 60, notes: 2000 };
 
+// A qué partido y mercado pertenece (para resolverla sola). Viene del cliente: se valida y lo que no cuadra se descarta
+// (la apuesta se guarda igual, sin resolución automática). settled y guessed sólo los pone el resolvedor
+function cleanRef(r, sport) {
+  if (!r || typeof r !== 'object') return null;
+  const s = v => String(v ?? '');
+  if (!SPORTS.includes(s(r.sport) || sport)) return null;
+  if (!/^[\w:.-]{1,80}$/.test(s(r.match)) || !s(r.key) || s(r.key).length > 200 || !/^[\w-]{1,20}$/.test(s(r.out))) return null;
+  const out = { sport: s(r.sport) || sport, match: s(r.match), key: s(r.key), out: s(r.out) };
+  if (r.start && !Number.isNaN(Date.parse(r.start))) out.start = new Date(r.start).toISOString();
+  if (r.guessed === true) out.guessed = true;
+  if (r.settled && typeof r.settled === 'object') out.settled = { at: s(r.settled.at).slice(0, 40), text: s(r.settled.text).slice(0, 200) };
+  return out;
+}
+
+// { ref } sólo si lo hay: las apuestas sin partido quedan igual que antes
+const withRef = (r, sport) => { const ref = cleanRef(r, sport); return ref ? { ref } : {}; };
+
 function normalizeBet(b) {
   if (!b || typeof b !== 'object') throw fail('Apuesta no válida');
   // Texto con tope de longitud; un número que no lo es (NaN, "abc") se rechaza en vez de guardarse como 0
@@ -179,7 +205,7 @@ function normalizeBet(b) {
   legs = Array.isArray(legs) ? legs.filter(l => l && typeof l === 'object').map(l => ({
     event: text(l.event, 'event'), league: text(l.league, 'league'), market: text(l.market, 'market'),
     selection: text(l.selection, 'selection'), odds: odds(l.odds, 'La cuota'), status: LEG_STATUSES.includes(l.status) ? l.status : 'pending',
-    sport: sportOf(l.sport ?? b.sport)
+    sport: sportOf(l.sport ?? b.sport), ...withRef(l.ref, sportOf(l.sport ?? b.sport))
   })).filter(l => l.selection || l.event) : [];
   if (legs.length >= 2) return normalizeCombo(b, legs, money, text);
   return {
@@ -195,7 +221,8 @@ function normalizeBet(b) {
     stake: money(b.stake, 'La apuesta'),
     status: STATUSES.includes(b.status) ? b.status : 'pending',
     cashout: money(b.cashout, 'El cash out'),
-    notes: text(b.notes, 'notes')
+    notes: text(b.notes, 'notes'),
+    ...withRef(b.ref, sportOf(b.sport))
   };
 }
 
@@ -227,4 +254,4 @@ function normalizeCombo(b, legs, money, text) {
   };
 }
 
-module.exports = { getSettings, setSettings, claimExisting, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };
+module.exports = { getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

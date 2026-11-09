@@ -173,17 +173,19 @@ export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a:
   const x = blockOf(pa), y = blockOf(pb);
   const dx = dominance(x), dy = dominance(y);
   const row = (m: Metric) => <TvRow key={m.key} label={m.label} a={num(x, m.key)} b={num(y, m.key)} aText={fmt(m, num(x, m.key))} bText={fmt(m, num(y, m.key))} better={m.better} spread={m.spread} />;
+  // Los dos en una sola rejilla: el balance ("11-15") toma el ancho que necesite sin partirse (antes, con una columna fija,
+  // se partía en dos líneas y se montaba sobre el otro jugador) y queda alineado entre los dos
   const line = (s: Side, r: Block) => (
-    <div className="grid h-[22px] grid-cols-[minmax(0,9rem)_1.25rem_3rem] items-center gap-2 font-score">
-      <span className="truncate text-[17px] font-bold">{surname(s.name)}</span>
+    <>
+      <span className="truncate text-[17px] font-bold leading-6" title={s.name}>{surname(s.name)}</span>
       {s.flag ? <img src={s.flag} alt="" className="h-3 w-5 object-cover" /> : <span />}
-      <span className="text-right text-[17px] font-bold tnum">{r.won}-{r.lost}</span>
-    </div>
+      <span className="whitespace-nowrap text-right text-[17px] font-bold leading-6 tnum" title={`${r.won} victorias y ${r.lost} derrotas en este periodo`}>{r.won}-{r.lost}</span>
+    </>
   );
   return (
     <TvFrame className="mx-auto w-full max-w-6xl">
       <TvHeader title="Estadísticas" sub={`${cur.label} · ${pick === 'all' ? 'Todas las superficies' : SURFACE_ES[pick]}`}>
-        <div className="flex flex-col">{line(a, x)}{line(b, y)}</div>
+        <div className="grid min-w-0 grid-cols-[minmax(0,13rem)_1.25rem_auto] items-center gap-x-2 font-score">{line(a, x)}{line(b, y)}</div>
         <div className="hidden min-w-0 flex-1 basis-40 text-right font-score lg:block">
           <div className="truncate text-[17px] font-bold">{tournament}</div>
           <div className="text-[12px] font-medium text-white/80">{tour.toUpperCase()}{city ? ` · ${city}` : ''}</div>

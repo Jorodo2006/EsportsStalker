@@ -91,7 +91,9 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   const M = BASKET_MARKETS[market];
   const event = game ? `${game.away.abbr} @ ${game.home.abbr}` : `${team}${opp ? ` vs ${opp}` : ''}`;
   const betOf = (s: SideValue) => ({
-    league: LEAGUE_NAME[player.league], event, market: `${M.label} · ${player.name}`, selection: `${SIDE_LABEL[s.side]} de ${L}`, odds: s.price, bookmaker: s.book || book
+    league: LEAGUE_NAME[player.league], event, market: `${M.label} · ${player.name}`, selection: `${SIDE_LABEL[s.side]} de ${L}`, odds: s.price, bookmaker: s.book || book,
+    // Con partido, se resuelve sola con su línea de jugador
+    ...(game && L != null ? { ref: { sport: 'basket' as const, match: game.id, start: game.date, key: `player|${M.label}|${player.name.toLowerCase()}|${L}`, out: s.side } } : {})
   });
 
   const cs = log.data!.currentSeason;
@@ -236,8 +238,8 @@ function LastGames({ games, market, line, mu }: { games: BasketLogGame[]; market
             <CartesianGrid stroke="#2b3034" vertical={false} />
             <XAxis dataKey="x" stroke="#85948f" fontSize={10} tickLine={false} axisLine={false} interval={0} />
             <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }}
-              labelStyle={{ color: '#9aaaa4' }} labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : ''} formatter={v => [v, M.short]} />
+            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} itemStyle={{ color: '#fafafa', fontWeight: 600 }}
+              labelStyle={{ color: '#d4d4d8' }} labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : ''} formatter={v => [v, M.short]} />
             <ReferenceLine y={line} stroke="var(--acc-400)" strokeDasharray="4 4" />
             <ReferenceLine y={mu} stroke="#9aaaa4" strokeDasharray="2 4" />
             <Bar dataKey="v" radius={[3, 3, 0, 0]}>

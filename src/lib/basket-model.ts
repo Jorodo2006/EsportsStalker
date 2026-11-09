@@ -238,8 +238,10 @@ export const playerOut = (injury: string | null | undefined, missed: number) => 
 
 // Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, book }] }
 export function playerLines(odds: MatchOdds | undefined, name: string) {
-  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
-  const n = norm(name), last = norm(name.split(' ').slice(-1)[0] || '');
+  // Sin "Jr." ni "III": ESPN y las casas no siempre lo ponen
+  const bare = (s: string) => s.trim().replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, '');
+  const norm = (s: string) => bare(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+  const n = norm(name), last = norm(bare(name).split(' ').slice(-1)[0] || '');
   const out: Record<string, { line: number; over?: number; under?: number; overBook?: string; underBook?: string }[]> = {};
   for (const m of odds?.markets ?? []) {
     if (!m.key.startsWith('player|') || m.line == null) continue;

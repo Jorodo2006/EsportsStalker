@@ -48,20 +48,65 @@ El orden de la tabla es el de la lista de partidos. Para añadir una liga basta 
 | `GET /api/football/days?from=&n=` | Partidos y en juego por día, para la tira |
 | `GET /api/football/live` | Partidos en juego |
 | `GET /api/football/match?id=<liga>:<evento>` | Ficha del partido |
+| `GET /api/football/player-stats?match=<liga>:<evento>&team=&player=` | Estadísticas de un jugador en el partido (API core de ESPN: `sports.core.api.espn.com/…/competitors/<equipo>/roster/<jugador>/statistics/0`), `{ nombre: valor }`. La ficha (`summary`) sólo trae goles, tiros y tarjetas; la core trae entradas, intercepciones, regates, duelos, pases, xG y paradas. 404 si no jugó |
 | `GET /api/football/standings/:league` | Clasificación (grupos y filas) |
 
 ## Interfaz
 
-- `src/views/FootballMatches.tsx`: lista (en juego arriba, el resto por competición) y ficha del partido con el marcador
-  grande, los goleadores y las rojas debajo, y las pestañas Resumen, Estadísticas, Alineaciones, Forma (últimos cinco y
-  cara a cara) y Clasificación. Antes de empezar se abre en Forma. La ficha se carga por su id, así que también abre los
-  partidos de otro día que llegan desde la columna de directo.
+- `src/views/FootballMatches.tsx`: lista (en juego arriba, el resto por competición, con la cuota 1X2 en cada tarjeta y el
+  interruptor Cuotas) y ficha del partido con el marcador grande, los goleadores y las rojas debajo, y las pestañas Resumen,
+  Cuotas (hasta que acaba), Estadísticas, Alineaciones, Forma (últimos cinco y cara a cara) y Clasificación. Antes de
+  empezar se abre en Forma. La ficha se carga por su id, así que también abre los partidos de otro día que llegan desde la
+  columna de directo.
+- Alineaciones: el campo entero con los dos onces (horizontal desde `lg`, vertical por debajo), colocados por la
+  formación y la posición de ESPN (`linesOf`, `spotsOf`), con goles, tarjetas y minuto del cambio sacados del resumen.
+  Campo verde con franjas (`PITCH_LINEUP`, `PitchLines bright`) y cada jugador un círculo relleno del color del equipo con
+  el dorsal en blanco y borde blanco, sin fotos (se probaron fotos en el campo y no gustaron). Al pulsar un
+  jugador (o un suplente que entró) se abre `PlayerStatsDialog`: cabecera con su foto (si la hay), las cifras principales,
+  su mapa de tiros (`HalfPitchShots`) y Ataque, Regate y duelos, Defensa, Pase y, si es el portero, Portería (`STAT_GROUPS`).
+- Mapas de tiros: los tiros salen del comentario de la ficha de ESPN (`commentary[].play`, con `fieldPositionX/Y` desde
+  donde se tiró y `fieldPosition2X/Y` hasta donde llegó; x hacia la portería rival, y de 0 a 100 con lo bajo a la derecha
+  del que tira) y van en `shots` del detalle. En Estadísticas, `MatchShotMap`: el campo entero, cada equipo en el lado de
+  su nombre. Gol en el acento de la app, parado en blanco, fuera sólo el borde, bloqueado en gris; de cabeza, cuadrado.
+  Entran con una animación (`shot-line`, `shot-mark` en `src/index.css`), que se quita con "reducir movimiento".
+- Fotos de jugadores (`server/services/football/photos.js`, `GET /api/football/photo?id=&name=&team=`): como en el tenis,
+  ESPN y si no, la de su artículo de Wikipedia, buscando con el equipo para desempatar nombres repetidos ("Bremer"). De una en
+  una y guardadas en `football.cache` (60 días; el resto de la caché, 7). Muchos jugadores no tienen foto libre: entonces
+  sale el dorsal. Para pedir las de una alineación entera (ahora no se usa), `POST /api/football/photos`: devuelve al momento
+  las que ya tiene y `null` en las que faltan, que busca por detrás; la interfaz vuelve a preguntar cada 3 s mientras falte
+  alguna. Si Wikipedia responde 429, su cola se para 2 minutos (reintentar enseguida sólo alarga el corte).
 - `src/views/FootballStandings.tsx`: la segunda sección de la app ("Clasificación" en vez de "Jugadores").
 - `src/components/football.tsx`: el balón del selector, `themeOf`, `esTime` y la tabla de clasificación.
 
+## Cuotas (Winamax y Betway)
+
+Como en baloncesto y tenis: las lee el lector de Docker, se comparan en la pestaña Cuotas (`SportOdds`) y van al cupón.
+
+- **El partido** (`targetOfFootball`): local (a) contra visitante (b), con el nombre de ESPN, que es la clave del partido
+  (`a|b`) en el esquema `odds`; tiene que ser igual en la interfaz y en el programador. Los otros nombres (`alt`) son los
+  `alts` de ESPN sin la abreviatura ("VAL" está dentro de "Valladolid") y, en los filiales, la versión con B: ESPN dice
+  "Real Sociedad II" y las dos casas "Real Sociedad B".
+- **Lector** (`SPORT_CFG.football` en `server/lector/runner.js`): en Winamax, deporte 1 y el torneo por su nombre
+  (`FOOTBALL_TOURS`; ojo, "LaLiga " lleva un espacio al final y hay "Serie A" y "Bundesliga" de otros países); en Betway, la
+  lista de cada liga (`FOOTBALL_LISTS`, `grp/soccer/spain/la-liga`…). En Betway se saltan las pestañas "Crea tu apuesta",
+  "Tiempo completo" y "1er Tiempo", que repiten mercados de otras.
+- **El 1-X-2 de Betway** va arriba sin cabecera: el marcador (`marcador.js`) lo reconoce por tener tres selecciones con
+  "Empate" y lo titula "1-X-2".
+- **Normalizador** (`winamaxFootballInto` y `betwayFootballInto` en `server/services/odds/odds.js`): a filas comunes van
+  1X2 (`moneyline`, con `x` para el empate), doble oportunidad (`double`: `1x`, `12`, `x2`), empate no válido (`dnb`), ambos
+  marcan (`btts`), hándicap asiático (`spread`, referido al local), total de goles (`total`), goles de cada equipo
+  (`team_total`), córners (`corners`) y tarjetas (`cards`), del partido (periodo 0) o de la 1.ª mitad (1). El periodo sale
+  sólo del título ("1ª mitad - …", "1º Mitad - …"), nunca de la pestaña: la "1er Tiempo" de Betway enseña los del partido.
+  Lo demás (resultado exacto, hándicap a 3 formas, multigoles…) sale como mercado de cada casa en Otros; goleadores,
+  asistentes, remates y faltas, en Jugadores. Los "Trío/Dúo goleadores" de Winamax no se guardan: son decenas.
+- **Tarjetas**: la cuota de ganador de cada lectura guarda también el empate (`ml.x` en `odds.imports`), y `MatchCard`
+  enseña tres fichas cuando lo hay.
+- **Lecturas programadas** (`upcomingFootball` en `scheduler.js`): como el tenis, porque hay decenas de partidos los fines
+  de semana: de cerca sólo las últimas 3 horas y de lejos cada 3 horas, hasta 24 horas antes. Sin los aplazados.
+- Los partidos pequeños (Copa contra equipos de Segunda RFEF, Segunda días antes) pueden tener sólo uno o dos mercados en
+  Winamax, o no estar todavía en Betway: es lo que ofrecen las casas, no un fallo del lector.
+
 ## Pendiente
 
-1. **Cuotas de Winamax y Betway**: el lector (1X2, doble oportunidad, total de goles, ambos marcan, hándicap), el
-   comparador en la ficha, el cupón y las lecturas programadas en `scheduler.js`.
-2. **Modelo y recomendaciones**: goles esperados con la fuerza de ataque y defensa de cada equipo, comprobado con partidos
+1. **Modelo y recomendaciones**: goles esperados con la fuerza de ataque y defensa de cada equipo, comprobado con partidos
    pasados (como `backtest.js` en tenis) antes de enseñar nada.

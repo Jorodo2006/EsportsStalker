@@ -56,7 +56,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
         for (const l of list) {
           await window.api.bets.save({
             date: today(), sport: l.sport, league: l.league, event: l.event, market: l.market, selection: l.selection,
-            odds: l.odds, bookmaker: l.bookmaker || '', stake: num(stakes[keyOf(l)]), status: 'pending'
+            odds: l.odds, bookmaker: l.bookmaker || '', stake: num(stakes[keyOf(l)]), status: 'pending', ref: l.ref
           });
         }
         // Las que no tenían stake se quedan en el cupón

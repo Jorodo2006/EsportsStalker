@@ -165,7 +165,7 @@ function LineChart({ title, rows, value, line }: { title: string; rows: TeamRow[
             <CartesianGrid stroke="#2b3034" vertical={false} />
             <XAxis dataKey="x" stroke="#85948f" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
             <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
-            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#191c22', border: '1px solid #3b4a45', borderRadius: 2, fontSize: 12 }} labelStyle={{ color: '#9aaaa4' }}
+            <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} itemStyle={{ color: '#fafafa', fontWeight: 600 }} labelStyle={{ color: '#d4d4d8' }}
               labelFormatter={(_, p) => (p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : '')}
               formatter={(_, __, p) => [`${p.payload.v} (${p.payload.d > 0 ? '+' : ''}${fmtLine(p.payload.d)})`, 'Puntos']} />
             <ReferenceLine y={0} stroke="#cdd6d2" />

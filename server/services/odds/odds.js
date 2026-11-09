@@ -32,9 +32,26 @@ function basketPeriod(title) {
   const n = Number(m[1]);
   return { period: /cuarto/i.test(m[2]) ? 10 + n : /set/i.test(m[2]) ? 20 + n : n, rest: t.slice(m[0].length).trim() };
 }
+// Fútbol: periodo 0 = partido, 1-2 = mitades (los mismos números que en baloncesto)
+function footballLabel(type, period, teamName) {
+  const pre = period === 1 || period === 2 ? `${BASKET_PERIOD[period]} · ` : '';
+  switch (type) {
+    case 'moneyline': return `${pre}Resultado (1X2)`;
+    case 'double': return `${pre}Doble oportunidad`;
+    case 'dnb': return `${pre}Empate no válido`;
+    case 'btts': return `${pre}Ambos marcan`;
+    case 'spread': return `${pre}Hándicap asiático`;
+    case 'total': return `${pre}Total de goles`;
+    case 'team_total': return `${pre}Goles de ${teamName}`;
+    case 'corners': return `${pre}Total de córners`;
+    case 'cards': return `${pre}Total de tarjetas`;
+    default: return type;
+  }
+}
 // Deportes que usan el normalizador por periodos (ganador, hándicap, totales) en vez del de LoL
 const PERIOD_SPORTS = ['basket', 'tennis'];
 function marketLabel(type, period, teamName, sport) {
+  if (sport === 'football') return footballLabel(type, period, teamName);
   if (PERIOD_SPORTS.includes(sport)) return basketLabel(type, period, teamName, sport);
   const map = period ? `Mapa ${period} · ` : '';
   switch (type) {
@@ -81,15 +98,22 @@ class Book {
   addStd(type, period, line, bookmaker, prices, main, side) {
     const { a, b } = this;
     const fmt = v => (v > 0 ? `+${v}` : `${v}`);
+    const A = a.code || a.name, B = b.code || b.name;
+    // Fútbol: el ganador lleva empate (1X2) y hay mercados sin línea (doble oportunidad, empate no válido, ambos marcan)
+    const NO_LINE = ['moneyline', 'double', 'dnb', 'btts'];
     let outcomes;
-    if (type === 'moneyline') outcomes = [{ id: 'a', label: a.code || a.name }, { id: 'b', label: b.code || b.name }];
-    else if (type === 'spread') outcomes = [{ id: 'a', label: `${a.code || a.name} ${fmt(line)}` }, { id: 'b', label: `${b.code || b.name} ${fmt(-line)}` }];
+    if (type === 'moneyline' && this.sport === 'football') outcomes = [{ id: 'a', label: A }, { id: 'x', label: 'Empate' }, { id: 'b', label: B }];
+    else if (type === 'moneyline' || type === 'dnb') outcomes = [{ id: 'a', label: A }, { id: 'b', label: B }];
+    else if (type === 'double') outcomes = [{ id: '1x', label: `${A} o empate` }, { id: '12', label: `${A} o ${B}` }, { id: 'x2', label: `Empate o ${B}` }];
+    else if (type === 'btts') outcomes = [{ id: 'yes', label: 'Sí' }, { id: 'no', label: 'No' }];
+    else if (type === 'spread') outcomes = [{ id: 'a', label: `${A} ${fmt(line)}` }, { id: 'b', label: `${B} ${fmt(-line)}` }];
     else outcomes = [{ id: 'over', label: `Más de ${line}` }, { id: 'under', label: `Menos de ${line}` }];
     const team = side === 'a' ? a : side === 'b' ? b : null;
+    const noLine = NO_LINE.includes(type);
     this.add({
-      key: `${type}|${period}|${side || ''}|${type === 'moneyline' ? '' : line}`,
+      key: `${type}|${period}|${side || ''}|${noLine ? '' : line}`,
       group: marketLabel(type, period, team ? team.code || team.name : '', this.sport),
-      period, line: type === 'moneyline' ? null : line, main, outcomes
+      period, line: noLine ? null : line, main, outcomes
     }, bookmaker, prices);
   }
 
@@ -179,13 +203,25 @@ function winamaxInto(book, match, st, found) {
 // ---------- Winamax, baloncesto ----------
 // Ganador, hándicap y totales (del partido, de cada mitad y de cada cuarto) van a filas comunes con Betway;
 // las líneas de jugador van con la misma clave que usa el analizador (player|estadística|jugador|línea)
+// Betway mezcla títulos en español y en inglés ("Player To Get 5+ Rebounds Plus Assists"): se miran los dos
 const BASKET_STAT = [
-  [/puntos.*rebotes.*asistencias|pts.*reb.*ast/i, 'Pts + Reb + Ast'], [/puntos.*rebotes/i, 'Pts + Reb'], [/puntos.*asistencias/i, 'Pts + Ast'],
-  [/rebotes.*asistencias/i, 'Reb + Ast'], [/triples|3 puntos|tres puntos/i, 'Triples anotados'], [/rebotes/i, 'Rebotes'],
-  [/asistencias/i, 'Asistencias'], [/robos.*tapones|tapones.*robos/i, 'Robos + Tapones'], [/robos/i, 'Robos'], [/tapones/i, 'Tapones'],
-  [/p[eé]rdidas/i, 'Pérdidas'], [/puntos/i, 'Puntos']
+  [/puntos.*(rebotes.*asistencias|asistencias.*rebotes)|pts.*reb.*ast|points.*rebounds.*assists/i, 'Pts + Reb + Ast'],
+  [/puntos.*rebotes|points.*rebounds/i, 'Pts + Reb'], [/puntos.*asistencias|points.*assists/i, 'Pts + Ast'],
+  [/rebotes.*asistencias|asistencias.*rebotes|rebounds.*assists/i, 'Reb + Ast'],
+  [/triples|3 puntos|tres puntos|three/i, 'Triples anotados'], [/rebotes|rebounds/i, 'Rebotes'],
+  [/asistencias|assists/i, 'Asistencias'], [/robos.*tapones|tapones.*robos|steals.*blocks/i, 'Robos + Tapones'], [/robos|steals/i, 'Robos'],
+  [/tapones|blocks/i, 'Tapones'], [/p[eé]rdidas|turnovers/i, 'Pérdidas'], [/puntos|points/i, 'Puntos']
 ];
 const basketStat = t => (BASKET_STAT.find(([re]) => re.test(t)) || [null, null])[1];
+// Clave del jugador en las líneas: sin mayúsculas, espacios de más ni "Jr." (Betway pone "Darius Acuff Jr.", Winamax no)
+const playerKey = name => String(name || '').toLowerCase().trim().replace(/\s+(jr|sr|ii|iii|iv)\.?$/, '').trim();
+// Una línea de jugador (la clave la comparte con el analizador y el escáner). Las escaleras ("N o más") sólo traen el Más
+function addPlayerLine(book, bk, stat, who, line, over, under) {
+  const outcomes = [over && { id: 'over', label: `${who.trim()} · Más de ${line}` }, under && { id: 'under', label: `${who.trim()} · Menos de ${line}` }].filter(Boolean);
+  if (!outcomes.length) return;
+  book.add({ key: `player|${stat}|${playerKey(who)}|${line}`, group: `Jugadores · ${stat}`, period: PLAYER_PERIOD, line, main: true, outcomes },
+    bk, { over, under });
+}
 
 function winamaxBasketInto(book, match, st, found) {
   const { e, o } = found;
@@ -219,11 +255,10 @@ function winamaxBasketInto(book, match, st, found) {
       const h = num(sbv.hcp);
       const [c1, c2] = outs;
       book.addStd('spread', period, o.swapped ? -h : h, BK, o.swapped ? { a: c2.price, b: c1.price } : { a: c1.price, b: c2.price }, true);
-    } else if (bet.template === 'OverUnder' && who && total != null) {
-      const stat = basketStat(rest) || rest.replace(who, '').replace(/^\s*[-–]\s*|\s*[-–]\s*$/g, '').trim() || 'Jugador';
-      const outcomes = [over && { id: 'over', label: `${who} · Más de ${total}` }, under && { id: 'under', label: `${who} · Menos de ${total}` }].filter(Boolean);
-      book.add({ key: `player|${stat}|${who.toLowerCase()}|${total}`, group: `Jugadores · ${stat}`, period: PLAYER_PERIOD, line: total, main: true, outcomes },
-        BK, { over: over?.price, under: under?.price });
+    } else if ((bet.template === 'OverUnder' || (/\(logros\)/i.test(rest) && over && !under)) && who && total != null) {
+      // Más/Menos del jugador y su escalera "(logros)": una apuesta por línea, sólo con el Más
+      const stat = basketStat(rest.replace(who, '')) || rest.replace(who, '').replace(/^\s*[-–]\s*|\s*[-–]\s*$/g, '').trim() || 'Jugador';
+      addPlayerLine(book, BK, stat, who, total, over?.price, under?.price);
     } else if (bet.template === 'OverUnder' && total != null && over && under && /^(n[uú]mero (total )?de (puntos|juegos)|total (de )?(puntos|juegos))$/i.test(rest)) {
       book.addStd('total', period, total, BK, { over: over.price, under: under.price }, true);
     } else if (bet.template === 'OverUnder' && total != null && over && under && ptsTeam) {
@@ -235,6 +270,164 @@ function winamaxBasketInto(book, match, st, found) {
         key: `wmx|${title}|${bet.specialBetValue || ''}`, group: label, period: pid ? PLAYER_PERIOD : period || 50, line: total, main: true,
         outcomes: outs.map(x => ({ id: x.id, label: who && bet.template === 'dynamic' ? `${who} · ${x.label}` : x.label }))
       }, BK, Object.fromEntries(outs.map(x => [x.id, x.price])));
+    }
+  }
+  return n;
+}
+
+// ---------- Fútbol (Winamax y Betway) ----------
+// 1X2, doble oportunidad, empate no válido, ambos marcan, hándicap asiático y totales (goles del partido y de cada equipo,
+// córners y tarjetas) van a filas comunes entre las dos casas; lo demás (resultado exacto, goleadores…) sale como mercado
+// propio de cada una. El periodo sale sólo del título ("1ª mitad - …"): la pestaña "1er Tiempo" de Betway repite los
+// mercados del partido entero
+const STOP_FOOTBALL = /^(tr[ií]o|d[uú]o) goleadores/i; // decenas de combinaciones de goleadores que llenarían el comparador
+const PLAYER_FOOTBALL = /goleador|asistente|jugador|remates|paradas|faltas|tarjeta roja|tarjeta amarilla|recibe una o m[aá]s tarjetas|marca \d+ goles|marcador de/i;
+const lastNum = s => { const x = String(s || '').match(/([-+]?\d+(?:[.,]\d+)?)\s*$/); return x ? Number(x[1].replace(',', '.')) : null; };
+const fbSide = (match, name, min = 0.6) => {
+  const sa = teamScore(match.a, name), sb = teamScore(match.b, name);
+  return sa >= min && sa > sb ? 'a' : sb >= min && sb > sa ? 'b' : null;
+};
+// Doble oportunidad por el nombre de la selección: "Italia o empate", "Italia o Francia", "Empate o Eldense"
+function doubleId(match, name) {
+  const n = String(name || '');
+  if (!/empate/i.test(n)) return '12';
+  const s = fbSide(match, n.replace(/\s*\bo\s+empate\b|\bempate\s+o\s*/i, '').trim());
+  return s === 'a' ? '1x' : s === 'b' ? 'x2' : null;
+}
+const periodPre = period => (period === 1 || period === 2 ? `${BASKET_PERIOD[period]} · ` : '');
+
+function winamaxFootballInto(book, match, st, found) {
+  const { e, o } = found;
+  const m = st.matches?.[e.id];
+  if (!m?.bets?.length) return 0;
+  const BK = 'Winamax';
+  const sideOf = code => ((code === '1') !== o.swapped ? 'a' : 'b');
+  let n = 0;
+  for (const betId of m.bets) {
+    const bet = st.bets?.[betId];
+    if (!bet || bet.available === false) continue;
+    const outs = (bet.outcomes || []).map(id => ({ ...(st.outcomes?.[id] || {}), id: String(id), price: st.odds?.[id] }))
+      .filter(x => x.price > 1 && x.available !== false);
+    const title = String(bet.betTitle || bet.betTypeName || '').trim();
+    if (!outs.length || STOP_FOOTBALL.test(title)) continue;
+    const sbv = parseSbv(bet.specialBetValue);
+    const { period, rest } = basketPeriod(title); // "1ª mitad - …", "1º Mitad - …"
+    const lo = rest.toLowerCase();
+    const total = num(sbv.total);
+    const code = c => outs.find(x => String(x.code).toLowerCase() === c);
+    const over = outs.find(x => /^más/i.test(x.label) || x.code === 'over');
+    const under = outs.find(x => /^menos/i.test(x.label) || x.code === 'under');
+    const ou = bet.template === 'OverUnder' && total != null && over && under;
+    const ouAdd = (type, side) => book.addStd(type, period, total, BK, { over: over.price, under: under.price }, true, side);
+    const teamGoals = /^n[uú]mero total de goles (?:marcados )?(?:por|de) (.+)$/i.exec(rest);
+    const goalsSide = teamGoals ? fbSide(match, teamGoals[1]) : null;
+    n++;
+    if (bet.template === '3way' && /^resultado$/.test(lo) && code('1') && code('x') && code('2')) {
+      book.addStd('moneyline', period, null, BK, { [sideOf('1')]: code('1').price, x: code('x').price, [sideOf('2')]: code('2').price }, true);
+      continue;
+    }
+    if (/^doble oportunidad$/.test(lo) && outs.length === 3) {
+      const p = Object.fromEntries(outs.map(x => [doubleId(match, x.label), x.price]).filter(([id]) => id));
+      if (p['1x'] && p['12'] && p.x2) { book.addStd('double', period, null, BK, p, true); continue; }
+    }
+    if (bet.template === '2way' && /^ganador sin empate/.test(lo) && code('1') && code('2')) {
+      book.addStd('dnb', period, null, BK, { [sideOf('1')]: code('1').price, [sideOf('2')]: code('2').price }, true);
+      continue;
+    }
+    if (bet.template === '2way' && /^ambos equipos marcan$/.test(lo)) {
+      const yes = outs.find(x => /^s[ií]$/i.test(x.label)), no = outs.find(x => /^no$/i.test(x.label));
+      if (yes && no) { book.addStd('btts', period, null, BK, { yes: yes.price, no: no.price }, true); continue; }
+    }
+    if (ou && /^n[uú]mero total de goles$/.test(lo)) { ouAdd('total'); continue; }
+    if (ou && goalsSide) { ouAdd('team_total', goalsSide); continue; }
+    if (ou && /^n[uú]mero total de c[oó]rners$/.test(lo)) { ouAdd('corners'); continue; }
+    if (ou && /^n[uú]mero total de tarjetas$/.test(lo)) { ouAdd('cards'); continue; }
+    if (bet.template === 'asian_handicap' && outs.length === 2 && /^h[aá]ndicap asi[aá]tico/.test(lo)) {
+      // "Italia -1.5" / "Francia +1.5": el lado sale del nombre y la línea, del número del final
+      const sides = outs.map(x => fbSide(match, String(x.label).replace(/\s*[-+]?\d+(?:[.,]\d+)?\s*$/, '')));
+      const ia = sides.indexOf('a'), ib = sides.indexOf('b');
+      const h = ia >= 0 ? lastNum(outs[ia].label) : null;
+      if (ia >= 0 && ib >= 0 && h != null) { book.addStd('spread', period, h, BK, { a: outs[ia].price, b: outs[ib].price }, true); continue; }
+    }
+    const label = periodPre(period) + rest + (total != null && !/\d/.test(rest) ? ` (${total})` : '');
+    book.add({
+      key: `wmx|${title}|${bet.specialBetValue || ''}`, group: label,
+      period: PLAYER_FOOTBALL.test(rest) || outs.some(x => x.playerId) ? PLAYER_PERIOD : period || 50, line: total, main: true,
+      outcomes: outs.map(x => ({ id: x.id, label: x.label }))
+    }, BK, Object.fromEntries(outs.map(x => [x.id, x.price])));
+  }
+  return n;
+}
+
+function betwayFootballInto(book, imp, match) {
+  const BK = BOOK_LABEL[imp.book];
+  const players = /marketGroup=players\b/.test(imp.page || '');
+  const lineOf = o => { const v = lastNum(o.hcap); return v == null ? null : v; };
+  const isOU = o => /^(m[aá]s|menos|over|under)/i.test(o.name);
+  const overOf = o => /^(m[aá]s|over)/i.test(o.name);
+  let n = 0;
+  for (const mk of imp.markets || []) {
+    const outs = (mk.outcomes || []).filter(o => o.price > 1);
+    if (!outs.length) continue;
+    const { period, rest } = basketPeriod(mk.title);
+    const lo = rest.toLowerCase().trim();
+    const ou = outs.every(isOU) && outs.every(o => lineOf(o) != null);
+    // Una fila por línea: "Más de / O 2.5" con "Menos de / U 2.5"
+    const ouAdd = (type, side) => {
+      for (const l of [...new Set(outs.map(o => Math.abs(lineOf(o))))]) {
+        const ov = outs.find(o => overOf(o) && Math.abs(lineOf(o)) === l), un = outs.find(o => !overOf(o) && Math.abs(lineOf(o)) === l);
+        if (ov || un) book.addStd(type, period, l, BK, { over: ov?.price, under: un?.price }, true, side);
+      }
+    };
+    const teamPre = /^(.+?)\s+(goles|c[oó]rners) en total$/i.exec(rest);
+    const preSide = teamPre ? fbSide(match, teamPre[1], 0.8) : null;
+    n++;
+    if (/^1-x-2$/.test(lo) && outs.length === 3) {
+      const p = Object.fromEntries(outs.map(o => [/^empate$/i.test(o.name) ? 'x' : fbSide(match, o.name, 0.8), o.price]).filter(([s]) => s));
+      if (p.a && p.x && p.b) { book.addStd('moneyline', period, null, BK, p, true); continue; }
+    }
+    if (/^doble oportunidad$/.test(lo) && outs.length === 3) {
+      const p = Object.fromEntries(outs.map(o => [doubleId(match, o.name), o.price]).filter(([id]) => id));
+      if (p['1x'] && p['12'] && p.x2) { book.addStd('double', period, null, BK, p, true); continue; }
+    }
+    if (/^(apuesta sin posibilidad de empate|empate no v[aá]lido)$/.test(lo) && outs.length === 2) {
+      const p = Object.fromEntries(outs.map(o => [fbSide(match, o.name, 0.8), o.price]).filter(([s]) => s));
+      if (p.a && p.b) { book.addStd('dnb', period, null, BK, p, true); continue; }
+    }
+    if (/^ambos equipos marcan$/.test(lo)) {
+      const yes = outs.find(o => /^s[ií]$/i.test(o.name)), no = outs.find(o => /^no$/i.test(o.name));
+      if (yes && no) { book.addStd('btts', period, null, BK, { yes: yes.price, no: no.price }, true); continue; }
+    }
+    if (ou && /^goles en total$/.test(lo)) { ouAdd('total'); continue; }
+    if (ou && teamPre && /^goles$/i.test(teamPre[2]) && preSide) { ouAdd('team_total', preSide); continue; }
+    if (ou && /^c[oó]rners en total$/.test(lo)) { ouAdd('corners'); continue; }
+    if (ou && /^(tarjetas en total|total de tarjetas)$/.test(lo)) { ouAdd('cards'); continue; }
+    if (/^h[aá]ndicap asi[aá]tico$/.test(lo)) {
+      const sides = outs.map(o => fbSide(match, o.name, 0.8));
+      let any = false;
+      for (const oa of outs.filter((x, i) => sides[i] === 'a')) {
+        const h = lineOf(oa);
+        const ob = outs.find((x, i) => sides[i] === 'b' && h != null && lineOf(x) === -h);
+        if (h != null && ob) { book.addStd('spread', period, h, BK, { a: oa.price, b: ob.price }, true); any = true; }
+      }
+      if (any) continue;
+    }
+    // Mercado propio de Betway: resultado exacto, hándicap a 3 formas, córners de un equipo…
+    const label = periodPre(period) + rest.charAt(0).toUpperCase() + rest.slice(1); // sin sentence(): bajaría los nombres de equipo
+    const per = players || PLAYER_FOOTBALL.test(rest) ? PLAYER_PERIOD : period || 50;
+    if (ou) {
+      for (const l of [...new Set(outs.map(o => Math.abs(lineOf(o))))]) {
+        const at = outs.filter(o => Math.abs(lineOf(o)) === l);
+        book.add({
+          key: `${imp.book}|${mk.title}|${l}`, group: label, period: per, line: l, main: true,
+          outcomes: at.map(o => ({ id: overOf(o) ? 'over' : 'under', label: `${overOf(o) ? 'Más' : 'Menos'} de ${l}` }))
+        }, BK, Object.fromEntries(at.map(o => [overOf(o) ? 'over' : 'under', o.price])));
+      }
+    } else {
+      book.add({
+        key: `${imp.book}|${mk.title}|${mk.line || ''}`, group: label, period: per, line: null, main: true,
+        outcomes: outs.map((o, i) => ({ id: String(i), label: o.hcap && !/^[OU]\s/.test(o.hcap) && o.hcap !== o.name ? `${o.name} ${o.hcap}` : o.name }))
+      }, BK, Object.fromEntries(outs.map((o, i) => [String(i), o.price])));
     }
   }
   return n;
@@ -304,6 +497,27 @@ function marketsInto(book, imp, match) {
     const lo = rest.toLowerCase();
     const outs = (mk.outcomes || []).filter(o => o.price > 1);
     if (!outs.length) continue;
+    // Baloncesto en Betway: escaleras de jugador ("Jugador anota 2 triples o más", "Player To Get 5+ Rebounds"), una
+    // selección por jugador. "N o más" es Más de N - 0,5: van a las mismas líneas que el Más/Menos de Winamax
+    const ladder = book.sport === 'basket' && !period && /^(?:jugador\s+\S+|player to get)\s+(\d+)\+?\s+(.+?)(?:\s+o\s+m[aá]s)?$/i.exec(rest);
+    const ladderStat = ladder ? basketStat(ladder[2]) : null;
+    if (ladder && ladderStat && outs.every(o => !side(o.name))) {
+      for (const o of outs) addPlayerLine(book, BK, ladderStat, o.name, Number(ladder[1]) - 0.5, o.price);
+      n++;
+      continue;
+    }
+    // Más/Menos de un jugador en Betway: "Bobby Portis Puntos + Rebotes", "Bam Adebayo Rebounds Plus Assists"
+    const propOf = book.sport === 'basket' && !period
+      && /^(.+?)\s+((?:puntos|rebotes|asistencias|triples|robos|tapones|p[eé]rdidas|points|rebounds|assists|three|steals|blocks|turnovers)\b.*)$/i.exec(rest);
+    const propStat = propOf && !mentions(propOf[1]) && !/total|mitad|cuarto|equipo|partido|margen|jugador/i.test(propOf[1]) ? basketStat(propOf[2]) : null;
+    if (propStat && outs.every(o => /^(m[aá]s|menos|over|under)/i.test(o.name))) {
+      for (const l of [...new Set(outs.map(lineOf).filter(v => v != null).map(Math.abs))]) {
+        const ov = outs.find(o => /^(m[aá]s|over)/i.test(o.name) && Math.abs(lineOf(o)) === l), un = outs.find(o => /^(menos|under)/i.test(o.name) && Math.abs(lineOf(o)) === l);
+        addPlayerLine(book, BK, propStat, propOf[1], l, ov?.price, un?.price);
+      }
+      n++;
+      continue;
+    }
     const sides = outs.map(o => side(o.name));
     const ou = outs.every(o => /^(m[aá]s|menos|over|under)/i.test(o.name));
     const overOf = o => /^(m[aá]s|over)/i.test(o.name);
@@ -351,10 +565,13 @@ function marketsInto(book, imp, match) {
 
 // Mete una importación (una casa, una página) en el acumulador; devuelve cuántos mercados ha leído
 function intoBook(book, match, imp) {
+  const football = book.sport === 'football';
   if (imp.book === 'winamax') {
     const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
-    return (PERIOD_SPORTS.includes(book.sport) ? winamaxBasketInto : winamaxInto)(book, match, imp.state, { e: { id: imp.matchId }, o });
+    const into = football ? winamaxFootballInto : PERIOD_SPORTS.includes(book.sport) ? winamaxBasketInto : winamaxInto;
+    return into(book, match, imp.state, { e: { id: imp.matchId }, o });
   }
+  if (football) return betwayFootballInto(book, imp, match);
   return sectionsInto(book, imp) + marketsInto(book, imp, match);
 }
 
@@ -384,7 +601,8 @@ async function afterImport(match, imp) {
   intoBook(book, match, imp);
   const ml = book.markets.get('moneyline|0||');
   const price = id => ml?.outcomes.find(x => x.id === id)?.prices[BOOK_LABEL[imp.book]];
-  if (price('a') && price('b')) await bridge.setMoneyline(imp.id, { a: price('a'), b: price('b') });
+  // En fútbol va también el empate (x)
+  if (price('a') && price('b')) await bridge.setMoneyline(imp.id, { a: price('a'), b: price('b'), ...(price('x') ? { x: price('x') } : {}) });
   const rows = [];
   for (const m of book.markets.values()) {
     for (const o of m.outcomes) {

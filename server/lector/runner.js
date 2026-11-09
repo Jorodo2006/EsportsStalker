@@ -213,12 +213,28 @@ const BETWAY_LISTS = {
   nba: 'usa/nba', wnba: 'usa/wnba', euroleague: 'international-club/euroleague', eurocup: 'international-club/eurocup'
 };
 
+// Fútbol por competición de la app: torneo de Winamax (su nombre; "LaLiga " lleva un espacio al final) y lista de Betway.
+// Hay ligas con el mismo nombre en otros países ("Serie A" de Brasil, "Bundesliga" de Austria): se miran los primeros que salen
+const FOOTBALL_TOURS = {
+  laliga: '^\\s*laliga\\s*$', segunda: '^segunda divisi[oó]n$', copa: '^copa del rey$', premier: '^premier league$',
+  seriea: '^serie a$', bundesliga: '^bundesliga$', ligue1: '^ligue 1', champions: '^champions league$', europa: '^europa league$',
+  conference: '^conference league$'
+};
+const FOOTBALL_LISTS = {
+  laliga: 'spain/la-liga', segunda: 'spain/la-liga-2', copa: 'spain/copa-del-rey', premier: 'england/premier-league',
+  seriea: 'italy/serie-a', bundesliga: 'germany/bundesliga', ligue1: 'france/ligue-1', champions: 'european-cups/uefa-champions-league',
+  europa: 'european-cups/uefa-europa-league', conference: 'european-cups/uefa-conference-league'
+};
+
 // Lee todas las pestañas de mercados de un partido de Betway (principales, jugadores, cuartos…)
 async function betwayEvent(page, job, base, say, max = 10) {
-  const groups = await until(page, () => {
+  const all = await until(page, () => {
     const ids = [...document.querySelectorAll('[data-navitemid]')].map(e => e.getAttribute('data-navitemid')).filter(Boolean);
     return ids.length ? [...new Set(ids)] : null;
   }, [], 15000) || [''];
+  // Pestañas que repiten lo de otras (en fútbol "Crea tu apuesta", "Tiempo completo" y "1er Tiempo")
+  const skip = cfgOf(job).skip;
+  const groups = skip ? all.filter(g => !skip.test(g)) : all;
   const hechos = [];
   for (const g of groups.slice(0, max)) {
     say('leyendo', `Leyendo ${g || 'mercados'}…`);
@@ -240,6 +256,12 @@ const SPORT_CFG = {
   tennis: {
     wm: 5, tours: job => (String(job.match.league || '').split(/[^A-Za-z]+/).sort((a, b) => b.length - a.length)[0] || 'atp|wta'),
     bw: () => null, bwCat: 'cat/tennis'
+  },
+  // Fútbol: la competición va en league con el id de la app ("laliga", "premier"…)
+  football: {
+    wm: 1, tours: job => FOOTBALL_TOURS[job.match.league] || '^\\s*laliga\\s*$|^premier league$|^champions league$',
+    bw: job => (FOOTBALL_LISTS[job.match.league] ? 'grp/soccer/' + FOOTBALL_LISTS[job.match.league] : null), bwCat: 'cat/soccer',
+    skip: /^(SGP|marketGroup\.fullTime|1st half)$/
   }
 };
 const cfgOf = job => SPORT_CFG[job.match.sport] || SPORT_CFG.basket;

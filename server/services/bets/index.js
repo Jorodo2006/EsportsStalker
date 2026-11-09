@@ -5,6 +5,7 @@ const { migrate, query } = require('../../shared/db');
 const env = require('../../shared/env');
 const store = require('./store');
 const auth = require('./auth');
+const settle = require('./settle');
 const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
@@ -50,10 +51,13 @@ const routes = [
   ['GET', '/api/bets', ({ req }) => store.listBets(who(req).id)],
   ['POST', '/api/bets', ({ req, body }) => store.saveBet(who(req).id, body || {})],
   ['DELETE', '/api/bets/:id', ({ req, params }) => store.deleteBet(who(req).id, params.id)],
-  ['POST', '/api/bets/import', ({ req, body }) => store.importBets(who(req).id, body?.list)]
+  ['POST', '/api/bets/import', ({ req, body }) => store.importBets(who(req).id, body?.list)],
+  // Comprobar ya los resultados (sin esperar a la pasada de cada 5 min). Pide sesión, como todo /api; devuelve cuántas cambiaron
+  ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))
   .then(() => auth.bootstrapAdmin())
   .then(() => start({ name: 'bets', port: Number(process.env.PORT) || 4003, routes, health: async () => (await query('SELECT 1'), true) }))
+  .then(() => settle.startSettler())
   .catch(e => { console.error(e); process.exit(1); });

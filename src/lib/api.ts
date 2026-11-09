@@ -65,6 +65,7 @@ function pickFile(accept: string): Promise<File | null> {
 // ---------- Avisos en vivo (SSE): cuotas nuevas y progreso de los trabajos ----------
 const onAuto = new Set<(job: AutoJob) => void>();
 const onImported = new Set<() => void>();
+const onSettled = new Set<() => void>();
 const onStatus = new Set<(up: boolean) => void>();
 let source: EventSource | null = null;
 let connected = false;
@@ -83,6 +84,7 @@ function connect() {
       const ev = JSON.parse(e.data);
       if (ev.type === 'odds:imported') onImported.forEach(cb => cb());
       else if (ev.type === 'odds:auto') onAuto.forEach(cb => cb(ev.data));
+      else if (ev.type === 'bets:settled') onSettled.forEach(cb => cb());
     } catch { /* un aviso mal formado no debe romper la conexión */ }
   };
   // Con un 502 del proxy el navegador no reintenta por sí mismo: hay que volver a conectar a mano
@@ -109,6 +111,7 @@ export const api: Api = {
     list: () => get('/api/bets'),
     save: b => call('POST', '/api/bets', b),
     delete: id => call('DELETE', `/api/bets/${part(id)}`),
+    settle: () => call('POST', '/api/bets/settle', {}),
     export: async () => {
       const name = `apuestas-${new Date().toISOString().slice(0, 10)}.csv`;
       download(name, toCsv(await get('/api/bets')));
@@ -150,6 +153,9 @@ export const api: Api = {
     days: (from, n) => get('/api/football/days', { from, n }),
     live: () => get('/api/football/live'),
     match: id => get('/api/football/match', { id }),
+    playerStats: (match, team, player) => get('/api/football/player-stats', { match, team, player }),
+    photo: (id, name, team) => get('/api/football/photo', { id, name, team }),
+    photos: players => call('POST', '/api/football/photos', { players }),
     standings: league => get(`/api/football/standings/${part(league)}`)
   },
   tennis: {
@@ -177,6 +183,7 @@ export const api: Api = {
     teamLogs: (league, t) => get(`/api/basket/team-logs/${part(league)}/${part(t)}`),
     injuries: () => get('/api/basket/injuries'),
     boxscore: id => get(`/api/basket/boxscore/${part(id)}`),
+    playerGame: (gameId, playerId) => get(`/api/basket/player-game/${part(gameId)}/${part(playerId)}`),
     search: q => get('/api/basket/search', { q }),
     gamelog: (league, id, t) => get(`/api/basket/gamelog/${part(league)}/${part(id)}`, { team: t })
   },
@@ -190,6 +197,7 @@ export const api: Api = {
     }
   },
   onOddsImported: cb => listen(onImported, cb),
+  onBetsSettled: cb => listen(onSettled, cb),
   backend: { status: () => get('/api/health') },
   onBackendStatus: cb => listen(onStatus, cb),
   openExternal: async url => { if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener'); }

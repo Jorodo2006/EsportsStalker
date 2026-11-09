@@ -167,7 +167,8 @@ async function boxscore(lg, gid) {
     min: Math.round((s.timePlayed || 0) / 6) / 10, pts: s.points || 0, reb: s.totalRebounds || 0, ast: s.assistances || 0,
     stl: s.steals || 0, blk: s.blocksFavour || 0, tov: s.turnovers || 0,
     fg: shoot((s.fieldGoalsMade2 || 0) + (s.fieldGoalsMade3 || 0), (s.fieldGoalsAttempted2 || 0) + (s.fieldGoalsAttempted3 || 0)),
-    fg3: shoot(s.fieldGoalsMade3, s.fieldGoalsAttempted3), ft: shoot(s.freeThrowsMade, s.freeThrowsAttempted), pm: s.plusMinus != null ? String(s.plusMinus) : ''
+    fg3: shoot(s.fieldGoalsMade3, s.fieldGoalsAttempted3), ft: shoot(s.freeThrowsMade, s.freeThrowsAttempted), pm: s.plusMinus != null ? String(s.plusMinus) : '',
+    oreb: s.offensiveRebounds || 0, dreb: s.defensiveRebounds || 0, pf: s.foulsCommited ?? s.foulsCommitted ?? 0
   });
   const sum = list => {
     const t = { timePlayed: 0, points: 0, totalRebounds: 0, assistances: 0, steals: 0, blocksFavour: 0, turnovers: 0, fieldGoalsMade2: 0, fieldGoalsAttempted2: 0, fieldGoalsMade3: 0, fieldGoalsAttempted3: 0, freeThrowsMade: 0, freeThrowsAttempted: 0 };

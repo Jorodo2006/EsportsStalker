@@ -135,7 +135,8 @@ async function boxscore(lg, eventId) {
     const row = arr => ({
       min: toNum(val(arr, 'MIN')), pts: toNum(val(arr, 'PTS')), reb: toNum(val(arr, 'REB')), ast: toNum(val(arr, 'AST')),
       stl: toNum(val(arr, 'STL')), blk: toNum(val(arr, 'BLK')), tov: toNum(val(arr, 'TO')),
-      fg: val(arr, 'FG') || '', fg3: val(arr, '3PT') || '', ft: val(arr, 'FT') || '', pm: val(arr, '+/-') || ''
+      fg: val(arr, 'FG') || '', fg3: val(arr, '3PT') || '', ft: val(arr, 'FT') || '', pm: val(arr, '+/-') || '',
+      oreb: toNum(val(arr, 'OREB')), dreb: toNum(val(arr, 'DREB')), pf: toNum(val(arr, 'PF'))
     });
     const c = comps.find(x => x.team?.id === t.team?.id) || {};
     return {
@@ -154,6 +155,57 @@ async function boxscore(lg, eventId) {
 }
 
 module.exports.boxscore = boxscore;
+
+// El partido de un jugador por cuartos y sus tiros, de las jugadas de ESPN (la misma ficha que el boxscore, ya en caché).
+// En cada jugada el primer participante es quien la hace y el segundo quien asiste, roba o tapona ("X blocks Y's layup",
+// "X lost ball turnover (Y steals)"). Los tiros traen coordenadas en pies desde el aro (x de 0 a 50 a lo ancho, con el
+// aro en 25; y hacia el medio campo); los tiros libres traen basura y no van al mapa
+async function playerGame(lg, eventId, playerId) {
+  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 30e3);
+  const plays = j.plays || [];
+  if (!plays.length) return { available: false, periods: [], byPeriod: {}, shots: [] };
+  const pid = String(playerId);
+  const blank = () => ({ pts: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0 });
+  const by = {};
+  const at = per => (by[per] ??= blank());
+  const shots = [];
+  const periods = new Set();
+  for (const p of plays) {
+    const per = p.period?.number || 0;
+    if (per) periods.add(per);
+    const ids = (p.participants || []).map(x => String(x.athlete?.id || ''));
+    const type = p.type?.text || '', text = p.text || '';
+    const me = ids[0] === pid, second = ids[1] === pid;
+    if (!me && !second) continue;
+    if (p.shootingPlay) {
+      const ft = /free throw/i.test(type);
+      if (me && ft) { const s = at(per); s.fta++; if (p.scoringPlay) { s.ftm++; s.pts += p.scoreValue || 1; } }
+      else if (me) {
+        const s = at(per), three = p.pointsAttempted === 3;
+        s.fga++; if (three) s.tpa++;
+        if (p.scoringPlay) { s.fgm++; if (three) s.tpm++; s.pts += p.scoreValue || (three ? 3 : 2); }
+        const c = p.coordinate;
+        if (c && Math.abs(c.x) <= 60 && Math.abs(c.y) <= 100) {
+          shots.push({ period: per, clock: p.clock?.displayValue || '', x: c.x - 25, y: c.y, made: !!p.scoringPlay, value: three ? 3 : 2, text });
+        }
+      }
+      if (second && !ft && p.scoringPlay) at(per).ast++;
+      if (second && !p.scoringPlay && /block/i.test(text)) at(per).blk++;
+      continue;
+    }
+    if (me && /offensive rebound/i.test(type)) at(per).oreb++;
+    else if (me && /defensive rebound/i.test(type)) at(per).dreb++;
+    else if (/turnover/i.test(type)) { if (me) at(per).tov++; if (second && /steal/i.test(text)) at(per).stl++; }
+    else if (me && /foul/i.test(type) && !/technical/i.test(type)) at(per).pf++;
+  }
+  // 0: todo el partido
+  const total = blank();
+  for (const s of Object.values(by)) for (const k of Object.keys(total)) total[k] += s[k];
+  by[0] = total;
+  return { available: true, periods: [...periods].sort((a, b) => a - b), byPeriod: by, shots };
+}
+
+module.exports.playerGame = playerGame;
 
 // ---------- Clasificación y ficha de equipo ----------
 const CONF = { 'Eastern Conference': 'Conferencia Este', 'Western Conference': 'Conferencia Oeste' };

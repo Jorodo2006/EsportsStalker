@@ -1,4 +1,4 @@
-// Cuotas de un partido de baloncesto o de tenis (Winamax y Betway, leídas por el lector de Docker): estado de cada casa,
+// Cuotas de un partido de baloncesto, tenis o fútbol (Winamax y Betway, leídas por el lector de Docker): estado de cada casa,
 // botón para leerlas ya, y los mercados por periodo con la mejor cuota marcada. En hándicaps y totales se enseñan
 // primero las líneas más igualadas, que son las que se suelen apostar.
 import { useEffect, useMemo, useState } from 'react';
@@ -61,8 +61,12 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   })), [m.a.name, m.b.name, target.id, target.sport, qc]);
   const running = !!job && !job.done;
   const books = data?.books.length ? data.books : ['Winamax', 'Betway'];
-  const pick = (market: string, sel: string, bk: string, price: number) =>
-    addToSlip({ sport: target.sport, league: target.league, event: target.event, market, selection: sel, bookmaker: bk, odds: price, status: 'pending' });
+  // Con su ref (partido, clave del mercado y selección): el servidor la resolverá sola cuando acabe el partido
+  const pick = (market: string, sel: string, bk: string, price: number, key: string, out: string) =>
+    addToSlip({
+      sport: target.sport, league: target.league, event: target.event, market, selection: sel, bookmaker: bk, odds: price, status: 'pending',
+      ref: { sport: target.sport, match: target.id, key, out, ...(target.match.start ? { start: target.match.start } : {}) }
+    });
 
   const groups = useMemo(() => {
     const out = new Map<string, MarketLine[]>();
@@ -116,7 +120,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
 
 // Una tarjeta de mercado: filas de selecciones y una columna por casa. Clic: al cupón
 function OddsCard({ group, lines, books, onPick }: {
-  group: string; lines: MarketLine[]; books: string[]; onPick: (market: string, sel: string, bk: string, price: number) => void;
+  group: string; lines: MarketLine[]; books: string[]; onPick: (market: string, sel: string, bk: string, price: number, key: string, out: string) => void;
 }) {
   const [all, setAll] = useState(false);
   // Líneas más igualadas primero (la principal de la casa suele ser la de menos diferencia entre lados)
@@ -124,7 +128,7 @@ function OddsCard({ group, lines, books, onPick }: {
     const ps = l.outcomes.map(o => Math.max(0, ...Object.values(o.prices)));
     return ps.length === 2 && ps[0] && ps[1] ? Math.abs(ps[0] - ps[1]) : 9;
   };
-  const many = ['spread', 'total', 'team_total'].includes(typeOf(lines[0])) && lines.length > 3;
+  const many = ['spread', 'total', 'team_total', 'corners', 'cards'].includes(typeOf(lines[0])) && lines.length > 3;
   const sorted = many ? lines.slice().sort((x, y) => gap(x) - gap(y)) : lines;
   const shown = all || !many ? (many ? sorted.slice().sort((x, y) => (x.line ?? 0) - (y.line ?? 0)) : sorted) : sorted.slice(0, 3).sort((x, y) => (x.line ?? 0) - (y.line ?? 0));
   return (
@@ -145,7 +149,7 @@ function OddsCard({ group, lines, books, onPick }: {
               {books.map(bk => {
                 const p = o.prices[bk];
                 return (
-                  <button key={bk} disabled={!p} onClick={() => p && onPick(group, o.label, bk, p)}
+                  <button key={bk} disabled={!p} onClick={() => p && onPick(group, o.label, bk, p, l.key, o.id)}
                     title={p ? `${bk}: ${o.label}. Clic para añadirla al cupón (otra vez para quitarla)` : undefined}
                     className={cn(oddBtn(!!p && p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1)), 'h-8 w-[72px] text-[13px]', !p && 'bg-transparent text-zinc-700 hover:bg-transparent')}>
                     {p ? odd(p) : '–'}

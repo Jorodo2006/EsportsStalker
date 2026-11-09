@@ -150,11 +150,12 @@ export interface RowTeam { name: string; short?: string; logo?: string; score?: 
 const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.name.replace(/\s*\(\d+\)$/, '').split(' ').pop() || t.name);
 
 // Tarjeta de partido: estado y hora arriba, los dos equipos con su marcador y, si se piden, las cuotas de ganador en dos
-// fichas (la del favorito teñida del acento). featured: más grande, para "En directo", con la competición en la cabecera.
+// fichas (la del favorito teñida del acento); en fútbol, tres, con el empate (x) en medio.
+// featured: más grande, para "En directo", con la competición en la cabecera.
 // En tenis en juego, tras los sets van los juegos del set y los puntos del juego.
 // items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
 export function MatchCard({ state, time, status, a, b, odds, active, onClick, tag, competition, featured }: {
-  state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number } | null;
+  state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number; x?: number } | null;
   active?: boolean; onClick: () => void; tag?: string; competition?: string; featured?: boolean;
 }) {
   const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
@@ -169,10 +170,10 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
     </div>
   );
   // Se resalta el favorito (la cuota más baja), como antes
-  const best = odds ? Math.min(odds.a || 99, odds.b || 99) : 0;
-  const oddChip = (o: number, t: RowTeam) => (
-    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 items-center justify-between gap-2 px-3 text-sm', !o && 'bg-zinc-900 text-zinc-600')}>
-      <span className="min-w-0 truncate text-xs font-medium opacity-70">{oddsTag(t)}</span>
+  const best = odds ? Math.min(odds.a || 99, odds.b || 99, odds.x || 99) : 0;
+  const oddChip = (o: number, tag: string) => (
+    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between gap-2 px-3 text-sm', !o && 'bg-zinc-900 text-zinc-600')}>
+      <span className="min-w-0 truncate text-xs font-medium opacity-70">{tag}</span>
       <span>{o ? odd(o) : '–'}</span>
     </span>
   );
@@ -191,7 +192,9 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
         {tag && <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">{tag}</span>}
       </div>
       <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
-      {odds && <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, a)}{oddChip(odds.b, b)}</div>}
+      {odds && (odds.x
+        ? <div className="mt-auto grid grid-cols-3 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.x, 'X')}{oddChip(odds.b, oddsTag(b))}</div>
+        : <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.b, oddsTag(b))}</div>)}
     </button>
   );
 }

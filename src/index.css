@@ -103,5 +103,14 @@ input[type=number]::-webkit-inner-spin-button { opacity: .4; }
 /* Etiqueta pequeña (cabeceras de tabla, rótulos de cifras): en minúsculas normales, sin espaciar */
 .label-data { font-size: 12px; line-height: 16px; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* Mapas de tiros: cada tiro entra con un retraso (style animationDelay), la línea se dibuja y luego aparece la marca */
+@keyframes shot-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes shot-mark { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.shot-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: shot-line .5s ease-out forwards; }
+.shot-mark { opacity: 0; transform-box: fill-box; transform-origin: center; animation: shot-mark .35s cubic-bezier(.2, .9, .3, 1.3) forwards; }
+.bar-grow { transform-origin: left; animation: bar-grow .6s ease-out both; }
+/* Sin animaciones, todo a la vista desde el principio */
+@media (prefers-reduced-motion: reduce) { .shot-mark { opacity: 1; } .shot-line { stroke-dashoffset: 0; } }
 /* Gráficas (Recharts): cifras de los ejes con números tabulares */
 .recharts-cartesian-axis-tick-value, .recharts-tooltip-wrapper { font-variant-numeric: tabular-nums; }

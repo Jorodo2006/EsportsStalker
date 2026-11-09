@@ -82,6 +82,31 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
   - Cada selección se marca como ganada, perdida, nula o pendiente desde ahí.
   - Las combinadas no tienen los botones rápidos de ganada/perdida.
 
+## Resolución automática (`server/services/bets/settle.js`)
+
+Las apuestas y selecciones que saben a qué partido y mercado pertenecen (`ref`, ver `10-base-de-datos.md`) se resuelven
+solas con el resultado del partido.
+
+- **De dónde sale `ref`**: al pulsar una cuota del comparador (`SportOdds`, cualquier deporte) va la clave de su fila;
+  el escáner de líneas, el analizador y las recomendaciones de jugador de baloncesto ponen `player|<estadística>|<jugador>|<línea>`.
+  El cupón lo guarda en cada simple y en cada selección de la combinada; al editar la apuesta se conserva.
+- **Apuestas sin `ref`** (las de antes o las de recomendaciones de equipo): si son de baloncesto y llevan los textos
+  que pone la app ("CHA @ BKN" + "Total de puntos" + "Más de 212.5", "Asistencias · Naji Marshall" + "Más de 2.5",
+  "Ganador", "Hándicap", "Puntos de X", con periodo) se reconocen por el texto (`guessBasket`, `ref.guessed`).
+- **Cuándo**: cada 5 minutos, o al pulsar *Comprobar resultados* en Mis apuestas (`POST /api/bets/settle`). Cada
+  partido se pide una vez por pasada, al servicio de su deporte por su API (regla 6).
+- **Qué sabe resolver**: ganador (1X2 en fútbol), hándicap, totales y puntos/goles/juegos de cada uno, del partido y por
+  periodo (mitades y cuartos en baloncesto, 1.ª mitad en fútbol, sets en tenis); doble oportunidad, empate no válido,
+  ambos marcan, córners y tarjetas en fútbol; líneas de jugador de baloncesto (nula si no jugó).
+- **Lo que deja para hacer a mano**: LoL, mercados propios de cada casa (resultado exacto, goleadores…), líneas de cuarto
+  (0,25 / 0,75), partidos de tenis con retirada o W.O., partidos de fútbol con prórroga, un ganador de cuarto empatado,
+  y un jugador que no encuentra en el boxscore. Mejor no resolver que resolver mal.
+- **Al resolver**: la selección (o la simple) pasa a ganada/perdida/nula y guarda en `ref.settled` qué pasó ("CHA 104-114
+  BKN: 218 puntos"); la combinada se recalcula con `normalizeCombo`, como al editarla. Sólo toca lo que está pendiente:
+  lo marcado a mano no se cambia. Avisa con `bets:settled` (sin datos de nadie) y la app recarga la lista.
+- En el historial, cada apuesta con `ref` lleva la marca *se resuelve sola* / *resuelta sola* (al pasar el ratón, el
+  resultado). Pruebas en `server/test/resolver.test.js`.
+
 ## Importar y exportar
 
 - **JSON**: el array de apuestas tal cual.
