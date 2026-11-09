@@ -5,12 +5,14 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, Plus } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
-import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam } from '@/lib/types';
+import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam, MatchOdds } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
+import { BasketFlow } from '@/components/BasketFlow';
+import { TrendsTable, basketMarkets, type TrendGame } from '@/components/Trends';
 import { BasketDayPicks, BasketPicksBoard } from '@/components/BasketPicks';
 import { GamePoints } from '@/components/BasketPoints';
 import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
@@ -141,7 +143,7 @@ function DayBand({ onOpen, onAll }: { onOpen: (p: BasketPick) => void; onAll: ()
 // El día de la tira va al centro: la semana que se pide empieza 3 días antes
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
-type Tab = 'stats' | 'odds' | 'picks' | 'points' | 'lines' | 'teams' | 'rosters' | 'value';
+type Tab = 'stats' | 'odds' | 'picks' | 'points' | 'lines' | 'h2h' | 'teams' | 'rosters' | 'value';
 
 // Ficha del partido (como la de LoL): estadísticas en juego o terminado, recomendaciones y cuotas antes de empezar.
 // from: la recomendación con la que se abrió, para ir directo a su análisis
@@ -177,13 +179,14 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
           ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
           ['points', 'Puntos'],
           ...(st === 'pre' ? [['lines', 'Líneas']] as [Tab, string][] : []),
-          ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
+          ['h2h', 'H2H'], ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
       {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
         : tab === 'picks' ? <BasketPicksBoard games={[game]} injuries={injuries} onOpen={openPick} onOdds={() => setTab('odds')} />
         : tab === 'points' ? <GamePoints key={teamPick?.id} game={game} odds={odds.data} initial={teamPick?.period && teamPick.pointKind ? { period: teamPick.period, kind: teamPick.pointKind, line: teamPick.line } : undefined} />
           : tab === 'lines' ? <BasketLineScanner games={[game]} injuries={injuries} onPick={p => { setPlayer(p); setTab('value'); }} />
+          : tab === 'h2h' ? <BasketTrends game={game} odds={odds.data} />
             : tab === 'teams' ? <TeamsCompare game={game} onTeam={setSheet} /> : tab === 'rosters'
         ? <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Roster game={game} side="away" injuries={injuries} current={player?.id} onPick={pick} />
@@ -243,6 +246,7 @@ function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: strin
     queryKey: ['basket', 'box', game.id], queryFn: () => window.api.basket.boxscore(game.id),
     refetchInterval: st === 'live' ? 20_000 : false, staleTime: st === 'post' ? 3600e3 : 15_000
   });
+  const themeOf = useTeamThemes(game.league);
   if (box.isLoading) return <Loading label="Cargando estadísticas…" />;
   if (box.error) return <ErrorBox error={box.error} />;
   const teams = ['away', 'home'].map(s => box.data!.teams.find(t => t.side === s)).filter(Boolean) as BoxTeam[];
@@ -250,6 +254,7 @@ function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: strin
   return (
     <div className="flex flex-col gap-5">
       {played && <Periods teams={teams} />}
+      {played && <BasketFlow game={game} colorA={themeOf(game.away.id)?.mark ?? '#a1a1aa'} colorB={themeOf(game.home.id)?.mark ?? '#f59e0b'} />}
       {played && <Compare teams={teams} />}
       {!played && <Empty>El partido aún no ha empezado: las estadísticas salen en cuanto arranque. Mientras, mira las cuotas o el valor de los jugadores.</Empty>}
       {teams.filter(t => t.players.length).map(t => <BoxTable key={t.side} team={t} game={game} onPick={p => onPick(p, t.id)} />)}
@@ -310,6 +315,49 @@ function Compare({ teams }: { teams: BoxTeam[] }) {
         })}
       </div>
     </div>
+  );
+}
+
+// ---------- H2H y "cuántas veces se cumple" ----------
+// Con los partidos de la liga de esta temporada y la anterior (los mismos que usan los puntos de los equipos): los cara a cara
+// y los últimos 10 de cada uno, contra las líneas que dan ahora las casas. A = visitante, B = local, como en la app
+function BasketTrends({ game, odds }: { game: BasketGame; odds?: MatchOdds }) {
+  const q = useQuery({ queryKey: ['basket', 'leagueGames', game.league], queryFn: () => window.api.basket.leagueGames(game.league), staleTime: 5 * 60e3, retry: false });
+  if (q.isLoading) return <Loading label="Cargando los partidos de la liga…" />;
+  if (q.error) return <ErrorBox error={q.error} />;
+  const lg = q.data!;
+  const A = game.away, B = game.home;
+  const before = new Date(game.date).getTime();
+  const done = lg.games.filter(g => new Date(g.date).getTime() < before - 3600e3 && Number.isFinite(g.home.pts) && Number.isFinite(g.away.pts))
+    .sort((x, y) => y.date.localeCompare(x.date));
+  const abbr = (id: string) => lg.teams[id]?.abbr || id;
+  const half = (q: number[] | undefined) => (q && q.length >= 2 ? q[0] + q[1] : undefined);
+  // Desde el lado de un equipo: lo suyo y lo del rival
+  const sideOf = (g: typeof done[number], id: string) => (g.home.id === id ? [g.home, g.away] as const : [g.away, g.home] as const);
+  const lastOf = (id: string, mine: 'a' | 'b'): TrendGame[] => done.filter(g => g.home.id === id || g.away.id === id).slice(0, 10).map(g => {
+    const [us, them] = sideOf(g, id);
+    const t = { a: us.pts, b: them.pts, a1: half(us.q), b1: half(them.q) };
+    // En los de B, A es su rival: se dan la vuelta
+    const o = mine === 'a' ? t : { a: t.b, b: t.a, a1: t.b1, b1: t.a1 };
+    return { id: g.id, date: g.date, ...o, vs: `${g.home.id === id ? 'vs' : '@'} ${abbr(them.id)}` };
+  });
+  const h2h: TrendGame[] = done.filter(g => [g.home.id, g.away.id].includes(A.id) && [g.home.id, g.away.id].includes(B.id)).slice(0, 10).map(g => {
+    const [a, b] = [sideOf(g, A.id)[0], sideOf(g, B.id)[0]];
+    return { id: g.id, date: g.date, a: a.pts, b: b.pts, a1: half(a.q), b1: half(b.q), vs: g.home.id === A.id ? `en casa de ${A.abbr}` : `en casa de ${B.abbr}` };
+  });
+  const lastA = lastOf(A.id, 'a'), lastB = lastOf(B.id, 'b');
+  const markets = basketMarkets(odds, A.abbr, B.abbr, [...lastA, ...lastB]);
+  const date = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  return (
+    <TrendsTable A={A.abbr} B={B.abbr} logoA={A.logo} logoB={B.logo} h2h={h2h} lastA={lastA} lastB={lastB} markets={markets}
+      note={!odds?.markets.length ? 'Todavía no hay cuotas de este partido: las líneas son las habituales de los dos equipos.' : undefined}
+      list={g => <>
+        <span className="w-16 shrink-0 text-xs text-zinc-500 tnum">{date(g.date)}</span>
+        <span className="min-w-0 flex-1 truncate font-medium tnum">
+          <span className={g.a > g.b ? 'text-zinc-50' : 'text-zinc-400'}>{A.abbr} {g.a}</span> - <span className={g.b > g.a ? 'text-zinc-50' : 'text-zinc-400'}>{g.b} {B.abbr}</span>
+        </span>
+        <span className="shrink-0 text-xs text-zinc-500">{g.vs} · {g.a + g.b} puntos</span>
+      </>} />
   );
 }
 

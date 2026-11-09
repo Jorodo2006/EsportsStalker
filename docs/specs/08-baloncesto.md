@@ -94,6 +94,15 @@ vuelven a pedir.
   (`GET /api/basket/player-game/:id/:jugador`, `playerGame` en `espn.js`: el primer participante de cada jugada es quien la
   hace y el segundo quien asiste, roba o tapona; coordenadas en pies desde el aro). Sólo NBA y WNBA: la Euroliga no da
   jugada a jugada y su ficha sale sin pista ni cuartos.
+- *Cómo fue el partido* (`BasketFlow`, en Estadísticas; `GET /api/basket/flow/:id`, `flow` en `espn.js`): la ventaja de
+  cada equipo en cada momento (visitante arriba, local abajo, cada uno en su color), con la mayor ventaja, los cambios de
+  líder, los empates y el mayor parcial de cada uno. Sale del marcador de cada jugada; en directo se refresca cada 30 s.
+  Sólo NBA y WNBA.
+- *H2H* (`BasketTrends` en `BasketMatches.tsx`, tabla común en `src/components/Trends.tsx`): para cada mercado con la
+  línea más igualada de las casas (ganador, total, hándicap, puntos de cada uno, total de la 1.ª mitad), cuántas veces se
+  ha cumplido en los cara a cara y en los últimos 10 de cada equipo, frente a la probabilidad sin margen. Usa los partidos
+  de la liga de esta temporada y la anterior (`league-games`, los mismos de los puntos). En los últimos de un equipo, el
+  otro lado del mercado es su rival de cada día. Sin cuotas, las líneas salen de lo habitual de los dos (mediana, a x,5).
 - *Cuotas* (`BasketOdds`): estado de cada casa, botón *Actualizar cuotas* y mercados por Partido / Jugadores /
   Mitades / Cuartos / Otros. En hándicaps y totales salen primero las tres líneas más igualadas. Clic: apuesta; clic
   derecho: combinada.

@@ -87,6 +87,12 @@ const routes = [
     if (!l.src.playerGame) return { available: false, periods: [], byPeriod: {}, shots: [] };
     return l.src.playerGame(l.id, rest.join(':'), params.player);
   }],
+  // Cómo fue el partido (ventaja en cada momento, parciales…). Sólo NBA y WNBA, como el jugada a jugada
+  ['GET', '/api/basket/flow/:id', ({ params }) => {
+    const [lg, ...rest] = String(params.id).split(':');
+    const l = league(lg);
+    return l.src.flow ? l.src.flow(l.id, rest.join(':')) : { available: false };
+  }],
   ['GET', '/api/basket/search', async ({ query: q }) => {
     const lists = await Promise.all(LEAGUES.filter(l => l.id !== 'wnba').map(l => l.src.search(l.id, q.q).catch(() => [])));
     return lists.flat().slice(0, 30);

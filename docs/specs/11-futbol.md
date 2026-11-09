@@ -78,6 +78,15 @@ El orden de la tabla es el de la lista de partidos. Para añadir una liga basta 
 - `src/views/FootballStandings.tsx`: la segunda sección de la app ("Clasificación" en vez de "Jugadores").
 - `src/components/football.tsx`: el balón del selector, `themeOf`, `esTime` y la tabla de clasificación.
 
+## H2H y "cuántas veces se cumple"
+
+Pestaña *H2H* de la ficha (`FootballTrends`, tabla común en `src/components/Trends.tsx`, la misma que en baloncesto):
+1X2, más de 1,5 / 2,5 / 3,5 goles, ambos marcan y si marca cada uno, con cuántas veces se ha cumplido en los cara a cara
+y en los últimos 10 de cada equipo (todas las competiciones) frente a la probabilidad sin margen de las casas. Los partidos
+de cada equipo salen de `GET /api/football/team-games/:equipo` (calendario de ESPN de todas las competiciones, esta
+temporada y la anterior). Los cara a cara, de la ficha (`headToHeadGames`) y, como a menudo viene vacía, también de esos
+partidos (los del local contra el visitante).
+
 ## Cuotas (Winamax y Betway)
 
 Como en baloncesto y tenis: las lee el lector de Docker, se comparan en la pestaña Cuotas (`SportOdds`) y van al cupón.

@@ -207,6 +207,51 @@ async function playerGame(lg, eventId, playerId) {
 
 module.exports.playerGame = playerGame;
 
+// Cómo fue el partido: el marcador tras cada canasta (de las jugadas de ESPN), en minutos jugados, más los cambios de líder,
+// los empates, la mayor ventaja de cada uno y su mayor parcial (puntos seguidos sin que anote el otro).
+// a = visitante, b = local, como en la app. Los cuartos duran 12 minutos en la NBA y 10 en la WNBA; las prórrogas, 5
+async function flow(lg, eventId) {
+  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 30e3);
+  const plays = j.plays || [];
+  if (!plays.length) return { available: false };
+  const len = lg === 'wnba' ? 10 : 12;
+  const startOf = per => (per <= 4 ? (per - 1) * len : 4 * len + (per - 5) * 5);
+  const lenOf = per => (per <= 4 ? len : 5);
+  // "11:24" o "45.3" (segundos del último minuto)
+  const left = s => { const m = /^(\d+):(\d+(?:\.\d+)?)$/.exec(s || ''); return m ? Number(m[1]) + Number(m[2]) / 60 : (Number(s) || 0) / 60; };
+  const points = [{ t: 0, a: 0, b: 0, per: 1 }];
+  let last = { a: 0, b: 0 }, maxPer = 1;
+  for (const p of plays) {
+    const per = p.period?.number || 1;
+    maxPer = Math.max(maxPer, per);
+    const a = Number(p.awayScore), b = Number(p.homeScore);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || (a === last.a && b === last.b)) continue;
+    const t = Math.round((startOf(per) + lenOf(per) - left(p.clock?.displayValue)) * 100) / 100;
+    points.push({ t, a, b, per });
+    last = { a, b };
+  }
+  // Cambios de líder, empates, mayor ventaja y mayor parcial de cada uno
+  let leadChanges = 0, ties = 0, leader = null;
+  const maxLead = { a: 0, b: 0 };
+  const best = { a: { pts: 0, per: 1 }, b: { pts: 0, per: 1 } };
+  let run = { side: null, pts: 0, per: 1 };
+  for (let i = 1; i < points.length; i++) {
+    const x = points[i], prev = points[i - 1];
+    const d = x.a - x.b;
+    if (d > 0) maxLead.a = Math.max(maxLead.a, d); else if (d < 0) maxLead.b = Math.max(maxLead.b, -d);
+    const now = d > 0 ? 'a' : d < 0 ? 'b' : null;
+    if (now === null && prev.a !== prev.b) ties++;
+    if (now && leader && now !== leader) leadChanges++;
+    if (now) leader = now;
+    const scorer = x.a > prev.a ? 'a' : 'b', got = scorer === 'a' ? x.a - prev.a : x.b - prev.b;
+    run = run.side === scorer ? { ...run, pts: run.pts + got } : { side: scorer, pts: got, per: x.per };
+    if (run.pts > best[scorer].pts) best[scorer] = { pts: run.pts, per: run.per };
+  }
+  return { available: true, periodLen: len, periods: maxPer, points, leadChanges, ties, maxLead, runs: best };
+}
+
+module.exports.flow = flow;
+
 // ---------- Clasificación y ficha de equipo ----------
 const CONF = { 'Eastern Conference': 'Conferencia Este', 'Western Conference': 'Conferencia Oeste' };
 const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };

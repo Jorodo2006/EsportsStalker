@@ -299,6 +299,14 @@ export interface BasketTeamLogs { currentSeason: number; players: (BasketRosterP
 export interface BasketPointSide { id: string; pts: number; q: number[] }
 export interface BasketPointGame { id: string; date: string; season: number; type: 'reg' | 'post'; home: BasketPointSide; away: BasketPointSide }
 export interface BasketLeagueGames { currentSeason: number; teams: Record<string, { abbr: string; name: string; logo: string }>; games: BasketPointGame[] }
+// Cómo fue un partido: el marcador tras cada canasta (t: minutos jugados; a: visitante, b: local), cambios de líder, empates,
+// mayor ventaja y mayor parcial de cada uno. available: false sin jugada a jugada (Euroliga)
+export interface BasketFlow {
+  available: boolean; periodLen?: number; periods?: number; points?: { t: number; a: number; b: number; per: number }[];
+  leadChanges?: number; ties?: number; maxLead?: { a: number; b: number }; runs?: { a: { pts: number; per: number }; b: { pts: number; per: number } };
+}
+// Un partido acabado de un equipo de fútbol, con sus goles primero
+export interface FootballTeamGame { id: string; date: string; home: boolean; gf: number; ga: number; opp: { id: string; name: string; logo: string }; league: string }
 // Estadísticas de un partido: por equipo, puntos por cuarto, jugadores y totales; series = enfrentamientos de la temporada
 // oreb/dreb: rebotes ofensivos y defensivos; pf: faltas personales
 export interface BoxLine { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg: string; fg3: string; ft: string; pm: string; oreb?: number; dreb?: number; pf?: number }
@@ -366,6 +374,8 @@ export interface Api {
     photo(id: string, name: string, team: string): Promise<{ url: string; from: string }>;
     // Las de una alineación entera: null en las que aún se están buscando (hay que volver a preguntar)
     photos(players: { id: string; name: string; team: string }[]): Promise<Record<string, { url: string; from: string } | null>>;
+    // Últimos partidos acabados de un equipo (todas las competiciones)
+    teamGames(teamId: string): Promise<FootballTeamGame[]>;
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
   };
   tennis: {
@@ -395,6 +405,7 @@ export interface Api {
     boxscore(gameId: string): Promise<BasketBox>;
     // El partido de un jugador por cuartos y sus tiros (sólo NBA y WNBA)
     playerGame(gameId: string, playerId: string): Promise<BasketPlayerGame>;
+    flow(gameId: string): Promise<BasketFlow>;
     search(q: string): Promise<BasketPlayerHit[]>;
     gamelog(league: BasketLeagueId, playerId: string, teamId?: string): Promise<BasketGamelog>;
   };

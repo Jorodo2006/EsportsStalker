@@ -291,6 +291,28 @@ async function standings(lgId) {
   })).filter(g => g.rows.length);
 }
 
+// Últimos partidos acabados de un equipo, de todas las competiciones (para "cuántas veces se cumple"): esta temporada y la
+// anterior (de ahí salen también los cara a cara cuando la ficha de ESPN no los trae). Del más reciente al más antiguo, con
+// sus goles primero
+async function teamGames(teamId) {
+  if (!/^\d+$/.test(String(teamId || ''))) throw fail('Equipo desconocido');
+  const url = season => `https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/${teamId}/schedule${season ? `?season=${season}` : ''}`;
+  const parse = j => (j.events || []).flatMap(e => {
+    const c = e.competitions?.[0];
+    if (c?.status?.type?.state !== 'post') return [];
+    const me = (c.competitors || []).find(x => String(x.team?.id) === String(teamId)), op = (c.competitors || []).find(x => x !== me);
+    const sc = x => num(x?.score?.value ?? x?.score?.displayValue ?? x?.score);
+    if (!me || !op || sc(me) == null || sc(op) == null) return [];
+    return [{ id: String(e.id), date: e.date, home: me.homeAway === 'home', gf: sc(me), ga: sc(op), opp: { id: String(op.team?.id || ''), name: op.team?.displayName || '', logo: op.team?.logos?.[0]?.href || op.team?.logo || '' }, league: e.league?.name || e.league?.slug || '' }];
+  });
+  const now = await getJSON(url(), 30 * 60e3);
+  let list = parse(now);
+  const y = Number(now.requestedSeason?.year || now.season?.year);
+  if (y) list = list.concat(parse(await getJSON(url(y - 1), 12 * 3600e3).catch(() => ({}))));
+  const seen = new Set();
+  return list.filter(g => !seen.has(g.id) && seen.add(g.id)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 80);
+}
+
 // Estadísticas de un jugador en un partido: la ficha (summary) sólo trae goles, tiros y tarjetas; la API "core" de ESPN, también
 // pública y gratuita, trae el resto (entradas, intercepciones, regates, duelos, pases, xG, paradas…). Se devuelven tal cual,
 // { nombre: valor }; la interfaz elige cuáles enseña. Un suplente que no jugó no tiene: ESPN responde 404
@@ -322,6 +344,7 @@ const routes = [
   ['GET', '/api/football/live', () => live()],
   ['GET', '/api/football/match', ({ query: q }) => detail(q.id)],
   ['GET', '/api/football/player-stats', ({ query: q }) => playerStats(q)],
+  ['GET', '/api/football/team-games/:team', ({ params }) => teamGames(params.team)],
   ['GET', '/api/football/photo', ({ query: q }) => {
     const name = String(q.name || '').trim();
     if (!name || name.length > 80 || !/^\d*$/.test(String(q.id || ''))) throw fail('Jugador desconocido');

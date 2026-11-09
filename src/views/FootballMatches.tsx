@@ -8,7 +8,8 @@ import { ArrowDown, ArrowLeft, ArrowUp, CalendarX, Plus } from 'lucide-react';
 import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import type { FootballDetail, FootballEvent, FootballLeagueId, FootballMatch, FootballPastGame, FootballShot, FootballTeam } from '@/lib/types';
-import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
+import { SportOdds, useMatchOdds, type OddsTarget } from '@/components/BasketOdds';
+import { TrendsTable, footballMarkets, type TrendGame } from '@/components/Trends';
 import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { FootballIcon, StandingsTable, esTime, themeOf } from '@/components/football';
 import { Button, Dialog, Empty, ErrorBox, Loading, TeamLogo, panelCls, seg, segWrap } from '@/components/ui';
@@ -119,7 +120,7 @@ export default function FootballMatches() {
 }
 
 // ---------- ficha del partido ----------
-type Tab = 'summary' | 'odds' | 'stats' | 'lineups' | 'form' | 'table';
+type Tab = 'summary' | 'odds' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
 
 function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMatch | null; onClose: () => void }) {
   const { openBet } = useApp();
@@ -145,7 +146,7 @@ function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMa
       <MatchHeader m={m} events={d?.timeline ?? m.incidents} attendance={d?.attendance ?? null}>
         <SheetTabs value={current} onChange={setTab} items={[
           ['summary', 'Resumen'], ...(st === 'post' || m.off ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
-          ['stats', 'Estadísticas'], ['lineups', 'Alineaciones'], ['form', 'Forma'],
+          ['stats', 'Estadísticas'], ['lineups', 'Alineaciones'], ['form', 'Forma'], ['h2h', 'H2H'],
           ...(m.league !== 'copa' ? [['table', 'Clasificación']] as [Tab, string][] : [])
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'football', league: m.leagueName, event: targetOfFootball(m).event })}><Plus size={14} />Apuesta</Button>} />
       </MatchHeader>
@@ -155,6 +156,7 @@ function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMa
           : current === 'stats' ? <div className="flex flex-col gap-3">{!!d.shots?.length && <MatchShotMap m={m} shots={d.shots} />}<Stats d={d} /></div>
             : current === 'lineups' ? <Lineups d={d} />
               : current === 'form' ? <Form d={d} />
+                : current === 'h2h' ? <FootballTrends d={d} />
                 : <Table m={m} />}
     </div>
   );
@@ -963,6 +965,47 @@ function Form({ d }: { d: FootballDetail }) {
         </Panel>
       )}
     </div>
+  );
+}
+
+// H2H y "cuántas veces se cumple": los cara a cara de la ficha de ESPN y los últimos 10 de cada uno (todas las competiciones),
+// contra las líneas que dan ahora las casas. A = local, B = visitante, como en la ficha
+function FootballTrends({ d }: { d: FootballDetail }) {
+  const { match: m } = d;
+  const qa = useQuery({ queryKey: ['football', 'teamGames', m.home.id], queryFn: () => window.api.football.teamGames(m.home.id), staleTime: 30 * 60e3, retry: false });
+  const qb = useQuery({ queryKey: ['football', 'teamGames', m.away.id], queryFn: () => window.api.football.teamGames(m.away.id), staleTime: 30 * 60e3, retry: false });
+  const odds = useMatchOdds(targetOfFootball(m));
+  if (qa.isLoading || qb.isLoading) return <Loading label="Cargando los últimos partidos de los dos…" />;
+  const ev = m.id.split(':')[1], before = new Date(m.date).getTime();
+  const last = (list: typeof qa.data, mine: 'a' | 'b'): TrendGame[] => (list ?? [])
+    .filter(g => g.id !== ev && new Date(g.date).getTime() < before).slice(0, 10)
+    .map(g => ({ id: g.id, date: g.date, ...(mine === 'a' ? { a: g.gf, b: g.ga } : { a: g.ga, b: g.gf }), vs: `${g.home ? 'vs' : '@'} ${g.opp.name}` }));
+  const lastA = last(qa.data, 'a'), lastB = last(qb.data, 'b');
+  // Cara a cara: los de la ficha de ESPN (el marcador va con los goles de su equipo primero: se da la vuelta si es el
+  // visitante) y, como la ficha a veces no los trae, también los de los partidos del local contra el visitante
+  const fromSheet: TrendGame[] = d.h2h.flatMap(g => {
+    const [x, y] = g.score.split('-').map(s => parseInt(s, 10));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+    const fromHome = !g.team || g.team === m.home.id;
+    return [{ id: g.id || g.date, date: g.date, a: fromHome ? x : y, b: fromHome ? y : x, vs: g.league }];
+  });
+  const fromGames: TrendGame[] = (qa.data ?? []).filter(g => g.opp.id === m.away.id && g.id !== ev && new Date(g.date).getTime() < before)
+    .map(g => ({ id: g.id, date: g.date, a: g.gf, b: g.ga, vs: g.league }));
+  const seen = new Set<string>();
+  const h2h = [...fromSheet, ...fromGames].filter(g => { const k = g.date.slice(0, 10); return !seen.has(k) && !!seen.add(k); })
+    .sort((x, y) => y.date.localeCompare(x.date)).slice(0, 10);
+  const date = (s: string) => new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  return (
+    <TrendsTable A={m.home.name} B={m.away.name} logoA={m.home.logo} logoB={m.away.logo} h2h={h2h} lastA={lastA} lastB={lastB}
+      markets={footballMarkets(odds.data, m.home.name, m.away.name)}
+      note={!odds.data?.markets.length ? 'Sin cuotas de este partido: la columna de la casa sale vacía.' : undefined}
+      list={g => <>
+        <span className="w-16 shrink-0 text-xs text-zinc-500 tnum">{date(g.date)}</span>
+        <span className="min-w-0 flex-1 truncate font-medium tnum">
+          <span className={g.a > g.b ? 'text-zinc-50' : 'text-zinc-400'}>{m.home.name} {g.a}</span> - <span className={g.b > g.a ? 'text-zinc-50' : 'text-zinc-400'}>{g.b} {m.away.name}</span>
+        </span>
+        <span className="hidden shrink-0 text-xs text-zinc-500 sm:block">{g.vs}</span>
+      </>} />
   );
 }
 

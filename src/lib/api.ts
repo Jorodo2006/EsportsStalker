@@ -156,6 +156,7 @@ export const api: Api = {
     playerStats: (match, team, player) => get('/api/football/player-stats', { match, team, player }),
     photo: (id, name, team) => get('/api/football/photo', { id, name, team }),
     photos: players => call('POST', '/api/football/photos', { players }),
+    teamGames: teamId => get(`/api/football/team-games/${part(teamId)}`),
     standings: league => get(`/api/football/standings/${part(league)}`)
   },
   tennis: {
@@ -184,6 +185,7 @@ export const api: Api = {
     injuries: () => get('/api/basket/injuries'),
     boxscore: id => get(`/api/basket/boxscore/${part(id)}`),
     playerGame: (gameId, playerId) => get(`/api/basket/player-game/${part(gameId)}/${part(playerId)}`),
+    flow: gameId => get(`/api/basket/flow/${part(gameId)}`),
     search: q => get('/api/basket/search', { q }),
     gamelog: (league, id, t) => get(`/api/basket/gamelog/${part(league)}/${part(id)}`, { team: t })
   },
