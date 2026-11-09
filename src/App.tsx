@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Dribbble, ServerCrash, Settings as Cog, Swords, Users, Wallet } from 'lucide-react';
+import { CalendarDays, Dribbble, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -20,6 +20,7 @@ import FootballMatches from '@/views/FootballMatches';
 import FootballStandings from '@/views/FootballStandings';
 import { FootballIcon } from '@/components/football';
 import BetsView from '@/views/BetsView';
+import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
@@ -28,6 +29,7 @@ import SettingsView from '@/views/SettingsView';
 //   - por debajo de lg: cabecera arriba, barra de navegación abajo y el cupón flotante.
 
 const NAV: { view: View; label: string; icon: typeof Users }[] = [
+  { view: 'today', label: 'Hoy', icon: Sun },
   { view: 'matches', label: 'Partidos', icon: CalendarDays },
   { view: 'players', label: 'Jugadores', icon: Users },
   { view: 'bets', label: 'Apuestas', icon: Wallet }
@@ -139,6 +141,7 @@ export default function App() {
           <div className="mx-auto flex max-w-[1680px] items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
             <div className="min-w-0 flex-1">
               <BackendBanner />
+              {view === 'today' && <TodayView />}
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : <FootballMatches />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : <FootballStandings />)}
               {view === 'bets' && <BetsView key={app} />}
@@ -153,7 +156,7 @@ export default function App() {
           </div>
         </main>
 
-        <nav className="grid shrink-0 grid-cols-3 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
           {NAV.map(({ view: v, label, icon: Icon }) => (
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>

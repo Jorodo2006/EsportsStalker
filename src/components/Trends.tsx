@@ -4,7 +4,7 @@
 // B es su rival de ese día (así "gana B" es "A perdió"); en los de B, A es su rival ("puntos de A" es "lo que encajó B").
 import type { ReactNode } from 'react';
 import { cn, pct } from '@/lib/format';
-import type { MatchOdds } from '@/lib/types';
+import type { BasketGame, BasketLeagueGames, FootballMatch, FootballPastGame, FootballTeamGame, MatchOdds } from '@/lib/types';
 import { TeamLogo } from './ui';
 import { Panel } from './viz';
 
@@ -83,6 +83,75 @@ export function footballMarkets(odds: MatchOdds | undefined, A: string, B: strin
     { id: 'sa', label: `Marca ${A}`, test: g => g.a > 0, prob: tt('a') },
     { id: 'sb', label: `Marca ${B}`, test: g => g.b > 0, prob: tt('b') }
   ];
+}
+
+// ---------- los partidos de cada deporte ----------
+export interface TrendData { h2h: TrendGame[]; lastA: TrendGame[]; lastB: TrendGame[] }
+
+// Baloncesto: con los partidos de la liga de esta temporada y la anterior. A = visitante, B = local, como en la app
+export function basketTrendData(game: BasketGame, lg: BasketLeagueGames): TrendData {
+  const A = game.away, B = game.home;
+  const before = new Date(game.date).getTime();
+  const done = lg.games.filter(g => new Date(g.date).getTime() < before - 3600e3 && Number.isFinite(g.home.pts) && Number.isFinite(g.away.pts))
+    .sort((x, y) => y.date.localeCompare(x.date));
+  const abbr = (id: string) => lg.teams[id]?.abbr || id;
+  const half = (q: number[] | undefined) => (q && q.length >= 2 ? q[0] + q[1] : undefined);
+  const sideOf = (g: typeof done[number], id: string) => (g.home.id === id ? [g.home, g.away] as const : [g.away, g.home] as const);
+  const lastOf = (id: string, mine: 'a' | 'b'): TrendGame[] => done.filter(g => g.home.id === id || g.away.id === id).slice(0, 10).map(g => {
+    const [us, them] = sideOf(g, id);
+    const t = { a: us.pts, b: them.pts, a1: half(us.q), b1: half(them.q) };
+    const o = mine === 'a' ? t : { a: t.b, b: t.a, a1: t.b1, b1: t.a1 }; // en los de B, A es su rival
+    return { id: g.id, date: g.date, ...o, vs: `${g.home.id === id ? 'vs' : '@'} ${abbr(them.id)}` };
+  });
+  const h2h = done.filter(g => [g.home.id, g.away.id].includes(A.id) && [g.home.id, g.away.id].includes(B.id)).slice(0, 10).map(g => {
+    const [a, b] = [sideOf(g, A.id)[0], sideOf(g, B.id)[0]];
+    return { id: g.id, date: g.date, a: a.pts, b: b.pts, a1: half(a.q), b1: half(b.q), vs: g.home.id === A.id ? `en casa de ${A.abbr}` : `en casa de ${B.abbr}` };
+  });
+  return { h2h, lastA: lastOf(A.id, 'a'), lastB: lastOf(B.id, 'b') };
+}
+
+// Fútbol: los últimos de cada uno (todas las competiciones) y los cara a cara, de la ficha (sheet) y de los partidos del
+// local contra el visitante (la ficha a menudo no los trae). A = local, B = visitante
+export function footballTrendData(m: FootballMatch, gamesA: FootballTeamGame[] = [], gamesB: FootballTeamGame[] = [], sheet: FootballPastGame[] = []): TrendData {
+  const ev = m.id.split(':')[1], before = new Date(m.date).getTime();
+  const last = (list: FootballTeamGame[], mine: 'a' | 'b'): TrendGame[] => list
+    .filter(g => g.id !== ev && new Date(g.date).getTime() < before).slice(0, 10)
+    .map(g => ({ id: g.id, date: g.date, ...(mine === 'a' ? { a: g.gf, b: g.ga } : { a: g.ga, b: g.gf }), vs: `${g.home ? 'vs' : '@'} ${g.opp.name}` }));
+  const fromSheet: TrendGame[] = sheet.flatMap(g => {
+    const [x, y] = g.score.split('-').map(s => parseInt(s, 10));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+    const fromHome = !g.team || g.team === m.home.id; // el marcador va con los goles de su equipo primero
+    return [{ id: g.id || g.date, date: g.date, a: fromHome ? x : y, b: fromHome ? y : x, vs: g.league }];
+  });
+  const fromGames: TrendGame[] = gamesA.filter(g => g.opp.id === m.away.id && g.id !== ev && new Date(g.date).getTime() < before)
+    .map(g => ({ id: g.id, date: g.date, a: g.gf, b: g.ga, vs: g.league }));
+  const seen = new Set<string>();
+  const h2h = [...fromSheet, ...fromGames].filter(g => { const k = g.date.slice(0, 10); return !seen.has(k) && !!seen.add(k); })
+    .sort((x, y) => y.date.localeCompare(x.date)).slice(0, 10);
+  return { h2h, lastA: last(gamesA, 'a'), lastB: last(gamesB, 'b') };
+}
+
+// ---------- rachas destacadas ----------
+// Las que se alejan de verdad de lo que dice la casa: 20 puntos o más por encima, con al menos 3 cara a cara o 6 de los
+// últimos de un equipo. score ordena (más diferencia y más partidos, primero)
+export interface Highlight { id: string; text: string; detail: string; prob: number; rate: number; score: number }
+export function highlights(markets: TrendMarket[], d: TrendData, A: string, B: string): Highlight[] {
+  const out: Highlight[] = [];
+  const sets: [TrendGame[], string, number][] = [[d.h2h, 'cara a cara', 3], [d.lastA, `últimos de ${A}`, 6], [d.lastB, `últimos de ${B}`, 6]];
+  for (const m of markets) {
+    if (m.prob == null) continue;
+    for (const [list, where, min] of sets) {
+      const res = list.map(m.test).filter((v): v is boolean => v != null);
+      if (res.length < min) continue;
+      const hit = res.filter(Boolean).length, rate = hit / res.length, diff = rate - m.prob;
+      if (diff < 0.2) continue;
+      out.push({ id: `${m.id}:${where}`, text: m.label, detail: `${hit} de ${res.length} en los ${where}`, prob: m.prob, rate, score: diff * Math.sqrt(res.length) });
+    }
+  }
+  // Del mismo mercado, sólo la más fuerte
+  const best = new Map<string, Highlight>();
+  for (const h of out.sort((x, y) => y.score - x.score)) { const k = h.id.split(':')[0]; if (!best.has(k)) best.set(k, h); }
+  return [...best.values()];
 }
 
 // ---------- la tabla ----------

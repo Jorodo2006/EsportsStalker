@@ -9,7 +9,7 @@ import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import type { FootballDetail, FootballEvent, FootballLeagueId, FootballMatch, FootballPastGame, FootballShot, FootballTeam } from '@/lib/types';
 import { SportOdds, useMatchOdds, type OddsTarget } from '@/components/BasketOdds';
-import { TrendsTable, footballMarkets, type TrendGame } from '@/components/Trends';
+import { TrendsTable, footballMarkets, footballTrendData } from '@/components/Trends';
 import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { FootballIcon, StandingsTable, esTime, themeOf } from '@/components/football';
 import { Button, Dialog, Empty, ErrorBox, Loading, TeamLogo, panelCls, seg, segWrap } from '@/components/ui';
@@ -976,24 +976,7 @@ function FootballTrends({ d }: { d: FootballDetail }) {
   const qb = useQuery({ queryKey: ['football', 'teamGames', m.away.id], queryFn: () => window.api.football.teamGames(m.away.id), staleTime: 30 * 60e3, retry: false });
   const odds = useMatchOdds(targetOfFootball(m));
   if (qa.isLoading || qb.isLoading) return <Loading label="Cargando los últimos partidos de los dos…" />;
-  const ev = m.id.split(':')[1], before = new Date(m.date).getTime();
-  const last = (list: typeof qa.data, mine: 'a' | 'b'): TrendGame[] => (list ?? [])
-    .filter(g => g.id !== ev && new Date(g.date).getTime() < before).slice(0, 10)
-    .map(g => ({ id: g.id, date: g.date, ...(mine === 'a' ? { a: g.gf, b: g.ga } : { a: g.ga, b: g.gf }), vs: `${g.home ? 'vs' : '@'} ${g.opp.name}` }));
-  const lastA = last(qa.data, 'a'), lastB = last(qb.data, 'b');
-  // Cara a cara: los de la ficha de ESPN (el marcador va con los goles de su equipo primero: se da la vuelta si es el
-  // visitante) y, como la ficha a veces no los trae, también los de los partidos del local contra el visitante
-  const fromSheet: TrendGame[] = d.h2h.flatMap(g => {
-    const [x, y] = g.score.split('-').map(s => parseInt(s, 10));
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
-    const fromHome = !g.team || g.team === m.home.id;
-    return [{ id: g.id || g.date, date: g.date, a: fromHome ? x : y, b: fromHome ? y : x, vs: g.league }];
-  });
-  const fromGames: TrendGame[] = (qa.data ?? []).filter(g => g.opp.id === m.away.id && g.id !== ev && new Date(g.date).getTime() < before)
-    .map(g => ({ id: g.id, date: g.date, a: g.gf, b: g.ga, vs: g.league }));
-  const seen = new Set<string>();
-  const h2h = [...fromSheet, ...fromGames].filter(g => { const k = g.date.slice(0, 10); return !seen.has(k) && !!seen.add(k); })
-    .sort((x, y) => y.date.localeCompare(x.date)).slice(0, 10);
+  const { h2h, lastA, lastB } = footballTrendData(m, qa.data, qb.data, d.h2h);
   const date = (s: string) => new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
   return (
     <TrendsTable A={m.home.name} B={m.away.name} logoA={m.home.logo} logoB={m.away.logo} h2h={h2h} lastA={lastA} lastB={lastB}

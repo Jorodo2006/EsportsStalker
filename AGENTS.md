@@ -126,6 +126,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
+- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cuatro deportes, sólo con
+  los partidos importantes y sin nada de dinero (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores
+  recomendaciones de baloncesto y tenis, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
+  y ronda (`footballScore`, `basketScore`, `tennisScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
+  mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
+  con `useFocus`.
 - Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.

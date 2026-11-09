@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 import { wallet } from './format';
 
-export type View = 'matches' | 'players' | 'bets' | 'settings';
+// today: la portada común a los cuatro deportes (src/views/TodayView.tsx)
+export type View = 'today' | 'matches' | 'players' | 'bets' | 'settings';
 // Cuatro apps en una: LoL, baloncesto, tenis y fútbol, cada una con sus partidos, sus jugadores y sus apuestas
 export type AppId = Sport;
 
@@ -46,7 +47,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
   const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' || a === 'football' ? a : 'lol'; } catch { return 'lol'; } });
-  const [view, setView] = useState<View>('matches');
+  const [view, setView] = useState<View>('today'); // se abre en Hoy
   const [viewParam, setViewParam] = useState<string>();
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);
   const [betDraft, setBetDraft] = useState<BetDraft | null>(null);

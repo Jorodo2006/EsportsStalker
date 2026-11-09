@@ -90,7 +90,7 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
   };
 }
 
-const usePickAdd = () => {
+export const usePickAdd = () => {
   const { addToSlip } = useApp();
   // Las de jugador llevan su línea (para resolverse solas); las de equipo las reconoce el servidor por el texto si puede
   return (p: BasketPick) => addToSlip({

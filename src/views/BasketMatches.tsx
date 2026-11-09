@@ -12,7 +12,7 @@ import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds'
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
 import { BasketFlow } from '@/components/BasketFlow';
-import { TrendsTable, basketMarkets, type TrendGame } from '@/components/Trends';
+import { TrendsTable, basketMarkets, basketTrendData } from '@/components/Trends';
 import { BasketDayPicks, BasketPicksBoard } from '@/components/BasketPicks';
 import { GamePoints } from '@/components/BasketPoints';
 import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
@@ -325,27 +325,8 @@ function BasketTrends({ game, odds }: { game: BasketGame; odds?: MatchOdds }) {
   const q = useQuery({ queryKey: ['basket', 'leagueGames', game.league], queryFn: () => window.api.basket.leagueGames(game.league), staleTime: 5 * 60e3, retry: false });
   if (q.isLoading) return <Loading label="Cargando los partidos de la liga…" />;
   if (q.error) return <ErrorBox error={q.error} />;
-  const lg = q.data!;
   const A = game.away, B = game.home;
-  const before = new Date(game.date).getTime();
-  const done = lg.games.filter(g => new Date(g.date).getTime() < before - 3600e3 && Number.isFinite(g.home.pts) && Number.isFinite(g.away.pts))
-    .sort((x, y) => y.date.localeCompare(x.date));
-  const abbr = (id: string) => lg.teams[id]?.abbr || id;
-  const half = (q: number[] | undefined) => (q && q.length >= 2 ? q[0] + q[1] : undefined);
-  // Desde el lado de un equipo: lo suyo y lo del rival
-  const sideOf = (g: typeof done[number], id: string) => (g.home.id === id ? [g.home, g.away] as const : [g.away, g.home] as const);
-  const lastOf = (id: string, mine: 'a' | 'b'): TrendGame[] => done.filter(g => g.home.id === id || g.away.id === id).slice(0, 10).map(g => {
-    const [us, them] = sideOf(g, id);
-    const t = { a: us.pts, b: them.pts, a1: half(us.q), b1: half(them.q) };
-    // En los de B, A es su rival: se dan la vuelta
-    const o = mine === 'a' ? t : { a: t.b, b: t.a, a1: t.b1, b1: t.a1 };
-    return { id: g.id, date: g.date, ...o, vs: `${g.home.id === id ? 'vs' : '@'} ${abbr(them.id)}` };
-  });
-  const h2h: TrendGame[] = done.filter(g => [g.home.id, g.away.id].includes(A.id) && [g.home.id, g.away.id].includes(B.id)).slice(0, 10).map(g => {
-    const [a, b] = [sideOf(g, A.id)[0], sideOf(g, B.id)[0]];
-    return { id: g.id, date: g.date, a: a.pts, b: b.pts, a1: half(a.q), b1: half(b.q), vs: g.home.id === A.id ? `en casa de ${A.abbr}` : `en casa de ${B.abbr}` };
-  });
-  const lastA = lastOf(A.id, 'a'), lastB = lastOf(B.id, 'b');
+  const { h2h, lastA, lastB } = basketTrendData(game, q.data!);
   const markets = basketMarkets(odds, A.abbr, B.abbr, [...lastA, ...lastB]);
   const date = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
   return (
