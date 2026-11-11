@@ -1,12 +1,12 @@
 // Manda al servidor las recomendaciones que se están viendo, para medir después si el modelo acierta (Mis apuestas →
-// Acierto del modelo), de partidos que no han empezado: de baloncesto, las de valor; de tenis, todas las que enseña (la
+// Acierto del modelo), de partidos que no han empezado: de baloncesto, las de valor; de tenis y fútbol, todas las que enseña (la
 // principal es "la más fiable", que puede no tener valor). No repite las que no han cambiado y
 // las junta en un envío cada pocos segundos: una jornada de baloncesto son cientos.
 import { BASKET_MARKETS } from './basket-model';
 import { POINT_PERIODS } from './basket-teams';
 import type { BasketPick } from './basket-picks';
 import { alert, firstTime } from './notify';
-import type { PredictionIn, TennisPick } from './types';
+import type { FootballPick, PredictionIn, TennisPick } from './types';
 
 const sent = new Map<string, string>();
 let queue: PredictionIn[] = [];
@@ -67,6 +67,17 @@ export function tennisPredictions(m: { id: string; date: string; tournament?: st
     return {
       sport: 'tennis', match: m.id, start: m.date, key, out, group: x.market, title: x.title, event: `${m.a.name} - ${m.b.name}`,
       league: m.tournament ?? '', book: x.book, price: x.price, p: x.p, pModel: x.pModel, pMarket: x.pMarket, ev: x.ev, rel: x.rel.score
+    };
+  }).filter(x => x.key && x.out && KNOWN.test(x.key));
+}
+
+// Fútbol: igual que el tenis (el mismo formato de id); el local es el primero
+export function footballPredictions(m: { id: string; date: string; leagueName: string; home: { name: string }; away: { name: string } }, picks: (FootballPick | null | undefined)[]): PredictionIn[] {
+  return picks.filter((x): x is FootballPick => !!x).map((x): PredictionIn => {
+    const [key, out] = x.id.split('#');
+    return {
+      sport: 'football', match: m.id, start: m.date, key, out, group: x.market, title: x.title, event: `${m.home.name} - ${m.away.name}`,
+      league: m.leagueName, book: x.book, price: x.price, p: x.p, pModel: x.pModel, pMarket: x.pMarket, ev: x.ev, rel: x.rel.score
     };
   }).filter(x => x.key && x.out && KNOWN.test(x.key));
 }

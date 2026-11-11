@@ -8,6 +8,7 @@ const { photoOf } = require('./photos');
 const { picksFor } = require('./picks');
 const { withPoints } = require('./points');
 const ls = require('./livescore');
+const { hits, queryOf } = require('../../shared/search');
 
 const TOURS = { atp: 'ATP', wta: 'WTA' };
 const site = t => `https://site.api.espn.com/apis/site/v2/sports/tennis/${t}`;
@@ -197,7 +198,29 @@ async function profile(tour, id) {
 // Mirar todo el día cuesta: dos pantallas seguidas no deben repetirlo
 const dayPicks = new Map();
 
+// Buscador: partidos de ayer a dentro de una semana (sin los Challenger, que salen aparte) y torneos de esos días
+async function search(raw) {
+  const q = queryOf(raw);
+  if (!q) return { matches: [], competitions: [] };
+  const t = madridDay(Date.now());
+  const list = await between(addDays(t, -1), addDays(t, 7));
+  const who = p => [p.name, p.short, ...(p.alt || [])];
+  const score = m => m.a.sets.map((x, i) => `${x}-${m.b.sets[i] ?? 0}`).join(' ') || null;
+  const matches = list.filter(m => hits(q, [...who(m.a), ...who(m.b)]) || hits(q, [m.tournament, m.city])).map(m => ({
+    sport: 'tennis', id: m.id, home: m.a.name, away: m.b.name, league: m.tournament, stage: m.round, date: m.date, state: m.state,
+    status: m.status, score: m.state === 'pre' ? null : score(m), team: hits(q, [...who(m.a), ...who(m.b)])
+  }));
+  const tours = new Map();
+  for (const m of list) if (!tours.has(m.tournament) && hits(q, [m.tournament, m.city])) tours.set(m.tournament, m);
+  const competitions = [...tours.values()].map(m => ({
+    sport: 'tennis', id: m.tournamentId || m.tournament, name: m.tournament, sub: [TOURS[m.tour], m.city].filter(Boolean).join(' · '),
+    next: list.filter(x => x.tournament === m.tournament && x.state !== 'post')[0]?.date || null
+  }));
+  return { matches, competitions };
+}
+
 const routes = [
+  ['GET', '/api/tennis/search', ({ query: q }) => search(q.q)],
   // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
   ['GET', '/api/tennis/stats/:tour/:id', async ({ params }) => {
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');

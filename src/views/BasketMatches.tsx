@@ -71,7 +71,7 @@ export default function BasketMatches() {
     ...byLeague.map(({ id, list }) => ({ id: sectionId(LEAGUE_NAME[id]), label: LEAGUE_NAME[id], count: list.length, live: 0 }))
   ]);
   const has = useCallback((id: string) => all.some(g => g.id === id), [all]);
-  useFocus(setOpenId, has);
+  useFocus(setOpenId, has, setDate);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el baloncesto hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
 

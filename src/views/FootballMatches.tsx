@@ -10,6 +10,7 @@ import { cn } from '@/lib/format';
 import type { FootballDetail, FootballEvent, FootballLeagueId, FootballMatch, FootballPastGame, FootballShot, FootballTeam } from '@/lib/types';
 import { SportOdds, useMatchOdds, type OddsTarget } from '@/components/BasketOdds';
 import { TrendsTable, footballMarkets, footballTrendData } from '@/components/Trends';
+import { FootballDayPicks, FootballPicksPanel } from '@/components/FootballPicks';
 import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { FootballIcon, StandingsTable, esTime, themeOf } from '@/components/football';
 import { Button, Dialog, Empty, ErrorBox, Loading, TeamLogo, panelCls, seg, segWrap } from '@/components/ui';
@@ -74,8 +75,8 @@ export default function FootballMatches() {
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(([, list]) => ({ id: sectionId(list[0].leagueName), label: list[0].leagueName, count: list.length, live: 0 }))
   ]);
-  const has = useCallback((id: string) => /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa):\d+$/.test(id), []);
-  useFocus(setOpenId, has);
+  const has = useCallback((id: string) => /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa|nations|amistosos|wchampions|ligaf|wsl):\d+$/.test(id), []);
+  useFocus(setOpenId, has, setDate);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el fútbol hay que volver a lanzar <code>npm run backend</code> y recargar la página.</ErrorBox>;
   // La ficha se carga por su id: también abre los partidos que llegan desde la columna de directo aunque sean de otro día
@@ -101,6 +102,7 @@ export default function FootballMatches() {
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); saveFlag('football-odds', v); }} label="Cuotas" />
       </StateFilterBar>
+      <FootballDayPicks date={date} onOpen={setOpenId} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
         : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de las ligas que sigue la app. Prueba otro día de la tira.</Empty>
           : <>
@@ -120,7 +122,7 @@ export default function FootballMatches() {
 }
 
 // ---------- ficha del partido ----------
-type Tab = 'summary' | 'odds' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
+type Tab = 'summary' | 'picks' | 'odds' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
 
 function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMatch | null; onClose: () => void }) {
   const { openBet } = useApp();
@@ -137,20 +139,22 @@ function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMa
   );
   if (!m) return <div className="flex flex-col gap-3">{back}{q.error ? <ErrorBox error={q.error} /> : <Loading label="Cargando el partido…" />}</div>;
   const st = stateOf(m);
-  // Antes de empezar no hay resumen ni estadísticas: se abre la forma de los dos
-  const current: Tab = tab ?? (st === 'pre' ? 'form' : 'summary');
+  // Antes de empezar no hay resumen ni estadísticas: se abren las recomendaciones
+  const current: Tab = tab ?? (st === 'pre' && !m.off ? 'picks' : 'summary');
   const d = q.data;
   return (
     <div className="flex flex-col gap-3">
       {back}
       <MatchHeader m={m} events={d?.timeline ?? m.incidents} attendance={d?.attendance ?? null}>
         <SheetTabs value={current} onChange={setTab} items={[
-          ['summary', 'Resumen'], ...(st === 'post' || m.off ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
+          ['summary', 'Resumen'], ...(st === 'pre' && !m.off ? [['picks', 'Recomendaciones']] as [Tab, string][] : []),
+          ...(st === 'post' || m.off ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
           ['stats', 'Estadísticas'], ['lineups', 'Alineaciones'], ['form', 'Forma'], ['h2h', 'H2H'],
           ...(m.league !== 'copa' ? [['table', 'Clasificación']] as [Tab, string][] : [])
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'football', league: m.leagueName, event: targetOfFootball(m).event })}><Plus size={14} />Apuesta</Button>} />
       </MatchHeader>
       {current === 'odds' ? <SportOdds target={targetOfFootball(m)} />
+        : current === 'picks' ? <FootballPicksPanel m={m} onOdds={() => setTab('odds')} />
         : !d ? (q.error ? <ErrorBox error={q.error} /> : <Loading label="Cargando la ficha…" />)
         : current === 'summary' ? <Timeline d={d} />
           : current === 'stats' ? <div className="flex flex-col gap-3">{!!d.shots?.length && <MatchShotMap m={m} shots={d.shots} />}<Stats d={d} /></div>

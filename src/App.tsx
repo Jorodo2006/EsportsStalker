@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Dribbble, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { CalendarDays, Dribbble, Search, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -23,6 +23,7 @@ import BetsView from '@/views/BetsView';
 import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
 import { Notifier } from '@/components/Notifier';
+import { SearchDialog, useSearchShortcut } from '@/components/Search';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
 //   - desde lg: menú lateral a la izquierda (deportes, navegación, competiciones del día y cartera) y el contenido;
@@ -73,6 +74,9 @@ interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactN
 export default function App() {
   const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId } = useApp();
   const wide = useMedia('(min-width: 1400px)');
+  const [searching, setSearching] = useState(false);
+  const openSearch = useCallback(() => setSearching(true), []);
+  useSearchShortcut(openSearch);
   // Partidos en juego de cada app: aviso rojo del selector y lista "En directo" de la derecha
   const { data: lolLive } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
   const { data: basketLive } = useQuery({ queryKey: ['basket', 'live'], queryFn: () => window.api.basket.live(), refetchInterval: 60_000, enabled: !!window.api.basket });
@@ -122,13 +126,18 @@ export default function App() {
 
   return (
     <div data-app={app} className="flex h-full">
-      <Sidebar live={live} />
+      <Sidebar live={live} onSearch={openSearch} />
+      <SearchDialog open={searching} onClose={() => setSearching(false)} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-3 lg:hidden">
           <div className="flex h-14 items-center gap-3">
             <Logo />
             <WalletChip onClick={() => go('bets')} />
+            <button onClick={openSearch} title="Buscar" aria-label="Buscar"
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100">
+              <Search size={16} />
+            </button>
             <button onClick={() => go('settings')} title="Ajustes" aria-label="Ajustes" aria-current={view === 'settings'}
               className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md transition',
                 view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
@@ -185,7 +194,7 @@ function Logo({ big }: { big?: boolean }) {
 }
 
 // Menú lateral de escritorio: deportes, navegación, competiciones de la lista de partidos y la cartera abajo
-function Sidebar({ live }: { live: Record<AppId, number> }) {
+function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: () => void }) {
   const { app, switchApp, view, go, sections } = useApp();
   const label = (t: string) => <div className="mb-1 px-3 text-xs font-medium text-zinc-500">{t}</div>;
   const navRow = (on: boolean) => cn('flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm transition',
@@ -193,7 +202,13 @@ function Sidebar({ live }: { live: Record<AppId, number> }) {
   const jump = (id: string) => { go('matches'); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); };
   return (
     <aside className="hidden w-[232px] shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-surface lg:flex">
-      <div className="px-5 pb-4 pt-5"><Logo big /></div>
+      <div className="px-5 pb-3 pt-5"><Logo big /></div>
+      <div className="px-2.5 pb-4">
+        <button onClick={onSearch} title="Buscar equipos, jugadores y competiciones (Ctrl+K)"
+          className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300">
+          <Search size={15} className="shrink-0" /><span className="min-w-0 flex-1 truncate">Buscar</span><span className="shrink-0 text-xs text-zinc-600">Ctrl K</span>
+        </button>
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-2.5 pb-3 no-scrollbar">
         <div>
           {label('Deportes')}

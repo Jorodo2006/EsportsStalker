@@ -56,6 +56,15 @@ Reglas:
 | `/api/tennis` | tennis |
 | `/api/football` | football |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
+| `/api/search?q=` | el propio gateway: pregunta a la vez a `/api/<esports\|basket\|tennis\|football>/search` (8 s como mucho cada uno; si uno falla salen los demás) y junta los resultados |
+
+**Buscador** (`/api/search`, componente `src/components/Search.tsx`, Ctrl+K o "/"): partidos de ayer a dentro de una semana
+y competiciones de los cuatro deportes. Cada servicio busca en lo suyo con `server/shared/search.js` (sin tildes ni
+mayúsculas; cada palabra al principio de una palabra del nombre, también en los otros nombres de equipos y selecciones) y
+devuelve `{ matches, competitions }`. Orden: lo que está en juego, lo que encaja por equipo o jugador antes que por
+competición y lo más cercano a ahora. Al elegir un partido la app cambia de deporte, lleva la lista a su día
+(`setFocusDay` + `useFocus(open, has, setDate)`) y lo abre; en LoL se abre directamente con el partido que trae el resultado.
+Pruebas: `server/test/buscador.test.js`.
 
 API de la web (la usa `src/lib/api.ts`):
 

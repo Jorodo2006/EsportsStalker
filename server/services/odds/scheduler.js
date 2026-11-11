@@ -91,6 +91,8 @@ async function upcomingTennis(hours) {
 // Fútbol: local (a) contra visitante (b), como en la app. Sin los aplazados. Los otros nombres de ESPN ayudan a encontrarlo
 // en las casas ("UE Tavernes"), pero no la abreviatura: "VAL" está dentro de "Valladolid". Los filiales de ESPN ("Real
 // Sociedad II") en las casas son "Real Sociedad B"
+const BIG_NATIONS = /^(españa|francia|inglaterra|alemania|italia|portugal|países bajos|bélgica|croacia|argentina|brasil|uruguay|colombia|méxico|estados unidos|marruecos|japón)$/i;
+
 async function upcomingFootball(hours) {
   const until = Date.now() + hours * 3600e3;
   const days = daysUntil(until);
@@ -100,6 +102,9 @@ async function upcomingFootball(hours) {
     alt: [...new Set([...(/\sII$/.test(s.name) ? [s.name.replace(/\sII$/, ' B')] : []), ...(s.alts || []).filter(x => x && x !== s.name && x !== s.abbr)])]
   });
   return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && !g.off && t >= Date.now() && t <= until && g.home?.name && g.away?.name; })
+    // En un parón hay decenas de amistosos (Fiyi, Islas Cook…) que las casas casi no tienen: sólo se leen solos los de
+    // selecciones grandes; el resto, a mano desde su pestaña de cuotas
+    .filter(g => g.league !== 'amistosos' || BIG_NATIONS.test(g.home.name) || BIG_NATIONS.test(g.away.name))
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'football', a: team(g.home), b: team(g.away) }));
 }
 

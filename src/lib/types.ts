@@ -178,7 +178,7 @@ export interface AutoStatus {
 export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean };
 
 // ---------- Fútbol (servicio football: ESPN) ----------
-export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa';
+export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
 export interface FootballLeague { id: FootballLeagueId; name: string; country: string; logo: string }
 // form: últimos resultados (G, E o P); record: ganados-empatados-perdidos en la competición; color y alt: los del equipo, sin #
 export interface FootballTeam {
@@ -190,7 +190,7 @@ export type FootballEventKind = 'goal' | 'penalty' | 'owngoal' | 'missed' | 'yel
 export interface FootballEvent { kind: FootballEventKind; minute: string; team: string; player: string; other?: string }
 export interface FootballMatch {
   id: string; league: FootballLeagueId; leagueName: string; date: string; state: 'pre' | 'in' | 'post'; status: string; off: boolean;
-  stage: string; venue: string; city: string; home: FootballTeam; away: FootballTeam; incidents: FootballEvent[];
+  stage: string; venue: string; city: string; neutral?: boolean; home: FootballTeam; away: FootballTeam; incidents: FootballEvent[];
 }
 export interface FootballPlayer { id: string; name: string; number: string; pos: string; starter: boolean; subIn: boolean; subOut: boolean; place: number | null }
 export interface FootballLineup { team: string; formation: string; players: FootballPlayer[] }
@@ -237,6 +237,23 @@ export interface TennisPicks {
   match?: { pModel: number; pElo: number; pStats: number; pMarket: number | null; pFinal: number; expectedGames: number; holdA: number; holdB: number; weight: number };
   top?: TennisPick | null; easy?: TennisPick[]; hard?: TennisPick[]; considered?: number; warnings?: string[];
 }
+// Recomendaciones de fútbol (server/services/football/picks.js): las mismas piezas que las de tenis. who: de qué equipo es la
+// línea (goles de un equipo) o a quién favorece
+export type FootballPick = TennisPick & { who?: 'a' | 'b' | null };
+export interface FootballPicks {
+  ready: boolean; reason?: 'started' | 'finished' | 'noodds' | 'nomodel'; oddsAge?: number;
+  match?: { home: number; draw: number; away: number; pMarketHome: number | null; goalsHome: number; goalsAway: number; weight: number; fav: 'a' | 'b'; pFav: number };
+  top?: FootballPick | null; easy?: FootballPick[]; hard?: FootballPick[]; considered?: number; warnings?: string[];
+}
+// Buscador (GET /api/search): partidos de ayer a dentro de una semana y competiciones de los cuatro deportes. team: encaja por
+// equipo o jugador (no sólo por la competición). event: en LoL, el partido entero para abrirlo
+export interface SearchMatch {
+  sport: Sport; id: string; home: string; away: string; league: string; stage: string; date: string; state: 'pre' | 'in' | 'post';
+  status: string; score: string | null; team: boolean; event?: MatchEvent;
+}
+export interface SearchCompetition { sport: Sport; id: string; name: string; sub: string; next: string | null }
+export interface SearchResults { matches: SearchMatch[]; competitions: SearchCompetition[] }
+export interface FootballDayPick { id: string; league: FootballLeagueId; leagueName: string; date: string; home: FootballTeam; away: FootballTeam; top: FootballPick; hard: FootballPick | null }
 export interface TennisDayPick { id: string; tour: Tour; tournament: string; round: string; date: string; a: TennisPlayer; b: TennisPlayer; top: TennisPick; hard: TennisPick | null }
 
 // Ficha de un tenista: datos personales, balance y últimos resultados
@@ -340,6 +357,7 @@ export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: s
 export interface AuthUser { id: string; username: string; isAdmin: boolean }
 
 export interface Api {
+  search(q: string): Promise<SearchResults>;
   auth: {
     me(): Promise<AuthUser | null>;
     config(): Promise<{ first: boolean; signupOpen: boolean }>;
@@ -396,6 +414,8 @@ export interface Api {
     // Últimos partidos acabados de un equipo (todas las competiciones)
     teamGames(teamId: string): Promise<FootballTeamGame[]>;
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
+    picks(date: string, id: string): Promise<FootballPicks>;
+    picksDay(date: string): Promise<FootballDayPick[]>;
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;

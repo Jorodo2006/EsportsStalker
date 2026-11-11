@@ -20,6 +20,11 @@ gratuita y sin clave, la misma que usan la NBA y el tenis.
 | Conference League | `conference` | `uefa.europa.conf` |
 | Segunda División | `segunda` | `esp.2` |
 | Copa del Rey | `copa` | `esp.copa_del_rey` |
+| Nations League | `nations` | `uefa.nations` |
+| Amistosos internacionales | `amistosos` | `fifa.friendly` |
+| Champions League Femenina | `wchampions` | `uefa.wchampions` |
+| Liga F | `ligaf` | `esp.w.1` |
+| Women's Super League | `wsl` | `eng.w.1` |
 
 El orden de la tabla es el de la lista de partidos. Para añadir una liga basta con una fila en `LEAGUES` (servicio), en
 `FootballLeagueId` (`src/lib/types.ts`) y, si tiene tabla, en `src/views/FootballStandings.tsx`.
@@ -115,7 +120,63 @@ Como en baloncesto y tenis: las lee el lector de Docker, se comparan en la pesta
 - Los partidos pequeños (Copa contra equipos de Segunda RFEF, Segunda días antes) pueden tener sólo uno o dos mercados en
   Winamax, o no estar todavía en Betway: es lo que ofrecen las casas, no un fallo del lector.
 
-## Pendiente
+## Modelo y recomendaciones
 
-1. **Modelo y recomendaciones**: goles esperados con la fuerza de ataque y defensa de cada equipo, comprobado con partidos
-   pasados (como `backtest.js` en tenis) antes de enseñar nada.
+Como en tenis: el modelo está en el servicio y la interfaz sólo enseña lo que devuelve.
+
+- **Resultados** (`server/services/football/history.js`): el marcador de ESPN mes a mes de cada competición, 18 meses. Un
+  mes pasado se guarda para siempre en `football.cache` (`hist:<liga>:<AAAAMM>`, la limpieza de 7 días no lo toca); el mes en
+  curso se pide cada media hora. Tres grupos que no se mezclan: hombres (las diez competiciones de clubes), mujeres
+  (Champions Femenina, Liga F y WSL) y selecciones (Nations League y amistosos, más Mundial y clasificación sólo como
+  datos). Con prórroga, el partido cuenta como el empate de los 90 minutos.
+- **Modelo** (`model.js`): Poisson con ataque y defensa de cada equipo, el nivel de goles de cada liga y la ventaja de
+  jugar en casa (nada en campo neutral), ajustado por máxima verosimilitud con los partidos recientes pesando más (vida
+  media `halfLife`) y cada equipo tirado hacia la media (`reg`). Los que sólo salen en la Copa (categorías que no se
+  siguen) parten de peor. Corrección de Dixon y Coles para los marcadores cortos. La primera parte es el 45 % de los goles.
+  Se reajusta cada 3 horas.
+- **Comprobación** (`backtest.js`, dentro del contenedor: `docker compose exec football node services/football/backtest.js men 2026-02-01`):
+  cada semana se ajusta sólo con lo anterior. Parámetros elegidos con sep. 2025-ene. 2026 (`rejilla`) y comprobados con
+  feb.-nov. 2026:
+
+  | Grupo | Partidos | 1X2 log-loss | Sin mirar equipos | Más/menos 2,5 (azar 0,693) |
+  |---|---|---|---|---|
+  | Hombres | 1.801 | 0,994 | 1,061 | 0,674 |
+  | Mujeres | 511 | 0,866 | 1,054 | 0,684 |
+  | Selecciones | 464 | 0,909 | 1,075 | 0,675 |
+
+  En hombres, el 1X2 sale bien calibrado (45 % → 47 %, 64 % → 74 % arriba: algo corto con los favoritos claros) y los goles
+  medios cuadran (2,78 esperados, 2,91 reales). En selecciones sobrevalora a las débiles (26 % → 9 %): se avisa y se fía
+  menos. Los goles se predicen mucho peor que el ganador, como en cualquier modelo público.
+- **Recomendaciones** (`picks.js`, `GET /api/football/picks?date=&id=` y `/api/football/picks/day?date=`): como las de
+  tenis. Mercados: 1X2, doble oportunidad, empate no válido, ambos marcan, total de goles, goles de cada equipo y hándicap
+  asiático, del partido y de la 1.ª parte; sólo líneas x,5 (las enteras y las de cuarto pueden devolverse). El modelo pesa
+  un 25 % frente a las casas sin margen (10 % si un equipo tiene pocos partidos) y menos cuanto más se aleja de ellas en
+  el 1X2. Salen la más fiable, tres fáciles y tres complicadas. Se registran en `bets.predictions` (Acierto del modelo).
+- **Interfaz** (`src/components/FootballPicks.tsx`): pestaña Recomendaciones en la ficha (se abre en ella antes de empezar),
+  "Recomendaciones del día" encima de la lista y las mejores en la portada Hoy.
+
+## Femenino
+
+Champions Femenina, Liga F y WSL, con `women: true` en `LEAGUES`. En Winamax llevan "(F)" ("Champions League (F)"); la Liga F
+y la WSL no estaban cuando se miró (parón) y sus nombres en `FOOTBALL_TOURS` son los más probables: si no encuentra un
+partido, mira el nombre en Winamax. Betway no tiene una lista que se haya podido ver: se busca en la portada de fútbol.
+
+## Selecciones (Nations League y amistosos)
+
+En los parones salen la **Nations League** (`uefa.nations`) y los **amistosos internacionales** (`fifa.friendly`), con
+`national: true` en `LEAGUES` (`server/services/football/index.js`). Cuando no hay, sus listas salen vacías.
+
+- **Nombres en español**: las listas y la clasificación se piden a ESPN con `lang=es`. La ficha del partido no, porque con
+  `lang=es` también se traducen los tipos de jugada ("Gol", "Tiro de esquina") y dejarían de reconocerse los tiros: se
+  pide en inglés y `spanishNames` cambia los nombres de las selecciones por los del marcador en español de ese día.
+- **`NATIONAL`**: las selecciones que ESPN deja en inglés aunque se pida en español ("North Macedonia", "Kenya") y otros
+  nombres con que las llaman las casas ("República Checa" para Chequia, "Holanda", "Taiwán"…). Van a `alts`, con los que
+  se emparejan los partidos en Winamax y Betway. Si una selección no sale en las cuotas, mira cómo la llama la casa y
+  añádela aquí.
+- **Casas**: Winamax "Nations League" (hay otra "Nations League " con espacio en MultiFútbol, que son combinadas, y no
+  la coge el `^…$`) y "Partidos amistosos internacionales"; Betway `uefa-international-competitions/uefa-nations-league` y
+  `international/friendlies` (`FOOTBALL_TOURS` y `FOOTBALL_LISTS` en `server/lector/runner.js`). Probado con Chequia-España:
+  320 mercados en Winamax y todas las pestañas en Betway.
+- **Lecturas programadas**: los amistosos sólo si juega una selección grande (`BIG_NATIONS` en `scheduler.js`): en un
+  parón hay decenas y la mayoría no los tienen las casas. Los demás, a mano desde su pestaña de cuotas.
+- **Hoy**: la Nations League pesa como una gran liga y los amistosos sólo entran si juega una de las grandes.

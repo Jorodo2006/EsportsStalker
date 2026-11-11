@@ -1,5 +1,5 @@
 // football-svc: fútbol de la API pública de ESPN (gratuita, sin clave): LaLiga, Segunda, las otras cuatro grandes ligas,
-// las tres competiciones europeas y la Copa del Rey. Partidos por día en hora de España con el marcador en directo, ficha
+// las tres competiciones europeas, la Copa del Rey, las selecciones y el femenino (Champions, Liga F y WSL). Partidos por día en hora de España con el marcador en directo, ficha
 // del partido (estadísticas, alineaciones, goles, tarjetas y cambios, forma y cara a cara) y clasificaciones.
 // La ficha de ESPN también trae cuotas: no se usan, las cuotas sólo salen del lector de las casas.
 // Caché en memoria y en football.cache (por si ESPN no responde).
@@ -7,6 +7,8 @@ const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
 const { photoOf, photosOf } = require('./photos');
+const { picksFor } = require('./picks');
+const { hits, queryOf } = require('../../shared/search');
 
 // En este orden salen en la lista de partidos
 const LEAGUES = [
@@ -19,8 +21,33 @@ const LEAGUES = [
   { id: 'europa', espn: 'uefa.europa', name: 'Europa League', country: 'Europa' },
   { id: 'conference', espn: 'uefa.europa.conf', name: 'Conference League', country: 'Europa' },
   { id: 'segunda', espn: 'esp.2', name: 'Segunda División', country: 'España' },
-  { id: 'copa', espn: 'esp.copa_del_rey', name: 'Copa del Rey', country: 'España' }
+  { id: 'copa', espn: 'esp.copa_del_rey', name: 'Copa del Rey', country: 'España' },
+  // Selecciones (parones internacionales). national: ESPN da sus nombres en inglés; se piden en español (lang=es)
+  { id: 'nations', espn: 'uefa.nations', name: 'Nations League', country: 'Selecciones', national: true },
+  { id: 'amistosos', espn: 'fifa.friendly', name: 'Amistosos internacionales', country: 'Selecciones', national: true },
+  // Fútbol femenino: su propio grupo en el modelo (history.js), no se mezcla con el masculino
+  { id: 'wchampions', espn: 'uefa.wchampions', name: 'Champions League Femenina', country: 'Femenino', women: true },
+  { id: 'ligaf', espn: 'esp.w.1', name: 'Liga F', country: 'Femenino', women: true },
+  { id: 'wsl', espn: 'eng.w.1', name: "Women's Super League", country: 'Femenino', women: true }
 ];
+
+// Las listas de las selecciones en español. La ficha del partido no: con lang=es también se traducen los tipos de jugada
+// ("Gol", "Tiro de esquina") y dejarían de reconocerse los tiros; ahí se cambian sólo los nombres (spanishNames)
+const lang = lg => (lg.national ? '&lang=es&region=es' : '');
+
+// Selecciones que ESPN deja en inglés aunque se pida en español, y cómo las llaman las casas: el primero es el nombre que
+// se enseña; los demás, otros nombres para emparejarlas con Winamax y Betway
+const NATIONAL = {
+  'North Macedonia': ['Macedonia del Norte', 'Macedonia'], 'Bolívia': ['Bolivia'], 'Sao Tome and Principe': ['Santo Tomé y Príncipe'],
+  Comoros: ['Comoras'], Djibouti: ['Yibuti'], Maldives: ['Maldivas'], Niger: ['Níger'], Kenya: ['Kenia'], Rwanda: ['Ruanda'],
+  Botswana: ['Botsuana'], Benin: ['Benín'], Suriname: ['Surinam'], Anguilla: ['Anguila'], Tahiti: ['Tahití'], Fiji: ['Fiyi'],
+  Chequia: ['Chequia', 'República Checa'], 'Países Bajos': ['Países Bajos', 'Holanda'], 'Estados Unidos': ['Estados Unidos', 'EE. UU.', 'USA'],
+  'Bosnia y Herzegovina': ['Bosnia y Herzegovina', 'Bosnia-Herzegovina', 'Bosnia'], Irlanda: ['Irlanda', 'República de Irlanda'],
+  'Corea del Sur': ['Corea del Sur', 'República de Corea'], 'China Taipéi': ['China Taipéi', 'Taiwán'], 'Arabia Saudita': ['Arabia Saudita', 'Arabia Saudí'],
+  'Emiratos Árabes Unidos': ['Emiratos Árabes Unidos', 'Emiratos Árabes'], Moldavia: ['Moldavia', 'Moldova'], Bielorrusia: ['Bielorrusia', 'Belarús'],
+  Turquía: ['Turquía', 'Türkiye'], Irán: ['Irán', 'RI de Irán'], 'República Democrática del Congo': ['República Democrática del Congo', 'RD Congo'],
+  'Islas Feroe': ['Islas Feroe', 'Feroe'], 'Costa de Marfil': ['Costa de Marfil'], Kosovo: ['Kosovo']
+};
 const BY_ID = Object.fromEntries(LEAGUES.map(l => [l.id, l]));
 const ORDER = Object.fromEntries(LEAGUES.map((l, i) => [l.id, i]));
 const site = espn => `https://site.api.espn.com/apis/site/v2/sports/soccer/${espn}`;
@@ -70,17 +97,18 @@ const valid = d => { if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) throw fail('Fecha
 const hex = c => (/^[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : null);
 const num = v => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
-function teamOf(x, state) {
+function teamOf(x, state, national = false) {
   const t = x.team || {};
+  const nat = national ? NATIONAL[t.displayName] : null;
   return {
-    id: String(t.id || ''), name: t.displayName || t.name || '', short: t.shortDisplayName || t.displayName || '', abbr: t.abbreviation || '',
+    id: String(t.id || ''), name: nat?.[0] || t.displayName || t.name || '', short: nat?.[0] || t.shortDisplayName || t.displayName || '', abbr: t.abbreviation || '',
     logo: t.logo || t.logos?.[0]?.href || '', color: hex(t.color), alt: hex(t.alternateColor),
     score: state === 'pre' ? null : num(x.score), winner: !!x.winner,
     // form: últimos resultados, el más reciente al final (G, E o P); record: ganados-empatados-perdidos en la competición
     form: String(x.form || '').replace(/W/g, 'G').replace(/D/g, 'E').replace(/L/g, 'P'),
     record: (x.records || []).find(r => r.type === 'total')?.summary || '',
     // Cómo lo pueden llamar las casas ("Atlético Madrid", "Atlético", "ATM")
-    alts: [...new Set([t.displayName, t.shortDisplayName, t.name, t.location, t.abbreviation].filter(Boolean))]
+    alts: [...new Set([...(nat || []), t.displayName, t.shortDisplayName, t.name, t.location, t.abbreviation].filter(Boolean))]
   };
 }
 
@@ -135,8 +163,8 @@ function matchOf(lg, e) {
     id: `${lg.id}:${e.id}`, league: lg.id, leagueName: lg.name, date: e.date || c.date, state, status: statusOf(status),
     // Aplazado o cancelado: ESPN lo da por terminado, pero no se jugó
     off: /POSTPONED|CANCEL|SUSPENDED|ABANDONED/.test(st.name || ''),
-    stage: stageOf(e.season?.slug), venue: c.venue?.fullName || '', city: c.venue?.address?.city || '',
-    home: teamOf(home, state), away: teamOf(away, state), incidents: incidents(c)
+    stage: stageOf(e.season?.slug), venue: c.venue?.fullName || '', city: c.venue?.address?.city || '', neutral: !!c.neutralSite,
+    home: teamOf(home, state, lg.national), away: teamOf(away, state, lg.national), incidents: incidents(c)
   };
 }
 
@@ -152,8 +180,8 @@ async function between(from, to) {
   const lists = await Promise.all(LEAGUES.map(async lg => {
     try {
       const boards = await Promise.all([
-        ...near.map(d => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(d)}`, 30e3)),
-        ...months.map(m => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(m)}`, m < month ? 6 * 3600e3 : 15 * 60e3))
+        ...near.map(d => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(d)}${lang(lg)}`, 30e3)),
+        ...months.map(m => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(m)}${lang(lg)}`, m < month ? 6 * 3600e3 : 15 * 60e3))
       ]);
       return boards.flatMap(j => (j.events || []).map(e => matchOf(lg, e)).filter(Boolean));
     } catch (e) {
@@ -173,7 +201,7 @@ async function between(from, to) {
 
 async function live() {
   const today = madridDay(Date.now());
-  const lists = await Promise.all(LEAGUES.map(lg => Promise.all([addDays(today, -1), today].map(d => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(d)}`, 30e3)))
+  const lists = await Promise.all(LEAGUES.map(lg => Promise.all([addDays(today, -1), today].map(d => getJSON(`${site(lg.espn)}/scoreboard?dates=${compact(d)}${lang(lg)}`, 30e3)))
     .then(bs => bs.flatMap(j => (j.events || []).map(e => matchOf(lg, e)).filter(m => m?.state === 'in')))
     .catch(() => [])));
   const seen = new Set();
@@ -184,7 +212,7 @@ async function live() {
 async function leagues() {
   const today = compact(madridDay(Date.now()));
   return Promise.all(LEAGUES.map(async lg => {
-    const j = await getJSON(`${site(lg.espn)}/scoreboard?dates=${today}`, 6 * 3600e3).catch(() => null);
+    const j = await getJSON(`${site(lg.espn)}/scoreboard?dates=${today}${lang(lg)}`, 6 * 3600e3).catch(() => null);
     return { id: lg.id, name: lg.name, country: lg.country, logo: j?.leagues?.[0]?.logos?.[0]?.href || '' };
   }));
 }
@@ -261,7 +289,28 @@ async function detail(id) {
   const form = Object.fromEntries((j.lastFiveGames || []).map(x => [String(x.team?.id || ''), (x.events || []).map(pastGame).sort((p, q) => q.date.localeCompare(p.date))]));
   const h2h = (j.headToHeadGames || []).flatMap(x => (x.events || []).map(v => ({ ...pastGame(v), team: String(x.team?.id || '') })))
     .sort((p, q) => q.date.localeCompare(p.date)).slice(0, 10);
-  return { match, timeline, stats, lineups, shots, form, h2h, attendance: num(j.gameInfo?.attendance) || null, hasStandings: !!j.standings?.groups?.length };
+  const out = { match, timeline, stats, lineups, shots, form, h2h, attendance: num(j.gameInfo?.attendance) || null, hasStandings: !!j.standings?.groups?.length };
+  return lg.national ? spanishNames(lg, h.date, out) : out;
+}
+
+// Selecciones: la ficha viene en inglés ("Spain"); los nombres se cambian por los del marcador en español de ese día (ya
+// en caché casi siempre), en todo objeto con id y name de una de ellas (el partido, las alineaciones, la forma…)
+async function spanishNames(lg, date, out) {
+  const days = [0, -1].map(n => compact(new Date(Date.parse(date) + n * 864e5).toISOString().slice(0, 10)));
+  const boards = await Promise.all(days.map(d => getJSON(`${site(lg.espn)}/scoreboard?dates=${d}${lang(lg)}`, 6 * 3600e3).catch(() => ({ events: [] }))));
+  const names = new Map();
+  for (const e of boards.flatMap(b => b.events || [])) {
+    for (const c of e.competitions?.[0]?.competitors || []) { const t = teamOf(c, 'pre', true); names.set(t.id, t); }
+  }
+  const walk = o => {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== 'object') return;
+    const t = o.id != null && names.get(String(o.id));
+    if (t && typeof o.name === 'string') { o.name = t.name; if (typeof o.short === 'string') o.short = t.short; }
+    Object.values(o).forEach(walk);
+  };
+  walk(out);
+  return out;
 }
 
 // ---------- clasificaciones ----------
@@ -276,14 +325,14 @@ function zoneEs(s) {
 
 async function standings(lgId) {
   const lg = league(lgId);
-  if (lg.id === 'copa') return [];
-  const j = await getJSON(standingsUrl(lg.espn), 30 * 60e3);
+  if (lg.id === 'copa' || lg.id === 'amistosos') return [];
+  const j = await getJSON(standingsUrl(lg.espn) + (lg.national ? '?lang=es&region=es' : ''), 30 * 60e3);
   return (j.children?.length ? j.children : [j]).map(ch => ({
-    name: /league phase/i.test(ch.name || '') ? 'Fase de liga' : ch.name || '',
+    name: /league phase/i.test(ch.name || '') ? 'Fase de liga' : String(ch.name || '').replace(/^Group/i, 'Grupo').replace(/^League/i, 'Liga'),
     rows: (ch.standings?.entries || []).map(e => {
       const s = Object.fromEntries((e.stats || []).map(x => [x.name, x.value]));
       return {
-        rank: s.rank ?? null, team: { id: String(e.team?.id || ''), name: e.team?.displayName || '', abbr: e.team?.abbreviation || '', logo: e.team?.logos?.[0]?.href || '' },
+        rank: s.rank ?? null, team: { id: String(e.team?.id || ''), name: (lg.national && NATIONAL[e.team?.displayName]?.[0]) || e.team?.displayName || '', abbr: e.team?.abbreviation || '', logo: e.team?.logos?.[0]?.href || '' },
         played: s.gamesPlayed ?? 0, won: s.wins ?? 0, drawn: s.ties ?? 0, lost: s.losses ?? 0, gf: s.pointsFor ?? 0, ga: s.pointsAgainst ?? 0,
         gd: s.pointDifferential ?? 0, points: s.points ?? 0, zone: e.note?.description ? { color: e.note.color || '', text: zoneEs(e.note.description) } : null
       };
@@ -330,7 +379,28 @@ async function playerStats(q) {
   return out;
 }
 
+// Buscador: partidos de ayer a dentro de una semana y competiciones (shared/search.js)
+async function search(raw) {
+  const q = queryOf(raw);
+  if (!q) return { matches: [], competitions: [] };
+  const t = madridDay(Date.now());
+  const list = (await between(addDays(t, -1), addDays(t, 7))).filter(m => !m.off);
+  const side = x => [x.name, x.short, x.abbr, ...(x.alts || [])];
+  // Los partidos, por los equipos y el nombre de la competición; el país ("España") sólo encuentra competiciones, o saldrían
+  // todos los partidos de sus ligas por delante de los de la selección
+  const comp = lg => [lg.name, ...(lg.women ? ['femenino', 'femenina'] : [])];
+  const matches = list.filter(m => hits(q, [...side(m.home), ...side(m.away)]) || hits(q, comp(BY_ID[m.league]))).map(m => ({
+    sport: 'football', id: m.id, home: m.home.name, away: m.away.name, league: m.leagueName, stage: m.stage, date: m.date, state: m.state,
+    status: m.status, score: m.state === 'pre' ? null : `${m.home.score ?? 0}-${m.away.score ?? 0}`, team: hits(q, [...side(m.home), ...side(m.away)])
+  }));
+  const competitions = LEAGUES.filter(l => hits(q, [...comp(l), l.country])).map(l => ({
+    sport: 'football', id: l.id, name: l.name, sub: l.country, next: list.filter(m => m.league === l.id && m.state !== 'post')[0]?.date || null
+  }));
+  return { matches, competitions };
+}
+
 const routes = [
+  ['GET', '/api/football/search', ({ query: q }) => search(q.q)],
   ['GET', '/api/football/leagues', () => leagues()],
   ['GET', '/api/football/games', ({ query: q }) => between(valid(q.date), valid(q.date))],
   ['GET', '/api/football/days', async ({ query: q }) => {
@@ -352,11 +422,33 @@ const routes = [
   }],
   // Las de una alineación entera: { players: [{ id, name, team }] } → { id: { url, from } | null (aún buscándola) }
   ['POST', '/api/football/photos', ({ body }) => photosOf(body?.players)],
-  ['GET', '/api/football/standings/:league', ({ params }) => standings(params.league)]
+  ['GET', '/api/football/standings/:league', ({ params }) => standings(params.league)],
+  // Recomendaciones de un partido (modelo de goles + cuotas), o las mejores de un día entre los partidos con cuotas leídas
+  ['GET', '/api/football/picks', async ({ query: q }) => {
+    const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
+    if (!m) throw fail('Partido no encontrado');
+    return picksFor(m, BY_ID[m.league].espn);
+  }],
+  ['GET', '/api/football/picks/day', async ({ query: q }) => {
+    const date = valid(q.date);
+    const hit = dayPicks.get(date);
+    if (hit && Date.now() - hit.t < 60e3) return hit.v;
+    const list = (await between(date, date)).filter(m => m.state === 'pre' && !m.off);
+    const out = [];
+    for (const m of list) {
+      const r = await picksFor(m, BY_ID[m.league].espn).catch(e => { console.error('[football] recomendaciones:', m.id, e.message); return null; });
+      if (r?.ready && r.top) out.push({ id: m.id, league: m.league, leagueName: m.leagueName, date: m.date, home: m.home, away: m.away, top: r.top, hard: r.hard[0] ?? null });
+    }
+    out.sort((x, y) => y.top.p - x.top.p);
+    dayPicks.set(date, { t: Date.now(), v: out });
+    return out;
+  }]
 ];
+const dayPicks = new Map();
 
 migrate('football', path.join(__dirname, 'migrations'))
   // Las fotos de jugadores duran más: buscarlas cuesta (Wikipedia, de una en una) y casi no cambian
-  .then(() => query(`DELETE FROM football.cache WHERE t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
+  // y los resultados de meses pasados (hist:, para el modelo) no cambian: se quedan
+  .then(() => query(`DELETE FROM football.cache WHERE key NOT LIKE 'hist:%' AND t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
   .then(() => start({ name: 'football', port: Number(process.env.PORT) || 4006, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

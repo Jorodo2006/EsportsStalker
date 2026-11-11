@@ -71,7 +71,7 @@ export default function TennisMatches() {
     ...byTour.map(([k, list]) => ({ id: sectionId(k), label: list[0].tournament, count: list.length, live: 0 }))
   ]);
   const has = useCallback((id: string) => (games.data ?? []).some(g => g.id === id), [games.data]);
-  useFocus(setOpenId, has);
+  useFocus(setOpenId, has, setDate);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
   if (open) return <MatchDetail key={open.id} m={open} date={date} onClose={() => setOpenId(null)} />;

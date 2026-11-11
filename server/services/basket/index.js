@@ -6,6 +6,7 @@ const { migrate, query } = require('../../shared/db');
 const cache = require('./cache');
 const espn = require('./espn');
 const el = require('./euroleague');
+const { hits, queryOf } = require('../../shared/search');
 
 const LEAGUES = [
   { id: 'nba', name: 'NBA', country: 'EE. UU.', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png', src: espn },
@@ -47,7 +48,26 @@ async function between(from, to) {
 
 const meta = () => LEAGUES.map(({ src: _, ...l }) => l);
 
+// Buscador: partidos de ayer a dentro de una semana y competiciones (shared/search.js)
+async function search(raw) {
+  const q = queryOf(raw);
+  if (!q) return { matches: [], competitions: [] };
+  const t = madridDay(Date.now());
+  const games = await between(addDays(t, -1), addDays(t, 7));
+  const name = id => LEAGUES.find(l => l.id === id)?.name || id;
+  const side = x => [x.name, x.abbr, ...(x.alt || [])];
+  const matches = games.filter(g => hits(q, [...side(g.home), ...side(g.away)]) || hits(q, [name(g.league)])).map(g => ({
+    sport: 'basket', id: g.id, home: g.home.name, away: g.away.name, league: name(g.league), stage: g.round || '', date: g.date, state: g.state,
+    status: g.status, score: g.state === 'pre' ? null : `${g.home.score ?? 0}-${g.away.score ?? 0}`, team: hits(q, [...side(g.home), ...side(g.away)])
+  }));
+  const competitions = LEAGUES.filter(l => hits(q, [l.name, l.id])).map(l => ({
+    sport: 'basket', id: l.id, name: l.name, sub: l.country, next: games.filter(g => g.league === l.id && g.state !== 'post')[0]?.date || null
+  }));
+  return { matches, competitions };
+}
+
 const routes = [
+  ['GET', '/api/basket/search', ({ query: q }) => search(q.q)],
   ['GET', '/api/basket/leagues', () => meta()],
   ['GET', '/api/basket/games', async ({ query: q }) => between(valid(q.date), valid(q.date))],
   // Cuántos partidos hay cada día (para la tira de días)

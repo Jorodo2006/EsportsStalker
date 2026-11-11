@@ -2,8 +2,8 @@
 // Se publica en window.api para que las vistas no tengan que saber cómo se habla con el backend.
 import marcador from '../../chrome/bookmarklet/marcador.js?raw';
 import { fromCsv, toCsv } from './csv';
-import { logPredictions, tennisPredictions } from './predictions';
-import type { Api, AutoJob, TeamRef, TennisDayPick } from './types';
+import { footballPredictions, logPredictions, tennisPredictions } from './predictions';
+import type { Api, AutoJob, FootballDayPick, TeamRef, TennisDayPick } from './types';
 
 const DOWN = 'El servidor no responde. Arranca el backend con «npm run backend» (hace falta Docker Desktop encendido).';
 const TIMEOUT = 180e3; // las stats esperan en la cola de Leaguepedia
@@ -99,6 +99,7 @@ function listen<T>(set: Set<T>, cb: T) {
 }
 
 export const api: Api = {
+  search: q => get('/api/search', { q }),
   auth: {
     me: () => get('/api/auth/me'),
     config: () => get('/api/auth/config'),
@@ -160,7 +161,13 @@ export const api: Api = {
     photo: (id, name, team) => get('/api/football/photo', { id, name, team }),
     photos: players => call('POST', '/api/football/photos', { players }),
     teamGames: teamId => get(`/api/football/team-games/${part(teamId)}`),
-    standings: league => get(`/api/football/standings/${part(league)}`)
+    standings: league => get(`/api/football/standings/${part(league)}`),
+    picks: (date, id) => get('/api/football/picks', { date, id }),
+    // Las del día se registran para medir si el modelo acierta (las ve la lista de fútbol y la portada Hoy)
+    picksDay: date => get('/api/football/picks/day', { date }).then((list: FootballDayPick[]) => {
+      logPredictions(list.flatMap(d => footballPredictions(d, [d.top, d.hard])));
+      return list;
+    })
   },
   tennis: {
     games: date => get('/api/tennis/games', { date }),

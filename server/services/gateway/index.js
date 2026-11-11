@@ -64,6 +64,22 @@ function proxy(req, res, service, user) {
 }
 
 // ---------- Avisos en vivo (SSE) ----------
+// Buscador de la cabecera: pregunta a la vez a los cuatro deportes (cada uno busca en lo suyo, /api/<servicio>/search) y
+// junta lo que respondan; si uno tarda o falla, salen los demás. Primero lo que está en juego, luego lo que encaja por
+// equipo o jugador (no sólo por la competición) y, dentro de eso, lo más cercano a ahora, antes lo que viene que lo pasado
+const SEARCH = ['esports', 'basket', 'tennis', 'football'];
+async function search(q) {
+  const qs = String(q || '').trim().slice(0, 60);
+  if (qs.length < 2) return { matches: [], competitions: [] };
+  const parts = await Promise.all(SEARCH.map(svc => call(svc, 'GET', `/api/${svc}/search?q=${encodeURIComponent(qs)}`, undefined, 8000)
+    .catch(e => { console.error(`[buscador] ${svc}:`, e.message); return { matches: [], competitions: [] }; })));
+  const now = Date.now();
+  const rank = m => (m.state === 'in' ? 0 : 1e13) + (m.team ? 0 : 1e12) + (+new Date(m.date) >= now - 3 * 3600e3 ? +new Date(m.date) - now : 1e11 + (now - +new Date(m.date)));
+  const matches = parts.flatMap(p => p.matches || []).sort((a, b) => rank(a) - rank(b)).slice(0, 15);
+  const competitions = parts.flatMap(p => p.competitions || []).slice(0, 8);
+  return { matches, competitions };
+}
+
 const clients = new Set();
 function broadcast(text) { for (const res of clients) res.write(`data: ${text}\n\n`); }
 
@@ -129,6 +145,7 @@ const server = http.createServer(async (req, res) => {
     req.on('close', () => { clearInterval(ping); clients.delete(res); });
     return;
   }
+  if (pathname === '/api/search' && req.method === 'GET') return json(res, 200, { ok: true, data: await search(new URL(req.url, 'http://localhost').searchParams.get('q')) });
   const hit = ROUTES.find(([re]) => re.test(pathname));
   if (!hit) return json(res, 404, { ok: false, error: `No existe ${req.method} ${pathname}` });
   proxy(req, res, hit[1], user);

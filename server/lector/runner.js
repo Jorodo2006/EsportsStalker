@@ -218,12 +218,19 @@ const BETWAY_LISTS = {
 const FOOTBALL_TOURS = {
   laliga: '^\\s*laliga\\s*$', segunda: '^segunda divisi[oó]n$', copa: '^copa del rey$', premier: '^premier league$',
   seriea: '^serie a$', bundesliga: '^bundesliga$', ligue1: '^ligue 1', champions: '^champions league$', europa: '^europa league$',
-  conference: '^conference league$'
+  conference: '^conference league$',
+  // Selecciones. Winamax tiene otra "Nations League " (con espacio) en MultiFútbol, que son combinadas: no la coge el ^…$
+  nations: '^nations league$', amistosos: '^partidos amistosos internacionales$',
+  // Femenino: Winamax lo marca con "(F)". La Liga F y la WSL no salían en los parones; los nombres son los más probables
+  // (la de Escocia también se llama "Primera División (F)": se mira de más, pero el partido se busca por los equipos)
+  wchampions: '^champions league \\(f\\)$', ligaf: '^liga f\\b|^primera divisi[oó]n \\(f\\)$', wsl: '^(women.?s )?super league( \\(f\\))?$|^wsl\\b'
 };
 const FOOTBALL_LISTS = {
   laliga: 'spain/la-liga', segunda: 'spain/la-liga-2', copa: 'spain/copa-del-rey', premier: 'england/premier-league',
   seriea: 'italy/serie-a', bundesliga: 'germany/bundesliga', ligue1: 'france/ligue-1', champions: 'european-cups/uefa-champions-league',
-  europa: 'european-cups/uefa-europa-league', conference: 'european-cups/uefa-conference-league'
+  europa: 'european-cups/uefa-europa-league', conference: 'european-cups/uefa-conference-league',
+  nations: 'uefa-international-competitions/uefa-nations-league', amistosos: 'international/friendlies'
+  // Femenino: Betway no tiene una lista fija que se haya podido ver; se busca en la portada de fútbol
 };
 
 // Lee todas las pestañas de mercados de un partido de Betway (principales, jugadores, cuartos…)

@@ -36,6 +36,9 @@ interface Ctx {
   // Partido de baloncesto, tenis o fútbol que hay que abrir (p. ej. desde la lista de directo); la vista lo recoge y lo borra
   focusId: string | null;
   setFocusId(id: string | null): void;
+  // Día (AAAA-MM-DD, en España) al que tiene que ir la lista antes de abrir el partido: desde el buscador llegan de otros días
+  focusDay: string | null;
+  setFocusDay(d: string | null): void;
 }
 
 // Una competición del día: id del bloque en la página (para desplazarse hasta él), nombre, partidos y en juego
@@ -54,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toastMsg, setToast] = useState<string | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusDay, setFocusDay] = useState<string | null>(null);
   const [slip, setSlipState] = useState<SlipLeg[]>(() => {
     try { return JSON.parse(localStorage.getItem('slip') || '[]'); } catch { return []; }
   });
@@ -115,7 +119,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sections,
     setSections,
     focusId,
-    setFocusId
+    setFocusId,
+    focusDay,
+    setFocusDay
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
@@ -133,9 +139,13 @@ export function useSections(list: Section[]) {
 // El id del bloque de una competición en la página
 export const sectionId = (name: string) => 'comp-' + name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-');
 
-// Abre en la vista el partido pedido desde fuera (lista de directo) en cuanto la vista lo tiene cargado
-export function useFocus(open: (id: string) => void, has: (id: string) => boolean) {
-  const { focusId, setFocusId } = useApp();
+// Abre en la vista el partido pedido desde fuera (lista de directo, buscador) en cuanto la vista lo tiene cargado. Si viene
+// con día, primero lleva la lista a ese día (setDate)
+export function useFocus(open: (id: string) => void, has: (id: string) => boolean, setDate?: (d: string) => void) {
+  const { focusId, setFocusId, focusDay, setFocusDay } = useApp();
+  useEffect(() => {
+    if (focusDay && setDate) { setDate(focusDay); setFocusDay(null); }
+  }, [focusDay, setDate, setFocusDay]);
   useEffect(() => {
     if (focusId && has(focusId)) { open(focusId); setFocusId(null); }
   }, [focusId, has, open, setFocusId]);

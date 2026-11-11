@@ -171,9 +171,11 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
   );
   // Se resalta el favorito (la cuota más baja), como antes
   const best = odds ? Math.min(odds.a || 99, odds.b || 99, odds.x || 99) : 0;
+  // Con empate son tres por fila: menos relleno para que quepan la abreviatura ("CZE") y la cuota sin cortarse
+  const three = !!odds && odds.x != null;
   const oddChip = (o: number, tag: string) => (
-    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between gap-2 px-3 text-sm', !o && 'bg-zinc-900 text-zinc-600')}>
-      <span className="min-w-0 truncate text-xs font-medium opacity-70">{tag}</span>
+    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between text-sm', three ? 'gap-1 px-2' : 'gap-2 px-3', !o && 'bg-zinc-900 text-zinc-600')}>
+      <span className={cn('min-w-0 truncate font-medium opacity-70', three ? 'text-[10.5px]' : 'text-xs')}>{tag}</span>
       <span>{o ? odd(o) : '–'}</span>
     </span>
   );

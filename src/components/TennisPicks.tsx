@@ -24,7 +24,7 @@ const restart = (e: unknown) => /No handler registered|is not a function/.test(S
   ? <ErrorBox error="La app tiene que reiniciarse para ver las recomendaciones">Para <code>npm run dev</code> (Ctrl+C) y vuelve a lanzarlo.</ErrorBox>
   : <ErrorBox error={e} />;
 
-function ValueChip({ pick }: { pick: TennisPick }) {
+export function ValueChip({ pick }: { pick: TennisPick }) {
   const good = hasValue(pick);
   return (
     <span title="Valor esperado por cada euro con esta probabilidad y esta cuota. Si es negativo, a la larga gana la casa."
@@ -32,7 +32,7 @@ function ValueChip({ pick }: { pick: TennisPick }) {
   );
 }
 
-function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => void }) {
+export function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => void }) {
   return (
     <div className="px-3 py-1.5 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
       <div className="flex items-center gap-3">

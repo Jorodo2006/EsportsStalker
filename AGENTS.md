@@ -7,7 +7,7 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 
 Web con login, para el ordenador y el móvil, con backend en Docker, que son **cuatro apps en una**, con un selector arriba:
 **LoL** (esports, verde azulado), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja), **Tenis** (ATP, Challengers y WTA, verde) y
-**Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas y Copa del Rey, azul).
+**Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas, Copa del Rey, selecciones: Nations League y amistosos, y femenino: Champions, Liga F y WSL, azul).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
 apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las cuatro apps**, y las cuotas que se pulsan van a un **cupón** desde
 el que se registran como simples o combinada. La interfaz es React en el navegador; la lógica y los datos están en
@@ -82,7 +82,7 @@ Docker Compose (docker-compose.yml)
   ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings. Puntos del juego (WTA, LiveScore)
   │                                                     y Challengers (LiveScore) → esquema tennis
   ├─ football :4006          server/services/football/  fútbol (ESPN): partidos por día en hora de España, ficha (goles, tarjetas,
-  │                                                     estadísticas, alineaciones, forma), clasificaciones → esquema football
+  │                                                     estadísticas, alineaciones, forma), clasificaciones, modelo de goles y recomendaciones → esquema football
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -128,11 +128,11 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
 - La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cuatro deportes, sólo con
   los partidos importantes y sin nada de dinero (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores
-  recomendaciones de baloncesto y tenis, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
+  recomendaciones de baloncesto, tenis y fútbol, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
   y ronda (`footballScore`, `basketScore`, `tennisScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
   mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
   con `useFocus`.
-- Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral) en `src/lib/app-context.tsx`.
+- Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
@@ -151,7 +151,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Fútbol en las casas** (`winamaxFootballInto` y `betwayFootballInto` en `odds.js`): el periodo sale sólo del título,
   nunca de la pestaña (la "1er Tiempo" de Betway repite los mercados del partido). El 1X2 lleva empate (`x`). Los nombres
   del partido (`targetOfFootball` y `upcomingFootball`) tienen que coincidir, porque son la clave en `odds`
-  (`docs/specs/11-futbol.md`).
+  (`docs/specs/11-futbol.md`). Las selecciones (`national: true` en `LEAGUES`) se piden a ESPN en español y llevan en `NATIONAL` los nombres que ESPN deja en inglés y los de las casas ("República Checa", "Holanda").
 - **Emparejar equipos** entre lolesports / ESPN / la Euroliga y las casas (`orient`/`teamScore` en
   `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
   "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.
@@ -164,6 +164,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Acierto del modelo** (`bets.predictions`, `src/lib/predictions.ts`): las claves de mercado son las de las apuestas; si cambias una en `odds.js`, las recomendaciones dejarán de resolverse.
 - **Recomendaciones de baloncesto** (`src/lib/basket-picks.ts`, `blendWithMarket` y `tooFar` en `src/lib/value.ts`): no ordenes por el EV del modelo a secas. Sube a la cabeza sus propios errores: en la prueba salían EV de +65 % con el modelo diciendo 29 % y la casa 10 %. Los pesos frente a la casa son una decisión, no una medida (`docs/specs/08-baloncesto.md`).
 - **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
+- **Modelo de fútbol** (`server/services/football/model.js`, `picks.js`): si tocas algo, repite `backtest.js` dentro del contenedor (ajusta con un periodo y comprueba con otro; cifras en `docs/specs/11-futbol.md`). Los resultados pasados (`hist:` en `football.cache`) no se borran con la limpieza.
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.
@@ -185,5 +186,5 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/07-backend.md`](docs/specs/07-backend.md) | Microservicios, gateway, PostgreSQL, migraciones, avisos en vivo |
 | [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
 | [`docs/specs/09-tenis.md`](docs/specs/09-tenis.md) | App de tenis: datos de ESPN, cuotas por sets y juegos, modelo y recomendaciones |
-| [`docs/specs/11-futbol.md`](docs/specs/11-futbol.md) | App de fútbol: ligas de ESPN, ficha del partido, clasificaciones y lo que falta (cuotas y modelo) |
+| [`docs/specs/11-futbol.md`](docs/specs/11-futbol.md) | App de fútbol: ligas de ESPN, ficha del partido, clasificaciones, cuotas, modelo de goles y recomendaciones, selecciones y femenino |
 | [`docs/specs/10-base-de-datos.md`](docs/specs/10-base-de-datos.md) | Esquema de PostgreSQL: tablas, relaciones, diagramas y puntos a vigilar |

@@ -6,6 +6,7 @@ const client = require('../../shared/client');
 const env = require('../../shared/env');
 const lolesports = require('./lolesports');
 const leaguepedia = require('./leaguepedia');
+const { hits, queryOf } = require('../../shared/search');
 
 // Clave pública que usa la propia web de lolesports (por si bets-svc no responde)
 const DEFAULT_KEY = '0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z';
@@ -19,7 +20,31 @@ const key = async () => (await s()).lolesportsKey;
 const lp = fn => async ctx => { leaguepedia.configure(await s()); return fn(ctx); };
 const need = (v, what) => { if (!v) throw fail(`Falta ${what}`); return v; };
 
+// Buscador: los partidos de la página de calendario de lolesports alrededor de hoy (y la siguiente) y las ligas
+async function search(raw) {
+  const q = queryOf(raw);
+  if (!q) return { matches: [], competitions: [] };
+  const k = await key();
+  const now = await lolesports.getSchedule(k);
+  const more = now.newer ? await lolesports.getSchedule(k, { pageToken: now.newer }).catch(() => ({ events: [] })) : { events: [] };
+  const from = Date.now() - 2 * 864e5, to = Date.now() + 8 * 864e5;
+  const seen = new Set();
+  const events = [...now.events, ...more.events].filter(e => { const t = +new Date(e.startTime); return t >= from && t <= to && !seen.has(e.id) && seen.add(e.id); });
+  const team = e => e.teams.flatMap(t => [t.name, t.code]);
+  const st = e => (e.state === 'inProgress' ? 'in' : e.state === 'completed' ? 'post' : 'pre');
+  const matches = events.filter(e => e.teams.length === 2 && (hits(q, team(e)) || hits(q, [e.league]))).map(e => ({
+    sport: 'lol', id: e.id, home: e.teams[0].name, away: e.teams[1].name, league: e.league, stage: e.blockName, date: e.startTime, state: st(e),
+    status: '', score: st(e) === 'pre' ? null : `${e.teams[0].wins ?? 0}-${e.teams[1].wins ?? 0}`, team: hits(q, team(e)), event: e
+  }));
+  const leagues = await lolesports.getLeagues(k).catch(() => []);
+  const competitions = leagues.filter(l => hits(q, [l.name, l.region || ''])).slice(0, 6).map(l => ({
+    sport: 'lol', id: l.id, name: l.name, sub: l.region || '', next: events.filter(e => e.league === l.name && st(e) !== 'post')[0]?.startTime || null
+  }));
+  return { matches, competitions };
+}
+
 const routes = [
+  ['GET', '/api/esports/search', ({ query: q }) => search(q.q)],
   ['GET', '/api/esports/leagues', async () => lolesports.getLeagues(await key())],
   ['GET', '/api/esports/schedule', async ({ query: q }) => lolesports.getSchedule(await key(), {
     leagueIds: q.leagueIds ? q.leagueIds.split(',').filter(Boolean) : [], pageToken: q.pageToken || undefined

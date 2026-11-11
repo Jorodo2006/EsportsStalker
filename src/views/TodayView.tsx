@@ -1,5 +1,5 @@
 // Hoy: la portada común a los cuatro deportes, sólo con los partidos importantes (sin nada de dinero): los destacados del
-// día, los que están en juego, las mejores recomendaciones (baloncesto y tenis) y los próximos. Cada partido lleva una nota
+// día, los que están en juego, las mejores recomendaciones (baloncesto, tenis y fútbol) y los próximos. Cada partido lleva una nota
 // según su competición, el nivel de los equipos o jugadores y la ronda (importance); los que no llegan al corte no salen.
 // Pulsar un partido abre su ficha en su deporte.
 import { useMemo } from 'react';
@@ -32,9 +32,13 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: 
 // y la ronda. Es una decisión, no una medida: se ajusta aquí
 const CUT = 60;
 const FOOTBALL_LEAGUE: Record<string, number> = {
-  champions: 100, laliga: 90, premier: 85, europa: 70, seriea: 65, bundesliga: 65, copa: 55, ligue1: 55, conference: 50, segunda: 30
+  champions: 100, laliga: 90, premier: 85, europa: 70, seriea: 65, bundesliga: 65, copa: 55, ligue1: 55, conference: 50, segunda: 30,
+  // Selecciones: la Nations League cuenta como una gran liga; los amistosos, sólo si juega una de las grandes
+  nations: 70, amistosos: 40,
+  // Femenino: la Champions como una competición importante; las ligas, un poco por debajo
+  wchampions: 62, ligaf: 45, wsl: 45
 };
-const BIG_FOOTBALL = /real madrid|barcelona|atl[eé]tico( de)? madrid|manchester city|liverpool|arsenal|manchester united|chelsea|bayern|paris saint|psg|inter\b|internazionale|juventus|\bmilan|napoli|dortmund|tottenham|athletic|real sociedad|villarreal|betis/i;
+const BIG_FOOTBALL = /^(españa|francia|inglaterra|alemania|italia|portugal|países bajos|bélgica|croacia|argentina|brasil)$|real madrid|barcelona|atl[eé]tico( de)? madrid|manchester city|liverpool|arsenal|manchester united|chelsea|bayern|paris saint|psg|inter\b|internazionale|juventus|\bmilan|napoli|dortmund|tottenham|athletic|real sociedad|villarreal|betis/i;
 const BASKET_LEAGUE: Record<string, number> = { euroleague: 80, nba: 70, eurocup: 45, wnba: 40 };
 const SPANISH_BASKET = /real madrid|barcelona|baskonia|valencia|unicaja|gran canaria|joventut|tenerife|murcia|bilbao|manresa|zaragoza/i;
 
@@ -135,11 +139,12 @@ export default function TodayView() {
     enabled: withOdds.length > 0, refetchInterval: 60_000
   });
 
-  // ---------- mejores apuestas (baloncesto y tenis), sólo las que tienen valor ----------
+  // ---------- mejores apuestas (baloncesto, tenis y fútbol), sólo las que tienen valor ----------
   const bp = useBasketPicks(u.games, u.injuries);
   const addBasket = usePickAdd();
   const basketBest = useMemo(() => bestPicks(bp.picks, 1.5, 5), [bp.picks]);
   const tq = useQuery({ queryKey: ['tennis', 'picks-day', day], queryFn: () => window.api.tennis.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const fq = useQuery({ queryKey: ['football', 'picks-day', day], queryFn: () => window.api.football.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   type Best = { id: string; s: AppId; title: string; event: string; date: string; p: number; ev: number; price: number; book?: string; open: () => void; add: () => void };
   const best: Best[] = [
     ...basketBest.map((p: BasketPick) => ({ id: p.id, s: 'basket' as const, title: p.title, event: `${p.game.away.abbr} @ ${p.game.home.abbr}`, date: p.game.date, p: p.p, ev: p.ev, price: p.price, book: p.book, open: () => open('basket', p.game.id), add: () => addBasket(p) })),
@@ -147,6 +152,11 @@ export default function TodayView() {
       id: d.id, s: 'tennis' as const, title: d.top.title, event: `${surname(d.a.name)} - ${surname(d.b.name)}`, date: d.date, p: d.top.p, ev: d.top.ev, price: d.top.price, book: d.top.book,
       open: () => open('tennis', d.id),
       add: () => addToSlip({ sport: 'tennis', league: d.tournament, event: `${d.a.name} vs ${d.b.name}`, market: d.top.market, selection: d.top.selection, bookmaker: d.top.book, odds: d.top.price, status: 'pending' })
+    })),
+    ...(fq.data ?? []).slice(0, 5).map(d => ({
+      id: d.id, s: 'football' as const, title: d.top.title, event: `${d.home.short || d.home.name} - ${d.away.short || d.away.name}`, date: d.date, p: d.top.p, ev: d.top.ev, price: d.top.price, book: d.top.book,
+      open: () => open('football', d.id),
+      add: () => addToSlip({ sport: 'football', league: d.leagueName, event: `${d.home.name} - ${d.away.name}`, market: d.top.market, selection: d.top.selection, bookmaker: d.top.book, odds: d.top.price, status: 'pending' })
     }))
   ].filter(x => x.ev > 0).sort((x, y) => y.ev - x.ev).slice(0, 6);
 
@@ -187,7 +197,7 @@ export default function TodayView() {
           )}
         </Panel>
 
-        <Panel title="Mejores apuestas del día" aside="baloncesto y tenis">
+        <Panel title="Mejores apuestas del día" aside="baloncesto, tenis y fútbol">
           {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{bp.loaded < bp.total ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
             <div className="divide-y divide-zinc-800/60">
               {best.map(x => (
