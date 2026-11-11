@@ -35,6 +35,9 @@ vuelven a pedir.
 | `GET /api/basket/boxscore/:id` | `basket:boxscore` | Estadísticas del partido: puntos por cuarto, jugadores, totales y enfrentamientos de la temporada |
 | `GET /api/basket/search?q=` | `basket:search` | Jugadores de NBA, Euroliga y EuroCup |
 | `GET /api/basket/gamelog/:league/:id?team=` | `basket:gamelog` | Partidos del jugador (en la Euroliga hace falta su equipo) |
+| `GET /api/basket/absences/:league/:id?team=` | `basket:absences` | Partidos recientes de su equipo que no jugó, con el motivo (sólo NBA y WNBA). El registro de ESPN se los salta; salen del boxscore de cada partido (`didNotPlay`), guardados para siempre en `keep:dnp:<liga>:<partido>`. En la gráfica del analizador van en gris, y un 0 jugando como barra roja corta. El boxscore del partido trae también `out` (los que no jugaron) |
+| `GET /api/basket/schedule/:league/:team` | `basket:schedule` | Calendario del equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo NBA y WNBA |
+| `GET /api/basket/rest/:id?home=&away=` | `basket:rest` | Descanso de los dos equipos antes del partido (`rest` en `espn.js`, del calendario del equipo en hora de Nueva York): noches libres (0 = B2B), partidos en las 4 últimas noches, partido anterior y si mañana vuelve a jugar. Sale bajo el marcador del partido y en el contexto del jugador |
 
 ## Cuotas
 
@@ -262,3 +265,49 @@ La ficha de un partido tiene además la pestaña *Equipos*, con los dos frente a
   Las estadísticas se piden con `seasontype=2`, porque fuera de temporada ESPN daría sólo las del playoff.
 - **Euroliga y EuroCup** (API de la Euroliga): la clasificación se pide por jornada y la jornada en curso puede dar 404, así
   que se usa la última que responda. Añaden aforo, ciudad, país y presidente; la API no da bajas.
+
+## Contexto del jugador
+
+En el analizador, la tarjeta **Contexto** (`src/components/BasketContext.tsx`) junta lo que puede cambiar el partido de
+un jugador: el parte médico de ESPN, si lleva partidos sin jugar o vuelve de una lesión (con sus minutos desde la vuelta
+frente a los de antes), el descanso de su equipo y del rival, cómo rinde él en B2B frente a con descanso (esta temporada y
+la anterior, con el % de veces que supera la línea), si le están dando más o menos minutos (los 5 últimos frente a la media)
+y las bajas de su equipo. Es información; de ella, el modelo sólo usa lo que se ha medido que importa (abajo).
+
+## B2B y vuelta de baja en el modelo (`src/lib/basket-context.ts`, `CTX_FACTORS` en `basket-model.ts`)
+
+`gameCtx` saca del registro del jugador, del calendario de su equipo y de la fecha del partido si juega en B2B (su partido
+anterior fue el día antes, en hora de Nueva York) y si es su 1.º, 2.º o 3.º partido tras perderse 3 o más seguidos de su
+equipo. Lo usan igual el analizador (calendario de `/api/basket/schedule`), el escáner y las recomendaciones (calendario
+sacado de la plantilla, `teamGamesOf`): las tres pantallas siguen dando la misma probabilidad.
+
+Medido con `scripts/backtest-basket.ts` sobre los registros de la caché (unos 420 jugadores de la NBA, temporadas 25-26
+y 26-27): para cada partido se proyecta con los anteriores y se compara con lo que hizo. Ajuste: 25-26 hasta enero;
+comprobación: de febrero en adelante y 26-27.
+
+| Situación | Ajuste | Comprobación | En el modelo |
+|---|---|---|---|
+| B2B | PRA +2,7 % ±2,4, minutos +2,2 % | PRA +5,9 % ±2,4, minutos +5,0 % | ×1,02 en puntos, rebotes y sus sumas |
+| 1.er partido tras baja | PRA −11,6 % ±6,6, minutos −13 % | PRA −12,3 % ±6,5, minutos −16 % | ×0,90-0,93 según el mercado |
+| 2.º partido tras baja | PRA −10 % | PRA −6 % | ×0,93-0,97 |
+| 3.er partido | ≈ 0 | ≈ 0 | nada |
+
+**En B2B no rinden menos, sino algo más**: quien juega el segundo de un B2B está sano y tiene minutos; los que se toman
+descanso no salen. Por eso en la tarjeta de contexto el B2B ya no va en rojo. Lo medido se encoge un 20 % hacia 1. Con
+el periodo de comprobación, la probabilidad de "Más" mejora en los partidos de vuelta (Brier 0,2375 → 0,2359) y un poco
+en los B2B, sin empeorar el resto.
+
+La misma prueba enseña que **el modelo solo se pasa de seguro**: cuando dice 63 %, sale un 54-56 %; cuando dice 27 %, un
+34-37 %. En la app lo suaviza la mezcla con la casa (`MODEL_WEIGHT`), y el acierto real de lo que enseña se mide en
+Mis apuestas → Acierto del modelo. Si ahí también sale descalibrado, el siguiente paso es encoger la probabilidad del
+modelo hacia el 50 % o bajar su peso.
+
+Para repetir la prueba:
+
+```bash
+docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(key, value) FROM basket.cache WHERE key LIKE 'log:nba:%'" > <temporal>/logs.json
+npx esbuild scripts/backtest-basket.ts --bundle --platform=node --outfile=<temporal>/bt.cjs && node <temporal>/bt.cjs <temporal>/logs.json
+```
+
+Debajo de "En las casas", la tabla del analizador enseña la cuota de cada casa por línea (Más y Menos), con la que paga
+más resaltada cuando las dos la tienen (`playerLines` guarda `books` con las cuotas de cada casa).

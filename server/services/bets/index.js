@@ -6,6 +6,7 @@ const env = require('../../shared/env');
 const store = require('./store');
 const auth = require('./auth');
 const settle = require('./settle');
+const predictions = require('./predictions');
 const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
@@ -53,7 +54,10 @@ const routes = [
   ['DELETE', '/api/bets/:id', ({ req, params }) => store.deleteBet(who(req).id, params.id)],
   ['POST', '/api/bets/import', ({ req, body }) => store.importBets(who(req).id, body?.list)],
   // Comprobar ya los resultados (sin esperar a la pasada de cada 5 min). Pide sesión, como todo /api; devuelve cuántas cambiaron
-  ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }]
+  ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
+  // Recomendaciones del modelo, para medir si acierta. No son de nadie: cualquiera con sesión las manda mientras las ve
+  ['POST', '/api/bets/predictions', ({ req, body }) => { who(req); return predictions.record(body?.list); }],
+  ['GET', '/api/bets/predictions', ({ req }) => { who(req); return predictions.report(); }]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))

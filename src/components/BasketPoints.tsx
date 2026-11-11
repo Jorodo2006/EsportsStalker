@@ -150,7 +150,8 @@ function SplitsTable({ splits, value, line }: { splits: PointSplit[]; value?: (r
 // Últimos partidos frente a la línea: las barras salen de la propia línea. Desde 0 no se verían 5 puntos sobre 225, y
 // recortar el eje engañaría; así arriba es Más y abajo es Menos sin depender sólo del color.
 function LineChart({ title, rows, value, line }: { title: string; rows: TeamRow[]; value: (r: TeamRow) => number; line: number }) {
-  const data = rows.slice(0, 20).reverse().map(r => ({ x: `${r.home ? '' : '@'}${r.opp}`, date: shortDate(r.date), v: value(r), d: value(r) - line }));
+  // k: clave única de cada barra (con el rival, dos partidos contra el mismo equipo compartían tooltip)
+  const data = rows.slice(0, 20).reverse().map((r, k) => ({ k, x: `${r.home ? '' : '@'}${r.opp}`, date: shortDate(r.date), v: value(r), d: value(r) - line }));
   const hits = data.filter(d => d.v > line).length;
   return (
     <div className="min-w-0">
@@ -163,7 +164,7 @@ function LineChart({ title, rows, value, line }: { title: string; rows: TeamRow[
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -14, bottom: 0 }} barCategoryGap={2}>
             <CartesianGrid stroke="#2b3034" vertical={false} />
-            <XAxis dataKey="x" stroke="#85948f" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
+            <XAxis dataKey="k" tickFormatter={k => data[k]?.x ?? ''} stroke="#85948f" fontSize={9} tickLine={false} axisLine={false} interval={0} angle={-45} textAnchor="end" height={34} />
             <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => (v > 0 ? `+${v}` : `${v}`)} />
             <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} itemStyle={{ color: '#fafafa', fontWeight: 600 }} labelStyle={{ color: '#d4d4d8' }}
               labelFormatter={(_, p) => (p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : '')}

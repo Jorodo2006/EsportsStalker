@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
+import { BookIcon } from '@/components/BookIcon';
 import { useApp, type AppId } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
 import { bestPicks, type BasketPick } from '@/lib/basket-picks';
@@ -197,6 +198,7 @@ export default function TodayView() {
                     <span className="block truncate text-xs text-zinc-500"><span className="tnum">{hhmm(x.date)}</span> · {x.event} · EV <span className="text-emerald-300">+{pct(x.ev)}</span></span>
                   </button>
                   <span className="w-11 shrink-0 text-right text-xs text-zinc-400 tnum">{pct(x.p)}</span>
+                  <span className="grid w-4 shrink-0 place-items-center" title={x.book}>{x.book && <BookIcon name={x.book} size={16} />}</span>
                   <button onClick={x.add} title={`${x.book ?? ''}: al cupón`} className={cn(oddBtn(true), 'h-8 w-14 text-[13px]')}>{odd(x.price)}</button>
                 </div>
               ))}

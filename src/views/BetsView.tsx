@@ -5,6 +5,7 @@ import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Targ
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
+import { ModelAccuracy } from '@/components/ModelAccuracy';
 import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
 
 const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
@@ -26,6 +27,8 @@ export default function BetsView() {
   const w = useWallet();
 
   const [checking, setChecking] = useState(false);
+  // Tus apuestas, o el acierto de las recomendaciones del modelo (las apostaras o no)
+  const [tab, setTab] = useState<'mine' | 'model'>('mine');
 
   async function quickSettle(b: Bet, status: BetStatus) {
     // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
@@ -56,6 +59,9 @@ export default function BetsView() {
         <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
+      <div className="mb-5"><Tabs value={tab} onChange={setTab} items={[{ value: 'mine', label: 'Mis apuestas' }, { value: 'model', label: 'Acierto del modelo' }]} /></div>
+      {tab === 'model' ? <ModelAccuracy /> : <>
+
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
         <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
           sub={`${money(w.inPlay, cur)} en juego · beneficio total ${money(w.profit, cur, true)}`} />
@@ -74,6 +80,7 @@ export default function BetsView() {
       </div>
 
       <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} />
+      </>}
     </>
   );
 }
@@ -86,7 +93,8 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
     const settled = bets.filter(b => b.status !== 'pending' && b.status !== 'void' && b.date >= since).sort((a, b) => a.date.localeCompare(b.date));
     let acc = 0;
     const points = settled.map(b => ({ date: fmtDate(b.date), event: b.event, profit: +(acc += betProfit(b)).toFixed(2) }));
-    return points.length ? [{ date: 'Inicio', event: '', profit: 0 }, ...points] : points;
+    // k: clave única de cada punto. Con la fecha como clave, dos apuestas del mismo día enseñaban en el tooltip la primera
+    return (points.length ? [{ date: 'Inicio', event: '', profit: 0 }, ...points] : points).map((p, k) => ({ ...p, k }));
   }, [bets, range]);
   const last = data.at(-1)?.profit ?? 0;
   const color = last >= 0 ? '#55f28c' : '#ff8a7f';
@@ -104,7 +112,7 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="#2b3034" vertical={false} />
-              <XAxis dataKey="date" stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
+              <XAxis dataKey="k" tickFormatter={k => data[k]?.date ?? ''} stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} minTickGap={30} />
               <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} width={70} tickFormatter={v => money(v, cur)} />
               <ReferenceLine y={0} stroke="#5e6c68" strokeDasharray="4 4" />
               <Tooltip

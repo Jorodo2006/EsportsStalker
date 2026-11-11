@@ -7,6 +7,7 @@ import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
 import { PICK_GROUPS, arrangePicks, bestPicks, hasValue, playerPicks, saneLine, teamPicks, type BasketPick, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { basketPrediction, logPredictions } from '@/lib/predictions';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
 import type { Side } from '@/lib/value';
 import { LEAGUE_NAME, esTime } from './BasketAnalyzer';
@@ -76,6 +77,11 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
     });
     return { picks: all.filter(saneLine), considered: all.length };
   }, [games, oddsKey, logsKey, pointsKey, injuries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Las de valor se registran para medir después si el modelo acierta (Mis apuestas → Acierto del modelo)
+  useEffect(() => {
+    logPredictions(picks.filter(hasValue).map(basketPrediction).filter((x): x is NonNullable<typeof x> => !!x));
+  }, [picks]);
 
   const now = Date.now();
   const stamps = games.map((_, i) => newest(oddsQ[i]?.data)).filter(Boolean);

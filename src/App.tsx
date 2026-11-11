@@ -22,6 +22,7 @@ import { FootballIcon } from '@/components/football';
 import BetsView from '@/views/BetsView';
 import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
+import { Notifier } from '@/components/Notifier';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
 //   - desde lg: menú lateral a la izquierda (deportes, navegación, competiciones del día y cartera) y el contenido;
@@ -169,6 +170,7 @@ export default function App() {
 
       <BetFormDialog />
       {!wide && <Coupon />}
+      <Notifier />
       {toastMsg && (
         <div className="fixed bottom-20 left-1/2 z-[60] w-max max-w-[90vw] -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm shadow-lg shadow-black/40 lg:bottom-5">{toastMsg}</div>
       )}

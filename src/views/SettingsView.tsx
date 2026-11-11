@@ -6,6 +6,8 @@ import type { Settings } from '@/lib/types';
 import { fmtTime } from '@/lib/format';
 import { useUser } from '@/components/AuthGate';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
+import { Toggle } from '@/components/sport';
+import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
 
 type Check = { name: string; ok?: boolean; msg?: string; ms?: number };
 
@@ -49,6 +51,7 @@ export default function SettingsView() {
       <PageHeader title="Ajustes" />
       <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <AccountCard isAdmin={isAdmin} />
+        <AlertsCard />
         <form onSubmit={submit}>
           <Card title="Preferencias">
             <div className="space-y-5">
@@ -274,6 +277,40 @@ function MarcadorCard() {
           ⚡ LoL Tracker
         </a>
       </div>
+    </Card>
+  );
+}
+
+// Avisos: cada uno se enciende por separado y se guarda en este navegador. Al encender el primero se pide permiso
+function AlertsCard() {
+  const [p, setP] = useState(alertPrefs);
+  const [perm, setPerm] = useState(notifyPermission);
+  const ITEMS: [AlertKind, string, string][] = [
+    ['settled', 'Apuestas resueltas', 'Cuando el servidor resuelve sola una de tus apuestas: ganada, perdida o nula, y cuánto.'],
+    ['picks', 'Recomendaciones fuertes', 'Cuando aparece una con mucho valor (EV de 8 % o más) y fiabilidad de 65 o más, de baloncesto o tenis.'],
+    ['injuries', 'Bajas en tus apuestas', 'Si un jugador de una apuesta pendiente de baloncesto sale de baja o en duda antes del partido.']
+  ];
+  async function flip(k: AlertKind, on: boolean) {
+    const n = { ...p, [k]: on };
+    setP(n); setAlertPrefs(n);
+    if (on) setPerm(await askPermission());
+  }
+  const note = perm === 'unsupported'
+    ? 'Este navegador no deja avisar desde aquí (pasa en el móvil entrando por la IP de casa, sin https): los avisos saldrán dentro de la app mientras la tengas abierta.'
+    : perm === 'denied' ? 'Has bloqueado los avisos para esta web: actívalos en el candado de la barra de direcciones. Mientras, salen dentro de la app.'
+      : perm === 'granted' ? 'Llegan como avisos del sistema mientras la app esté abierta en alguna pestaña.'
+        : 'Al encender uno, el navegador te pedirá permiso.';
+  return (
+    <Card title="Avisos">
+      <div className="flex flex-col divide-y divide-zinc-800/60">
+        {ITEMS.map(([k, label, hint]) => (
+          <div key={k} className="flex items-start justify-between gap-4 py-2.5 first:pt-0">
+            <div className="min-w-0"><div className="text-sm font-medium">{label}</div><div className="text-xs text-zinc-500">{hint}</div></div>
+            <Toggle on={p[k]} onChange={v => flip(k, v)} label="" />
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">{note}</p>
     </Card>
   );
 }

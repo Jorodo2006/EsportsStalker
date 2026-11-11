@@ -1,6 +1,8 @@
 // Recomendaciones de tenis: la apuesta más fiable de un partido, las más fáciles y las más complicadas, y las mejores del día.
 // Todo se calcula en el servicio (server/services/tennis/picks.js); aquí sólo se enseña y se manda al cupón.
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { logPredictions, tennisPredictions } from '@/lib/predictions';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
@@ -58,6 +60,11 @@ export function TennisPicksPanel({ m, date, onOdds }: { m: TennisMatch; date: st
   const q = useQuery({
     queryKey: ['tennis', 'picks', m.id], queryFn: () => window.api.tennis.picks(date, m.id), enabled: m.state === 'pre', refetchInterval: 60_000, retry: false
   });
+  // Las de valor se registran para medir después si el modelo acierta
+  useEffect(() => {
+    const r = q.data;
+    if (r?.ready) logPredictions(tennisPredictions(m, [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
+  }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const add = (p: TennisPick) => addToSlip({ sport: 'tennis', league: m.tournament, event: `${m.a.name} vs ${m.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending' });
   if (m.state !== 'pre') return <Empty>Las recomendaciones son para antes de empezar: el modelo no sigue el marcador en directo.</Empty>;
   if (q.isLoading) return <Loading label="Calculando las recomendaciones…" />;

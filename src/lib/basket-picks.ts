@@ -4,6 +4,7 @@
 // con las que comprobar si a la larga se gana dinero.
 import { BASKET_MARKETS, fmtLine, missedByPlayer, playerLines, playerOut, scanLine, type BasketMarket } from './basket-model';
 import { POINT_PERIODS, analyzePoints, pointLines, projectGame, type PointKind, type PointPeriod } from './basket-teams';
+import { gameCtx, teamGamesOf } from './basket-context';
 import type { BasketGame, BasketInjury, BasketLeagueGames, BasketTeamLogs, MatchOdds } from './types';
 import { SIDE_LABEL, tooFar, type Reliability, type Side } from './value';
 
@@ -36,13 +37,14 @@ const word = (s: Side) => SIDE_LABEL[s].toLowerCase();
 export function playerPicks(game: BasketGame, side: 'home' | 'away', data: BasketTeamLogs, odds: MatchOdds, injuries: BasketInjury[]): BasketPick[] {
   const team = game[side], opp = game[side === 'home' ? 'away' : 'home'];
   const missed = missedByPlayer(data);
+  const sched = teamGamesOf(data, team.id); // calendario de su equipo: el mismo contexto (B2B, vuelta de baja) que el analizador
   const out: BasketPick[] = [];
   for (const p of data.players) {
     const lines = playerLines(odds, p.name);
     if (!Object.keys(lines).length) continue;
     const injury = (game.league === 'nba' ? injuries.find(x => x.playerId === p.id)?.status : null) || p.injury;
     if (playerOut(injury, missed.get(p.id) ?? 0)) continue;
-    const ctx = { currentSeason: data.currentSeason, home: side === 'home', opp: opp.abbr, injury };
+    const ctx = { currentSeason: data.currentSeason, home: side === 'home', opp: opp.abbr, injury, ...gameCtx(p.games, sched, game.date, team.id) };
     for (const k of Object.keys(BASKET_MARKETS) as BasketMarket[]) {
       const M = BASKET_MARKETS[k];
       for (const l of lines[M.label] ?? []) {

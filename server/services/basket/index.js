@@ -101,6 +101,28 @@ const routes = [
     const l = league(params.league);
     if (l.src === el && !q.team) throw fail('Falta el equipo del jugador');
     return l.src === el ? el.gamelog(l.id, params.id, q.team) : espn.gamelog(l.id, params.id);
+  }],
+  // Descanso de los dos equipos antes del partido (B2B, 3 en 4 noches…). Sólo NBA y WNBA
+  ['GET', '/api/basket/rest/:id', async ({ params, query: q }) => {
+    const [lg, ev] = String(params.id).split(':');
+    const l = league(lg);
+    if (l.src === el) return { home: null, away: null };
+    if (!/^\d+$/.test(ev || '') || !/^\d+$/.test(String(q.home || '')) || !/^\d+$/.test(String(q.away || ''))) throw fail('Partido desconocido');
+    const [home, away] = await Promise.all([espn.rest(l.id, q.home, ev), espn.rest(l.id, q.away, ev)]);
+    return { home, away };
+  }],
+  // Calendario de un equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo NBA y WNBA
+  ['GET', '/api/basket/schedule/:league/:team', async ({ params }) => {
+    const l = league(params.league);
+    if (l.src === el) return [];
+    if (!/^\d+$/.test(String(params.team))) throw fail('Equipo desconocido');
+    return (await espn.teamSchedule(l.id, params.team)).map(g => ({ id: g.id, date: g.date }));
+  }],
+  // Partidos recientes de su equipo que no jugó, con el motivo. Sólo NBA y WNBA: la Euroliga no dice quién no jugó
+  ['GET', '/api/basket/absences/:league/:id', ({ params, query: q }) => {
+    const l = league(params.league);
+    if (!/^\d+$/.test(String(params.id)) || !/^\d+$/.test(String(q.team || ''))) throw fail('Jugador o equipo desconocido');
+    return l.src === el ? [] : espn.absences(l.id, params.id, q.team);
   }]
 ];
 

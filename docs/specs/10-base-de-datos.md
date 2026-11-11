@@ -206,6 +206,13 @@ Clave primaria `(bet_id, pos)`.
 comparador de cuotas (`total|0||212.5`, `player|Asistencias|naji marshall|2.5`) y `out` la selección (`over`, `a`, `x`…).
 La valida `cleanRef` en `store.js`; lo que no cuadra se descarta y la apuesta se guarda sin resolución automática.
 
+### `bets.predictions`
+
+Recomendaciones del modelo para medir si acierta (migración `009_predicciones.sql`). No tiene `user_id`: la recomendación
+es la misma para todos. Una fila por `(match, key, out)`; `p`, `p_model`, `p_market`, `price`, `ev` y `rel` son la última
+opinión antes del partido, `first_price` la cuota de la primera vez. `status`: `pending`, `won`, `lost`, `void` o
+`unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor.
+
 ## Esquema `odds` (servicio odds)
 
 Cuotas leídas de Winamax y Betway, su histórico y la cola de lecturas. Migraciones `001` y `002`.

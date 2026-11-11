@@ -143,6 +143,8 @@ async function boxscore(lg, eventId) {
       id: String(t.team?.id || ''), name: t.team?.displayName || '', abbr: t.team?.abbreviation || '', logo: t.team?.logo || '',
       side: c.homeAway === 'home' ? 'home' : 'away', periods: (c.linescores || []).map(l => toNum(l.displayValue ?? l.value)),
       players: (s.athletes || []).filter(a => a.stats?.length).map(a => ({ id: String(a.athlete?.id || ''), name: a.athlete?.displayName || '', starter: !!a.starter, ...row(a.stats) })),
+      // Los de la plantilla que no jugaron, con el motivo (decisión técnica, lesión…)
+      out: (s.athletes || []).filter(a => !a.stats?.length || a.didNotPlay).map(a => ({ id: String(a.athlete?.id || ''), name: a.athlete?.displayName || '', reason: reasonEs(a.reason) })),
       totals: row(s.totals)
     };
   });
@@ -155,6 +157,90 @@ async function boxscore(lg, eventId) {
 }
 
 module.exports.boxscore = boxscore;
+
+// ---------- Partidos que no jugó ----------
+// El registro de ESPN se salta los partidos en que el jugador no salió: sin esto, "no jugó" y "jugó e hizo 0" no se
+// distinguen. Se miran los últimos partidos terminados de su equipo que no están en su registro, y en el boxscore de cada
+// uno sale si estaba en la plantilla sin jugar (y por qué). Si no sale en el boxscore no estaba en el equipo (fichado
+// después, cedido…) y no cuenta. Las bajas de un partido terminado no cambian: se guardan para siempre, sólo la lista
+const REASON = [
+  [/coach/i, 'Decisión técnica'], [/not with team/i, 'No está con el equipo'], [/g league|two-way/i, 'En la G League'],
+  [/suspen/i, 'Sanción'], [/rest/i, 'Descanso'], [/personal/i, 'Motivos personales'], [/illness/i, 'Enfermedad']
+];
+const reasonEs = r => {
+  const s = String(r || '').trim();
+  if (!s) return 'No jugó';
+  const hit = REASON.find(([re]) => re.test(s));
+  return hit ? hit[1] : `Lesión: ${s.charAt(0) + s.slice(1).toLowerCase()}`;
+};
+
+const dnpOf = (lg, ev) => remember(`keep:dnp:${lg}:${ev}`, 0, async () => {
+  const j = await bulk(() => fetchJSON(`${site(lg)}/summary?event=${ev}`));
+  const out = {};
+  for (const t of j.boxscore?.players || []) for (const a of t.statistics?.[0]?.athletes || []) {
+    if (a.didNotPlay || !a.stats?.length) out[String(a.athlete?.id || '')] = reasonEs(a.reason);
+  }
+  return out;
+}, { keep: true });
+
+async function absences(lg, playerId, teamId, last = 25) {
+  if (!teamId) return [];
+  const y = seasonYear();
+  const [sched, log] = await Promise.all([
+    getJSON(`${site(lg)}/teams/${teamId}/schedule?season=${y}`, 30 * 60e3),
+    gamelog(lg, playerId)
+  ]);
+  const played = new Set(log.games.map(g => String(g.id)));
+  const done = (sched.events || []).filter(e => e.competitions?.[0]?.status?.type?.completed)
+    .sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, last);
+  const missing = done.filter(e => !played.has(String(e.id)));
+  const rows = await Promise.all(missing.map(async e => {
+    const why = (await dnpOf(lg, e.id).catch(() => ({})))[String(playerId)];
+    if (!why) return null; // no estaba en el equipo
+    const cs = e.competitions[0].competitors || [];
+    const me = cs.find(c => String(c.team?.id) === String(teamId)) || {}, rival = cs.find(c => c !== me) || {};
+    return { id: String(e.id), date: e.date, home: me.homeAway === 'home', opp: rival.team?.abbreviation || '?', reason: why };
+  }));
+  return rows.filter(Boolean);
+}
+
+module.exports.absences = absences;
+
+// ---------- Descanso de los equipos ----------
+// Días entre partidos en hora de Nueva York (las fechas de la NBA son las de allí: un partido a las 01:30 UTC es de la
+// noche anterior). B2B = jugó el día antes; "3 en 4" = tercer partido en cuatro noches. El cansancio se nota más
+// en el segundo de un B2B jugado fuera, por el viaje
+const nyDay = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+
+async function teamSchedule(lg, teamId) {
+  const y = seasonYear();
+  const lists = await Promise.all(['', '&seasontype=3'].map(s =>
+    getJSON(`${site(lg)}/teams/${teamId}/schedule?season=${y}${s}`, 30 * 60e3).catch(() => ({ events: [] }))));
+  const seen = new Set();
+  return lists.flatMap(j => j.events || []).filter(e => !seen.has(e.id) && seen.add(e.id)).map(e => {
+    const cs = e.competitions?.[0]?.competitors || [];
+    const me = cs.find(c => String(c.team?.id) === String(teamId)) || {}, rival = cs.find(c => c !== me) || {};
+    return { id: String(e.id), date: e.date, day: nyDay(e.date), home: me.homeAway === 'home', opp: rival.team?.abbreviation || '?' };
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+async function rest(lg, teamId, eventId) {
+  const games = await teamSchedule(lg, teamId);
+  const i = games.findIndex(g => g.id === String(eventId));
+  if (i < 0) return null;
+  const g = games[i], prev = games[i - 1] || null, next = games[i + 1] || null, d = dayNum(g.day);
+  const days = prev ? d - dayNum(prev.day) - 1 : null; // noches libres entre medias
+  return {
+    teamId: String(teamId), days, b2b: days === 0,
+    in4: games.filter(x => d - dayNum(x.day) >= 0 && d - dayNum(x.day) <= 3).length, // partidos en las 4 últimas noches, éste incluido
+    prev: prev && { date: prev.date, opp: prev.opp, home: prev.home },
+    nextB2b: !!next && dayNum(next.day) - d === 1 // mañana vuelve a jugar: a veces se dosifican minutos
+  };
+}
+
+module.exports.rest = rest;
+module.exports.teamSchedule = teamSchedule;
 
 // El partido de un jugador por cuartos y sus tiros, de las jugadas de ESPN (la misma ficha que el boxscore, ya en caché).
 // En cada jugada el primer participante es quien la hace y el segundo quien asiste, roba o tapona ("X blocks Y's layup",

@@ -2,7 +2,8 @@
 // Se publica en window.api para que las vistas no tengan que saber cómo se habla con el backend.
 import marcador from '../../chrome/bookmarklet/marcador.js?raw';
 import { fromCsv, toCsv } from './csv';
-import type { Api, AutoJob, TeamRef } from './types';
+import { logPredictions, tennisPredictions } from './predictions';
+import type { Api, AutoJob, TeamRef, TennisDayPick } from './types';
 
 const DOWN = 'El servidor no responde. Arranca el backend con «npm run backend» (hace falta Docker Desktop encendido).';
 const TIMEOUT = 180e3; // las stats esperan en la cola de Leaguepedia
@@ -112,6 +113,8 @@ export const api: Api = {
     save: b => call('POST', '/api/bets', b),
     delete: id => call('DELETE', `/api/bets/${part(id)}`),
     settle: () => call('POST', '/api/bets/settle', {}),
+    recordPredictions: list => call('POST', '/api/bets/predictions', { list }),
+    predictions: () => get('/api/bets/predictions'),
     export: async () => {
       const name = `apuestas-${new Date().toISOString().slice(0, 10)}.csv`;
       download(name, toCsv(await get('/api/bets')));
@@ -169,7 +172,11 @@ export const api: Api = {
     stats: (tour, id) => get(`/api/tennis/stats/${part(tour)}/${part(id)}`),
     surface: (tour, name, city) => get(`/api/tennis/surface/${part(tour)}`, { name, city }),
     picks: (date, id) => get('/api/tennis/picks', { date, id }),
-    picksDay: date => get('/api/tennis/picks/day', { date })
+    // Las del día se registran para medir si el modelo acierta (las ve la lista de tenis y la portada Hoy)
+    picksDay: date => get('/api/tennis/picks/day', { date }).then((list: TennisDayPick[]) => {
+      logPredictions(list.flatMap(d => tennisPredictions(d, [d.top, d.hard])));
+      return list;
+    })
   },
   basket: {
     leagues: () => get('/api/basket/leagues'),
@@ -187,7 +194,10 @@ export const api: Api = {
     playerGame: (gameId, playerId) => get(`/api/basket/player-game/${part(gameId)}/${part(playerId)}`),
     flow: gameId => get(`/api/basket/flow/${part(gameId)}`),
     search: q => get('/api/basket/search', { q }),
-    gamelog: (league, id, t) => get(`/api/basket/gamelog/${part(league)}/${part(id)}`, { team: t })
+    gamelog: (league, id, t) => get(`/api/basket/gamelog/${part(league)}/${part(id)}`, { team: t }),
+    absences: (league, id, t) => get(`/api/basket/absences/${part(league)}/${part(id)}`, { team: t }),
+    schedule: (league, team) => get(`/api/basket/schedule/${part(league)}/${part(team)}`),
+    rest: (gameId, home, away) => get(`/api/basket/rest/${part(gameId)}`, { home, away })
   },
   onOddsAuto: cb => listen(onAuto, cb),
   marcador: {

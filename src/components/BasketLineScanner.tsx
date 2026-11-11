@@ -5,6 +5,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
+import { gameCtx, teamGamesOf } from '@/lib/basket-context';
 import { BASKET_MARKETS, fmtLine, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
 import { SIDE_LABEL, type Side } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketSide, BasketTeamLogs } from '@/lib/types';
@@ -77,8 +78,9 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       const t = teams[i], data = logs[i]?.data;
       if (!data) continue;
       const missed = missedByPlayer(data);
+      const sched = teamGamesOf(data, t.team.id);
       for (const p of data.players) {
-        const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: (t.game.league === 'nba' ? injuries.find(x => x.playerId === p.id)?.status : null) || p.injury };
+        const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: (t.game.league === 'nba' ? injuries.find(x => x.playerId === p.id)?.status : null) || p.injury, ...gameCtx(p.games, sched, t.game.date, t.team.id) };
         const book = linesOf.get(`${t.game.id}:${p.id}`)?.[BASKET_MARKETS[market].label] ?? [];
         const exact = book.find(b => b.line === L);
         const r = scanLine(p.games, market, L, side, ctx, { over: exact?.over, under: exact?.under });

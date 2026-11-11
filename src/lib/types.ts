@@ -35,6 +35,18 @@ export interface Bet {
   ref?: BetRef; // simple: su partido y mercado, para resolverla sola
 }
 
+// Una recomendación del modelo tal y como se registra: su partido y mercado (como el ref de una apuesta), lo que decía
+// (p, la probabilidad que enseña la app; pModel y pMarket, sus dos partes) y la cuota
+export interface PredictionIn {
+  sport: Sport; match: string; key: string; out: string; start: string; group: string; title: string; event: string; league: string;
+  book?: string; price: number; p: number; pModel?: number | null; pMarket?: number | null; ev: number; rel?: number;
+}
+export interface PredictionRow {
+  sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
+  pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
+}
+export interface PredictionReport { pending: number; unknown: number; since: string | null; rows: PredictionRow[] }
+
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
 export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
 
@@ -293,6 +305,10 @@ export interface BasketLogGame {
   min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number;
 }
 export interface BasketGamelog { currentSeason: number; games: BasketLogGame[] }
+// Un partido reciente de su equipo que no jugó, con el motivo (sólo NBA y WNBA)
+// Descanso de un equipo antes de un partido: noches libres desde el anterior (0 = B2B), partidos en las 4 últimas noches
+export interface BasketRest { teamId: string; days: number | null; b2b: boolean; in4: number; prev: { date: string; opp: string; home: boolean } | null; nextB2b: boolean }
+export interface BasketAbsence { id: string; date: string; home: boolean; opp: string; reason: string }
 // Plantilla con los partidos de cada jugador (escáner de líneas)
 export interface BasketTeamLogs { currentSeason: number; players: (BasketRosterPlayer & { games: BasketLogGame[] })[] }
 // Partidos terminados de una liga con sus parciales (q: un valor por cuarto y prórroga), de más reciente a más antiguo
@@ -318,7 +334,7 @@ export interface BasketPlayerGame {
   byPeriod: Record<string, { pts: number; fgm: number; fga: number; tpm: number; tpa: number; ftm: number; fta: number; oreb: number; dreb: number; ast: number; stl: number; blk: number; tov: number; pf: number }>;
   shots: BasketShot[];
 }
-export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; totals: BoxLine }
+export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; out?: { id: string; name: string; reason: string }[]; totals: BoxLine }
 export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
 export interface AuthUser { id: string; username: string; isAdmin: boolean }
@@ -338,6 +354,9 @@ export interface Api {
     // Mira ya los resultados de las pendientes (el servidor también lo hace solo cada 5 minutos)
     settle(): Promise<{ changed: number }>;
     export(): Promise<string | null>; import(): Promise<number>;
+    // Recomendaciones del modelo, para medir si acierta (no son de ningún usuario)
+    recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
+    predictions(): Promise<PredictionReport>;
   };
   esports: {
     leagues(): Promise<League[]>;
@@ -408,6 +427,9 @@ export interface Api {
     flow(gameId: string): Promise<BasketFlow>;
     search(q: string): Promise<BasketPlayerHit[]>;
     gamelog(league: BasketLeagueId, playerId: string, teamId?: string): Promise<BasketGamelog>;
+    absences(league: BasketLeagueId, playerId: string, teamId: string): Promise<BasketAbsence[]>;
+    schedule(league: BasketLeagueId, teamId: string): Promise<{ id: string; date: string }[]>;
+    rest(gameId: string, homeId: string, awayId: string): Promise<{ home: BasketRest | null; away: BasketRest | null }>;
   };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;
   marcador: { url(): Promise<string>; paste(m?: { a: TeamRef; b: TeamRef }): Promise<{ ok: boolean; partido: string | null }> };

@@ -2,6 +2,7 @@
 // ajuste local / visitante y por rival, probabilidad de la línea mezclada con la frecuencia histórica,
 // y el valor, la fiabilidad y el veredicto con las funciones comunes de value.ts.
 import type { BasketLogGame, BasketTeamLogs, MatchOdds } from './types';
+import type { GameCtx } from './basket-context';
 import { devig, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue } from './value';
 
 type G = BasketLogGame;
@@ -27,7 +28,29 @@ export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (
 };
 export type BasketMarket = keyof typeof BASKET_MARKETS;
 
-export interface BasketCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null }
+// El contexto del partido (descanso, vuelta tras baja) sale de gameCtx en basket-context.ts, igual en todas las pantallas
+export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null }
+
+// Cuánto cambia lo que hace un jugador con el cansancio y al volver de una baja, por mercado, frente a lo que ya proyecta
+// el modelo. Medido con scripts/backtest-basket.ts (ajuste: temporada 25-26 hasta enero; comprobación: el resto); 1 = no
+// se nota y no se aplica
+// - B2B: al contrario de lo que se suele pensar, rinden algo MÁS de lo proyectado (ajuste: PRA +2,7 % ±2,4, minutos +2,2 %;
+//   comprobación: +5,9 % y +5,0 %). Quien juega el segundo de un B2B está sano y tiene minutos; los que descansan no salen
+// - 1.er partido tras perderse 3 o más: −11/−13 % en todo y −13 % de minutos (en los dos periodos). 2.º: algo menos. 3.º: normal
+// Lo medido en el ajuste se encoge un 20 % hacia 1 para no pasarse
+const CTX_FACTORS: Record<'b2b' | 'back1' | 'back2', Partial<Record<BasketMarket, number>>> = {
+  b2b: { pts: 1.02, reb: 1.02, pra: 1.02, pr: 1.02, pa: 1.02, ra: 1.02 },
+  back1: { pts: 0.91, reb: 0.91, ast: 0.9, fg3m: 0.93, pra: 0.91, pr: 0.91, pa: 0.91, ra: 0.9, stl: 0.93, blk: 0.92, sb: 0.92, tov: 0.92 },
+  back2: { pts: 0.93, reb: 0.95, ast: 0.93, fg3m: 0.97, pra: 0.93, pr: 0.93, pa: 0.93, ra: 0.93, stl: 0.95, blk: 0.95, sb: 0.95, tov: 0.95 }
+};
+function ctxFactors(market: BasketMarket, ctx: BasketCtx) {
+  const out: { label: string; f: number; n: number }[] = [];
+  const f = (k: keyof typeof CTX_FACTORS) => CTX_FACTORS[k][market] ?? 1;
+  if (ctx.b2b && f('b2b') !== 1) out.push({ label: 'B2B', f: f('b2b'), n: 0 });
+  if (ctx.back === 1 && f('back1') !== 1) out.push({ label: '1.er partido tras baja', f: f('back1'), n: 0 });
+  if (ctx.back === 2 && f('back2') !== 1) out.push({ label: '2.º partido tras baja', f: f('back2'), n: 0 });
+  return out;
+}
 
 const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
 const mean = (a: number[]) => (a.length ? sum(a) / a.length : 0);
@@ -85,6 +108,7 @@ export function project(games: G[], market: BasketMarket, ctx: BasketCtx) {
     mu *= h2h.f;
     factors.push({ label: `Contra ${ctx.opp}`, ...h2h });
   }
+  for (const c of ctxFactors(market, ctx)) { mu *= c.f; factors.push(c); }
   const W = sum(weights), neff = (W * W) / sum(weights.map(w => w * w));
   let variance = Math.max(wvar(xs, weights), mu * 0.9);
   variance *= 1 + 2 / Math.max(neff, 1); // más incertidumbre con muestras cortas
@@ -236,25 +260,32 @@ export function missedByPlayer(t: BasketTeamLogs) {
 // Baja segura: lesionado, sancionado o sin jugar los últimos 3 partidos de su equipo
 export const playerOut = (injury: string | null | undefined, missed: number) => (!!injury && /out|suspen/i.test(injury)) || missed >= 3;
 
-// Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, book }] }
+// Una línea de jugador en las casas: la mejor cuota de cada lado (y de qué casa es) y lo que da cada casa
+export interface CasaLine { line: number; over?: number; under?: number; overBook?: string; underBook?: string; books: Record<string, { over?: number; under?: number }> }
+
+// Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, books }] }
 export function playerLines(odds: MatchOdds | undefined, name: string) {
   // Sin "Jr." ni "III": ESPN y las casas no siempre lo ponen
   const bare = (s: string) => s.trim().replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, '');
   const norm = (s: string) => bare(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
   const n = norm(name), last = norm(bare(name).split(' ').slice(-1)[0] || '');
-  const out: Record<string, { line: number; over?: number; under?: number; overBook?: string; underBook?: string }[]> = {};
+  const out: Record<string, CasaLine[]> = {};
   for (const m of odds?.markets ?? []) {
     if (!m.key.startsWith('player|') || m.line == null) continue;
     const [, stat, who] = m.key.split('|');
     const w = norm(who);
     if (w !== n && !(last.length >= 4 && w.endsWith(last) && w[0] === n[0])) continue;
-    const best = (id: string) => {
-      const p = m.outcomes.find(o => o.id === id)?.prices ?? {};
-      const [book, price] = Object.entries(p).sort((x, y) => y[1] - x[1])[0] ?? [];
-      return { price, book };
-    };
-    const o = best('over'), u = best('under');
-    (out[stat] ??= []).push({ line: m.line, over: o.price, under: u.price, overBook: o.book, underBook: u.book });
+    // Una casa puede escribir el nombre de otra forma ("Trey Murphy III" / "Trey Murphy"): misma línea, se juntan
+    const list = (out[stat] ??= []);
+    let row = list.find(r => r.line === m.line);
+    if (!row) list.push(row = { line: m.line, books: {} });
+    for (const side of ['over', 'under'] as const) {
+      for (const [book, price] of Object.entries(m.outcomes.find(o => o.id === side)?.prices ?? {})) {
+        if (!(price > 1)) continue;
+        (row.books[book] ??= {})[side] = price;
+        if (!(row[side]! >= price)) { row[side] = price; row[side === 'over' ? 'overBook' : 'underBook'] = book; }
+      }
+    }
   }
   return out;
 }

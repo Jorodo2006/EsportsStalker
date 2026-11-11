@@ -107,6 +107,36 @@ solas con el resultado del partido.
 - En el historial, cada apuesta con `ref` lleva la marca *se resuelve sola* / *resuelta sola* (al pasar el ratón, el
   resultado). Pruebas en `server/test/resolver.test.js`.
 
+## Acierto del modelo (`bets.predictions`, `server/services/bets/predictions.js`)
+
+En Mis apuestas → **Acierto del modelo** se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
+app (Hoy, Recomendaciones, la ficha del partido), `src/lib/predictions.ts` manda al servidor las de valor de baloncesto
+(`hasValue`) y todas las que enseña el tenis (la principal es "la más fiable", que puede no tener valor), con su partido
+y mercado (la misma clave que el `ref` de una apuesta), la probabilidad que enseña la app (`p`) y sus dos partes (modelo y
+casa sin margen), la cuota, el EV y la fiabilidad. Se guarda la última opinión antes de empezar y la cuota de la primera
+vez. El resolvedor (`settle.js`) las cierra en la misma pasada que las apuestas; si a los 4 días no ha podido, quedan como
+`unknown` y fuera de las cuentas. Sólo se guardan mercados que sabe resolver.
+
+La página enseña: acierto real frente al esperado (con el margen que da el azar), beneficio y ROI apostando 1 unidad a
+cada una, calibración por tramos de probabilidad, Brier del modelo solo, de la casa y de la mezcla sobre las mismas
+recomendaciones, si la cuota bajó mientras se recomendaba, y el desglose por mercado, por EV y por casa.
+
+No son de ningún usuario (la recomendación es la misma para todos), pero las manda el navegador de cualquiera con sesión:
+el servidor valida cada campo (`clean`, `server/test/predicciones.test.js`).
+
+## Avisos (`src/lib/notify.ts`, `src/components/Notifier.tsx`)
+
+En Ajustes → Avisos se enciende cada uno (se guarda en el navegador):
+
+- **Apuestas resueltas**: cuando el servidor resuelve sola una apuesta tuya (llega `bets:settled` y una pendiente deja de
+  estarlo en los 2 minutos siguientes; si la cambias a mano no avisa).
+- **Recomendaciones fuertes**: EV ≥ 8 % y fiabilidad ≥ 65; un solo aviso aunque salgan varias, con la mejor.
+- **Bajas en tus apuestas**: jugadores de apuestas pendientes de baloncesto (con `ref`) que el parte de ESPN pone como
+  Out, Doubtful o Questionable antes del partido (mirado cada 10 minutos).
+
+Sólo funcionan con la app abierta en alguna pestaña. El navegador sólo deja avisar en un sitio seguro (https, 127.0.0.1 o
+localhost); desde el móvil por la IP de casa salen dentro de la app. Lo ya avisado se recuerda 4 días (`avisos-vistos`).
+
 ## Importar y exportar
 
 - **JSON**: el array de apuestas tal cual.

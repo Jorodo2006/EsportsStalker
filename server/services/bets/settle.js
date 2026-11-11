@@ -7,6 +7,7 @@
 const { query, notify } = require('../../shared/db');
 const client = require('../../shared/client');
 const store = require('./store');
+const predictions = require('./predictions');
 
 const TICK = 5 * 60e3;
 const madridDay = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
@@ -247,6 +248,12 @@ async function run() {
     }
   } catch (e) {
     console.error('Resolver apuestas:', e.message);
+  }
+  // Las recomendaciones del modelo, con los mismos resultados (un partido se pide una vez para todo)
+  try {
+    await predictions.settle(resultOf, evaluate, madridDay);
+  } catch (e) {
+    console.error('Resolver recomendaciones:', e.message);
   } finally {
     running = false;
   }

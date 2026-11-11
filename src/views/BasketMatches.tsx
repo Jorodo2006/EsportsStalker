@@ -16,6 +16,7 @@ import { TrendsTable, basketMarkets, basketTrendData } from '@/components/Trends
 import { BasketDayPicks, BasketPicksBoard } from '@/components/BasketPicks';
 import { GamePoints } from '@/components/BasketPoints';
 import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
+import { restText, useRest } from '@/components/BasketContext';
 import { BasketTeamSheet, TeamsCompare } from '@/components/BasketTeamSheet';
 import type { BasketPick } from '@/lib/basket-picks';
 import { useTeamThemes } from '@/lib/team-colors';
@@ -182,6 +183,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
           ['h2h', 'H2H'], ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
+      {st === 'pre' && <RestStrip game={game} />}
       {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
         : tab === 'picks' ? <BasketPicksBoard games={[game]} injuries={injuries} onOpen={openPick} onOdds={() => setTab('odds')} />
         : tab === 'points' ? <GamePoints key={teamPick?.id} game={game} odds={odds.data} initial={teamPick?.period && teamPick.pointKind ? { period: teamPick.period, kind: teamPick.pointKind, line: teamPick.line } : undefined} />
@@ -194,6 +196,21 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
         </div>
         : player ? <BasketAnalyzer key={`${player.id}:${player.market}:${player.line}`} player={player} games={[game]} injuries={injuries} odds={odds.data} />
           : <Empty>Pulsa un jugador en Plantillas para analizar sus líneas.</Empty>}
+    </div>
+  );
+}
+
+// Descanso de los dos equipos antes del partido: un B2B o un 3 en 4 cambia totales y hándicaps
+function RestStrip({ game }: { game: BasketGame }) {
+  const r = useRest(game).data;
+  if (!r?.home || !r.away) return null;
+  const side = (abbr: string, x: NonNullable<typeof r.home>, home: boolean) => {
+    const t = restText(x, home);
+    return <span><span className="font-semibold text-zinc-300">{abbr}</span> <span className={t.tone === 'bad' ? 'text-rose-300' : 'text-zinc-400'}>{t.text.charAt(0).toLowerCase() + t.text.slice(1)}</span></span>;
+  };
+  return (
+    <div className="-mt-2 flex flex-wrap gap-x-5 gap-y-1 px-1 text-xs">
+      <span className="text-zinc-500">Descanso</span>{side(game.away.abbr, r.away, false)}{side(game.home.abbr, r.home, true)}
     </div>
   );
 }
@@ -407,6 +424,14 @@ function BoxTable({ team, game, onPick }: { team: BoxTeam; game: BasketGame; onP
           </tbody>
         </table>
       </div>
+      {!!team.out?.length && (
+        <div className="border-t border-zinc-800/60 px-4 py-2.5 text-xs leading-relaxed">
+          <span className="text-zinc-500">No jugaron: </span>
+          {team.out.map((o, i) => (
+            <span key={o.id || o.name}>{i > 0 && <span className="text-zinc-600"> · </span>}<span className="text-zinc-300">{o.name}</span> <span className="text-zinc-500">({o.reason.toLowerCase()})</span></span>
+          ))}
+        </div>
+      )}
       {sel && <BasketPlayerGameDialog key={sel.id || sel.name} game={game} team={team} player={sel} onClose={() => setSel(null)}
         onLines={() => { const p = sel; setSel(null); onPick(p); }} />}
     </div>
