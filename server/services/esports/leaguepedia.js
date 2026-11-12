@@ -51,7 +51,7 @@ async function apiFetch(params, { method = 'GET', body } = {}) {
     const res = await fetch(url, {
       method,
       body: body ? new URLSearchParams(body) : undefined,
-      headers: { 'User-Agent': 'Statex/0.3 (uso personal)', Accept: 'application/json', ...(cookies ? { Cookie: cookies } : {}) },
+      headers: { 'User-Agent': 'Sharpex/0.3 (uso personal)', Accept: 'application/json', ...(cookies ? { Cookie: cookies } : {}) },
       signal: ctrl.signal
     });
     storeCookies(res);

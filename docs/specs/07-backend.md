@@ -97,7 +97,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 |---|---|
 | `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt e `is_admin` |
 | `bets.sessions` | Sesiones de 30 días. Sólo se guarda el SHA-256 del token |
-| `bets.user_settings` | Preferencias de cada usuario |
+| `bets.user_settings` | Lo de cada usuario: banca inicial y filtro de ligas (el resto de ajustes son comunes, `bets.settings`) |
 | `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football` o `mix` (migraciones 002, 003, 004 y 007) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes comunes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |

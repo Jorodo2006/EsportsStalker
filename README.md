@@ -1,4 +1,4 @@
-# Statex
+# Sharpex
 
 Web con login, para el ordenador y el móvil, y un backend en Docker para seguir LoL, baloncesto, tenis y fútbol:
 

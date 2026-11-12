@@ -11,6 +11,7 @@ import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th
 import { BookHead, BookIcon } from '@/components/BookIcon';
 import { Scoreboard, SheetTabs } from '@/components/sport';
 import { oddsMeta } from '@/lib/odds-live';
+import { useUser } from '@/components/AuthGate';
 
 const DRAGONS: Record<string, string> = {
   ocean: 'Océano', infernal: 'Infernal', cloud: 'Nube', mountain: 'Montaña', hextech: 'Hextech', chemtech: 'Quimtec', elder: 'Ancestral'
@@ -99,6 +100,7 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
   updatedAt: number; fetching: boolean; onPaste: () => void;
 }) {
   const { go, toast } = useApp();
+  const isAdmin = !!useUser().data?.isAdmin;
   const [job, setJob] = useState<AutoJob | null>(null);
   // Progreso del trabajo propio y también de las lecturas programadas de este partido
   useEffect(() => window.api.onOddsAuto(j => setJob(cur => {
@@ -133,8 +135,8 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
       })}
       {!!job?.error && /lector/.test(job.error) && (
         <span className="text-xs text-rose-400">
-          El lector de cuotas no responde: ejecuta <code>npm run backend</code>{' '}
-          <button className="cursor-pointer text-amber-400 hover:underline" onClick={() => go('settings')}>Ajustes</button>
+          El lector de cuotas no responde: ejecuta <code>npm run backend</code>
+          {isAdmin && <>{' '}<button className="cursor-pointer text-amber-400 hover:underline" onClick={() => go('settings')}>Ajustes</button></>}
         </span>
       )}
       <div className="ml-auto flex items-center gap-3">

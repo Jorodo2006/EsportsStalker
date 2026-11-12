@@ -35,7 +35,7 @@ async function getCsv(file, ttl) {
   const url = `${BASE}/${file}`, hit = mem.get(url);
   if (hit && Date.now() - hit.t < ttl) return hit.v;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Statex/0.3 (uso personal)', Accept: 'text/csv' }, signal: AbortSignal.timeout(40000) });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Sharpex/0.3 (uso personal)', Accept: 'text/csv' }, signal: AbortSignal.timeout(40000) });
     if (!res.ok) throw new Error(`respondió ${res.status}`);
     const v = parseCsv(await res.text());
     mem.set(url, { t: Date.now(), v });

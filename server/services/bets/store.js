@@ -20,8 +20,9 @@ const DEFAULT_SETTINGS = {
   signupOpen: true // si se pueden crear cuentas nuevas desde la pantalla de entrada
 };
 
-// Cada usuario tiene las suyas; el resto de ajustes son comunes y sólo los cambia el administrador
-const USER_KEYS = ['currency', 'initialBankroll', 'featuredBooks', 'refreshSeconds', 'favoriteLeagues'];
+// Los ajustes son de la app entera: sólo los cambia el administrador y valen para todos (migración 010). De cada usuario
+// quedan su banca inicial (cada uno tiene su cartera) y el filtro de ligas de la lista de LoL, que no son ajustes de la app
+const USER_KEYS = ['initialBankroll', 'favoriteLeagues'];
 const SECRET_KEYS = ['leaguepediaUser', 'leaguepediaPassword', 'lolesportsKey'];
 
 const OLD_FEATURED = ['Pinnacle,Bet365,Bwin,Betfair Ex,William Hill,Unibet,Betway,1xBet,Codere,Betsson,Marathonbet,Stake', 'Bet365,Winamax,Betway,Betfair,William Hill', 'Bet365,Winamax,William Hill,Betway'];
@@ -31,7 +32,8 @@ const OBSOLETE = ['usePinnacle', 'useWinamax', 'useKambi', 'oddspapiKey', 'oddsp
 // Sin usuario (los demás servicios) sólo cuentan los ajustes comunes
 async function getSettings(userId) {
   const { rows } = await query('SELECT key, value FROM bets.settings');
-  const own = userId ? (await query('SELECT key, value FROM bets.user_settings WHERE user_id = $1', [userId])).rows : [];
+  // De lo guardado por cada usuario sólo cuenta lo suyo (USER_KEYS): las filas antiguas de moneda o casas no pisan las comunes
+  const own = userId ? (await query('SELECT key, value FROM bets.user_settings WHERE user_id = $1 AND key = ANY($2)', [userId, USER_KEYS])).rows : [];
   const s = { ...DEFAULT_SETTINGS, ...Object.fromEntries([...rows, ...own].map(r => [r.key, r.value])) };
   // La lista de casas de versiones anteriores pasa a la nueva por defecto
   if (OLD_FEATURED.includes(s.featuredBooks)) s.featuredBooks = DEFAULT_SETTINGS.featuredBooks;
@@ -41,9 +43,11 @@ async function getSettings(userId) {
   return s;
 }
 
-// El formulario manda todos los ajustes: los comunes se ignoran si no es administrador
+// Cada uno guarda lo suyo (USER_KEYS); el resto, sólo el administrador, y vale para todos. Quien no lo es y manda un ajuste
+// común recibe un 403: la interfaz no se lo enseña, así que sería una petición a mano
 async function setSettings(userId, isAdmin, patch) {
   const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined);
+  if (!isAdmin && entries.some(([k]) => !USER_KEYS.includes(k))) throw fail('Sólo el administrador puede cambiar los ajustes', 403);
   await tx(async c => {
     for (const [k, v] of entries) {
       if (USER_KEYS.includes(k)) {
@@ -254,4 +258,4 @@ function normalizeCombo(b, legs, money, text) {
   };
 }
 
-module.exports = { getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };
+module.exports = { USER_KEYS, getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

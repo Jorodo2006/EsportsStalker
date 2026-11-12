@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, ChevronDown, Loader2, LogOut, PlugZap, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Loader2, PlugZap, ShieldAlert, XCircle } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import type { Settings } from '@/lib/types';
 import { fmtTime } from '@/lib/format';
 import { useUser } from '@/components/AuthGate';
-import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
+import { Button, Card, Empty, Field, Input, PageHeader } from '@/components/ui';
 import { Toggle } from '@/components/sport';
-import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
 
 type Check = { name: string; ok?: boolean; msg?: string; ms?: number };
 
+// Ajustes de la app: sólo los ve y los cambia el administrador, y valen para todos los usuarios (el servidor rechaza los de
+// los demás). Lo de cada uno (contraseña, banca inicial, avisos) está en AccountView
 export default function SettingsView() {
   const { settings, saveSettings, toast } = useApp();
   const isAdmin = !!useUser().data?.isAdmin;
@@ -23,12 +24,10 @@ export default function SettingsView() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    await saveSettings({
-      ...f,
-      initialBankroll: parseFloat(String(f.initialBankroll)) || 0,
-      refreshSeconds: Math.max(10, parseInt(String(f.refreshSeconds), 10) || 30)
-    });
-    toast('Ajustes guardados');
+    // La banca inicial es de cada uno: no va en los ajustes comunes
+    const { initialBankroll: _own, favoriteLeagues: _filter, ...common } = f;
+    await saveSettings({ ...common, refreshSeconds: Math.max(10, parseInt(String(f.refreshSeconds), 10) || 30) });
+    toast('Ajustes guardados para todos los usuarios');
   }
 
   async function test() {
@@ -46,23 +45,19 @@ export default function SettingsView() {
     ]);
   }
 
+  if (!isAdmin) return <Empty icon={<ShieldAlert size={22} />}>Los ajustes de la app sólo los cambia el administrador. Lo tuyo está en «Tu cuenta».</Empty>;
   return (
     <>
-      <PageHeader title="Ajustes" />
+      <PageHeader title="Ajustes" subtitle="De la app entera: lo que cambies aquí vale al momento para todos los usuarios" />
       <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
-        <AccountCard isAdmin={isAdmin} />
-        <AlertsCard />
         <form onSubmit={submit}>
-          <Card title="Preferencias">
+          <Card title="General">
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Moneda"><Input maxLength={4} value={f.currency ?? ''} onChange={set('currency')} /></Field>
-                <Field label="Banca inicial"><Input type="number" step="0.01" value={f.initialBankroll ?? ''} onChange={set('initialBankroll')} /></Field>
-              </div>
+              <Field label="Moneda" hint="La de todas las cantidades, para todos."><Input maxLength={4} value={f.currency ?? ''} onChange={set('currency')} /></Field>
               <Field label="Casas del comparador" hint="Orden de las columnas al abrir un partido, separadas por comas.">
                 <Input value={f.featuredBooks ?? ''} onChange={set('featuredBooks')} />
               </Field>
-              {isAdmin && <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                 <div className="text-sm font-medium">Leaguepedia (opcional)</div>
                 <p className="text-xs leading-relaxed text-zinc-500">
                   Sin sesión, Fandom deja muy pocas consultas por minuto. Para subir el límite, crea una cuenta gratis en Fandom y una
@@ -78,17 +73,17 @@ export default function SettingsView() {
                   <Field label="Usuario del bot"><Input value={f.leaguepediaUser ?? ''} onChange={set('leaguepediaUser')} disabled={env('leaguepediaUser')} placeholder={env('leaguepediaUser') ? envPh : 'TuUsuario@app'} /></Field>
                   <Field label="Contraseña del bot"><Input type="password" value={f.leaguepediaPassword ?? ''} onChange={set('leaguepediaPassword')} disabled={env('leaguepediaPassword')} placeholder={env('leaguepediaPassword') ? envPh : ''} /></Field>
                 </div>
-              </div>}
+              </div>
               <Field label="Refresco automático (segundos)"><Input type="number" min={10} value={f.refreshSeconds ?? ''} onChange={set('refreshSeconds')} /></Field>
-              {isAdmin && <details className="group rounded-lg border border-zinc-800 p-4">
+              <details className="group rounded-lg border border-zinc-800 p-4">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm text-zinc-400">
                   Avanzado: claves públicas de las webs <ChevronDown size={16} className="transition group-open:rotate-180" />
                 </summary>
                 <div className="mt-4 space-y-3">
                   <Field label="Clave lolesports"><Input value={f.lolesportsKey ?? ''} onChange={set('lolesportsKey')} disabled={env('lolesportsKey')} placeholder={env('lolesportsKey') ? envPh : ''} /></Field>
                 </div>
-              </details>}
-              <Button type="submit">Guardar</Button>
+              </details>
+              <Button type="submit">Guardar para todos</Button>
             </div>
           </Card>
         </form>
@@ -116,60 +111,28 @@ export default function SettingsView() {
           )}
         </Card>
 
-        {isAdmin && <>
-          <AutoOddsCard />
-          <ExtensionCard />
-        </>}
+        <SignupCard />
+        <AutoOddsCard />
+        <ExtensionCard />
         <MarcadorCard />
       </div>
     </>
   );
 }
 
-// Tu cuenta: contraseña y salir. El administrador decide además si se pueden crear cuentas nuevas
-function AccountCard({ isAdmin }: { isAdmin: boolean }) {
+// Si se pueden crear cuentas nuevas desde la pantalla de entrada. Sin registro, las cuentas las da el administrador
+function SignupCard() {
   const { settings, saveSettings, toast } = useApp();
-  const user = useUser().data;
-  const [pw, setPw] = useState({ current: '', next: '', repeat: '' });
-  const [busy, setBusy] = useState(false);
-
-  async function change(e: FormEvent) {
-    e.preventDefault();
-    if (pw.next !== pw.repeat) { toast('Las contraseñas no coinciden'); return; }
-    setBusy(true);
-    try {
-      await window.api.auth.changePassword(pw.current, pw.next);
-      setPw({ current: '', next: '', repeat: '' });
-      toast('Contraseña cambiada');
-    } catch (err) { toast((err as Error).message); }
-    finally { setBusy(false); }
-  }
-
-  async function logout() {
-    await window.api.auth.logout();
-    // El cupón se queda en el navegador: no debe verlo quien entre después
-    try { localStorage.removeItem('slip'); } catch { /* sin almacenamiento */ }
-    location.reload();
-  }
-
+  const open = settings?.signupOpen !== false;
   return (
-    <Card className="2xl:col-span-2" title="Tu cuenta" action={<Button variant="secondary" size="sm" onClick={logout}><LogOut size={14} />Salir</Button>}>
-      <p className="mb-4 text-sm text-zinc-400">
-        Has entrado como <b className="text-zinc-100">{user?.username}</b>{isAdmin ? ' (administrador)' : ''}. Tus apuestas, tu cartera y tus preferencias son sólo tuyas.
-      </p>
-      <form onSubmit={change} className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
-        <Field label="Contraseña actual"><Input required type="password" autoComplete="current-password" value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} /></Field>
-        <Field label="Contraseña nueva"><Input required minLength={8} type="password" autoComplete="new-password" value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} /></Field>
-        <Field label="Repítela"><Input required minLength={8} type="password" autoComplete="new-password" value={pw.repeat} onChange={e => setPw(p => ({ ...p, repeat: e.target.value }))} /></Field>
-        <Button type="submit" variant="secondary" disabled={busy}>Cambiar</Button>
-      </form>
-      {isAdmin && (
-        <label className="mt-4 flex cursor-pointer items-center gap-2 border-t border-zinc-800 pt-4 text-sm">
-          <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={settings?.signupOpen !== false}
-            onChange={async e => { const open = e.target.checked; await saveSettings({ signupOpen: open }); toast(open ? 'Registro abierto' : 'Registro cerrado'); }} />
-          Permitir crear cuentas nuevas desde la pantalla de entrada
-        </label>
-      )}
+    <Card title="Registro de cuentas">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Permitir crear cuentas nuevas</div>
+          <div className="text-xs text-zinc-500">{open ? 'Cualquiera puede crearse una cuenta desde la pantalla de entrada.' : 'La pantalla de entrada sólo deja entrar: las cuentas nuevas las das tú.'}</div>
+        </div>
+        <Toggle on={open} onChange={async v => { await saveSettings({ signupOpen: v }); toast(v ? 'Registro abierto' : 'Registro cerrado'); }} label="" />
+      </div>
     </Card>
   );
 }
@@ -277,40 +240,6 @@ function MarcadorCard() {
           ⚡ LoL Tracker
         </a>
       </div>
-    </Card>
-  );
-}
-
-// Avisos: cada uno se enciende por separado y se guarda en este navegador. Al encender el primero se pide permiso
-function AlertsCard() {
-  const [p, setP] = useState(alertPrefs);
-  const [perm, setPerm] = useState(notifyPermission);
-  const ITEMS: [AlertKind, string, string][] = [
-    ['settled', 'Apuestas resueltas', 'Cuando el servidor resuelve sola una de tus apuestas: ganada, perdida o nula, y cuánto.'],
-    ['picks', 'Recomendaciones fuertes', 'Cuando aparece una con mucho valor (EV de 8 % o más) y fiabilidad de 65 o más, de baloncesto o tenis.'],
-    ['injuries', 'Bajas en tus apuestas', 'Si un jugador de una apuesta pendiente de baloncesto sale de baja o en duda antes del partido.']
-  ];
-  async function flip(k: AlertKind, on: boolean) {
-    const n = { ...p, [k]: on };
-    setP(n); setAlertPrefs(n);
-    if (on) setPerm(await askPermission());
-  }
-  const note = perm === 'unsupported'
-    ? 'Este navegador no deja avisar desde aquí (pasa en el móvil entrando por la IP de casa, sin https): los avisos saldrán dentro de la app mientras la tengas abierta.'
-    : perm === 'denied' ? 'Has bloqueado los avisos para esta web: actívalos en el candado de la barra de direcciones. Mientras, salen dentro de la app.'
-      : perm === 'granted' ? 'Llegan como avisos del sistema mientras la app esté abierta en alguna pestaña.'
-        : 'Al encender uno, el navegador te pedirá permiso.';
-  return (
-    <Card title="Avisos">
-      <div className="flex flex-col divide-y divide-zinc-800/60">
-        {ITEMS.map(([k, label, hint]) => (
-          <div key={k} className="flex items-start justify-between gap-4 py-2.5 first:pt-0">
-            <div className="min-w-0"><div className="text-sm font-medium">{label}</div><div className="text-xs text-zinc-500">{hint}</div></div>
-            <Toggle on={p[k]} onChange={v => flip(k, v)} label="" />
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-zinc-500">{note}</p>
     </Card>
   );
 }

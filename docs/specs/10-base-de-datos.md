@@ -162,7 +162,7 @@ Usuarios, sesiones, apuestas y ajustes. Migraciones `001` a `006`.
 | Columna | Tipo | Notas |
 |---|---|---|
 | `user_id` | bigint FK → `users` | `ON DELETE CASCADE` |
-| `key` | text | `currency`, `initialBankroll`, `featuredBooks`, `refreshSeconds`, `favoriteLeagues` |
+| `key` | text | `initialBankroll`, `favoriteLeagues` (moneda, casas y refresco pasaron a `bets.settings` en la migración 010) |
 | `value` | jsonb | |
 | `updated_at` | timestamptz | |
 

@@ -4,7 +4,7 @@
 // el resultado: Wikipedia corta enseguida (429) si se le piden muchas seguidas.
 const { query } = require('../../shared/db');
 
-const UA = 'Statex/0.3 (uso personal)';
+const UA = 'Sharpex/0.3 (uso personal)';
 const espnUrl = id => `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png`;
 const GAP = 1200;
 const mem = new Map();

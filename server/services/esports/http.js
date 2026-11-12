@@ -8,7 +8,7 @@ async function fetchJson(url, headers, timeout) {
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Statex/0.3 (uso personal)', Accept: 'application/json', ...headers },
+      headers: { 'User-Agent': 'Sharpex/0.3 (uso personal)', Accept: 'application/json', ...headers },
       signal: ctrl.signal
     });
     if (res.status === 204) return null;

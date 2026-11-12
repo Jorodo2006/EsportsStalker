@@ -19,7 +19,7 @@
   var ov = document.createElement('div');
   ov.id = '_lolet_ov';
   ov.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647;background:#18181b;color:#e4e4e7;border:1px solid #3f3f46;border-left:3px solid #f59e0b;border-radius:10px;padding:14px 16px;font:13px system-ui,sans-serif;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.6);line-height:1.5';
-  var say = function (html) { ov.innerHTML = '<div style="font-weight:700;color:#fbbf24;margin-bottom:6px">Statex' + (BOOK ? ' · ' + NAMES[BOOK] : '') + '</div>' + html + '<div style="margin-top:8px;color:#71717a;font-size:11px">Pulsa el marcador otra vez para cerrar</div>'; };
+  var say = function (html) { ov.innerHTML = '<div style="font-weight:700;color:#fbbf24;margin-bottom:6px">Sharpex' + (BOOK ? ' · ' + NAMES[BOOK] : '') + '</div>' + html + '<div style="margin-top:8px;color:#71717a;font-size:11px">Pulsa el marcador otra vez para cerrar</div>'; };
   document.body.appendChild(ov);
   if (!BOOK) { say('Esta página no es de Bet365, Winamax ni Betway.'); fin(false, 'página equivocada'); return; }
 

@@ -1,4 +1,4 @@
-# Statex: web + PostgreSQL + gateway + servicios.
+# Sharpex: web + PostgreSQL + gateway + servicios.
 #   docker compose up -d --build     (o npm run backend)
 # Sólo la web (puerto 8090) se abre a la red, para entrar desde el móvil; pide usuario y contraseña. El gateway
 # (127.0.0.1:47365) y, para depurar, PostgreSQL (127.0.0.1:55432) y Adminer (127.0.0.1:8080) se quedan en este equipo.
@@ -9,7 +9,7 @@
 # vez (un servidor nuevo, o tras cambiar el nombre) Docker falla al crear la misma etiqueta desde varios sitios ("already
 # exists"). Los demás la usan tal cual y no la buscan en Docker Hub
 x-servicio: &servicio
-  image: statex-server
+  image: sharpex-server
   pull_policy: never
   restart: unless-stopped
   env_file:
@@ -60,7 +60,7 @@ services:
   # Lector de cuotas: Chromium sin cabeza que lee Winamax y Betway (antes lo hacía la extensión de Chrome)
   lector:
     build: ./server/lector
-    image: statex-lector
+    image: sharpex-lector
     restart: unless-stopped
     environment:
       GATEWAY_URL: http://gateway:47365
@@ -101,7 +101,7 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
-    image: statex-web
+    image: sharpex-web
     restart: unless-stopped
     ports:
       - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8090}:80"

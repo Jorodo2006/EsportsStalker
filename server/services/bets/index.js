@@ -1,7 +1,7 @@
 // bets-svc: usuarios, apuestas, combinadas y ajustes de la app (esquema bets de PostgreSQL)
 const path = require('path');
 const { start, fail } = require('../../shared/service');
-const { migrate, query } = require('../../shared/db');
+const { migrate, query, notify } = require('../../shared/db');
 const env = require('../../shared/env');
 const store = require('./store');
 const auth = require('./auth');
@@ -45,7 +45,13 @@ const routes = [
   ['POST', '/internal/auth/session', ({ body }) => auth.userOf(body?.token)],
 
   ['GET', '/api/settings', async ({ req }) => { const u = who(req); return forUi(await store.getSettings(u.id), u.isAdmin); }],
-  ['PUT', '/api/settings', async ({ req, body }) => { const u = who(req); return forUi(await store.setSettings(u.id, u.isAdmin, cleanPatch(body)), u.isAdmin); }],
+  ['PUT', '/api/settings', async ({ req, body }) => {
+    const u = who(req), patch = cleanPatch(body);
+    const out = forUi(await store.setSettings(u.id, u.isAdmin, patch), u.isAdmin);
+    // Si el administrador ha cambiado un ajuste común, los que estén conectados lo recargan al momento (aviso SSE)
+    if (u.isAdmin && Object.keys(patch).some(k => !store.USER_KEYS.includes(k))) notify('settings:changed', {});
+    return out;
+  }],
   // Ajustes comunes efectivos para los demás servicios (no pasa por el gateway)
   ['GET', '/internal/settings', async () => ({ ...(await store.getSettings(null)), ...env.settings() })],
 

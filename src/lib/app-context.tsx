@@ -6,7 +6,8 @@ import { wallet } from './format';
 import { listenOdds } from './odds-live';
 
 // today: la portada común a los cuatro deportes (src/views/TodayView.tsx)
-export type View = 'today' | 'matches' | 'players' | 'bets' | 'settings';
+// settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos)
+export type View = 'today' | 'matches' | 'players' | 'bets' | 'settings' | 'account';
 // Cuatro apps en una: LoL, baloncesto, tenis y fútbol, cada una con sus partidos, sus jugadores y sus apuestas
 export type AppId = Sport;
 
@@ -78,6 +79,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // El servidor ha resuelto apuestas solas: se recargan. El aviso llega a todos los conectados (no dice de quién son, para
   // no repartir datos de nadie), así que no se saca mensaje: cada uno ve en su lista lo suyo
   useEffect(() => window.api.onBetsSettled(() => { qc.invalidateQueries({ queryKey: ['bets'] }); }), [qc]);
+  // El administrador ha cambiado los ajustes de la app: valen para todos, así que se recargan aquí también (moneda, casas…)
+  useEffect(() => window.api.onSettingsChanged(() => {
+    qc.invalidateQueries({ queryKey: ['settings'] });
+    qc.invalidateQueries({ queryKey: ['odds'] });
+  }), [qc]);
   // Cuotas nuevas: se recargan las consultas de ese partido que haya en pantalla (src/lib/odds-live.ts)
   useEffect(() => listenOdds(qc), [qc]);
 
@@ -91,11 +97,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     app,
     switchApp(a) {
-      setApp(a); setView(v => (v === 'settings' ? 'matches' : v)); setViewParam(undefined); setOpenMatch(null);
+      setApp(a); setView(v => (v === 'settings' || v === 'account' ? 'matches' : v)); setViewParam(undefined); setOpenMatch(null);
       try { localStorage.setItem('app', a); } catch { /* sin almacenamiento */ }
     },
     view,
     go(v, param) {
+      // Los ajustes de la app son sólo del administrador (el servidor tampoco deja guardarlos a los demás)
+      if (v === 'settings' && !qc.getQueryData<{ isAdmin?: boolean } | null>(['me'])?.isAdmin) return;
       // Pulsar "Partidos" estando ya en un partido vuelve a la lista; el resto de secciones lo conservan
       if (v === 'matches' && view === 'matches') setOpenMatch(null);
       setView(v); setViewParam(param);

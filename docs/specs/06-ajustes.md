@@ -2,20 +2,27 @@
 
 ## Ajustes (`src/views/SettingsView.tsx`, valores por defecto en `server/services/bets/store.js`, tablas `bets.settings` y `bets.user_settings`)
 
-De cada usuario: `currency`, `initialBankroll`, `featuredBooks`, `refreshSeconds` y `favoriteLeagues`. El resto son comunes: sólo
-los ve y los cambia el administrador (a los demás no les llegan las claves, y lo que manden de esos ajustes se ignora).
+Los ajustes son **de la app entera**: la página *Ajustes* sólo la ve el administrador, y lo que cambie vale al momento para
+todos (el servidor manda el aviso SSE `settings:changed` y cada navegador conectado los recarga). Si otro usuario manda un ajuste
+común, `PUT /api/settings` responde 403, y a los demás tampoco les llegan las claves (`SECRET_KEYS`).
+
+De cada usuario quedan sólo dos cosas (`USER_KEYS`, en `bets.user_settings`): `initialBankroll`, porque cada uno tiene su
+cartera, y `favoriteLeagues`, el filtro de ligas de la lista de LoL. La banca inicial se cambia en **Tu cuenta**
+(`src/views/AccountView.tsx`), que ven todos, junto con la contraseña, salir y los avisos de su navegador. La moneda, las
+casas del comparador y el refresco eran de cada usuario hasta la migración `bets/010_ajustes_comunes.sql`, que dejó para
+todos los del primer administrador.
 
 | Ajuste | Por defecto | Uso |
 |---|---|---|
 | `currency` | `€` | Moneda de las cantidades |
-| `initialBankroll` | 0 | Banca inicial, que se suma al beneficio |
+| `initialBankroll` | 0 | Banca inicial de cada usuario (en *Tu cuenta*), que se suma a su beneficio |
 | `featuredBooks` | `Bet365,Winamax,Betway` | Columnas del comparador y su orden |
 | `refreshSeconds` | 30 | Refresco del calendario y del directo (mínimo 10) |
 | `oddsAutoEnabled` | `true` | Lecturas de cuotas programadas (las hace el lector de Docker) |
 | `oddsRefreshMinutes` | 5 | Cada cuántos minutos se vuelve a leer cada partido cercano (2–240) |
 | `oddsAutoHours` | 6 | Son cercanos los partidos que empiezan en las próximas N horas (1–48) |
 | `oddsFarEnabled` | `true` | Leer también los de más adelante: cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (tenis: cada 3 h y sólo desde 24 h antes) |
-| `favoriteLeagues` | `[]` | Ligas que salen primero |
+| `favoriteLeagues` | `[]` | Filtro de ligas de la lista de LoL, de cada usuario |
 | `signupOpen` | `true` | Si se pueden crear cuentas desde la pantalla de entrada |
 | `lolesportsKey` | clave pública de lolesports.com | Cabecera `x-api-key` |
 | `leaguepediaUser` / `leaguepediaPassword` | vacío | *Bot password* de Fandom (opcional). **Sólo en la base de datos o en el `.env`, nunca en el repo** |

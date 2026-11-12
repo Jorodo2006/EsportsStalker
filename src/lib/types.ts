@@ -457,6 +457,8 @@ export interface Api {
   onOddsImported(cb: (d?: { matchKey?: string; book?: string }) => void): () => void;
   // El servidor ha resuelto alguna apuesta sola
   onBetsSettled(cb: () => void): () => void;
+  // El administrador ha cambiado los ajustes de la app: valen para todos y se recargan
+  onSettingsChanged(cb: () => void): () => void;
   backend: { status(): Promise<BackendStatus> };
   onBackendStatus(cb: (up: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;

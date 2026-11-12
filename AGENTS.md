@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guía para agentes de código (Claude Code, Codex, Copilot…) que trabajen en **Statex** (antes EsportsStalker / LoL Esports Tracker).
+Guía para agentes de código (Claude Code, Codex, Copilot…) que trabajen en **Sharpex** (antes Statex, EsportsStalker y LoL Esports Tracker).
 Los identificadores internos siguen siendo `lolet` (base de datos y usuario de PostgreSQL, cookie `lolet_session`, canal de avisos
 `lolet`, `window.__lolet_*` del marcador): no los renombres, romperían los datos y las sesiones de un despliegue ya hecho.
 Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte están en [`docs/specs/`](docs/specs/).
@@ -134,6 +134,10 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   y ronda (`footballScore`, `basketScore`, `tennisScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
   mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
   con `useFocus`.
+- **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
+  con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
+  (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
+  (`USER_KEYS` en `server/services/bets/store.js`).
 - Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.

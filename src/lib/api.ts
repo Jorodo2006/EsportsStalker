@@ -67,6 +67,7 @@ function pickFile(accept: string): Promise<File | null> {
 const onAuto = new Set<(job: AutoJob) => void>();
 const onImported = new Set<(d?: { matchKey?: string; book?: string }) => void>();
 const onSettled = new Set<() => void>();
+const onSettingsChanged = new Set<() => void>();
 const onStatus = new Set<(up: boolean) => void>();
 let source: EventSource | null = null;
 let connected = false;
@@ -92,6 +93,7 @@ function connect() {
       if (ev.type === 'odds:imported') onImported.forEach(cb => cb(ev.data));
       else if (ev.type === 'odds:auto') onAuto.forEach(cb => cb(ev.data));
       else if (ev.type === 'bets:settled') onSettled.forEach(cb => cb());
+      else if (ev.type === 'settings:changed') onSettingsChanged.forEach(cb => cb());
     } catch { /* un aviso mal formado no debe romper la conexión */ }
   };
   // Con un 502 del proxy el navegador no reintenta por sí mismo: hay que volver a conectar a mano
@@ -223,6 +225,7 @@ export const api: Api = {
   },
   onOddsImported: cb => listen(onImported, cb),
   onBetsSettled: cb => listen(onSettled, cb),
+  onSettingsChanged: cb => listen(onSettingsChanged, cb),
   backend: { status: () => get('/api/health') },
   onBackendStatus: cb => listen(onStatus, cb),
   openExternal: async url => { if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener'); }

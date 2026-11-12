@@ -1,7 +1,7 @@
 {
-  "name": "statex-server",
+  "name": "sharpex-server",
   "version": "0.3.0",
-  "description": "Backend de Statex: gateway, esports, cuotas y apuestas sobre PostgreSQL",
+  "description": "Backend de Sharpex: gateway, esports, cuotas y apuestas sobre PostgreSQL",
   "private": true,
   "license": "UNLICENSED",
   "engines": { "node": ">=22" },

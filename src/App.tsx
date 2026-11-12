@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Dribbble, Search, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
+import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -22,6 +22,8 @@ import { FootballIcon } from '@/components/football';
 import BetsView from '@/views/BetsView';
 import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
+import AccountView from '@/views/AccountView';
+import { useUser } from '@/components/AuthGate';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
 
@@ -138,10 +140,10 @@ export default function App() {
               className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100">
               <Search size={16} />
             </button>
-            <button onClick={() => go('settings')} title="Ajustes" aria-label="Ajustes" aria-current={view === 'settings'}
+            <button onClick={() => go('account')} title="Tu cuenta" aria-label="Tu cuenta" aria-current={view === 'account' || view === 'settings'}
               className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md transition',
-                view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
-              <Cog size={16} />
+                view === 'account' || view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
+              <CircleUser size={16} />
             </button>
           </div>
           <div className="pb-2.5">{appTabs}</div>
@@ -156,6 +158,7 @@ export default function App() {
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : <FootballStandings />)}
               {view === 'bets' && <BetsView key={app} />}
               {view === 'settings' && <SettingsView />}
+              {view === 'account' && <AccountView />}
             </div>
             {wide && (
               <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[340px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">
@@ -189,12 +192,14 @@ export default function App() {
 
 function Logo({ big }: { big?: boolean }) {
   return (
-    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>Statex</div>
+    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>Sharpex</div>
   );
 }
 
 // Menú lateral de escritorio: deportes, navegación, competiciones de la lista de partidos y la cartera abajo
 function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: () => void }) {
+  // Los ajustes de la app sólo los ve el administrador; «Tu cuenta», todos
+  const isAdmin = !!useUser().data?.isAdmin;
   const { app, switchApp, view, go, sections } = useApp();
   const label = (t: string) => <div className="mb-1 px-3 text-xs font-medium text-zinc-500">{t}</div>;
   const navRow = (on: boolean) => cn('flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm transition',
@@ -232,9 +237,14 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
                 <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}
               </button>
             ))}
-            <button onClick={() => go('settings')} aria-current={view === 'settings'} className={navRow(view === 'settings')}>
-              <Cog size={16} className={view === 'settings' ? 'text-zinc-50' : ''} />Ajustes
+            <button onClick={() => go('account')} aria-current={view === 'account'} className={navRow(view === 'account')}>
+              <CircleUser size={16} className={view === 'account' ? 'text-zinc-50' : ''} />Tu cuenta
             </button>
+            {isAdmin && (
+              <button onClick={() => go('settings')} aria-current={view === 'settings'} className={navRow(view === 'settings')} title="De la app entera: valen para todos">
+                <Cog size={16} className={view === 'settings' ? 'text-zinc-50' : ''} />Ajustes
+              </button>
+            )}
           </nav>
         </div>
 

@@ -33,7 +33,7 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 
 - beneficio total, ROI/yield y % de acierto;
 - cuota media y apuestas pendientes con su retorno;
-- banca, igual a la banca inicial de los ajustes más el beneficio;
+- banca, igual a la banca inicial del usuario (en *Tu cuenta*) más el beneficio;
 - la gráfica de evolución (todo, 30 días o 7 días);
 - el desglose por casa y por liga.
 
