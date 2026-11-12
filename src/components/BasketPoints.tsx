@@ -288,7 +288,9 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
     setLine(fmtLine(Math.floor(P[kind].mu) + 0.5)); setOver(''); setUnder(''); setBooks({});
   }, [kind, period, !!P, lines.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const L = toNum(line);
-  const A = useMemo(() => (P && L != null && L >= 0 ? analyzePoints(P, kind, L, { over: toNum(over), under: toNum(under), overBook: books.over, underBook: books.under }) : null), [P, kind, L, over, under, books]);
+  // La probabilidad de la casa, de todas las casas de esa línea (devigBooks): no cambia según la cuota que se pulse
+  const lineBooks = useMemo(() => lines.find(l => l.line === L)?.books, [lines, L]);
+  const A = useMemo(() => (P && L != null && L >= 0 ? analyzePoints(P, kind, L, { over: toNum(over), under: toNum(under), overBook: books.over, underBook: books.under, books: lineBooks }) : null), [P, kind, L, over, under, books, lineBooks]);
 
   if (q.isLoading) return <Loading label={LOADING} />;
   if (q.error) return restart(q.error);

@@ -58,6 +58,8 @@ vuelven a pedir.
 - Proyección: media ponderada (vida media de 10 partidos; esta temporada ×1,6, playoffs ×0,85, pretemporada fuera
   salvo que no haya otra cosa). Mitad media directa, mitad ritmo por minuto × minutos previstos (60 % últimos 5, 40 %
   media). Ajuste en casa / fuera (±6 %) y contra el rival (±10 %), encogidos hacia 1 según la muestra.
+- Ajustes medidos (`PROJ`, ver *Calibración de noviembre de 2026*): los partidos de la temporada pasada cuentan ×0,88 en la
+  estadística y ×0,92 en los minutos; los minutos previstos por encima de 30 se acercan un 15 % a 30; la varianza ×1,2.
 - Probabilidad: binomial negativa (o Poisson) si la media es menor de 12; normal con corrección de continuidad si no.
   Se mezcla con la frecuencia ponderada de superar la línea (el modelo cuenta como 10 partidos).
 - Fiabilidad: muestra de esta temporada (25), historial (15), regularidad (20), minutos estables (15), margen sobre la
@@ -68,18 +70,30 @@ vuelven a pedir.
 ## Valor común con LoL (`src/lib/value.ts`)
 
 - `devig`: con las dos cuotas quita el margen exacto; con una, lo estima (7 %).
+- `devigBooks`: con varias casas, quita a cada una su propio margen y las promedia (las que sólo dan un lado, con la mitad de peso).
+  Lo usan jugadores (analizador, escáner, recomendaciones) y puntos de equipo, con las cuotas de todas las casas de esa línea; lo que se
+  paga es la cuota elegida. Hasta el 12 de noviembre de 2026 se quitaba el margen a la mejor cuota de cada lado aunque fueran de casas
+  distintas: salían márgenes casi nulos (0,3 %) y la probabilidad de la casa inflada del lado elegido, y la misma apuesta daba +7 % desde
+  la recomendación y +0,8 % al pulsar la cuota de una casa. Las `p_market` de `bets.predictions` anteriores a esa fecha están hechas así.
 - `sideValue`: EV = p × cuota + nula − 1; ventaja = probabilidad estimada − probabilidad de la casa sin margen;
   stake = ¼ de Kelly con un tope del 3 % del bank.
 - `blendWithMarket` (sólo baloncesto; LoL usa el modelo a secas): la `p` del EV mezcla en logit el modelo y la casa sin margen, con peso
-  0,4 en jugadores (0,2 con menos de 10 partidos) y 0,25 en equipos. El peso se multiplica por 4·q·(1−q), con q la probabilidad de la casa:
+  0,3 en jugadores (0,15 con menos de 10 partidos; era 0,4 y 0,2 hasta noviembre de 2026) y 0,25 en equipos. El peso se multiplica por 4·q·(1−q), con q la probabilidad de la casa:
   hacia los extremos el modelo sale optimista y una diferencia pequeña da un EV enorme con cuotas altas. **Los pesos son una decisión, no una
   medida:** no hay cuotas históricas de baloncesto. La probabilidad del modelo no cambia: es la que dan el analizador y el escáner, y el panel
   enseña la mezcla aparte (*Con la casa*).
 - `tooFar`: 0,85 de diferencia en logit entre modelo y casa (50 % frente a 70 %, o 10 % frente a 21 %). En jugadores resta 25 de fiabilidad y
   las recomendaciones lo descartan: suele ser que al modelo le falta algo o un mercado mal leído.
 - `reliability`: suma los factores de cada deporte, reescala a 100 y resta las penalizaciones.
-- `verdict`: *Apostar* (EV ≥ 4 %, ventaja ≥ 3 %, fiabilidad ≥ 55), *Valor ligero* (EV ≥ 1,5 %, fiabilidad ≥ 45) o
-  *No apostar*.
+- `verdict` / `verdictOf`: *Apostar* (EV ≥ 2 %, fiabilidad ≥ 55), *Valor ligero* (EV ≥ 1 %, fiabilidad ≥ 45) o *No apostar*.
+  **Es el único criterio de toda la app** (`BET_EV`, `BET_REL`, `LEAN_EV`, `LEAN_REL`): la etiqueta *Con valor* de las
+  recomendaciones es *Apostar*, la banda de las mejores y la principal de cada perfil sólo cogen *Apostar* o *Valor ligero*, y lo usan
+  también tenis, LoL y Acierto del modelo. Hasta noviembre de 2026 cada pantalla tenía el suyo (la banda cogía cualquier EV positivo y
+  el análisis pedía un 4 %), y la misma apuesta salía como de las mejores en una y como *No apostar* en otra.
+  Si el modelo se aleja demasiado de la casa (`tooFar`), el veredicto es *No apostar* aunque el valor salga alto: las recomendaciones
+  ya las descartaban.
+- Las cuotas cambian: al abrir el análisis desde una recomendación, si la cuota de ese lado ya no es la que se vio en la lista, se
+  avisa arriba (la de antes y su valor, la de ahora y el suyo). El veredicto es siempre con la cuota de ahora.
 
 ## Interfaz
 
@@ -234,11 +248,63 @@ Calibración en 25-26: dice 25,0 % y se cumple 24,9 %; 45,1 % y 44,6 %; 64,8 % y
 equipos, sin más, falla por 15,6 en 25-26. El peso de esta temporada no se pudo ajustar, porque 24-25 no tenía temporada anterior en la
 muestra. Tampoco aquí se ha podido medir si se le gana a la casa, y Euroliga, EuroCup y WNBA usan los parámetros de la NBA sin evaluar.
 
+## Calibración de noviembre de 2026 (`scripts/calib-basket.ts`)
+
+Con las primeras recomendaciones reales resueltas (10 y 11 de noviembre) los "más" salían mal: decía 44 %, la casa 34 % y se
+cumplía un 27,5 %. Se buscó la causa con los registros de la caché (32 000 partidos de 1 046 jugadores) y con las líneas reales:
+
+- **La proyección se pasaba a principio de temporada.** En 25-26 el sesgo era cero, pero en 26-27 daba 1,5 minutos y 1,8 de
+  P+R+A de más (3 minutos y 3 de P+R+A en los 3 primeros partidos). Los que siguen de una temporada a otra juegan menos: les
+  quitan minutos novatos y fichajes y son un año mayores. Ajustado con octubre y comprobado con noviembre: los partidos de la
+  temporada pasada valen ×0,88 (estadística) y ×0,92 (minutos). Sesgo de P+R+A en 26-27: −1,57 → +0,03, sin tocar 25-26.
+- **Los minutos muy altos vuelven hacia la media**: 0,7 minutos de menos con 33 o más previstos, incluso en 25-26. Por encima de
+  30 se acercan un 15 % (ajustado hasta enero, comprobado después). Quita el sesgo de minutos; la probabilidad no cambia.
+- **Colas más gruesas que la curva**: a ±1,5 desviaciones pasan más partidos muy malos y muy buenos de los que dice. Varianza ×1,2.
+- **Quitar el margen de otra forma no cambia nada**: con un margen del 4,8 %, proporcional, aditivo, potencia y Shin dan lo mismo.
+
+La prueba pone las líneas a −1,5…+1,5 desviaciones de la media de los últimos 20 partidos (las mismas para todas las variantes,
+como las escaleras de las casas), y no sólo en la proyección. Log-loss en 26-27: 0,469 → 0,463; en 25-26 no cambia (0,494 → 0,493).
+Con las 633 recomendaciones reales de la NBA recalculadas, el modelo nuevo acierta más que el viejo (log-loss 0,641 → 0,624; mezclado
+con la casa 0,603 → 0,599) y habría recomendado 333 en vez de 632 (+2 % frente a −10 %; son unos 15 partidos, es poco).
+
+**La casa sola acertó más que cualquier mezcla** en esas recomendaciones: son justo las líneas en las que el modelo no estaba de
+acuerdo con ella, y en los "más" ganó siempre. Por eso el peso del modelo baja a 0,3. Para medirlo sin ese sesgo, desde ahora se
+guardan en `bets.predictions` **todas las líneas** que calcula el modelo, no sólo las de valor; en Acierto del modelo se ven las
+recomendadas (EV ≥ 2 % y fiabilidad ≥ 55) o «Todas las líneas». Con unos miles resueltas hay que repetir la medida del peso por
+mercado y por lado.
+
+Para repetir la prueba (unos 5 minutos con un partido de cada 4; el tercer argumento prueba variantes de `PROJ`):
+
+```bash
+docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(key, value) FROM basket.cache WHERE key LIKE 'log:nba:%'" > logs.json
+npx esbuild scripts/calib-basket.ts --bundle --platform=node --outfile=<temporal>/cal.cjs
+node <temporal>/cal.cjs logs.json 4 '{"carry":1,"carryMin":1}'
+```
+
+## Bajas de los compañeros
+
+El modelo **no** cambia la proyección cuando faltan compañeros: no está medido cuánto suben los demás, y la casa ya pone la línea
+sabiéndolo. Lo que sí hace (`src/lib/basket-mates.ts`, con los registros de la plantilla, `GET /api/basket/team-logs`):
+
+- **Quién falta y desde cuándo.** Un compañero con "Out" en el parte (ESPN en la NBA; el de la plantilla en la WNBA) cuenta como
+  importante si sus últimos 10 partidos con el equipo pasan del 42 % de los minutos (unos 20 en la NBA, 17 en la WNBA). La baja es
+  **nueva** si lleva 3 partidos o menos fuera esta temporada: entonces los últimos partidos del jugador, que son los que más pesan en la
+  proyección, se jugaron con él. Si lleva más, ya están dentro de su media.
+- **Fiabilidad de los "menos".** Con bajas nuevas e importantes, el lado "menos" pierde 10 + 5 por baja puntos de fiabilidad (25 como
+  mucho) y lleva un aviso; el "más" no se toca. Es una decisión, no una medida: la proyección puede quedarse corta justo hacia ese lado.
+  Se aplica igual en el analizador, el escáner y las recomendaciones (`matesOut` en el contexto del modelo).
+- **Con él y sin él.** En *Contexto*, por cada importante que falta: la media del jugador en el mercado elegido, sus minutos y cuántas
+  veces pasó la línea en los partidos sin él y con él, esta temporada y la anterior, sólo en este equipo y en temporadas en que coincidieron.
+  Con menos de 5 partidos sin él es una pista, no una prueba.
+
+Para meterlo en la proyección habría que medir con `scripts/backtest-basket.ts` cuánto cambia de verdad (como el B2B, que parecía obvio y
+salió al revés).
+
 ## Pendiente
 
 - Flechas de subida y bajada de las cuotas (el histórico se guarda en `odds.price_history` y lo da `POST /api/odds/history`; falta la interfaz).
 - Clasificaciones por liga.
-- No ajusta por bajas de compañeros, partidos seguidos, ritmo del rival ni defensa por posición.
+- No ajusta la proyección por bajas de compañeros (sólo la fiabilidad de los "menos", ver arriba), ritmo del rival ni defensa por posición.
 
 ## Colores de los equipos
 

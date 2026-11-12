@@ -2,7 +2,7 @@
 // equipo de un partido, con la probabilidad de cualquier línea y el valor frente a la cuota (funciones comunes de value.ts).
 import { wmean, wvar } from './basket-model';
 import type { BasketLeagueGames, BasketPointSide, MatchOdds } from './types';
-import { devig, lineProbs, relCommon, reliability, sideValue, verdict, type SideValue, type ValueData } from './value';
+import { devig, devigBooks, lineProbs, relCommon, reliability, sideValue, verdict, type SideValue, type ValueData } from './value';
 
 export type PointPeriod = 'game' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4';
 // odds: el número de ese tramo en las claves de las cuotas (server/services/odds/odds.js)
@@ -171,7 +171,7 @@ export function pointValues(kind: PointKind) {
 
 export interface PointAnalysis extends ValueData { mu: number; sd: number; modelOver: number; histOver: number }
 
-export function analyzePoints(P: PointProjection, kind: PointKind, line: number, odds: { over?: number | null; under?: number | null; overBook?: string; underBook?: string } = {}): PointAnalysis {
+export function analyzePoints(P: PointProjection, kind: PointKind, line: number, odds: { over?: number | null; under?: number | null; overBook?: string; underBook?: string; books?: { over?: number | null; under?: number | null }[] } = {}): PointAnalysis {
   const { mu, sd } = P[kind];
   const model = lineProbs(mu, sd, line);
   const f = pointValues(kind);
@@ -187,7 +187,7 @@ export function analyzePoints(P: PointProjection, kind: PointKind, line: number,
   pOver = Math.min(0.98, Math.max(0.02, pOver / norm));
   pUnder = Math.min(0.98, Math.max(0.02, pUnder / norm));
 
-  const mk = devig(odds.over, odds.under);
+  const mk = odds.books?.length ? devigBooks(odds.books) : devig(odds.over, odds.under);
   const sides: SideValue[] = [];
   if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.overBook, MODEL_WEIGHT));
   if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.underBook, MODEL_WEIGHT));
@@ -206,16 +206,19 @@ export function analyzePoints(P: PointProjection, kind: PointKind, line: number,
 }
 
 // ---------- líneas de las casas ----------
-export interface BookLine { line: number; over?: number; under?: number; overBook?: string; underBook?: string }
+export interface BookLine { line: number; over?: number; under?: number; overBook?: string; underBook?: string; books?: { over?: number; under?: number }[] }
 
 export function pointLines(odds: MatchOdds | undefined, kind: PointKind, period: PointPeriod): BookLine[] {
   const n = POINT_PERIODS.find(p => p.id === period)!.odds;
   const prefix = kind === 'total' ? `total|${n}||` : `team_total|${n}|${kind === 'away' ? 'a' : 'b'}|`;
   const best = (prices: Record<string, number> | undefined) => Object.entries(prices ?? {}).sort((x, y) => y[1] - x[1])[0] ?? [];
   return (odds?.markets ?? []).filter(m => m.key.startsWith(prefix) && m.line != null).map(m => {
-    const [overBook, over] = best(m.outcomes.find(o => o.id === 'over')?.prices);
-    const [underBook, under] = best(m.outcomes.find(o => o.id === 'under')?.prices);
-    return { line: m.line!, over, under, overBook, underBook };
+    const po = m.outcomes.find(o => o.id === 'over')?.prices ?? {}, pu = m.outcomes.find(o => o.id === 'under')?.prices ?? {};
+    const [overBook, over] = best(po);
+    const [underBook, under] = best(pu);
+    // Las dos cuotas de cada casa, para quitarle a cada una su margen (devigBooks)
+    const books = [...new Set([...Object.keys(po), ...Object.keys(pu)])].map(b => ({ over: po[b], under: pu[b] }));
+    return { line: m.line!, over, under, overBook, underBook, books };
   }).sort((a, b) => a.line - b.line);
 }
 

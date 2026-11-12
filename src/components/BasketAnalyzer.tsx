@@ -9,11 +9,12 @@ import { cn, odd, pct, summarize } from '@/lib/format';
 import { BASKET_MARKETS, analyze, fmtLine, playerLines, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket, type CasaLine } from '@/lib/basket-model';
 import { BookHead } from './BookIcon';
 import { BasketContext } from './BasketContext';
+import { freshKeyOuts, matesOut } from '@/lib/basket-mates';
 import { gameCtx } from '@/lib/basket-context';
-import { SIDE_LABEL, type SideValue } from '@/lib/value';
+import { SIDE_LABEL, type Side, type SideValue } from '@/lib/value';
 import type { BasketAbsence, BasketGame, BasketInjury, BasketLeagueId, BasketLogGame, MatchOdds } from '@/lib/types';
 import { ValuePanel } from './ValuePanel';
-import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, oddBtn, td, th } from './ui';
+import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, Tabs, oddBtn, td, th } from './ui';
 
 const BOOKS = ['Winamax', 'Betway'];
 export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup' };
@@ -24,7 +25,8 @@ const fx = (v: number | null | undefined, d = 1) => (v == null || !isFinite(v) ?
 export const badInjury = (s: string) => /out/i.test(s);
 
 // market y line: con qué abrir el análisis (lo manda el escáner de líneas)
-export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null; market?: BasketMarket; line?: number };
+// seen: cómo estaba la recomendación con la que se abrió, para avisar si la cuota ha cambiado desde entonces
+export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null; market?: BasketMarket; line?: number; seen?: { side: Side; price: number; book?: string; ev: number; at: number } };
 
 export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { player: Picked; games?: BasketGame[]; injuries?: BasketInjury[]; odds?: MatchOdds }) {
   const { addToSlip, settings } = useApp();
@@ -67,7 +69,16 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   });
   // B2B y vuelta de baja para el partido que se mira, igual que en el escáner y en las recomendaciones
   const gctx = game ? gameCtx(all, sched.data ?? [], game.date, teamId) : {};
-  const ctx: BasketCtx | null = log.data ? { currentSeason: log.data.currentSeason, home: venue === '' ? null : venue === 'home', opp: opp || null, injury, ...gctx } : null;
+  // Plantilla con sus partidos (la misma consulta que el escáner): qué compañeros faltan y cómo le fue sin ellos
+  const mateLogs = useQuery({
+    queryKey: ['basket', 'teamLogs', player.league, teamId], enabled: !!teamId && (player.league === 'nba' || player.league === 'wnba'),
+    queryFn: () => window.api.basket.teamLogs(player.league, teamId!), staleTime: 15 * 60e3, retry: 1
+  });
+  const mates = useMemo(() => matesOut(mateLogs.data, teamId, player.id, game?.date ?? new Date(Date.now() + 864e5).toISOString(),
+    (id, roster) => (player.league === 'nba' ? injuries.find(i => i.playerId === id)?.status : null) || roster, player.league === 'wnba' ? 40 : 48),
+  [mateLogs.data, teamId, player.id, player.league, game?.date, injuries]);
+  const freshNames = freshKeyOuts(mates).map(m => m.name);
+  const ctx: BasketCtx | null = log.data ? { currentSeason: log.data.currentSeason, home: venue === '' ? null : venue === 'home', opp: opp || null, injury, matesOut: freshNames, ...gctx } : null;
 
   // Líneas de este jugador y mercado que ya han leído las casas (si el partido tiene cuotas)
   const casa = useMemo(() => playerLines(odds, player.name)[BASKET_MARKETS[market].label] ?? [], [odds, player.name, market]);
@@ -94,8 +105,10 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   }, [market, log.data, casa.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const L = num(line);
-  const R = useMemo(() => ctx && L != null && L >= 0 ? analyze(all, market, L, { over: num(over), under: num(under), book }, ctx) : null,
-    [all, market, L, over, under, book, ctx?.home, ctx?.opp, ctx?.injury, ctx?.b2b, ctx?.back]); // eslint-disable-line react-hooks/exhaustive-deps
+  // La probabilidad de la casa sale de todas las casas de esa línea, pulses la cuota que pulses: sólo cambia lo que se paga
+  const lineBooks = useMemo(() => { const c = casa.find(x => x.line === L); return c ? Object.values(c.books) : undefined; }, [casa, L]);
+  const R = useMemo(() => ctx && L != null && L >= 0 ? analyze(all, market, L, { over: num(over), under: num(under), book, books: lineBooks }, ctx) : null,
+    [all, market, L, over, under, book, lineBooks, ctx?.home, ctx?.opp, ctx?.injury, ctx?.b2b, ctx?.back, freshNames.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const scan = useMemo(() => ctx ? scanMarkets(all, ctx) : [], [all, ctx?.home, ctx?.opp, ctx?.b2b, ctx?.back]); // eslint-disable-line react-hooks/exhaustive-deps
   const opps = useMemo(() => [...new Set(all.map(g => g.opp).filter(o => o && o !== '?'))].sort(), [all]);
 
@@ -151,9 +164,10 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
         <Lbl label="Rival"><Select value={opp} onChange={e => setOpp(e.target.value)}><option value="">Sin indicar</option>{(opp && !opps.includes(opp) ? [opp, ...opps] : opps).map(o => <option key={o}>{o}</option>)}</Select></Lbl>
       </div>
       {!!casa.length && <CasaTable casa={casa} line={L} onPick={useLine} />}
-      <BasketContext games={all} missed={absences.data} season={cs} game={game} teamId={teamId} playerId={player.id} injuries={injuries} market={market} line={L} />
+      <BasketContext games={all} missed={absences.data} season={cs} game={game} teamId={teamId} playerId={player.id} injuries={injuries} market={market} line={L} mates={mates} mateLogs={mateLogs.data} />
 
       {!R ? <Empty>Escribe una línea válida (por ejemplo 24,5)</Empty> : <>
+        <Moved seen={player.market === market && player.line === L ? player.seen : undefined} now={R.sides} />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
           <ValuePanel bank={bank}
             v={{ line: L!, pOver: R.pOver, pUnder: R.pUnder, pPush: R.pPush, fairOver: R.fairOver, fairUnder: R.fairUnder, margin: R.market.margin, exact: R.market.exact, sides: R.sides, rel: R.rel, verdict: R.verdict }}
@@ -168,7 +182,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
                 <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400">Modelo {pct(R.modelOver)} · histórico {pct(R.histOver)} de Más</span>
               </div>
             </Card>
-            <LastGames games={all} missed={absences.data} market={market} line={L!} mu={R.mu} />
+            <LastGames games={all} missed={absences.data} market={market} line={L!} mu={R.mu} season={cs} />
           </div>
         </div>
 
@@ -284,11 +298,20 @@ const Lbl = ({ label, children }: { label: string; children: ReactNode }) => (
 // Últimos 20 partidos frente a la línea: verde si superó, rojo si no. Entre medias, en gris, los de su equipo que no jugó
 // (con el motivo en el tooltip), para no confundirlos con un 0: un 0 jugando sale como una barra roja corta
 type LastRow = { k: number; x: string; date: string; v: number | null; na: number | null; reason?: string };
-function LastGames({ games, missed = [], market, line, mu }: { games: BasketLogGame[]; missed?: BasketAbsence[]; market: BasketMarket; line: number; mu: number }) {
+// Qué partidos enseña la gráfica: los 20 últimos (pueden ser de la temporada pasada) o todos los de esta temporada. Se recuerda
+const RANGE_KEY = 'basket.lastGames.range';
+type Range = 'last' | 'season';
+const loadRange = (): Range => { try { return localStorage.getItem(RANGE_KEY) === 'season' ? 'season' : 'last'; } catch { return 'last'; } };
+
+function LastGames({ games, missed = [], market, line, mu, season }: { games: BasketLogGame[]; missed?: BasketAbsence[]; market: BasketMarket; line: number; mu: number; season: number }) {
   const M = BASKET_MARKETS[market];
+  const [range, setRangeState] = useState<Range>(loadRange);
+  const setRange = (r: Range) => { setRangeState(r); try { localStorage.setItem(RANGE_KEY, r); } catch { /* sin almacenamiento */ } };
   let list = games.filter(g => g.type !== 'pre');
   if (list.length < 3) list = games;
-  const played = list.slice(0, 20);
+  const thisSeason = list.filter(g => g.season === season);
+  const played = range === 'season' ? thisSeason : list.slice(0, 20);
+  // Las ausencias de la lista de bajas sólo llegan a los 25 últimos partidos del equipo: con toda la temporada pueden faltar las antiguas
   const since = played.length ? +new Date(played[played.length - 1].date) : Infinity;
   const vs = (home: boolean | null, opp: string) => `${home ? '' : '@'}${opp}`;
   // k: clave única de cada barra. Con el rival como clave, dos partidos contra el mismo equipo enseñaban en el tooltip
@@ -299,13 +322,21 @@ function LastGames({ games, missed = [], market, line, mu }: { games: BasketLogG
   ].sort((a, b) => a.t - b.t).map(({ t: _t, ...r }, k) => ({ ...r, k }));
   const n = played.length, out = data.length - n;
   const hits = played.filter(g => M.f(g) > line).length;
+  const avg = n ? played.reduce((a, g) => a + M.f(g), 0) / n : null;
+  // Con muchos partidos no caben todos los rivales debajo: se deja que la gráfica salte los que no quepan
+  const many = data.length > 24;
   return (
-    <Card title={`${M.label}: últimos ${n}${out ? ` (y ${out} sin jugar)` : ''}`} action={<span className={cn('text-xs font-semibold', hits / n >= 0.6 ? 'text-emerald-400' : hits / n <= 0.4 ? 'text-rose-400' : 'text-zinc-400')}>Más de {line} en {hits}/{n}</span>}>
-      <div className="h-52">
+    <Card title={`${M.label}: ${range === 'season' ? 'esta temporada' : `últimos ${n}`}${out ? ` (y ${out} sin jugar)` : ''}`}
+      action={<Tabs value={range} onChange={setRange} items={[{ value: 'last', label: 'Últimos 20' }, { value: 'season', label: 'Esta temporada' }]} />}>
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+        <span className={cn('font-semibold', !n ? 'text-zinc-500' : hits / n >= 0.6 ? 'text-emerald-400' : hits / n <= 0.4 ? 'text-rose-400' : 'text-zinc-400')}>Más de {line} en {hits}/{n}{n ? ` (${Math.round((hits / n) * 100)} %)` : ''}</span>
+        {avg != null && <span className="text-zinc-500">Media <span className="tnum text-zinc-200">{fx(avg)}</span></span>}
+      </div>
+      {!n ? <Empty>Todavía no ha jugado esta temporada.</Empty> : <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
             <CartesianGrid stroke="#2b3034" vertical={false} />
-            <XAxis dataKey="k" tickFormatter={k => data[k]?.x ?? ''} stroke="#85948f" fontSize={10} tickLine={false} axisLine={false} interval={0} />
+            <XAxis dataKey="k" tickFormatter={k => data[k]?.x ?? ''} stroke="#85948f" fontSize={10} tickLine={false} axisLine={false} interval={many ? 'preserveStartEnd' : 0} minTickGap={many ? 4 : 0} />
             <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} />
             <Tooltip cursor={{ fill: '#2b303488' }} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} itemStyle={{ color: '#fafafa', fontWeight: 600 }}
               labelStyle={{ color: '#d4d4d8' }} labelFormatter={(_, p) => p?.[0] ? `${p[0].payload.date} ${p[0].payload.x}` : ''}
@@ -318,7 +349,7 @@ function LastGames({ games, missed = [], market, line, mu }: { games: BasketLogG
             <Bar dataKey="na" stackId="g" radius={[3, 3, 0, 0]} fill="#3f3f46" fillOpacity={0.55} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
-      </div>
+      </div>}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500">
         <span><span className="text-amber-400">- -</span> línea {line}</span><span><span className="text-zinc-300">··</span> proyección {fx(mu)}</span>
         {out > 0 && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-zinc-700" />no jugó (el motivo, al pasar por encima)</span>}
@@ -350,3 +381,20 @@ function Injuries({ teamId, team, opp, injuries }: { teamId?: string; team: stri
     </Card>
   );
 }
+
+// Si se abrió desde una recomendación y la cuota ha cambiado desde entonces, se dice: el veredicto de aquí es con la cuota de
+// ahora, y por eso puede no coincidir con lo que decía la lista
+function Moved({ seen, now }: { seen?: Picked['seen']; now: SideValue[] }) {
+  const cur = seen && now.find(s => s.side === seen.side);
+  if (!seen || !cur || Math.abs(cur.price - seen.price) < 0.005) return null;
+  const mins = Math.max(1, Math.round((Date.now() - seen.at) / 60e3));
+  const down = cur.price < seen.price;
+  return (
+    <div className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-200">
+      En la recomendación la cuota era <b className="tnum">{odd(seen.price)}</b>{seen.book ? ` (${seen.book})` : ''} con valor {signedPct(seen.ev)}; ahora es <b className="tnum">{odd(cur.price)}</b>{cur.book ? ` (${cur.book})` : ''} con {signedPct(cur.ev)}.
+      {down ? ' La casa la ha bajado: el modelo piensa lo mismo, pero ahora paga menos y queda menos valor.' : ' La casa la ha subido: ahora paga más.'}
+      <span className="text-zinc-500"> El veredicto de abajo es con la cuota de ahora{mins < 120 ? ` (la lista era de hace ${mins} min)` : ''}.</span>
+    </div>
+  );
+}
+const signedPct = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1).replace('.', ',')} %`;

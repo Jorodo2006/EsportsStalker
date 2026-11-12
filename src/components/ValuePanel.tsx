@@ -3,7 +3,7 @@
 import { AlertTriangle, Plus } from 'lucide-react';
 import { useCurrency } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
-import { SIDE_LABEL, VERDICT_LABEL, type Reliability, type Side, type SideValue, type ValueData, type VerdictCode } from '@/lib/value';
+import { LEAN_EV, SIDE_LABEL, VERDICT_LABEL, type Reliability, type Side, type SideValue, type ValueData, type VerdictCode } from '@/lib/value';
 import { Button } from './ui';
 
 const VERDICT_TONE: Record<VerdictCode, string> = {
@@ -61,7 +61,7 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
         {(['over', 'under'] as Side[]).map(side => {
           const s = v.sides.find(x => x.side === side);
           const p = side === 'over' ? v.pOver : v.pUnder, fair = side === 'over' ? v.fairOver : v.fairUnder;
-          const good = !!s && s.ev >= 0.015;
+          const good = !!s && s.ev >= LEAN_EV;
           return (
             <div key={side} className={cn('rounded-xl border bg-surface p-3', good ? 'border-emerald-500/50' : 'border-zinc-700/80')}>
               <div className="flex items-baseline justify-between">
@@ -73,7 +73,7 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
               {s ? <>
                 <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[11px]">
                   <div><div className="text-zinc-500">Cuota{s.book ? ` ${s.book}` : ''}</div><div className="font-semibold tabular-nums">{odd(s.price)}</div></div>
-                  <div><div className="text-zinc-500">Valor (EV)</div><div className={cn('font-semibold tabular-nums', s.ev >= 0.015 ? 'text-emerald-400' : s.ev < 0 ? 'text-rose-400' : 'text-zinc-300')}>{s.ev > 0 ? '+' : ''}{pct(s.ev)}</div></div>
+                  <div><div className="text-zinc-500">Valor (EV)</div><div className={cn('font-semibold tabular-nums', s.ev >= LEAN_EV ? 'text-emerald-400' : s.ev < 0 ? 'text-rose-400' : 'text-zinc-300')}>{s.ev > 0 ? '+' : ''}{pct(s.ev)}</div></div>
                   <div title="Probabilidad estimada menos la de la casa sin margen"><div className="text-zinc-500">Ventaja</div><div className="font-semibold tabular-nums">{s.edge == null ? '–' : `${s.edge > 0 ? '+' : ''}${pct(s.edge)}`}</div></div>
                 </div>
                 {(onBet || onSlip) && (

@@ -6,6 +6,7 @@ import { logPredictions, tennisPredictions } from '@/lib/predictions';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
+import { verdictOf } from '@/lib/value';
 import type { TennisDayPick, TennisMatch, TennisPick, TennisSurface } from '@/lib/types';
 import { ReliabilityMeter } from './ValuePanel';
 import { Empty, ErrorBox, Loading } from './ui';
@@ -18,7 +19,7 @@ const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `
 const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
 // Sólo se llama valor a lo que lo tiene y además tiene detrás un cálculo fiable
-const hasValue = (p: TennisPick) => p.ev >= 0.02 && p.rel.score >= 55;
+const hasValue = (p: TennisPick) => verdictOf(p.ev, p.rel.score) === 'BET';
 
 const restart = (e: unknown) => /No handler registered|is not a function/.test(String(e))
   ? <ErrorBox error="La app tiene que reiniciarse para ver las recomendaciones">Para <code>npm run dev</code> (Ctrl+C) y vuelve a lanzarlo.</ErrorBox>

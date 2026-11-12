@@ -3,14 +3,16 @@
 // y el valor, la fiabilidad y el veredicto con las funciones comunes de value.ts.
 import type { BasketLogGame, BasketTeamLogs, MatchOdds } from './types';
 import type { GameCtx } from './basket-context';
-import { devig, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue } from './value';
+import { devig, devigBooks, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue } from './value';
 
 type G = BasketLogGame;
 
-// Cuánto pesa el modelo frente a la casa sin margen al calcular el valor. Es una decisión, no una medida: no hay cuotas
-// históricas de baloncesto con las que ajustarlo. Las líneas de jugador son más blandas que un ganador de tenis (ahí es 0,25)
-const MODEL_WEIGHT = 0.4;
-const THIN_WEIGHT = 0.2; // con poca muestra, todavía menos
+// Cuánto pesa el modelo frente a la casa sin margen al calcular el valor. Con las primeras 633 recomendaciones reales de la NBA
+// (noviembre de 2026, unos 15 partidos: es poco) la casa sola acertó más que cualquier mezcla en los "más", y en los "menos"
+// lo mejor fue 0,2-0,3; con 0,4 se recomendaba el doble y se perdía. Se baja a 0,3, como en tenis y fútbol (0,25). Hay que
+// volver a medirlo con «Todas las líneas» en Acierto del modelo cuando haya unos miles resueltas
+const MODEL_WEIGHT = 0.3;
+const THIN_WEIGHT = 0.15; // con poca muestra, todavía menos
 const THIN_GAMES = 10;
 export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (g: G) => number }> = {
   pts: { label: 'Puntos', short: 'PTS', f: g => g.pts },
@@ -29,7 +31,9 @@ export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (
 export type BasketMarket = keyof typeof BASKET_MARKETS;
 
 // El contexto del partido (descanso, vuelta tras baja) sale de gameCtx en basket-context.ts, igual en todas las pantallas
-export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null }
+// matesOut: compañeros importantes de baja desde hace poco (basket-mates.ts). No cambian la proyección (no está medido cuánto),
+// pero bajan la fiabilidad de los "menos": la proyección sale de partidos en los que ellos jugaban
+export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null; matesOut?: string[] }
 
 // Cuánto cambia lo que hace un jugador con el cansancio y al volver de una baja, por mercado, frente a lo que ya proyecta
 // el modelo. Medido con scripts/backtest-basket.ts (ajuste: temporada 25-26 hasta enero; comprobación: el resto); 1 = no
@@ -63,7 +67,14 @@ export function wvar(xs: number[], ws: number[]) {
 }
 const std = (a: number[]) => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(sum(a.map(x => (x - m) ** 2)) / (a.length - 1)); };
 
-// Muestra: sin pretemporada salvo que no haya otra cosa; vida media de 10 partidos, esta temporada pesa ×1,6
+// Ajustes de la proyección, medidos con scripts/calib-basket.ts (se exportan para que la prueba pueda cambiarlos):
+// - carry / carryMin: lo que vale un partido de la temporada pasada al proyectar esta (estadística y minutos). Los que siguen
+//   de un año a otro juegan menos: les quitan minutos los novatos y los fichajes, y son un año mayores
+// - curWeight: cuánto más pesa un partido de esta temporada que uno de la pasada
+// - minPivot / minPull: los minutos muy altos vuelven hacia la media (descansos, palizas, faltas)
+export const PROJ = { carry: 0.88, carryMin: 0.92, curWeight: 1.6, minPivot: 30, minPull: 0.15, varMult: 1.2 };
+
+// Muestra: sin pretemporada salvo que no haya otra cosa; vida media de 10 partidos, esta temporada pesa más (PROJ.curWeight)
 function buildSample(games: G[], currentSeason: number) {
   let pool = games.filter(g => g.type !== 'pre');
   let usedPreseason = false;
@@ -71,7 +82,7 @@ function buildSample(games: G[], currentSeason: number) {
   pool = pool.slice().sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 70);
   const weights = pool.map((g, i) => {
     let w = Math.pow(0.5, i / 10);
-    if (g.season === currentSeason) w *= 1.6;
+    if (g.season === currentSeason) w *= PROJ.curWeight;
     if (g.type === 'post') w *= 0.85;
     if (g.type === 'pre') w *= 0.5;
     return w;
@@ -91,27 +102,30 @@ export function project(games: G[], market: BasketMarket, ctx: BasketCtx) {
   const M = BASKET_MARKETS[market];
   const { pool, weights, usedPreseason } = buildSample(games, ctx.currentSeason);
   if (!pool.length) return null;
-  const xs = pool.map(M.f), mins = pool.map(g => g.min);
+  const old = (g: G) => g.season < ctx.currentSeason;
+  const val = (g: G) => M.f(g) * (old(g) ? PROJ.carry : 1);
+  const xs = pool.map(val), mins = pool.map(g => g.min * (old(g) ? PROJ.carryMin : 1));
   const wAvg = wmean(xs, weights), wMin = wmean(mins, weights), last5Min = mean(mins.slice(0, 5));
-  const projMin = pool.length >= 5 ? 0.6 * last5Min + 0.4 * wMin : wMin;
+  let projMin = pool.length >= 5 ? 0.6 * last5Min + 0.4 * wMin : wMin;
+  if (projMin > PROJ.minPivot) projMin -= PROJ.minPull * (projMin - PROJ.minPivot);
   const perMin = sum(xs.map((x, i) => x * weights[i])) / Math.max(1e-9, sum(mins.map((m, i) => m * weights[i])));
   // Mitad media directa, mitad ritmo por minuto × minutos previstos: así se nota un cambio de rol
   let mu = 0.5 * wAvg + 0.5 * perMin * projMin;
   const factors: { label: string; f: number; n: number }[] = [];
   if (ctx.home != null) {
-    const loc = shrink(pool.filter(g => g.home === ctx.home).map(M.f), xs, 15, 0.94, 1.06);
+    const loc = shrink(pool.filter(g => g.home === ctx.home).map(val), xs, 15, 0.94, 1.06);
     mu *= loc.f;
     factors.push({ label: ctx.home ? 'En casa' : 'Fuera', ...loc });
   }
   if (ctx.opp) {
-    const h2h = shrink(pool.filter(g => g.opp === ctx.opp).map(M.f), xs, 8, 0.9, 1.1);
+    const h2h = shrink(pool.filter(g => g.opp === ctx.opp).map(val), xs, 8, 0.9, 1.1);
     mu *= h2h.f;
     factors.push({ label: `Contra ${ctx.opp}`, ...h2h });
   }
   for (const c of ctxFactors(market, ctx)) { mu *= c.f; factors.push(c); }
   const W = sum(weights), neff = (W * W) / sum(weights.map(w => w * w));
   let variance = Math.max(wvar(xs, weights), mu * 0.9);
-  variance *= 1 + 2 / Math.max(neff, 1); // más incertidumbre con muestras cortas
+  variance *= (1 + 2 / Math.max(neff, 1)) * PROJ.varMult; // más incertidumbre con muestras cortas
   return { mu, sigma: Math.sqrt(variance), neff, projMin, wMin, last5Min, factors, pool, weights, xs, usedPreseason };
 }
 
@@ -122,13 +136,17 @@ export interface BasketAnalysis {
   modelOver: number; histOver: number;
   market: ReturnType<typeof devig>;
   sides: SideValue[];
-  rel: ReturnType<typeof reliability>;
+  rel: ReturnType<typeof reliability>; // la del lado con más valor
+  relBySide: Record<Side, ReturnType<typeof reliability>>;
   verdict: ReturnType<typeof verdict>;
   splits: { label: string; n: number; avg: number | null; hit: number | null; min: number | null }[];
   ladder: { line: number; pOver: number; fairOver: number; fairUnder: number }[];
 }
 
-export function analyze(games: G[], market: BasketMarket, line: number, odds: { over?: number | null; under?: number | null; book?: string }, ctx: BasketCtx): BasketAnalysis | null {
+// odds.books: las cuotas de cada casa en esa línea. Con ellas la probabilidad de la casa sale de quitar a cada una su margen
+// (devigBooks), y no depende de qué cuota se esté mirando; over / under son las que se pagarían
+export type LineOdds = { over?: number | null; under?: number | null; book?: string; books?: { over?: number | null; under?: number | null }[] };
+export function analyze(games: G[], market: BasketMarket, line: number, odds: LineOdds, ctx: BasketCtx): BasketAnalysis | null {
   const P = project(games, market, ctx);
   if (!P) return null;
   const { mu, sigma, neff, pool, weights, xs } = P;
@@ -146,7 +164,7 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: { 
   pOver = clamp(pOver / norm, 0.02, 0.98);
   pUnder = clamp(pUnder / norm, 0.02, 0.98);
 
-  const mk = devig(odds.over, odds.under);
+  const mk = odds.books?.length ? devigBooks(odds.books) : devig(odds.over, odds.under);
   const w = pool.length < THIN_GAMES ? THIN_WEIGHT : MODEL_WEIGHT;
   const sides: SideValue[] = [];
   if (odds.over && odds.over > 1) sides.push(sideValue('over', pOver, pPush, odds.over, mk.over, odds.book, w));
@@ -162,14 +180,19 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: { 
   if (P.usedPreseason) penalties.push({ pts: 15, warning: 'La muestra incluye partidos de pretemporada' });
   const far = sides.find(s => s.gap != null && tooFar(s.pModel, s.pModel - s.gap));
   if (far) penalties.push({ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(far.pModel * 100)} % frente a ${Math.round((far.pModel - far.gap!) * 100)} %): lo normal es que ella sepa algo que él no` });
-  const rel = reliability([
+  const relFactors = [
     { label: 'Muestra esta temporada', value01: cur.length / 10, max: 25, note: `${cur.length} partido${cur.length === 1 ? '' : 's'} de liga regular` },
     { label: 'Historial total', value01: pool.length / 40, max: 15, note: `${pool.length} partidos analizados` },
     relCommon.consistency(mu, sigma),
     { label: 'Minutos estables', value01: 1 - (cvMin - 0.08) / 0.3, max: 15, note: `${mean(recentMins).toFixed(1)} min ± ${std(recentMins).toFixed(1)}` },
     relCommon.distance(mu, sigma, line),
     relCommon.agreement(model.over, empOver)
-  ], penalties);
+  ];
+  const mates = ctx.matesOut ?? [];
+  const matePenalty = mates.length ? [{ pts: Math.min(25, 10 + 5 * mates.length), warning: `Baja${mates.length > 1 ? 's' : ''} reciente${mates.length > 1 ? 's' : ''} de ${mates.join(', ')}: la proyección sale de partidos con ${mates.length > 1 ? 'ellos' : 'él'} y no cuenta que ahora le pueden llegar más balones y minutos` }] : [];
+  const relBySide = { over: reliability(relFactors, penalties), under: reliability(relFactors, [...penalties, ...matePenalty]) };
+  const bestSide = sides.slice().sort((a, b) => b.ev - a.ev)[0]?.side ?? (pOver >= pUnder ? 'over' : 'under');
+  const rel = relBySide[bestSide];
 
   const M = BASKET_MARKETS[market];
   const reg = games.filter(g => g.type !== 'pre');
@@ -201,7 +224,7 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: { 
   return {
     mu, sigma, projMin: P.projMin, factors: P.factors,
     pOver, pUnder, pPush, fairOver: (1 - pPush) / pOver, fairUnder: (1 - pPush) / pUnder,
-    modelOver: model.over, histOver: empOver, market: mk, sides, rel,
+    modelOver: model.over, histOver: empOver, market: mk, sides, rel, relBySide,
     verdict: verdict(sides, rel.score, line, pOver >= pUnder ? 'over' : 'under'),
     splits, ladder
   };
@@ -221,14 +244,14 @@ export function scanMarkets(games: G[], ctx: BasketCtx) {
 }
 
 // Una línea de un jugador para el escáner, con el mismo cálculo que el analizador: las dos pantallas dan la misma probabilidad
-export function scanLine(games: G[], market: BasketMarket, line: number, side: Side, ctx: BasketCtx, odds: { over?: number | null; under?: number | null } = {}) {
+export function scanLine(games: G[], market: BasketMarket, line: number, side: Side, ctx: BasketCtx, odds: LineOdds = {}) {
   const R = analyze(games, market, line, odds, ctx);
   if (!R) return null;
   const f = BASKET_MARKETS[market].f;
   const reg = games.filter(g => g.type !== 'pre');
   const hit = (list: G[]) => ({ n: list.length, won: list.filter(g => (side === 'over' ? f(g) > line : f(g) < line)).length });
   return {
-    mu: R.mu, projMin: R.projMin, rel: R.rel, push: R.pPush,
+    mu: R.mu, projMin: R.projMin, rel: R.relBySide[side], push: R.pPush,
     p: side === 'over' ? R.pOver : R.pUnder, fair: side === 'over' ? R.fairOver : R.fairUnder,
     value: R.sides.find(s => s.side === side) ?? null,
     played: reg.length, last5: hit(reg.slice(0, 5)), last10: hit(reg.slice(0, 10)), season: hit(reg.filter(g => g.season === ctx.currentSeason))

@@ -5,7 +5,7 @@ import { useApp, useRefreshMs } from '@/lib/app-context';
 import { cn, fmtDay, fmtTime, groupBy, k, odd, pct, summarize } from '@/lib/format';
 import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamForm, TeamRef } from '@/lib/types';
 import { MIN_GAMES, analyzeLine, estimate, findPlayer, mapWinA, parseStat } from '@/lib/edge';
-import { SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
+import { BET_EV, SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
 import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePanel';
 import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
@@ -352,7 +352,7 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
 // Lo que hace falta para estimar el valor de las líneas de jugador
 type ValueCtx = { forms: (TeamForm | undefined)[]; markets: MarketLine[]; bestOf: number | null; loading: boolean; error?: string };
 type Value = { data: ValueData; best: SideValue; title: string } | { reason: string };
-const VALUE_MIN = 0.03; // a partir de qué valor esperado se resalta una cuota
+const VALUE_MIN = BET_EV; // a partir de qué valor esperado se resalta una cuota: el mismo que «Apostar» (value.ts)
 
 // Análisis de la línea con el mismo modelo de valor que la NBA (fiabilidad, margen, veredicto)
 function lineValue(m: MarketLine, name: string, books: string[], ctx: ValueCtx): Value {

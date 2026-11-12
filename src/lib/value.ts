@@ -18,6 +18,25 @@ export function devig(over?: number | null, under?: number | null) {
   return { over: io ? io / f : null, under: iu ? iu / f : null, margin: io || iu ? DEFAULT_MARGIN : null, exact: false };
 }
 
+// Probabilidad sin margen cuando hay varias casas: a cada una se le quita su propio margen (con sus dos cuotas, o estimado si sólo
+// da un lado) y se promedian, pesando menos las estimadas. Quitárselo a la mejor cuota de cada lado mezclando casas (el más de una y
+// el menos de otra) daba márgenes casi nulos (0,3 %) y una probabilidad inflada justo del lado que se iba a apostar: la misma
+// apuesta salía con +7 % desde la recomendación y con +0,8 % al pulsar la cuota de una sola casa
+export function devigBooks(books: { over?: number | null; under?: number | null }[]) {
+  let w = 0, over = 0, margin = 0, nExact = 0;
+  for (const b of books) {
+    const d = devig(b.over, b.under);
+    const o = d.over ?? (d.under != null ? 1 - d.under : null);
+    if (o == null) continue;
+    const k = d.exact ? 1 : 0.5;
+    w += k; over += k * o;
+    if (d.exact) { margin += d.margin!; nExact++; }
+  }
+  if (!w) return { over: null, under: null, margin: null, exact: false };
+  const o = over / w;
+  return { over: o, under: 1 - o, margin: nExact ? margin / nExact : DEFAULT_MARGIN, exact: nExact > 0 };
+}
+
 export interface SideValue {
   side: Side;
   price: number;
@@ -102,18 +121,26 @@ export interface Verdict { code: VerdictCode; title: string; text: string; best:
 
 export const VERDICT_LABEL: Record<VerdictCode, string> = { BET: 'Apostar', LEAN: 'Valor ligero', PASS: 'No apostar', NOODDS: 'Sin cuota' };
 
-// Apostar: EV ≥ 4 %, ventaja ≥ 3 % y fiabilidad ≥ 55. Valor ligero: EV ≥ 1,5 % y fiabilidad ≥ 45.
+// Un solo criterio para todas las pantallas (recomendaciones, la banda de Hoy, el análisis del jugador, tenis, fútbol y LoL): si
+// cada una usara el suyo, la misma apuesta saldría como "de las mejores" en una y "No apostar" en otra.
+// Apostar: EV ≥ 2 % y fiabilidad ≥ 55. Valor ligero: EV ≥ 1 % y fiabilidad ≥ 45. Lo demás, no apostar
+export const BET_EV = 0.02, BET_REL = 55, LEAN_EV = 0.01, LEAN_REL = 45;
+export const verdictOf = (ev: number, rel: number): 'BET' | 'LEAN' | 'PASS' =>
+  ev >= BET_EV && rel >= BET_REL ? 'BET' : ev >= LEAN_EV && rel >= LEAN_REL ? 'LEAN' : 'PASS';
+
 export function verdict(sides: SideValue[], rel: number, line: number, lean: Side): Verdict {
   const best = sides.slice().sort((a, b) => b.ev - a.ev)[0] ?? null;
   const name = (s: Side) => `${SIDE_LABEL[s]} de ${line}`;
   if (!best) return { code: 'NOODDS', title: `Tendencia: ${name(lean)}`, text: 'Pon la cuota de la casa para calcular si hay valor.', best };
-  if (best.ev >= 0.04 && (best.edge ?? 0) >= 0.03 && rel >= 55)
-    return { code: 'BET', title: name(best.side), text: 'Hay valor y la muestra respalda el pronóstico.', best };
-  if (best.ev >= 0.015 && rel >= 45)
-    return { code: 'LEAN', title: `${name(best.side)} (valor ligero)`, text: 'Ventaja pequeña: stake bajo o espera a una cuota mejor.', best };
+  // Tan lejos de la casa suele ser que al modelo le falta algo: las recomendaciones no las enseñan, y aquí tampoco se dice que se apueste
+  if (best.gap != null && tooFar(best.pModel, best.pModel - best.gap))
+    return { code: 'PASS', title: 'No apostar', best, text: 'El modelo se aleja demasiado de la casa: lo normal es que ella sepa algo que él no (una baja, un cambio de rol).' };
+  const code = verdictOf(best.ev, rel);
+  if (code === 'BET') return { code, title: name(best.side), text: 'Hay valor y la muestra respalda el pronóstico.', best };
+  if (code === 'LEAN') return { code, title: `${name(best.side)} (valor ligero)`, text: 'Ventaja pequeña: stake bajo o espera a una cuota mejor.', best };
   return {
-    code: 'PASS', title: 'No apostar', best,
-    text: best.ev < 0.015 ? 'La cuota no paga lo suficiente para la probabilidad estimada.' : 'Hay algo de valor, pero la fiabilidad es baja.'
+    code, title: 'No apostar', best,
+    text: best.ev < LEAN_EV ? 'La cuota no paga lo suficiente para la probabilidad estimada.' : 'Hay algo de valor, pero la fiabilidad es baja.'
   };
 }
 

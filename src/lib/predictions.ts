@@ -1,7 +1,8 @@
 // Manda al servidor las recomendaciones que se están viendo, para medir después si el modelo acierta (Mis apuestas →
-// Acierto del modelo), de partidos que no han empezado: de baloncesto, las de valor; de tenis y fútbol, todas las que enseña (la
-// principal es "la más fiable", que puede no tener valor). No repite las que no han cambiado y
-// las junta en un envío cada pocos segundos: una jornada de baloncesto son cientos.
+// Acierto del modelo), de partidos que no han empezado: de baloncesto, todas las líneas que calcula (las recomendadas se separan al
+// mirarlas, y así se puede medir cuánto debe pesar el modelo frente a la casa sin quedarse sólo con aquellas en que no coinciden); de
+// tenis y fútbol, todas las que enseña (la principal es "la más fiable", que puede no tener valor). No repite las que no han cambiado
+// y las manda en tandas de 400 cada pocos segundos hasta acabar: una jornada de baloncesto son miles de líneas.
 import { BASKET_MARKETS } from './basket-model';
 import { POINT_PERIODS } from './basket-teams';
 import type { BasketPick } from './basket-picks';
@@ -33,12 +34,17 @@ export function logPredictions(list: PredictionIn[]) {
     const what = `${x.title} (${x.event}) · cuota ${x.price.toFixed(2)}${x.book ? ` en ${x.book}` : ''} · probabilidad ${Math.round(x.p * 100)} %`;
     alert('picks', strong.length === 1 ? 'Recomendación fuerte' : `${strong.length} recomendaciones fuertes`, strong.length === 1 ? what : `La mejor: ${what}`, 'picks');
   }
+  flush();
+}
+
+function flush() {
   if (!queue.length || timer) return;
   timer = window.setTimeout(() => {
-    timer = undefined;
     const batch = queue.splice(0, 400);
     // Si falla no pasa nada: se volverá a mandar la próxima vez que cambie
-    window.api.bets.recordPredictions(batch).catch(() => { for (const x of batch) sent.delete(`${x.match}|${x.key}|${x.out}`); });
+    window.api.bets.recordPredictions(batch)
+      .catch(() => { for (const x of batch) sent.delete(`${x.match}|${x.key}|${x.out}`); })
+      .finally(() => { timer = undefined; flush(); });
   }, 4000);
 }
 

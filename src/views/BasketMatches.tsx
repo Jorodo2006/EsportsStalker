@@ -26,7 +26,10 @@ import { TvTabs } from '@/components/viz';
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
 type Mode = 'games' | 'picks';
-const pickedOf = (p: BasketPick): Picked => ({ id: p.who!.id, name: p.who!.name, league: p.game.league, headshot: p.who!.headshot, teamId: p.who!.teamId, game: p.game, market: p.marketKey ?? undefined, line: p.line });
+const pickedOf = (p: BasketPick): Picked => ({
+  id: p.who!.id, name: p.who!.name, league: p.game.league, headshot: p.who!.headshot, teamId: p.who!.teamId, game: p.game, market: p.marketKey ?? undefined, line: p.line,
+  seen: { side: p.side, price: p.price, book: p.book, ev: p.ev, at: Date.now() }
+});
 
 function loadSet(key: string) { try { return new Set<string>(JSON.parse(localStorage.getItem(key) || '[]')); } catch { return new Set<string>(); } }
 function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, JSON.stringify([...s])); } catch { /* sin almacenamiento */ } }

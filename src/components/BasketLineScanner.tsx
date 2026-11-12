@@ -6,8 +6,9 @@ import { useQueries } from '@tanstack/react-query';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
 import { gameCtx, teamGamesOf } from '@/lib/basket-context';
+import { freshKeyOuts, matesOut } from '@/lib/basket-mates';
 import { BASKET_MARKETS, fmtLine, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
-import { SIDE_LABEL, type Side } from '@/lib/value';
+import { LEAN_EV, SIDE_LABEL, type Side } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketSide, BasketTeamLogs } from '@/lib/types';
 import { LEAGUE_NAME, badInjury, esTime, type Picked } from './BasketAnalyzer';
 import { targetOfGame } from './BasketOdds';
@@ -79,11 +80,13 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       if (!data) continue;
       const missed = missedByPlayer(data);
       const sched = teamGamesOf(data, t.team.id);
+      const statusOf = (id: string, roster: string | null | undefined) => (t.game.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
+      const fresh = freshKeyOuts(matesOut(data, t.team.id, '', t.game.date, statusOf, t.game.league === 'wnba' ? 40 : 48));
       for (const p of data.players) {
-        const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: (t.game.league === 'nba' ? injuries.find(x => x.playerId === p.id)?.status : null) || p.injury, ...gameCtx(p.games, sched, t.game.date, t.team.id) };
+        const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: statusOf(p.id, p.injury) ?? null, matesOut: fresh.filter(m => m.id !== p.id).map(m => m.name), ...gameCtx(p.games, sched, t.game.date, t.team.id) };
         const book = linesOf.get(`${t.game.id}:${p.id}`)?.[BASKET_MARKETS[market].label] ?? [];
         const exact = book.find(b => b.line === L);
-        const r = scanLine(p.games, market, L, side, ctx, { over: exact?.over, under: exact?.under });
+        const r = scanLine(p.games, market, L, side, ctx, { over: exact?.over, under: exact?.under, books: exact ? Object.values(exact.books) : undefined });
         if (!r || r.played < 3) continue;
         const miss = missed.get(p.id) ?? 0;
         // Con la línea de otra casa a la vista se sabe qué pagan aunque no sea exactamente la pedida
@@ -191,7 +194,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
                         <span className="whitespace-nowrap text-xs text-zinc-500" title={`Las casas tienen otra línea: ${fmtLine(r.near.line)} (Más ${odd(r.near.over)} · Menos ${odd(r.near.under)})`}>línea {fmtLine(r.near.line)}</span>
                       ) : <span className="text-zinc-700">–</span>}
                     </td>
-                    <td className={cn(tdc, 'text-right font-medium tnum', !r.value ? 'text-zinc-700' : r.value.ev >= 0.015 ? 'text-emerald-400' : r.value.ev < 0 ? 'text-rose-400' : 'text-zinc-300')}>{r.value ? `${r.value.ev > 0 ? '+' : ''}${pct(r.value.ev)}` : '–'}</td>
+                    <td className={cn(tdc, 'text-right font-medium tnum', !r.value ? 'text-zinc-700' : r.value.ev >= LEAN_EV ? 'text-emerald-400' : r.value.ev < 0 ? 'text-rose-400' : 'text-zinc-300')}>{r.value ? `${r.value.ev > 0 ? '+' : ''}${pct(r.value.ev)}` : '–'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -202,7 +205,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       )}
       <div className="flex flex-col gap-1 px-1 text-xs text-zinc-500">
         {(hidden > 0 || shortMin > 0 || lowOdds > 0) && <p>{hidden > 0 && `${hidden} ocultos por baja o por no jugar los últimos 3 partidos de su equipo. `}{shortMin > 0 && `${shortMin} ocultos por jugar menos de ${minMin} minutos. `}{lowOdds > 0 && `${lowOdds} ocultos por pagar menos de ${odd(minOdds).replace('.', ',')} (sin cuota de la casa, por tener una justa menor).`}</p>}
-        <p>Probabilidad del modelo, la misma que en Valor de jugador. Cuidado con los primeros de la lista: en la NBA (25-26) el 1.º de cada jornada decía un 77 % y se cumplió un 71 %, y los 5 primeros, un 68 % y un 63 %. En robos y tapones se desvía más. No tiene en cuenta las bajas de los compañeros.</p>
+        <p>Probabilidad del modelo, la misma que en Valor de jugador. Cuidado con los primeros de la lista: en la NBA (25-26) el 1.º de cada jornada decía un 77 % y se cumplió un 71 %, y los 5 primeros, un 68 % y un 63 %. En robos y tapones se desvía más. Las bajas de los compañeros no cambian la proyección: si son nuevas, bajan la fiabilidad de los «menos».</p>
         <p>Una probabilidad alta no quiere decir que la apuesta valga la pena: eso lo dice el EV, que mezcla el modelo con la casa sin margen. Si no hay cuota de la casa, la columna Justa es lo mínimo que tendrían que pagar para que saliera rentable.</p>
       </div>
     </div>

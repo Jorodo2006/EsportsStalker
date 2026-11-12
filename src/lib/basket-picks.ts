@@ -5,8 +5,9 @@
 import { BASKET_MARKETS, fmtLine, missedByPlayer, playerLines, playerOut, scanLine, type BasketMarket } from './basket-model';
 import { POINT_PERIODS, analyzePoints, pointLines, projectGame, type PointKind, type PointPeriod } from './basket-teams';
 import { gameCtx, teamGamesOf } from './basket-context';
+import { freshKeyOuts, matesOut } from './basket-mates';
 import type { BasketGame, BasketInjury, BasketLeagueGames, BasketTeamLogs, MatchOdds } from './types';
-import { SIDE_LABEL, tooFar, type Reliability, type Side } from './value';
+import { SIDE_LABEL, tooFar, verdictOf, type Reliability, type Side } from './value';
 
 export type PickGroup = 'pts' | 'reb' | 'ast' | 'fg3m' | 'combo' | 'def' | 'team';
 export const PICK_GROUPS: { value: PickGroup | 'all'; label: string; title?: string }[] = [
@@ -38,20 +39,24 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
   const team = game[side], opp = game[side === 'home' ? 'away' : 'home'];
   const missed = missedByPlayer(data);
   const sched = teamGamesOf(data, team.id); // calendario de su equipo: el mismo contexto (B2B, vuelta de baja) que el analizador
+  // Compañeros importantes de baja desde hace poco: bajan la fiabilidad de los "menos" de los demás
+  const statusOf = (id: string, roster: string | null | undefined) => (game.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
+  const fresh = freshKeyOuts(matesOut(data, team.id, '', game.date, statusOf, game.league === 'wnba' ? 40 : 48));
   const out: BasketPick[] = [];
   for (const p of data.players) {
     const lines = playerLines(odds, p.name);
     if (!Object.keys(lines).length) continue;
-    const injury = (game.league === 'nba' ? injuries.find(x => x.playerId === p.id)?.status : null) || p.injury;
+    const injury = statusOf(p.id, p.injury) ?? null;
     if (playerOut(injury, missed.get(p.id) ?? 0)) continue;
-    const ctx = { currentSeason: data.currentSeason, home: side === 'home', opp: opp.abbr, injury, ...gameCtx(p.games, sched, game.date, team.id) };
+    const mates = fresh.filter(m => m.id !== p.id).map(m => m.name);
+    const ctx = { currentSeason: data.currentSeason, home: side === 'home', opp: opp.abbr, injury, matesOut: mates, ...gameCtx(p.games, sched, game.date, team.id) };
     for (const k of Object.keys(BASKET_MARKETS) as BasketMarket[]) {
       const M = BASKET_MARKETS[k];
       for (const l of lines[M.label] ?? []) {
         for (const s of ['over', 'under'] as Side[]) {
           // Lo que nunca se va a recomendar no se calcula: una jornada son miles de líneas y esto corre en el móvil
           if ((s === 'over' ? l.over ?? 0 : l.under ?? 0) < MIN_PRICE) continue;
-          const r = scanLine(p.games, k, l.line, s, ctx, { over: l.over, under: l.under });
+          const r = scanLine(p.games, k, l.line, s, ctx, { over: l.over, under: l.under, books: Object.values(l.books) });
           const v = r?.value;
           if (!r || !v || r.played < MIN_PLAYED || r.projMin < MIN_MINUTES) continue;
           out.push({
@@ -100,14 +105,17 @@ export function teamPicks(game: BasketGame, d: BasketLeagueGames, odds: MatchOdd
 export const saneLine = (x: BasketPick) => x.price >= MIN_PRICE && x.price <= MAX_PRICE && x.rel.score >= MIN_REL && x.ev >= MIN_EV && (x.pMarket == null || !tooFar(x.pModel, x.pMarket));
 
 // Sólo se llama valor a lo que lo tiene y además tiene detrás un cálculo fiable (lo mismo que en tenis)
-export const hasValue = (x: BasketPick) => x.ev >= 0.02 && x.rel.score >= 55;
+export const hasValue = (x: BasketPick) => verdictOf(x.ev, x.rel.score) === 'BET';
+// El mismo veredicto que el análisis del jugador (value.ts): Apostar, Valor ligero o No apostar
+export const pickVerdict = (x: BasketPick) => verdictOf(x.ev, x.rel.score);
 
 export interface PickFilters { group: PickGroup | 'all'; side: Side | 'all'; line: number | null; minOdds: number; onlyValue: boolean }
 
 const score = (x: BasketPick) => x.ev + 0.1 * (x.rel.score / 100) + 0.1 * x.p;
 // Para destacar una: que salga rentable y sea de fiar. Robos y tapones son lo que peor calibra el modelo (docs/specs/08-baloncesto.md):
 // salen en las listas, pero no como la mejor opción salvo que se pidan
-const worthTop = (x: BasketPick, group?: PickGroup | 'all') => x.ev > 0 && x.rel.score >= 50 && x.p >= 0.3 && (x.group !== 'def' || group === 'def');
+// Lo que el análisis llamaría «No apostar» no se destaca nunca
+const worthTop = (x: BasketPick, group?: PickGroup | 'all') => pickVerdict(x) !== 'PASS' && x.p >= 0.3 && (x.group !== 'def' || group === 'def');
 const ownerOf = (x: BasketPick) => x.who?.id ?? `${x.game.id}:${x.period}:${x.pointKind}`;
 
 // Dos líneas del mismo mercado de un jugador no son dos ideas distintas, ni cinco apuestas del mismo jugador son cinco opciones

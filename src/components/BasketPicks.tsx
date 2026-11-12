@@ -6,7 +6,8 @@ import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
-import { PICK_GROUPS, arrangePicks, bestPicks, hasValue, playerPicks, saneLine, teamPicks, type BasketPick, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { PICK_GROUPS, arrangePicks, bestPicks, hasValue, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { VERDICT_LABEL } from '@/lib/value';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
 import type { Side } from '@/lib/value';
@@ -64,7 +65,7 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
     done.current.set(key, { deps, picks });
     return picks;
   };
-  const { picks, considered } = useMemo(() => {
+  const { picks, considered, lines } = useMemo(() => {
     const all: BasketPick[] = [];
     games.forEach((g, i) => {
       const odds = oddsQ[i]?.data;
@@ -75,13 +76,15 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
       const data = logs[i]?.data, odds = oddsQ[games.indexOf(t.game)]?.data;
       if (data && odds) all.push(...once(`${t.game.id}:${t.side}`, [t.game.date, odds.markets, data, injuries.length], () => playerPicks(t.game, t.side, data, odds, injuries)));
     });
-    return { picks: all.filter(saneLine), considered: all.length };
+    return { picks: all.filter(saneLine), considered: all.length, lines: all };
   }, [games, oddsKey, logsKey, pointsKey, injuries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Las de valor se registran para medir después si el modelo acierta (Mis apuestas → Acierto del modelo)
+  // Se registran todas las líneas calculadas, no sólo las de valor, para medir después si el modelo acierta (Mis apuestas →
+  // Acierto del modelo). Si sólo se guardaran las de valor, que son justo en las que el modelo no está de acuerdo con la casa,
+  // la casa saldría siempre mejor y no se podría medir cuánto debe pesar cada uno. Las recomendadas se separan al mirarlas
   useEffect(() => {
-    logPredictions(picks.filter(hasValue).map(basketPrediction).filter((x): x is NonNullable<typeof x> => !!x));
-  }, [picks]);
+    logPredictions(lines.map(basketPrediction).filter((x): x is NonNullable<typeof x> => !!x));
+  }, [lines]);
 
   const now = Date.now();
   const stamps = games.map((_, i) => newest(oddsQ[i]?.data)).filter(Boolean);
@@ -122,7 +125,7 @@ function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
             {pick.why}
           </div>
         </button>
-        <div className="w-[52px] shrink-0 text-right" title="Probabilidad estimada y valor esperado por cada euro">
+        <div className="w-[52px] shrink-0 text-right" title={`Probabilidad estimada y valor esperado por cada euro: ${VERDICT_LABEL[pickVerdict(pick)].toLowerCase()}`}>
           <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
           <div className={cn('font-score text-[12px] font-semibold tnum', good ? 'text-[var(--tv-mark)]' : pick.ev > 0 ? 'text-zinc-200' : 'text-zinc-500')}>{signed(pick.ev)}</div>
         </div>
@@ -233,7 +236,7 @@ export function BasketPicksBoard({ games, injuries, onOpen, onOdds }: { games: B
         <TvHeader title="Recomendaciones" sub={sub}>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <TvStat label="Opciones" value={A.count} sub={`de ${q.considered} líneas`} title="Las que pasan los filtros, de todas las líneas de las casas que el modelo sabe calcular" />
-            <TvStat label="Con valor" value={A.withValue} sub="valor 2 % o más" title="Valor esperado de 2 % o más y fiabilidad de 55 o más" />
+            <TvStat label="Con valor" value={A.withValue} sub="para apostar" title="Las que el análisis del jugador llama «Apostar»: valor esperado de 2 % o más y fiabilidad de 55 o más" />
             {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}
           </div>
         </TvHeader>
@@ -256,7 +259,7 @@ export function BasketPicksBoard({ games, injuries, onOpen, onOdds }: { games: B
           </div>
         )}
         <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
-          Es una estimación, no una garantía: el valor mezcla el modelo con la casa sin margen, y la casa pesa más. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero. No tiene en cuenta las bajas de los compañeros, y en robos y tapones se desvía más. Ganador y hándicap no salen porque el modelo no los calcula.
+          Es una estimación, no una garantía: el valor mezcla el modelo con la casa sin margen, y la casa pesa más. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero. Las bajas de los compañeros no cambian la proyección: si son nuevas, bajan la fiabilidad de los «menos». En robos y tapones se desvía más. Ganador y hándicap no salen porque el modelo no los calcula.
         </p>
       </TvFrame>
     </div>
@@ -276,7 +279,7 @@ export function BasketDayPicks({ games, injuries, onOpen, onAll }: { games: Bask
         <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_2.75rem_3rem_1rem] items-center gap-2 border-b border-white/10 px-3 py-1.5 text-left transition hover:bg-white/[.05]">
           <span className="min-w-0">
             <span className="block truncate font-score text-[15px] font-bold text-white">{p.title}</span>
-            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {signed(p.ev)}</span>
+            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]} {signed(p.ev)} · {p.book}</span>
           </span>
           <span className="text-right font-score text-[17px] font-bold text-[var(--tv-mark)] tnum">{p0(p.p)}</span>
           <span className="text-right font-score text-[17px] font-bold text-white tnum">{odd(p.price)}</span>

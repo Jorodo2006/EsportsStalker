@@ -1,11 +1,13 @@
 // Contexto de un jugador antes de apostar: si viene de lesión o lleva partidos sin jugar, el descanso de los dos equipos
-// (B2B, 3 en 4 noches), cómo rinde él en B2B, si le están dando más o menos minutos y las bajas de su equipo.
+// (B2B, 3 en 4 noches), cómo rinde él en B2B, si le están dando más o menos minutos, las bajas de su equipo (desde cuándo)
+// y cómo le fue sin cada compañero importante que falta (basket-mates.ts).
 // El modelo sólo usa lo que se ha medido que importa (B2B y vuelta de baja, en basket-context.ts y CTX_FACTORS); el resto
 // es información
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/format';
 import { BASKET_MARKETS, fmtLine, type BasketMarket } from '@/lib/basket-model';
-import type { BasketAbsence, BasketGame, BasketInjury, BasketLogGame, BasketRest } from '@/lib/types';
+import { withAndWithout, type MateOut } from '@/lib/basket-mates';
+import type { BasketAbsence, BasketGame, BasketInjury, BasketLogGame, BasketRest, BasketTeamLogs } from '@/lib/types';
 import { Card } from './ui';
 
 type Tone = 'bad' | 'good' | 'info';
@@ -43,9 +45,9 @@ function teamRun(games: BasketLogGame[], missed: BasketAbsence[], season: number
   return [...played, ...out].sort((a, b) => b.t - a.t);
 }
 
-export function BasketContext({ games, missed = [], season, game, teamId, playerId, injuries, market, line }: {
+export function BasketContext({ games, missed = [], season, game, teamId, playerId, injuries, market, line, mates, mateLogs }: {
   games: BasketLogGame[]; missed?: BasketAbsence[]; season: number; game: BasketGame | null; teamId?: string; playerId: string;
-  injuries: BasketInjury[]; market: BasketMarket; line: number | null;
+  injuries: BasketInjury[]; market: BasketMarket; line: number | null; mates?: MateOut[]; mateLogs?: BasketTeamLogs;
 }) {
   const rest = useRest(game);
   const M = BASKET_MARKETS[market];
@@ -126,13 +128,46 @@ export function BasketContext({ games, missed = [], season, game, teamId, player
     if (Math.abs(l5 - all) >= 3) facts.push({ label: 'Minutos', text: `${f1(l5)} min en los 5 últimos frente a ${f1(all)} de media`, tone: l5 > all ? 'good' : 'bad', note: l5 > all ? 'Le están dando más minutos' : 'Le están dando menos minutos' });
   }
 
-  // Bajas de su equipo: más balones y minutos para los demás
-  const outs = injuries.filter(x => x.teamId === teamId && x.playerId !== playerId && /out/i.test(x.status));
-  if (outs.length) facts.push({ label: 'Bajas de su equipo', text: outs.map(x => x.name).join(', '), tone: 'info', note: 'Más balones y minutos para el resto' });
+  // Bajas de su equipo. Con la plantilla cargada se sabe desde cuándo faltan y cómo le fue a él sin cada uno; si no, sólo
+  // los nombres del parte médico
+  if (mates && mateLogs) {
+    if (mates.length) {
+      const since = (m: MateOut) => m.streak === 0 ? 'nueva' : m.fresh ? `${plural(m.streak, 'partido')} fuera` : `fuera desde hace ${plural(m.streak, 'partido')}`;
+      const fresh = mates.filter(m => m.key && m.fresh);
+      facts.push({
+        label: 'Bajas de su equipo', tone: fresh.length ? 'bad' : 'info',
+        text: mates.map(m => `${m.name} (${since(m)}${m.key ? '' : ', pocos minutos'})`).join(', '),
+        note: fresh.length
+          ? `El modelo no cuenta las bajas de los compañeros, y ${fresh.length > 1 ? 'estas son nuevas' : 'esta es nueva'}: sus últimos partidos fueron con ${fresh.length > 1 ? 'ellos' : 'él'}. Ojo con los "menos"`
+          : 'Ninguna es nueva de alguien con minutos: sus últimos partidos ya se jugaron sin ellos'
+      });
+    }
+    // Él sin cada uno de los importantes que faltan, frente a con él (esta temporada y la anterior, en este equipo)
+    for (const m of mates.filter(x => x.key).slice(0, 3)) {
+      const s = teamId ? withAndWithout(games, mateLogs, m.id, teamId, market, line) : null;
+      if (!s) continue;
+      const first = m.name.split(' ').slice(1).join(' ') || m.name;
+      if (!s.n) { facts.push({ label: `Sin ${first}`, text: 'No ha jugado sin él ni esta temporada ni la anterior', tone: 'info', note: 'No hay con qué comparar' }); continue; }
+      const up = s.avg != null && s.avgWith != null && s.avgWith > 0 && s.avg > s.avgWith * 1.08;
+      const down = s.avg != null && s.avgWith != null && s.avgWith > 0 && s.avg < s.avgWith * 0.92;
+      facts.push({
+        label: `Sin ${first}`, tone: s.n >= 3 && up ? 'good' : s.n >= 3 && down ? 'bad' : 'info',
+        text: `${f1(s.avg)} ${M.short} en ${plural(s.n, 'partido')} sin él frente a ${f1(s.avgWith)} con él (${s.nWith})`,
+        note: [
+          `${f1(s.min)} min frente a ${f1(s.minWith)}`,
+          line != null && s.hit != null ? `más de ${fmtLine(line)}: ${Math.round(s.hit * 100)} % sin él${s.hitWith != null ? `, ${Math.round(s.hitWith * 100)} % con él` : ''}` : '',
+          s.n < 5 ? 'pocos partidos: tómalo como una pista' : ''
+        ].filter(Boolean).join(' · ')
+      });
+    }
+  } else {
+    const outs = injuries.filter(x => x.teamId === teamId && x.playerId !== playerId && /out/i.test(x.status));
+    if (outs.length) facts.push({ label: 'Bajas de su equipo', text: outs.map(x => x.name).join(', '), tone: 'info', note: 'El modelo no cuenta las bajas de los compañeros' });
+  }
 
   if (!facts.length) return null;
   return (
-    <Card title="Contexto" action={<span className="text-[11px] text-zinc-500">B2B y vuelta de baja ya cuentan en la proyección</span>}>
+    <Card title="Contexto" action={<span className="text-[11px] text-zinc-500">B2B y vuelta de baja cuentan en la proyección; las bajas de compañeros, no</span>}>
       <div className="-my-1 divide-y divide-zinc-800/60">
         {facts.map(f => (
           <div key={f.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 py-2 text-[13px] sm:grid-cols-[9rem_minmax(0,1fr)]">

@@ -4,11 +4,17 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, odd, pct, tone } from '@/lib/format';
+import { verdictOf } from '@/lib/value';
 import type { PredictionRow } from '@/lib/types';
 import { Card, Empty, ErrorBox, Loading, Stat, Tabs, td, th } from './ui';
 
 type SportF = 'all' | 'basket' | 'tennis';
 type RangeF = '30' | '90' | 'all';
+type ScopeF = 'picks' | 'lines';
+
+// De baloncesto se guardan todas las líneas que calcula el modelo; recomendadas son las que la app enseña como de valor
+// (hasValue en basket-picks.ts). De tenis y fútbol sólo se guardan las que enseña
+const isPick = (r: PredictionRow) => r.sport !== 'basket' || verdictOf(r.ev, r.rel ?? 0) === 'BET';
 
 const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', lol: 'LoL' };
 const decided = (r: PredictionRow) => r.status !== 'void';
@@ -37,10 +43,11 @@ export function ModelAccuracy() {
   const q = useQuery({ queryKey: ['predictions'], queryFn: () => window.api.bets.predictions(), staleTime: 60e3 });
   const [sport, setSport] = useState<SportF>('all');
   const [range, setRange] = useState<RangeF>('all');
+  const [scope, setScope] = useState<ScopeF>('picks');
   const rows = useMemo(() => {
     const since = range === 'all' ? 0 : Date.now() - Number(range) * 864e5;
-    return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && +new Date(r.start) >= since);
-  }, [q.data, sport, range]);
+    return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && +new Date(r.start) >= since && (scope === 'lines' || isPick(r)));
+  }, [q.data, sport, range, scope]);
 
   if (q.isLoading) return <Loading label="Cargando las recomendaciones resueltas…" />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -50,6 +57,7 @@ export function ModelAccuracy() {
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <Tabs value={sport} onChange={setSport} items={[{ value: 'all', label: 'Todo' }, { value: 'basket', label: 'Baloncesto' }, { value: 'tennis', label: 'Tenis' }]} />
       <Tabs value={range} onChange={setRange} items={[{ value: '30', label: '30 días' }, { value: '90', label: '90 días' }, { value: 'all', label: 'Todo' }]} />
+      <Tabs value={scope} onChange={setScope} items={[{ value: 'picks', label: 'Recomendadas' }, { value: 'lines', label: 'Todas las líneas' }]} />
       <span className="text-xs text-zinc-500">{data.pending} por resolver{data.since ? ` · registro desde el ${new Date(data.since).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}` : ''}</span>
     </div>
   );
@@ -57,7 +65,7 @@ export function ModelAccuracy() {
     <>
       {filters}
       <Empty>
-        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${SPORT_NAME[sport].toLowerCase()}` : ''}. Desde ahora se guardan las de valor de baloncesto y todas
+        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${SPORT_NAME[sport].toLowerCase()}` : ''}. Desde ahora se guardan todas las líneas que calcula el modelo de baloncesto y todas
         las de tenis mientras las ves en la app (Hoy, Recomendaciones, la ficha de cada partido), las apuestes o no; cuando acaban sus partidos se
         resuelven solas y salen aquí. Hacen falta unas cuantas decenas para que las cifras digan algo.
       </Empty>
@@ -126,7 +134,7 @@ export function ModelAccuracy() {
                 const best = v != null && v === Math.min(bModel ?? 9, bMarket ?? 9, bMix ?? 9);
                 return <div key={l} className="flex items-center justify-between gap-3"><span className="text-zinc-400">{l}</span><span className={cn('font-semibold tnum', best ? 'text-emerald-400' : 'text-zinc-100')}>{v?.toFixed(4).replace('.', ',')}</span></div>;
               })}
-              <p className="text-xs text-zinc-500">Sobre las mismas {both.length} recomendaciones. Si la casa sale mejor que el modelo, el modelo tiene que pesar menos en la mezcla.</p>
+              <p className="text-xs text-zinc-500">Sobre las mismas {both.length} {scope === 'lines' ? 'líneas' : 'recomendaciones'}. Para decidir cuánto debe pesar el modelo, mira «Todas las líneas»: en las recomendadas, que son justo en las que no está de acuerdo con la casa, la casa sale siempre mejor.</p>
               {moved.length >= 10 && (
                 <p className="border-t border-zinc-800/60 pt-2.5 text-xs text-zinc-400">
                   La cuota bajó en <span className="font-semibold text-zinc-100">{Math.round((down / moved.length) * 100)} %</span> de las {moved.length} que se movieron mientras se recomendaban: si es más de la mitad, el mercado tiende a ir hacia lo que decía el modelo.
