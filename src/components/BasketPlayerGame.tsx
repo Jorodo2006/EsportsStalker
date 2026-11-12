@@ -9,6 +9,7 @@ import { cn } from '@/lib/format';
 import type { BasketGame, BasketShot, BoxTeam } from '@/lib/types';
 import { Button, Dialog, Empty, Loading, TeamLogo, seg, segWrap } from './ui';
 import { Panel } from './viz';
+import { espnLeague } from '@/lib/basket-leagues';
 
 type BoxPlayer = BoxTeam['players'][number];
 
@@ -70,7 +71,7 @@ export function BasketPlayerGameDialog({ game, team, player, onClose, onLines }:
   game: BasketGame; team: BoxTeam; player: BoxPlayer; onClose: () => void; onLines: () => void;
 }) {
   const [period, setPeriod] = useState(0);
-  const espn = game.league === 'nba' || game.league === 'wnba';
+  const espn = espnLeague(game.league);
   const q = useQuery({
     queryKey: ['basket', 'playerGame', game.id, player.id], enabled: espn && !!player.id,
     queryFn: () => window.api.basket.playerGame(game.id, player.id), staleTime: 20e3,

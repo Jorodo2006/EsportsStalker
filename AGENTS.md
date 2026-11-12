@@ -6,7 +6,7 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 ## Qué es
 
 Web con login, para el ordenador y el móvil, con backend en Docker, que son **cuatro apps en una**, con un selector arriba:
-**LoL** (esports, verde azulado), **Baloncesto** (NBA, WNBA, Euroliga y EuroCup, naranja), **Tenis** (ATP, Challengers y WTA, verde) y
+**LoL** (esports, verde azulado), **Baloncesto** (NBA, WNBA, Euroliga, EuroCup y NBL, naranja), **Tenis** (ATP, Challengers y WTA, verde) y
 **Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas, Copa del Rey, selecciones: Nations League y amistosos, y femenino: Champions, Liga F y WSL, azul).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
 apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las cuatro apps**, y las cuotas que se pulsan van a un **cupón** desde
@@ -77,7 +77,7 @@ Docker Compose (docker-compose.yml)
   ├─ esports  :4001          server/services/esports/   lolesports + Leaguepedia (cola, caché) → esquema esports
   ├─ odds     :4002          server/services/odds/      puente, normalizador, trabajos,
   │                                                     programador cada X min, histórico     → esquema odds
-  ├─ basket   :4004          server/services/basket/    NBA y WNBA (ESPN), Euroliga y EuroCup
+  ├─ basket   :4004          server/services/basket/    NBA, WNBA y NBL (ESPN), Euroliga y EuroCup
   │                                                     (API de la Euroliga), días en hora de España → esquema basket
   ├─ tennis   :4005          server/services/tennis/    ATP y WTA (ESPN): partidos con sets, rankings. Puntos del juego (WTA, LiveScore)
   │                                                     y Challengers (LiveScore) → esquema tennis
@@ -147,7 +147,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio.
 - **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
   salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
-  clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`.
+  clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`. Si el partido no
+  tiene esa pestaña (la NBL usa `half`), Betway devuelve la del partido entero: `isPeriodCopy` la descarta, o sus líneas
+  pasarían por las de la mitad.
 - **Fútbol en las casas** (`winamaxFootballInto` y `betwayFootballInto` en `odds.js`): el periodo sale sólo del título,
   nunca de la pestaña (la "1er Tiempo" de Betway repite los mercados del partido). El 1X2 lleva empate (`x`). Los nombres
   del partido (`targetOfFootball` y `upcomingFootball`) tienen que coincidir, porque son la clave en `odds`

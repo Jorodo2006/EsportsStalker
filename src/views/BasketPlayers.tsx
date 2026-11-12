@@ -43,7 +43,7 @@ export default function BasketPlayers() {
         <PageHeader title="Equipos" subtitle={teamView === 'points' ? 'Puntos anotados, encajados y totales de cada equipo' : 'Clasificación por liga'}>
           {switcher}
           <Tabs value={teamView} onChange={setTeamView} items={[{ value: 'standings', label: 'Clasificación' }, { value: 'points', label: 'Puntos' }]} />
-          <Tabs value={league} onChange={setLeague} items={(['nba', 'euroleague', 'eurocup', 'wnba'] as BasketLeagueId[]).map(l => ({ value: l, label: LEAGUE_NAME[l] }))} />
+          <Tabs value={league} onChange={setLeague} items={(['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'] as BasketLeagueId[]).map(l => ({ value: l, label: LEAGUE_NAME[l] }))} />
         </PageHeader>
         {teamView === 'points' ? <LeaguePoints key={league} league={league} onTeam={setTeam} /> : <BasketStandings league={league} onTeam={setTeam} />}
       </>

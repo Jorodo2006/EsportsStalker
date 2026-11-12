@@ -286,7 +286,7 @@ export interface TennisStatPeriod {
 export interface TennisStats { source: string; updated: string | null; minSurface: number; found: boolean; periods: TennisStatPeriod[] }
 
 // ---------- Baloncesto (servicio basket: ESPN para NBA/WNBA, API de la Euroliga para Euroliga/EuroCup) ----------
-export type BasketLeagueId = 'nba' | 'wnba' | 'euroleague' | 'eurocup';
+export type BasketLeagueId = 'nba' | 'wnba' | 'euroleague' | 'eurocup' | 'nbl';
 export interface BasketLeague { id: BasketLeagueId; name: string; country: string; logo: string }
 export interface BasketSide { id: string; abbr: string; name: string; logo: string; score: string | null; record: string; alt?: string[] }
 export interface BasketGame {

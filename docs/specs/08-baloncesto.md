@@ -15,7 +15,14 @@ veredicto, comunes con LoL).
 | Liga | Fuente | Qué hay |
 |---|---|---|
 | NBA, WNBA | API pública de ESPN | Partidos, plantillas, bajas (NBA), buscador, partidos de cada jugador |
+| NBL (Australia) | API pública de ESPN (`basketball/nbl`) | Lo mismo que la WNBA salvo dos huecos que se rellenan en `espn.js`: el registro de cada jugador (ESPN lo da vacío) se monta con los box scores de su equipo (`boxLogs`), y a la clasificación le faltan casa, fuera y últimos 10, que se calculan con los resultados (`tableFromGames`, que también la da entera si ESPN no responde con nada). Los líderes y medias de la ficha de equipo salen de esos registros. La plantilla de ESPN no es de fiar (faltan fichajes, sobran los que se fueron y decenas que nunca han jugado): la plantilla es quien ha jugado con el equipo esta temporada según los box scores, con dorsal y posición de ESPN si los tiene (`squadFix`) |
 | Euroliga (`E`), EuroCup (`U`) | API pública de la Euroliga (`api-live.euroleague.net`) | Calendario de la temporada, plantillas y box score de cada partido; los partidos de un jugador se montan con los box scores de su equipo (esta temporada y la anterior) |
+
+**NBL**: ESPN sólo tiene jugadores en los box scores desde febrero de 2026 (el final de la 25-26 y su playoff); antes vienen
+vacíos. El modelo ve por eso menos partidos que en la NBA, y la fiabilidad lo refleja. La numeración de la temporada es la de la
+NBA (2027 = 26-27), los cuartos son de 10 minutos (`flow`, `gameMinutes` en `src/lib/basket-leagues.ts`) y tiene jugada a jugada
+con coordenadas, como la NBA. No sale en la portada **Hoy** (nota 40, como la WNBA). El lector la busca en Winamax por el torneo
+"NBL" y en Betway en `australia/nbl` (si esa lista no existe, en la de baloncesto).
 
 La ACB no tiene fuente gratis conocida. La NCAA está en ESPN, pero tiene cientos de partidos al día y no se ha metido.
 Sofascore bloquea las peticiones automáticas y no se usa.
@@ -35,8 +42,8 @@ vuelven a pedir.
 | `GET /api/basket/boxscore/:id` | `basket:boxscore` | Estadísticas del partido: puntos por cuarto, jugadores, totales y enfrentamientos de la temporada |
 | `GET /api/basket/search?q=` | `basket:search` | Jugadores de NBA, Euroliga y EuroCup |
 | `GET /api/basket/gamelog/:league/:id?team=` | `basket:gamelog` | Partidos del jugador (en la Euroliga hace falta su equipo) |
-| `GET /api/basket/absences/:league/:id?team=` | `basket:absences` | Partidos recientes de su equipo que no jugó, con el motivo (sólo NBA y WNBA). El registro de ESPN se los salta; salen del boxscore de cada partido (`didNotPlay`), guardados para siempre en `keep:dnp:<liga>:<partido>`. En la gráfica del analizador van en gris, y un 0 jugando como barra roja corta. El boxscore del partido trae también `out` (los que no jugaron) |
-| `GET /api/basket/schedule/:league/:team` | `basket:schedule` | Calendario del equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo NBA y WNBA |
+| `GET /api/basket/absences/:league/:id?team=` | `basket:absences` | Partidos recientes de su equipo que no jugó, con el motivo (sólo las ligas de ESPN: NBA, WNBA y NBL). El registro de ESPN se los salta; salen del boxscore de cada partido (`didNotPlay`), guardados para siempre en `keep:dnp:<liga>:<partido>`. En la gráfica del analizador van en gris, y un 0 jugando como barra roja corta. El boxscore del partido trae también `out` (los que no jugaron) |
+| `GET /api/basket/schedule/:league/:team` | `basket:schedule` | Calendario del equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo las ligas de ESPN (NBA, WNBA y NBL) |
 | `GET /api/basket/rest/:id?home=&away=` | `basket:rest` | Descanso de los dos equipos antes del partido (`rest` en `espn.js`, del calendario del equipo en hora de Nueva York): noches libres (0 = B2B), partidos en las 4 últimas noches, partido anterior y si mañana vuelve a jugar. Sale bajo el marcador del partido y en el contexto del jugador |
 
 ## Cuotas
@@ -109,12 +116,12 @@ vuelven a pedir.
   media pista con sus tiros (dentro y fallados) y sus estadísticas, y un botón *Sus líneas* que lleva al analizador.
   "Todos" sale del boxscore (oficial); cada cuarto y los tiros, de las jugadas de ESPN
   (`GET /api/basket/player-game/:id/:jugador`, `playerGame` en `espn.js`: el primer participante de cada jugada es quien la
-  hace y el segundo quien asiste, roba o tapona; coordenadas en pies desde el aro). Sólo NBA y WNBA: la Euroliga no da
+  hace y el segundo quien asiste, roba o tapona; coordenadas en pies desde el aro). Sólo NBA, WNBA y NBL: la Euroliga no da
   jugada a jugada y su ficha sale sin pista ni cuartos.
 - *Cómo fue el partido* (`BasketFlow`, en Estadísticas; `GET /api/basket/flow/:id`, `flow` en `espn.js`): la ventaja de
   cada equipo en cada momento (visitante arriba, local abajo, cada uno en su color), con la mayor ventaja, los cambios de
   líder, los empates y el mayor parcial de cada uno. Sale del marcador de cada jugada; en directo se refresca cada 30 s.
-  Sólo NBA y WNBA.
+  Sólo NBA, WNBA y NBL.
 - *H2H* (`BasketTrends` en `BasketMatches.tsx`, tabla común en `src/components/Trends.tsx`): para cada mercado con la
   línea más igualada de las casas (ganador, total, hándicap, puntos de cada uno, total de la 1.ª mitad), cuántas veces se
   ha cumplido en los cara a cara y en los últimos 10 de cada equipo, frente a la probabilidad sin margen. Usa los partidos
@@ -178,8 +185,8 @@ Ordenar selecciona los extremos, y ahí sale optimista. Misma línea en cada jor
 - Se probó una corrección logística (ajustada con 25-26, evaluada con 26-27). Mejoraba muy poco (Brier 0,1120 → 0,1117) y apenas tocaba
   el 1.º del ranking, así que no se aplicó: el sesgo viene sobre todo de seleccionar, no de una mala calibración. Se avisa en la pantalla.
 - **Límites:** sólo cuenta partidos que el jugador jugó y plantillas actuales. No hay líneas históricas de las casas, así que **no se ha
-  podido medir si el EV gana dinero**: el backtest dice si la probabilidad es correcta, no si se le gana a la casa. Euroliga, EuroCup y
-  WNBA no se han evaluado.
+  podido medir si el EV gana dinero**: el backtest dice si la probabilidad es correcta, no si se le gana a la casa. Euroliga, EuroCup,
+  WNBA y NBL no se han evaluado.
 
 ## Recomendaciones
 
@@ -246,7 +253,7 @@ Ajustado con la NBA 24-25 (1 086 partidos). Las líneas de la comparación son l
 
 Calibración en 25-26: dice 25,0 % y se cumple 24,9 %; 45,1 % y 44,6 %; 64,8 % y 64,5 %; 85,1 % y 85,1 %. Sumar los totales medios de los dos
 equipos, sin más, falla por 15,6 en 25-26. El peso de esta temporada no se pudo ajustar, porque 24-25 no tenía temporada anterior en la
-muestra. Tampoco aquí se ha podido medir si se le gana a la casa, y Euroliga, EuroCup y WNBA usan los parámetros de la NBA sin evaluar.
+muestra. Tampoco aquí se ha podido medir si se le gana a la casa, y Euroliga, EuroCup, WNBA y NBL usan los parámetros de la NBA sin evaluar.
 
 ## Calibración de noviembre de 2026 (`scripts/calib-basket.ts`)
 
@@ -328,6 +335,7 @@ La ficha de un partido tiene además la pestaña *Equipos*, con los dos frente a
 | `GET /api/basket/colors/:league` | `basket:colors` | Color principal y secundario de cada equipo |
 
 - **NBA y WNBA** (ESPN): los promedios de la plantilla salen de los líderes del equipo; la NBA añade salarios y bajas.
+  La **NBL** no tiene líderes ni estadísticas de equipo en ESPN: medias y líderes salen de los registros montados con los box scores.
   Las estadísticas se piden con `seasontype=2`, porque fuera de temporada ESPN daría sólo las del playoff.
 - **Euroliga y EuroCup** (API de la Euroliga): la clasificación se pide por jornada y la jornada en curso puede dar 404, así
   que se usa la última que responda. Añaden aforo, ciudad, país y presidente; la API no da bajas.

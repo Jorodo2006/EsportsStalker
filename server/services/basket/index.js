@@ -1,5 +1,5 @@
-// basket-svc: baloncesto de varias ligas en un mismo formato. NBA y WNBA salen de ESPN, y la Euroliga y la EuroCup
-// de la API de la Euroliga. Los días van en hora de España, así que un NBA a la 01:30 cuenta en el día siguiente.
+// basket-svc: baloncesto de varias ligas en un mismo formato. NBA, WNBA y NBL (Australia) salen de ESPN, y la Euroliga y la
+// EuroCup de la API de la Euroliga. Los días van en hora de España, así que un NBA a la 01:30 cuenta en el día siguiente.
 const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
@@ -12,6 +12,7 @@ const LEAGUES = [
   { id: 'nba', name: 'NBA', country: 'EE. UU.', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png', src: espn },
   { id: 'euroleague', name: 'Euroliga', country: 'Europa', logo: '', src: el },
   { id: 'eurocup', name: 'EuroCup', country: 'Europa', logo: '', src: el },
+  { id: 'nbl', name: 'NBL', country: 'Australia', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nbl.png', src: espn },
   { id: 'wnba', name: 'WNBA', country: 'EE. UU.', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/wnba.png', src: espn }
 ];
 const league = id => { const l = LEAGUES.find(x => x.id === id); if (!l) throw fail('Liga desconocida'); return l; };
@@ -99,7 +100,7 @@ const routes = [
     const l = league(lg);
     return l.src.boxscore(l.id, rest.join(':'));
   }],
-  // El partido de un jugador por cuartos y sus tiros. Sólo NBA y WNBA (ESPN da jugada a jugada con coordenadas); la Euroliga, no
+  // El partido de un jugador por cuartos y sus tiros. Sólo las ligas de ESPN (NBA, WNBA y NBL: dan jugada a jugada con coordenadas); la Euroliga, no
   ['GET', '/api/basket/player-game/:id/:player', ({ params }) => {
     const [lg, ...rest] = String(params.id).split(':');
     const l = league(lg);
@@ -107,7 +108,7 @@ const routes = [
     if (!l.src.playerGame) return { available: false, periods: [], byPeriod: {}, shots: [] };
     return l.src.playerGame(l.id, rest.join(':'), params.player);
   }],
-  // Cómo fue el partido (ventaja en cada momento, parciales…). Sólo NBA y WNBA, como el jugada a jugada
+  // Cómo fue el partido (ventaja en cada momento, parciales…). Sólo las ligas de ESPN, como el jugada a jugada
   ['GET', '/api/basket/flow/:id', ({ params }) => {
     const [lg, ...rest] = String(params.id).split(':');
     const l = league(lg);
@@ -120,9 +121,9 @@ const routes = [
   ['GET', '/api/basket/gamelog/:league/:id', ({ params, query: q }) => {
     const l = league(params.league);
     if (l.src === el && !q.team) throw fail('Falta el equipo del jugador');
-    return l.src === el ? el.gamelog(l.id, params.id, q.team) : espn.gamelog(l.id, params.id);
+    return l.src === el ? el.gamelog(l.id, params.id, q.team) : espn.gamelog(l.id, params.id, q.team);
   }],
-  // Descanso de los dos equipos antes del partido (B2B, 3 en 4 noches…). Sólo NBA y WNBA
+  // Descanso de los dos equipos antes del partido (B2B, 3 en 4 noches…). Sólo las ligas de ESPN
   ['GET', '/api/basket/rest/:id', async ({ params, query: q }) => {
     const [lg, ev] = String(params.id).split(':');
     const l = league(lg);
@@ -131,14 +132,14 @@ const routes = [
     const [home, away] = await Promise.all([espn.rest(l.id, q.home, ev), espn.rest(l.id, q.away, ev)]);
     return { home, away };
   }],
-  // Calendario de un equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo NBA y WNBA
+  // Calendario de un equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo las ligas de ESPN
   ['GET', '/api/basket/schedule/:league/:team', async ({ params }) => {
     const l = league(params.league);
     if (l.src === el) return [];
     if (!/^\d+$/.test(String(params.team))) throw fail('Equipo desconocido');
     return (await espn.teamSchedule(l.id, params.team)).map(g => ({ id: g.id, date: g.date }));
   }],
-  // Partidos recientes de su equipo que no jugó, con el motivo. Sólo NBA y WNBA: la Euroliga no dice quién no jugó
+  // Partidos recientes de su equipo que no jugó, con el motivo. Sólo las ligas de ESPN: la Euroliga no dice quién no jugó
   ['GET', '/api/basket/absences/:league/:id', ({ params, query: q }) => {
     const l = league(params.league);
     if (!/^\d+$/.test(String(params.id)) || !/^\d+$/.test(String(q.team || ''))) throw fail('Jugador o equipo desconocido');

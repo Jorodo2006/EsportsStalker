@@ -15,9 +15,10 @@ import { SIDE_LABEL, type Side, type SideValue } from '@/lib/value';
 import type { BasketAbsence, BasketGame, BasketInjury, BasketLeagueId, BasketLogGame, MatchOdds } from '@/lib/types';
 import { ValuePanel } from './ValuePanel';
 import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, Tabs, oddBtn, td, th } from './ui';
+import { espnLeague, gameMinutes } from '@/lib/basket-leagues';
 
 const BOOKS = ['Winamax', 'Betway'];
-export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup' };
+export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup', nbl: 'NBL' };
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 export const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 const num = (v: string) => { const n = parseFloat(v.replace(',', '.')); return isFinite(n) ? n : null; };
@@ -46,9 +47,9 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
 
   const all = log.data?.games ?? [];
   const teamId = player.teamId || all[0]?.teamId || undefined;
-  // Partidos de su equipo que no jugó (sólo NBA y WNBA): en la gráfica, para no confundirlos con un 0
+  // Partidos de su equipo que no jugó (sólo las ligas de ESPN): en la gráfica, para no confundirlos con un 0
   const absences = useQuery({
-    queryKey: ['basket', 'absences', player.league, player.id, teamId], enabled: !!teamId && (player.league === 'nba' || player.league === 'wnba'),
+    queryKey: ['basket', 'absences', player.league, player.id, teamId], enabled: !!teamId && espnLeague(player.league),
     queryFn: () => window.api.basket.absences(player.league, player.id, teamId!), staleTime: 30 * 60e3
   });
   const team = all[0]?.team || '';
@@ -64,18 +65,18 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   const injury = injuries.find(i => i.playerId === player.id)?.status || null;
   // Calendario de su equipo: con él se sabe si vuelve de una baja (el escáner lo saca de la plantilla; es el mismo)
   const sched = useQuery({
-    queryKey: ['basket', 'schedule', player.league, teamId], enabled: !!teamId && (player.league === 'nba' || player.league === 'wnba'),
+    queryKey: ['basket', 'schedule', player.league, teamId], enabled: !!teamId && espnLeague(player.league),
     queryFn: () => window.api.basket.schedule(player.league, teamId!), staleTime: 30 * 60e3
   });
   // B2B y vuelta de baja para el partido que se mira, igual que en el escáner y en las recomendaciones
   const gctx = game ? gameCtx(all, sched.data ?? [], game.date, teamId) : {};
   // Plantilla con sus partidos (la misma consulta que el escáner): qué compañeros faltan y cómo le fue sin ellos
   const mateLogs = useQuery({
-    queryKey: ['basket', 'teamLogs', player.league, teamId], enabled: !!teamId && (player.league === 'nba' || player.league === 'wnba'),
+    queryKey: ['basket', 'teamLogs', player.league, teamId], enabled: !!teamId && espnLeague(player.league),
     queryFn: () => window.api.basket.teamLogs(player.league, teamId!), staleTime: 15 * 60e3, retry: 1
   });
   const mates = useMemo(() => matesOut(mateLogs.data, teamId, player.id, game?.date ?? new Date(Date.now() + 864e5).toISOString(),
-    (id, roster) => (player.league === 'nba' ? injuries.find(i => i.playerId === id)?.status : null) || roster, player.league === 'wnba' ? 40 : 48),
+    (id, roster) => (player.league === 'nba' ? injuries.find(i => i.playerId === id)?.status : null) || roster, gameMinutes(player.league)),
   [mateLogs.data, teamId, player.id, player.league, game?.date, injuries]);
   const freshNames = freshKeyOuts(mates).map(m => m.name);
   const ctx: BasketCtx | null = log.data ? { currentSeason: log.data.currentSeason, home: venue === '' ? null : venue === 'home', opp: opp || null, injury, matesOut: freshNames, ...gctx } : null;
@@ -126,7 +127,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
 
   const cs = log.data!.currentSeason;
   // ESPN numera la temporada por el año en que acaba (2027 = 26-27) y la Euroliga por el que empieza (2026 = 26-27)
-  const espn = player.league === 'nba' || player.league === 'wnba';
+  const espn = espnLeague(player.league);
   const seasonLabel = (y: number) => espn ? `${String(y - 1).slice(2)}-${String(y).slice(2)}` : `${String(y).slice(2)}-${String(y + 1).slice(2)}`;
   let base = all.filter(g => g.type === 'reg' && g.season === cs), label = seasonLabel(cs);
   if (!base.length) { base = all.filter(g => g.type === 'reg' && g.season === cs - 1); label = seasonLabel(cs - 1); }

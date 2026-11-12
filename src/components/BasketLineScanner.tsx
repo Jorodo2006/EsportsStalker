@@ -18,6 +18,7 @@ import { Toggle } from './sport';
 import { Badge, Empty, Input, Select, th } from './ui';
 import { ReliabilityMeter } from './ValuePanel';
 import { Panel, TvTabs, panel, tdc } from './viz';
+import { gameMinutes } from '@/lib/basket-leagues';
 
 const PREFS = 'basket-scan';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -81,7 +82,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       const missed = missedByPlayer(data);
       const sched = teamGamesOf(data, t.team.id);
       const statusOf = (id: string, roster: string | null | undefined) => (t.game.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
-      const fresh = freshKeyOuts(matesOut(data, t.team.id, '', t.game.date, statusOf, t.game.league === 'wnba' ? 40 : 48));
+      const fresh = freshKeyOuts(matesOut(data, t.team.id, '', t.game.date, statusOf, gameMinutes(t.game.league)));
       for (const p of data.players) {
         const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: statusOf(p.id, p.injury) ?? null, matesOut: fresh.filter(m => m.id !== p.id).map(m => m.name), ...gameCtx(p.games, sched, t.game.date, t.team.id) };
         const book = linesOf.get(`${t.game.id}:${p.id}`)?.[BASKET_MARKETS[market].label] ?? [];

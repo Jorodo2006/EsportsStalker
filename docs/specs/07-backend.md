@@ -23,7 +23,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `bets` | `server/services/bets/` | 4003 (interno) | `bets` | Apuestas, combinadas, ajustes, importación de `data.json` |
 | `esports` | `server/services/esports/` | 4001 (interno) | `esports` | lolesports (calendario, directo, detalle) y Leaguepedia (stats, con cola y caché) |
 | `odds` | `server/services/odds/` | 4002 (interno) | `odds` | Puente de los lectores, normalizador (LoL y baloncesto), trabajos, programador, histórico |
-| `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA y WNBA (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
+| `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA, WNBA y NBL (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
 | `tennis` | `server/services/tennis/` | 4005 (interno) | `tennis` | Tenis ATP y WTA (ESPN): partidos de los torneos en juego, sets, rankings |
 | `football` | `server/services/football/` | 4006 (interno) | `football` | Fútbol (ESPN): partidos por día, ficha del partido, clasificaciones |
 | `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `chrome/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |

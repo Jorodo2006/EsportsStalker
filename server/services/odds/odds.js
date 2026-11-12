@@ -575,9 +575,18 @@ function intoBook(book, match, imp) {
   return sectionsInto(book, imp) + marketsInto(book, imp, match);
 }
 
+// Betway devuelve la página del partido entero cuando se le pide una pestaña que ese partido no tiene (en la NBL no hay
+// "1st-half": su mitad está en "half"), y como el periodo sale de la pestaña, las líneas del partido pasaban por las de la
+// 1.ª mitad. Esa copia se descarta si tiene los mismos mercados (título y línea) que una página del mismo trabajo sin periodo
+const PERIOD_TAB = /marketGroup=(1st-half|half|1st-quarter|quarter)\b/;
+const marketsPrint = imp => JSON.stringify((imp.markets || []).map(m => [m.title, m.line]));
+const isPeriodCopy = (imp, all) => imp.book === 'betway' && PERIOD_TAB.test(imp.page || '') && !!imp.markets?.length
+  && all.some(o => o !== imp && o.id !== imp.id && o.book === 'betway' && o.job === imp.job && !PERIOD_TAB.test(o.page || '') && marketsPrint(o) === marketsPrint(imp));
+
 // match = { a: {name, code}, b: {name, code}, start }
 async function getMatchOdds(match) {
-  const imports = await bridge.forMatch(match);
+  const all = await bridge.forMatch(match);
+  const imports = all.filter(imp => !isPeriodCopy(imp, all));
   const book = new Book(match.a, match.b, match.sport || imports.find(i => i.sport)?.sport);
   const sources = {}, counts = {};
   for (const imp of imports) {
@@ -597,6 +606,8 @@ async function getMatchOdds(match) {
 // Tras guardar una importación: cuota de ganador (para las tarjetas del calendario) e histórico de cuotas.
 // En el histórico sólo se apunta una cuota cuando cambia, para que la tabla no crezca sin control.
 async function afterImport(match, imp) {
+  // La copia de la página del partido en una pestaña de periodo apuntaría en el histórico líneas del partido como de la mitad
+  if (imp.book === 'betway' && PERIOD_TAB.test(imp.page || '') && isPeriodCopy(imp, await bridge.forMatch(match))) return;
   const book = new Book(match.a, match.b, imp.sport);
   intoBook(book, match, imp);
   const ml = book.markets.get('moneyline|0||');

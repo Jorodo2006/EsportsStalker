@@ -1,9 +1,12 @@
-// API pública de ESPN (sin clave) para las ligas de EE. UU.: partidos, plantillas, bajas, buscador y partidos de
-// cada jugador. Adaptado de courtside-edge. La NBA es la que tiene todo; la WNBA usa las mismas rutas.
+// API pública de ESPN (sin clave) para la NBA, la WNBA y la NBL australiana: partidos, plantillas, bajas, buscador y partidos
+// de cada jugador. Adaptado de courtside-edge. La NBA es la que tiene todo; la WNBA y la NBL usan las mismas rutas, salvo
+// el registro de cada jugador y la clasificación de la NBL, que ESPN da vacíos y aquí se montan con los partidos.
 const { getJSON, remember, fetchJSON, bulk } = require('./cache');
 const { assemble, advanced } = require('./points');
 
-const LEAGUES = { nba: 'nba', wnba: 'wnba' };
+const LEAGUES = { nba: 'nba', wnba: 'wnba', nbl: 'nbl' };
+// Ligas cuyo registro de jugador se monta con los boxscores de su equipo (ESPN lo da vacío)
+const BOX_LOGS = new Set(['nbl']);
 const site = lg => `https://site.api.espn.com/apis/site/v2/sports/basketball/${LEAGUES[lg]}`;
 const WEB = 'https://site.web.api.espn.com/apis/common/v3';
 
@@ -73,11 +76,13 @@ async function games(lg, days) {
 
 async function roster(lg, team) {
   const j = await getJSON(`${site(lg)}/teams/${team}/roster`, 30 * 60e3);
-  const list = Array.isArray(j.athletes?.[0]?.items) ? j.athletes.flatMap(g => g.items) : j.athletes || [];
-  return list.map(a => ({
+  const list = (Array.isArray(j.athletes?.[0]?.items) ? j.athletes.flatMap(g => g.items) : j.athletes || []).map(a => ({
     id: String(a.id), name: a.displayName, pos: a.position?.abbreviation || '', jersey: a.jersey || '',
     headshot: a.headshot?.href || headshot(lg, a.id), injury: a.injuries?.[0]?.status || null
   }));
+  if (!BOX_LOGS.has(lg)) return list;
+  const fix = await squadFix(lg, team, list);
+  return [...fix.keep, ...fix.extra.map(p => ({ ...p, pos: '', jersey: '', headshot: headshot(lg, p.id), injury: null }))];
 }
 
 async function injuries(lg) {
@@ -106,8 +111,13 @@ async function search(lg, q) {
 }
 
 // Esta temporada y la anterior (al principio de temporada hay pocos partidos). La anterior ya no cambia.
-async function gamelog(lg, id) {
+// team: el equipo del jugador, que hace falta en la NBL (su registro sale de los partidos de su equipo)
+async function gamelog(lg, id, team) {
   const y = seasonYear();
+  if (BOX_LOGS.has(lg)) {
+    const t = team || await teamOfPlayer(lg, id);
+    return { currentSeason: y, games: t ? (await boxLogs(lg, t)).get(String(id)) || [] : [] };
+  }
   const logs = await Promise.all([[y, 15 * 60e3], [y - 1, 24 * 3600e3]].map(([s, ttl]) =>
     remember(`log:${lg}:${id}:${s}`, ttl, async () => parseGamelog(await bulk(() => fetchJSON(`${WEB}/sports/basketball/${LEAGUES[lg]}/athletes/${id}/gamelog?season=${s}`)), s)).catch(() => [])));
   return { currentSeason: y, games: logs.flat().sort((a, b) => new Date(b.date) - new Date(a.date)) };
@@ -117,8 +127,124 @@ async function gamelog(lg, id) {
 // ese margen ve los mismos que el analizador y las dos pantallas dan la misma probabilidad.
 async function teamLogs(lg, team) {
   const players = await roster(lg, team);
+  if (BOX_LOGS.has(lg)) {
+    const byPlayer = await boxLogs(lg, team);
+    return { currentSeason: seasonYear(), players: players.map(p => ({ ...p, games: (byPlayer.get(p.id) || []).slice(0, 90) })) };
+  }
   const logs = await Promise.all(players.map(p => gamelog(lg, p.id)));
   return { currentSeason: seasonYear(), players: players.map((p, i) => ({ ...p, games: logs[i].games.slice(0, 90) })) };
+}
+
+// ---------- Registros montados con los boxscores (NBL) ----------
+// Los jugadores de los dos equipos de un partido terminado, ya con las columnas del registro. No cambia: se guarda para siempre,
+// y un mismo partido sirve para los dos equipos
+const boxRows = (lg, ev) => remember(`keep:box2:${lg}:${ev}`, 0, async () => {
+  const j = await bulk(() => fetchJSON(`${site(lg)}/summary?event=${ev}`));
+  const head = j.header?.competitions?.[0] || {};
+  const comps = head.competitors || [];
+  const toNum = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  const st = j.header?.season?.type;
+  return {
+    date: head.date || null, season: j.header?.season?.year ?? null, type: st === 3 ? 'post' : st === 1 ? 'pre' : 'reg',
+    teams: (j.boxscore?.players || []).map(t => {
+      const s = t.statistics?.[0] || {};
+      const names = s.names || s.labels || [];
+      const val = (arr, k) => (arr || [])[names.indexOf(k)];
+      const me = comps.find(c => String(c.team?.id) === String(t.team?.id)) || {}, opp = comps.find(c => c !== me) || {};
+      return {
+        teamId: String(t.team?.id || ''), team: t.team?.abbreviation || '', home: me.homeAway === 'home', opp: opp.team?.abbreviation || '?',
+        result: me.winner ? 'W' : opp.winner ? 'L' : '', score: `${toNum(me.score)}-${toNum(opp.score)}`,
+        players: (s.athletes || []).filter(a => a.stats?.length && !a.didNotPlay).map(a => ({
+          id: String(a.athlete?.id || ''), name: a.athlete?.displayName || '', min: toNum(val(a.stats, 'MIN')), pts: toNum(val(a.stats, 'PTS')), reb: toNum(val(a.stats, 'REB')),
+          ast: toNum(val(a.stats, 'AST')), stl: toNum(val(a.stats, 'STL')), blk: toNum(val(a.stats, 'BLK')), tov: toNum(val(a.stats, 'TO')),
+          fg3m: toNum(String(val(a.stats, '3PT') || '0').split('-')[0])
+        }))
+      };
+    })
+  };
+}, { keep: true });
+
+// Partidos de cada jugador de un equipo, esta temporada y la anterior con el playoff, del más reciente al más antiguo.
+// Sólo los que jugó con este equipo: los de un fichado en su equipo anterior no salen. ESPN sólo tiene jugadores en los
+// boxscores de la NBL desde febrero de 2026: de la temporada 25-26 salen el final y el playoff
+// Boxscores de los partidos terminados del equipo, del más reciente al más antiguo
+async function teamBoxes(lg, teamId) {
+  const y = seasonYear();
+  const lists = await Promise.all([[y, ''], [y, '&seasontype=3'], [y - 1, ''], [y - 1, '&seasontype=3']].map(([s, t]) =>
+    getJSON(`${site(lg)}/teams/${teamId}/schedule?season=${s}${t}`, s === y ? 30 * 60e3 : 24 * 3600e3).catch(() => ({ events: [] }))));
+  const seen = new Set();
+  const done = lists.flatMap(j => j.events || []).filter(e => e.competitions?.[0]?.status?.type?.completed && !seen.has(e.id) && seen.add(e.id));
+  const boxes = await Promise.all(done.map(e => boxRows(lg, e.id).then(b => ({ id: String(e.id), ...b })).catch(() => null)));
+  return boxes.filter(Boolean).sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+async function boxLogs(lg, teamId) {
+  const boxes = await teamBoxes(lg, teamId);
+  const out = new Map();
+  for (const b of boxes) {
+    const t = b?.teams.find(x => x.teamId === String(teamId));
+    if (!t) continue;
+    for (const p of t.players) {
+      if (!p.min) continue; // no jugó
+      if (!out.has(p.id)) out.set(p.id, []);
+      out.get(p.id).push({
+        id: b.id, date: b.date, season: b.season, type: b.type, home: t.home, opp: t.opp, team: t.team, teamId: t.teamId,
+        result: t.result, score: t.score, min: p.min, pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk, tov: p.tov, fg3m: p.fg3m
+      });
+    }
+  }
+  for (const list of out.values()) list.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return out;
+}
+
+// La plantilla de ESPN de la NBL no es de fiar: le faltan fichajes que ya juegan (Rakocevic en Adelaide, Ingles en Melbourne),
+// mantiene a los que se fueron (Galloway sale en Sydney y juega en Cairns), repite a alguno con dos fichas y lleva decenas de
+// nombres que nunca han jugado (50 en Melbourne). Lo fiable son los boxscores: la plantilla es quien ha jugado con el equipo
+// esta temporada (sin la pretemporada), con el dorsal y la posición de ESPN si los tiene. keep: los de ESPN que están en ella;
+// extra: los que faltan. Antes del primer partido de la temporada se queda la de ESPN, sin repetidos
+async function squadFix(lg, team, list) {
+  const boxes = await teamBoxes(lg, team).catch(() => []);
+  const y = seasonYear();
+  const names = new Map();
+  for (const b of boxes) {
+    if (b.season !== y || b.type === 'pre') continue;
+    for (const p of b.teams.find(x => x.teamId === String(team))?.players || []) if (p.min && !names.has(p.id)) names.set(p.id, p.name);
+  }
+  if (names.size) {
+    const keep = list.filter((p, i) => names.has(p.id) && list.findIndex(x => x.id === p.id) === i);
+    const have = new Set(keep.map(p => p.id));
+    return { keep, extra: [...names].filter(([id]) => !have.has(id)).map(([id, name]) => ({ id, name })) };
+  }
+  // Sin partidos aún: de dos con el mismo nombre, el que tiene dorsal
+  const key = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]+/g, '');
+  const best = new Map();
+  for (const p of list) { const k = key(p.name), prev = best.get(k); if (!prev || (!prev.jersey && p.jersey)) best.set(k, p); }
+  return { keep: list.filter(p => best.get(key(p.name)) === p), extra: [] };
+}
+
+// El equipo de un jugador, si la pantalla no lo dice (p. ej. desde el buscador)
+const teamOfPlayer = (lg, id) => remember(`team-of:${lg}:${id}`, 24 * 3600e3, async () => {
+  const j = await fetchJSON(`${WEB}/sports/basketball/${LEAGUES[lg]}/athletes/${id}`);
+  return j.athlete?.team?.id ? String(j.athlete.team.id) : null;
+}).catch(() => null);
+
+// Medias de cada jugador y líderes del equipo con los registros montados (la NBL no tiene líderes en ESPN). Liga regular de
+// esta temporada o, si aún no hay partidos, de la anterior
+const BOX_LEADERS = [['Puntos', 'pts'], ['Rebotes', 'reb'], ['Asistencias', 'ast'], ['Triples', 'fg3m'], ['Robos', 'stl'], ['Tapones', 'blk'], ['Minutos', 'min']];
+function boxLeaders(roster, logs) {
+  const y = seasonYear();
+  const season = roster.some(p => (logs.get(p.id) || []).some(g => g.type === 'reg' && g.season === y)) ? y : y - 1;
+  const avg = {};
+  for (const p of roster) {
+    const gs = (logs.get(p.id) || []).filter(g => g.type === 'reg' && g.season === season);
+    if (!gs.length) continue;
+    avg[p.id] = Object.fromEntries(BOX_LEADERS.map(([, k]) => [k, Math.round(gs.reduce((t, g) => t + g[k], 0) / gs.length * 10) / 10]));
+  }
+  const leaders = BOX_LEADERS.flatMap(([label, k]) => {
+    const top = roster.filter(p => avg[p.id]).sort((a, b) => avg[b.id][k] - avg[a.id][k]).slice(0, 3).filter(p => avg[p.id][k] > 0);
+    return top.length ? [{ label, players: top.map(p => ({ id: p.id, name: p.name, value: String(avg[p.id][k]).replace('.', ',') })) }] : [];
+  });
+  return { avg, leaders };
 }
 
 module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs };
@@ -188,7 +314,7 @@ async function absences(lg, playerId, teamId, last = 25) {
   const y = seasonYear();
   const [sched, log] = await Promise.all([
     getJSON(`${site(lg)}/teams/${teamId}/schedule?season=${y}`, 30 * 60e3),
-    gamelog(lg, playerId)
+    gamelog(lg, playerId, teamId)
   ]);
   const played = new Set(log.games.map(g => String(g.id)));
   const done = (sched.events || []).filter(e => e.competitions?.[0]?.status?.type?.completed)
@@ -295,12 +421,12 @@ module.exports.playerGame = playerGame;
 
 // Cómo fue el partido: el marcador tras cada canasta (de las jugadas de ESPN), en minutos jugados, más los cambios de líder,
 // los empates, la mayor ventaja de cada uno y su mayor parcial (puntos seguidos sin que anote el otro).
-// a = visitante, b = local, como en la app. Los cuartos duran 12 minutos en la NBA y 10 en la WNBA; las prórrogas, 5
+// a = visitante, b = local, como en la app. Los cuartos duran 12 minutos en la NBA y 10 en la WNBA y la NBL; las prórrogas, 5
 async function flow(lg, eventId) {
   const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 30e3);
   const plays = j.plays || [];
   if (!plays.length) return { available: false };
-  const len = lg === 'wnba' ? 10 : 12;
+  const len = lg === 'nba' ? 12 : 10;
   const startOf = per => (per <= 4 ? (per - 1) * len : 4 * len + (per - 5) * 5);
   const lenOf = per => (per <= 4 ? len : 5);
   // "11:24" o "45.3" (segundos del último minuto)
@@ -347,7 +473,9 @@ const streakEs = s => String(s || '').replace(/^W/i, 'G').replace(/^L/i, 'P');
 async function standings(lg) {
   const j = await getJSON(`https://site.web.api.espn.com/apis/v2/sports/basketball/${LEAGUES[lg]}/standings`, 15 * 60e3);
   const kids = j.children?.length ? j.children : [j];
-  return kids.map(ch => {
+  // Si ESPN no la da, se calcula con los resultados de la temporada
+  if (!kids.some(ch => ch.standings?.entries?.length)) return tableFromGames(lg);
+  const groups = kids.map(ch => {
     const teams = (ch.standings?.entries || []).map(e => {
       const st = n => (e.stats || []).find(x => x.name === n);
       const dv = n => st(n)?.displayValue ?? '';
@@ -361,6 +489,48 @@ async function standings(lg) {
     }).sort((a, b) => (a.seed ?? 99) - (b.seed ?? 99) || b.pct - a.pct).map((t, i) => ({ ...t, pos: i + 1 }));
     return { name: CONF[ch.name] || ch.name || '', teams };
   });
+  // La NBL viene sin casa, fuera ni últimos 10: se rellenan con los resultados
+  if (groups.some(g => g.teams.some(t => !t.home))) {
+    const calc = Object.fromEntries((await tableFromGames(lg).catch(() => [])).flatMap(g => g.teams).map(t => [t.id, t]));
+    for (const t of groups.flatMap(g => g.teams)) {
+      const c = calc[t.id];
+      if (c) { t.home ||= c.home; t.road ||= c.road; t.last ||= c.last; }
+    }
+  }
+  return groups;
+}
+
+// Clasificación con los partidos de liga regular de esta temporada (los mismos días que la proyección de puntos): victorias,
+// porcentaje, en casa y fuera, últimos 10, racha, puntos a favor y en contra por partido y partidos por detrás del primero
+async function tableFromGames(lg) {
+  const y = seasonYear(), today = dayKey(Date.now());
+  const days = (await calendar(lg, y).catch(() => [])).filter(d => d <= today);
+  const games = (await Promise.all(days.map(d => day(lg, d).catch(() => [])))).flat()
+    .filter(g => g.season === y && g.type === 'reg').sort((a, b) => new Date(a.date) - new Date(b.date));
+  const rows = new Map();
+  for (const g of games) {
+    for (const [me, them, home] of [[g.home, g.away, true], [g.away, g.home, false]]) {
+      if (!rows.has(me.id)) rows.set(me.id, { id: me.id, abbr: me.abbr, name: me.name, logo: me.logo, w: 0, l: 0, pf: 0, pa: 0, hw: 0, hl: 0, rw: 0, rl: 0, seq: [] });
+      const r = rows.get(me.id), win = me.pts > them.pts;
+      r[win ? 'w' : 'l']++; r.pf += me.pts; r.pa += them.pts; r.seq.push(win);
+      if (home) r[win ? 'hw' : 'hl']++; else r[win ? 'rw' : 'rl']++;
+    }
+  }
+  const list = [...rows.values()].map(r => {
+    const n = r.w + r.l, last = r.seq.slice(-10), tail = r.seq[r.seq.length - 1];
+    let streak = 0; for (let i = r.seq.length - 1; i >= 0 && r.seq[i] === tail; i--) streak++;
+    return {
+      id: r.id, abbr: r.abbr, name: r.name, logo: r.logo, seed: null, w: r.w, l: r.l, pct: n ? r.w / n : 0,
+      home: `${r.hw}-${r.hl}`, road: `${r.rw}-${r.rl}`, last: `${last.filter(Boolean).length}-${last.filter(x => !x).length}`,
+      streak: n ? `${tail ? 'G' : 'P'}${streak}` : '', pf: n ? Math.round(r.pf / n * 10) / 10 : null, pa: n ? Math.round(r.pa / n * 10) / 10 : null,
+      diff: n ? Math.round((r.pf - r.pa) / n * 10) / 10 : null, gb: '', form: []
+    };
+  }).sort((a, b) => b.pct - a.pct || (b.diff ?? 0) - (a.diff ?? 0));
+  const lead = list[0];
+  return [{ name: '', teams: list.map((t, i) => {
+    const gb = lead ? ((lead.w - t.w) + (t.l - lead.l)) / 2 : 0;
+    return { ...t, gb: i === 0 || gb <= 0 ? '-' : String(gb).replace('.', ','), pos: i + 1 };
+  }) }];
 }
 
 const TEAM_STATS = [
@@ -385,7 +555,7 @@ async function leadersOf(lg, team) {
 }
 
 async function team(lg, id) {
-  const [info, rosterJ, sched, stats, table, inj, lead] = await Promise.all([
+  const [info, rosterJ, sched, stats, table, inj, lead, logs] = await Promise.all([
     getJSON(`${site(lg)}/teams/${id}`, 30 * 60e3),
     getJSON(`${site(lg)}/teams/${id}/roster`, 30 * 60e3).catch(() => ({})),
     getJSON(`${site(lg)}/teams/${id}/schedule`, 15 * 60e3).catch(() => ({})),
@@ -393,7 +563,8 @@ async function team(lg, id) {
     getJSON(`${site(lg)}/teams/${id}/statistics?seasontype=2`, 30 * 60e3).catch(() => null),
     standings(lg).catch(() => []),
     injuries(lg).catch(() => []),
-    leadersOf(lg, id)
+    leadersOf(lg, id),
+    BOX_LOGS.has(lg) ? boxLogs(lg, id).catch(() => null) : null
   ]);
   const t = info.team || {};
   const allStats = (stats?.results?.stats?.categories || []).flatMap(c => c.stats || []);
@@ -408,7 +579,7 @@ async function team(lg, id) {
     if (!key) continue;
     for (const l of lead.find(c => c.name === cat)?.leaders || []) (avg[idOf(l)] ||= {})[key] = l.value;
   }
-  const roster = list.map(a => {
+  let roster = list.map(a => {
     const out = inj.find(i => i.playerId === String(a.id));
     return {
       id: String(a.id), name: a.displayName, pos: a.position?.abbreviation || '', jersey: a.jersey || '', headshot: a.headshot?.href || headshot(lg, a.id),
@@ -417,6 +588,15 @@ async function team(lg, id) {
       injury: out?.status || a.injuries?.[0]?.status || null, injuryDetail: out?.detail || '', injuryReturn: out?.returnDate || null, avg: avg[String(a.id)] || null
     };
   });
+  if (BOX_LOGS.has(lg)) {
+    const fix = await squadFix(lg, id, roster);
+    roster = [...fix.keep, ...fix.extra.map(p => ({
+      ...p, pos: '', jersey: '', headshot: headshot(lg, p.id), age: null, height: '', weight: '', from: '', years: null, salary: null,
+      injury: null, injuryDetail: '', injuryReturn: null, avg: null
+    }))];
+  }
+  const fromBox = logs && !lead.length ? boxLeaders(roster, logs) : null;
+  if (fromBox) for (const p of roster) p.avg = fromBox.avg[p.id] || null;
   const names = Object.fromEntries(roster.map(p => [p.id, p.name]));
   const side = (c, me) => ({ me, abbr: c?.team?.abbreviation || '', name: c?.team?.displayName || '', logo: c?.team?.logos?.[0]?.href || c?.team?.logo || '', score: c?.score?.displayValue ?? c?.score ?? null, winner: !!c?.winner });
   const games = (sched.events || []).map(e => {
@@ -435,7 +615,7 @@ async function team(lg, id) {
       ...TEAM_STATS.flatMap(([k, label, grp]) => { const x = allStats.find(v => v.name === k); return x ? [{ label, value: x.displayValue, group: grp }] : []; }),
       ...advanced({ pts: raw('avgPoints'), pa: row?.pa ?? NaN, fgm: raw('avgFieldGoalsMade'), fga: raw('avgFieldGoalsAttempted'), fg3m: raw('avgThreePointFieldGoalsMade'), fg3a: raw('avgThreePointFieldGoalsAttempted'), fta: raw('avgFreeThrowsAttempted'), orb: raw('avgOffensiveRebounds'), tov: raw('avgTurnovers') })
     ],
-    leaders: LEADERS.flatMap(([cat, label]) => {
+    leaders: fromBox ? fromBox.leaders : LEADERS.flatMap(([cat, label]) => {
       const ls = (lead.find(c => c.name === cat)?.leaders || []).filter(l => names[idOf(l)]).slice(0, 3);
       return ls.length ? [{ label, players: ls.map(l => ({ id: idOf(l), name: names[idOf(l)], value: l.displayValue })) }] : [];
     }),
@@ -460,7 +640,7 @@ module.exports.colors = colors;
 // ESPN no acepta rangos de fechas: un marcador por día. Cada uno trae todos los partidos de esa jornada, así que sale mucho más
 // barato que pedir partido a partido, y los días ya jugados no cambian: se piden una vez y se guarda sólo el resumen.
 // Un día cualquiera de la temporada sirve para pedir su calendario entero (sólo los días con partidos)
-const CALENDAR_DAY = { nba: '0115', wnba: '0715' };
+const CALENDAR_DAY = { nba: '0115', wnba: '0715', nbl: '0115' };
 const dayKey = t => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
 
 const calendar = (lg, year) => remember(`cal:${lg}:${year}`, 24 * 3600e3, async () => {

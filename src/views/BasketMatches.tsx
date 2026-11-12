@@ -23,7 +23,7 @@ import { useTeamThemes } from '@/lib/team-colors';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { TvTabs } from '@/components/viz';
 
-const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'wnba'];
+const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
 type Mode = 'games' | 'picks';
 const pickedOf = (p: BasketPick): Picked => ({

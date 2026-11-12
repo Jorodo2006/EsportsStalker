@@ -8,6 +8,7 @@ import { gameCtx, teamGamesOf } from './basket-context';
 import { freshKeyOuts, matesOut } from './basket-mates';
 import type { BasketGame, BasketInjury, BasketLeagueGames, BasketTeamLogs, MatchOdds } from './types';
 import { SIDE_LABEL, tooFar, verdictOf, type Reliability, type Side } from './value';
+import { gameMinutes } from './basket-leagues';
 
 export type PickGroup = 'pts' | 'reb' | 'ast' | 'fg3m' | 'combo' | 'def' | 'team';
 export const PICK_GROUPS: { value: PickGroup | 'all'; label: string; title?: string }[] = [
@@ -41,7 +42,7 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
   const sched = teamGamesOf(data, team.id); // calendario de su equipo: el mismo contexto (B2B, vuelta de baja) que el analizador
   // Compañeros importantes de baja desde hace poco: bajan la fiabilidad de los "menos" de los demás
   const statusOf = (id: string, roster: string | null | undefined) => (game.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
-  const fresh = freshKeyOuts(matesOut(data, team.id, '', game.date, statusOf, game.league === 'wnba' ? 40 : 48));
+  const fresh = freshKeyOuts(matesOut(data, team.id, '', game.date, statusOf, gameMinutes(game.league)));
   const out: BasketPick[] = [];
   for (const p of data.players) {
     const lines = playerLines(odds, p.name);

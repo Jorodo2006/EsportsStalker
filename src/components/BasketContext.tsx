@@ -9,6 +9,7 @@ import { BASKET_MARKETS, fmtLine, type BasketMarket } from '@/lib/basket-model';
 import { withAndWithout, type MateOut } from '@/lib/basket-mates';
 import type { BasketAbsence, BasketGame, BasketInjury, BasketLogGame, BasketRest, BasketTeamLogs } from '@/lib/types';
 import { Card } from './ui';
+import { espnLeague } from '@/lib/basket-leagues';
 
 type Tone = 'bad' | 'good' | 'info';
 type Fact = { label: string; text: string; tone: Tone; note?: string };
@@ -23,7 +24,7 @@ const f1 = (v: number | null) => (v == null ? '–' : v.toFixed(1).replace('.', 
 const plural = (n: number, s: string, p = s + 's') => `${n} ${n === 1 ? s : p}`;
 
 export const useRest = (game: BasketGame | null | undefined) => useQuery({
-  queryKey: ['basket', 'rest', game?.id], enabled: !!game && (game.league === 'nba' || game.league === 'wnba'),
+  queryKey: ['basket', 'rest', game?.id], enabled: !!game && espnLeague(game.league),
   queryFn: () => window.api.basket.rest(game!.id, game!.home.id, game!.away.id), staleTime: 30 * 60e3
 });
 

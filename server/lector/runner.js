@@ -208,9 +208,11 @@ const BOOKS = {
 
 // ---------- baloncesto ----------
 // Torneos de Winamax que se miran si el partido no está en la portada de baloncesto, y lista de Betway de cada liga
-const WINAMAX_TOURS = { nba: '^nba$', wnba: '^wnba$', euroleague: 'euroliga|euroleague', eurocup: 'eurocup|eurocopa' };
+// NBL: Winamax la llama "NBL" (en Australia; la checa también se llama así, pero el partido se busca por los equipos).
+// La lista de Betway no se ha podido ver: si no existe, se busca en la de baloncesto
+const WINAMAX_TOURS = { nba: '^nba$', wnba: '^wnba$', euroleague: 'euroliga|euroleague', eurocup: 'eurocup|eurocopa', nbl: '\\bnbl\\b' };
 const BETWAY_LISTS = {
-  nba: 'usa/nba', wnba: 'usa/wnba', euroleague: 'international-club/euroleague', eurocup: 'international-club/eurocup'
+  nba: 'usa/nba', wnba: 'usa/wnba', euroleague: 'international-club/euroleague', eurocup: 'international-club/eurocup', nbl: 'australia/nbl'
 };
 
 // Fútbol por competición de la app: torneo de Winamax (su nombre; "LaLiga " lleva un espacio al final) y lista de Betway.

@@ -39,7 +39,7 @@ const FOOTBALL_LEAGUE: Record<string, number> = {
   wchampions: 62, ligaf: 45, wsl: 45
 };
 const BIG_FOOTBALL = /^(españa|francia|inglaterra|alemania|italia|portugal|países bajos|bélgica|croacia|argentina|brasil)$|real madrid|barcelona|atl[eé]tico( de)? madrid|manchester city|liverpool|arsenal|manchester united|chelsea|bayern|paris saint|psg|inter\b|internazionale|juventus|\bmilan|napoli|dortmund|tottenham|athletic|real sociedad|villarreal|betis/i;
-const BASKET_LEAGUE: Record<string, number> = { euroleague: 80, nba: 70, eurocup: 45, wnba: 40 };
+const BASKET_LEAGUE: Record<string, number> = { euroleague: 80, nba: 70, eurocup: 45, wnba: 40, nbl: 40 };
 const SPANISH_BASKET = /real madrid|barcelona|baskonia|valencia|unicaja|gran canaria|joventut|tenerife|murcia|bilbao|manresa|zaragoza/i;
 
 const footballScore = (g: FootballMatch) =>

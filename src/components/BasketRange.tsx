@@ -10,7 +10,7 @@ import { Select } from './ui';
 import { TvTabs, panel } from './viz';
 
 const NEXT = 'next';
-const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'wnba'];
+const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const dayName = (iso: string, i: number) => (i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long' }));
 
 export function useUpcomingGames() {
