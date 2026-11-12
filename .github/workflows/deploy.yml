@@ -1,4 +1,4 @@
-# Despliegue en el homelab (VM compartida, runner autoalojado con la etiqueta "homelab").
+# Despliegue en el homelab, con el runner autoalojado de la VM compartida.
 # Se lanza solo cuando el CI termina bien en un push a main, o a mano desde la pestaña Actions.
 # El código se copia a /opt/stacks/sharpex, donde viven el .env y las capturas, que nunca se tocan.
 name: Despliegue
@@ -24,7 +24,7 @@ jobs:
   desplegar:
     # Sólo si el CI ha pasado y venía de un push (nunca de un pull request: el runner tiene acceso a Docker)
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    runs-on: [self-hosted, homelab]
+    runs-on: self-hosted
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
