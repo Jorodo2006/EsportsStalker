@@ -1,0 +1,70 @@
+# Despliegue en el homelab (VM compartida, runner autoalojado con la etiqueta "homelab").
+# Se lanza solo cuando el CI termina bien en un push a main, o a mano desde la pestaña Actions.
+# El código se copia a /opt/stacks/sharpex, donde viven el .env y las capturas, que nunca se tocan.
+name: Despliegue
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Un despliegue cada vez: si llegan dos pushes seguidos, el segundo espera al primero
+concurrency:
+  group: despliegue-homelab
+  cancel-in-progress: false
+
+env:
+  DESTINO: /opt/stacks/sharpex
+  COPIAS: /datos/backups/sharpex
+  COMPOSE: docker compose -p sharpex -f docker-compose.yml -f docker-compose.prod.yml
+
+jobs:
+  desplegar:
+    # Sólo si el CI ha pasado y venía de un push (nunca de un pull request: el runner tiene acceso a Docker)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: [self-hosted, homelab]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Copia de la base de datos antes de desplegar
+        run: |
+          mkdir -p "$COPIAS"
+          cd "$DESTINO"
+          if [ -f docker-compose.yml ] && $COMPOSE ps --status running --services 2>/dev/null | grep -qx db; then
+            $COMPOSE exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "$COPIAS/antes-de-desplegar-$(date +%F-%H%M).sql.gz"
+            # Se guardan las 10 últimas
+            ls -1t "$COPIAS"/antes-de-desplegar-*.sql.gz | tail -n +11 | xargs -r rm --
+          else
+            echo "Primera vez: todavía no hay base de datos que copiar"
+          fi
+
+      - name: Copiar el código al servidor
+        run: |
+          rsync -a --delete \
+            --exclude .git/ --exclude .env --exclude capturas/ --exclude backups/ \
+            --exclude node_modules/ --exclude dist/ \
+            ./ "$DESTINO"/
+          mkdir -p "$DESTINO/capturas"
+
+      - name: Construir y arrancar
+        working-directory: ${{ env.DESTINO }}
+        run: $COMPOSE up -d --build --remove-orphans
+
+      - name: Comprobar que la web responde
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8090/; then echo "La web responde"; exit 0; fi
+            sleep 5
+          done
+          echo "La web no responde tras 150 s"
+          cd "$DESTINO" && $COMPOSE ps && $COMPOSE logs --tail 50 web gateway bets
+          exit 1
+
+      - name: Limpiar imágenes viejas
+        if: always()
+        run: docker image prune -f
