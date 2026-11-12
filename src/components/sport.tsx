@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { TeamLogo, chip, oddBtn, panelCls } from './ui';
+import { sized, fallbackTo } from '@/lib/img';
 
 export type MatchState = 'pre' | 'live' | 'post';
 
@@ -114,7 +115,7 @@ export function CompetitionBlock({ id, name, sub, logo, count, live, open, onTog
   return (
     <section id={id} className="scroll-mt-4">
       <button onClick={onToggle} aria-expanded={open} className="mb-2.5 flex w-full cursor-pointer items-center gap-2.5 rounded-md px-1 py-1 text-left transition hover:bg-zinc-900/60">
-        {logo ? <img src={logo} alt="" className="h-5 w-5 object-contain" /> : <span className="grid h-5 w-5 place-items-center rounded bg-zinc-800 text-[9px] font-semibold text-zinc-400">{name.slice(0, 2).toUpperCase()}</span>}
+        {logo ? <img src={sized(logo, 20)} onError={fallbackTo(logo)} alt="" loading="lazy" decoding="async" className="h-5 w-5 object-contain" /> : <span className="grid h-5 w-5 place-items-center rounded bg-zinc-800 text-[9px] font-semibold text-zinc-400">{name.slice(0, 2).toUpperCase()}</span>}
         <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
           <span className="truncate text-[15px] font-semibold text-zinc-50">{name}</span>
           {sub && <span className="label-data truncate text-zinc-500">{sub}</span>}

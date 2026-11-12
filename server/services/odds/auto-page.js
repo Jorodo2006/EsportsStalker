@@ -3,7 +3,7 @@
 const AUTO_PAGE = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>LoL Tracker · cuotas</title>
 <style>body{background:#18181b;color:#e4e4e7;font:15px system-ui,sans-serif;display:flex;justify-content:center;padding-top:12vh}
 main{width:440px}h1{font-size:18px;color:#fbbf24}li{margin:6px 0;list-style:none}.m{color:#a1a1aa;font-size:13px}.e{color:#f87171}</style></head>
-<body><main><h1>LoL Esports Tracker · actualizando cuotas</h1><p id="t" class="m"></p><ul id="l"></ul><p id="x" class="m"></p></main>
+<body><main><h1>Statex · actualizando cuotas</h1><p id="t" class="m"></p><ul id="l"></ul><p id="x" class="m"></p></main>
 <script>
 var id=new URLSearchParams(location.search).get('job'),N={bet365:'Bet365',winamax:'Winamax',betway:'Betway'},I={esperando:'⏳',buscando:'🔎',leyendo:'📖',ok:'✅',error:'⚠️'};
 function tick(){fetch('/auto/status?id='+id).then(function(r){return r.json()}).then(function(j){

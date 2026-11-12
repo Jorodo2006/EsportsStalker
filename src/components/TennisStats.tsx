@@ -7,6 +7,7 @@ import { cn } from '@/lib/format';
 import type { TennisStatBlock as Block, TennisStatPeriod, TennisStats as Stats, TennisSurface, Tour } from '@/lib/types';
 import { Empty, ErrorBox, Loading, th } from './ui';
 import { KpiStrip, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, TvTabs, surname, tdc } from './viz';
+import { sized, fallbackTo } from '@/lib/img';
 
 export const SURFACE_ES: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
 // Validados con el comprobador de paletas sobre el fondo oscuro, también para daltonismo
@@ -178,7 +179,7 @@ export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a:
   const line = (s: Side, r: Block) => (
     <>
       <span className="truncate text-[17px] font-bold leading-6" title={s.name}>{surname(s.name)}</span>
-      {s.flag ? <img src={s.flag} alt="" className="h-3 w-5 object-cover" /> : <span />}
+      {s.flag ? <img loading="lazy" decoding="async" src={sized(s.flag, 20)} onError={fallbackTo(s.flag)} alt="" className="h-3 w-5 object-cover" /> : <span />}
       <span className="whitespace-nowrap text-right text-[17px] font-bold leading-6 tnum" title={`${r.won} victorias y ${r.lost} derrotas en este periodo`}>{r.won}-{r.lost}</span>
     </>
   );

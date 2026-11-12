@@ -15,6 +15,7 @@ import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTit
 import { FootballIcon, StandingsTable, esTime, themeOf } from '@/components/football';
 import { Button, Dialog, Empty, ErrorBox, Loading, TeamLogo, panelCls, seg, segWrap } from '@/components/ui';
 import { Panel, TvRow } from '@/components/viz';
+import { sized } from '@/lib/img';
 
 const stateOf = (g: FootballMatch): MatchState => (g.state === 'in' ? 'live' : g.state);
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
@@ -764,7 +765,7 @@ function PlayerStatsDialog({ sel, matchId, shots, live, onClose }: { sel: Select
           <span aria-hidden className="pointer-events-none absolute -right-2 -top-6 hidden select-none text-[150px] font-black leading-none text-white/[0.07] tnum sm:block">{p.number}</span>
           {pic ? (
             <span className="relative shrink-0">
-              <img src={pic} alt={p.name} onError={() => setBroken(true)} className="h-20 w-20 rounded-xl bg-zinc-900 object-cover object-top ring-1 ring-white/15 sm:h-24 sm:w-24" />
+              <img loading="lazy" decoding="async" src={sized(pic, 96)} alt={p.name} onError={() => setBroken(true)} className="h-20 w-20 rounded-xl bg-zinc-900 object-cover object-top ring-1 ring-white/15 sm:h-24 sm:w-24" />
               {photo.data?.from === 'Wikipedia' && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[9px] text-zinc-300">Wikipedia</span>}
             </span>
           ) : (

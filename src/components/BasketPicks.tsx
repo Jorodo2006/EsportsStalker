@@ -18,6 +18,7 @@ import { ReliabilityMeter } from './ValuePanel';
 import { Toggle } from './sport';
 import { Empty, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
+import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 
 const PREFS = 'basket-picks';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -38,9 +39,9 @@ const hasTeams = (o?: MatchOdds) => !!o?.markets.some(m => /^(total|team_total)\
 export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
   // La misma clave que la ficha del partido: comparten las cuotas ya leídas. Mirar muchos partidos no es abrirlos: quiet
   const oddsQ = useQueries({
-    queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), refetchInterval: 60_000 }; })
+    queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), meta: oddsMeta(t.match), refetchInterval: ODDS_FALLBACK }; })
   });
-  // Las cuotas se vuelven a pedir cada minuto, pero casi nunca cambian: si son iguales, TanStack Query conserva la misma lista de
+  // Las cuotas se vuelven a pedir cuando llega una lectura nueva, y a veces no cambian: si son iguales, TanStack Query conserva la misma lista de
   // mercados. Sólo se recalcula cuando cambia de verdad, porque son miles de líneas
   const ids = useRef(new WeakMap<object, number>());
   const nextId = useRef(1);

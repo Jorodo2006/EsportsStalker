@@ -10,6 +10,7 @@ import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePa
 import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
 import { Scoreboard, SheetTabs } from '@/components/sport';
+import { oddsMeta } from '@/lib/odds-live';
 
 const DRAGONS: Record<string, string> = {
   ocean: 'Océano', infernal: 'Infernal', cloud: 'Nube', mountain: 'Montaña', hextech: 'Hextech', chemtech: 'Quimtec', elder: 'Ancestral'
@@ -164,10 +165,9 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
   const { data, error, isLoading, dataUpdatedAt, isFetching, refetch } = useQuery({
     queryKey: ['odds', match.id],
     queryFn: () => window.api.odds.match({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code }, start: match.startTime }),
-    refetchInterval: match.state === 'inProgress' ? 15_000 : refreshMs
+    // Las lecturas nuevas (lector, marcador o extensión) la recargan con su aviso (src/lib/odds-live.ts)
+    meta: oddsMeta({ a, b }), refetchInterval: match.state === 'inProgress' ? 15_000 : refreshMs
   });
-  // Cuotas que llegan desde el marcador o la extensión
-  useEffect(() => window.api.onOddsImported(() => { refetch(); }), [refetch]);
   // Forma de los jugadores (Leaguepedia) para estimar el valor de las líneas de jugador; sólo si hay líneas
   const hasLines = !!data?.markets.some(isPlayerLine);
   const formOf = (t: TeamRef) => ({

@@ -10,6 +10,7 @@ import type { BasketGame, BasketShot, BoxTeam } from '@/lib/types';
 import { Button, Dialog, Empty, Loading, TeamLogo, seg, segWrap } from './ui';
 import { Panel } from './viz';
 import { espnLeague } from '@/lib/basket-leagues';
+import { sized } from '@/lib/img';
 
 type BoxPlayer = BoxTeam['players'][number];
 
@@ -110,7 +111,7 @@ export function BasketPlayerGameDialog({ game, team, player, onClose, onLines }:
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-zinc-900 p-4">
           {photo
-            ? <img src={photo} alt={player.name} onError={() => setNoPhoto(true)} className="h-16 w-[88px] shrink-0 rounded-lg bg-zinc-800 object-cover object-top sm:h-20 sm:w-[110px]" />
+            ? <img loading="lazy" decoding="async" src={sized(photo, 110)} alt={player.name} onError={() => setNoPhoto(true)} className="h-16 w-[88px] shrink-0 rounded-lg bg-zinc-800 object-cover object-top sm:h-20 sm:w-[110px]" />
             : <span className="grid h-16 w-16 shrink-0 place-items-center rounded-lg bg-zinc-800 sm:h-20 sm:w-20"><TeamLogo src={team.logo} name={team.abbr} size={44} /></span>}
           <div className="min-w-0 flex-1 basis-40">
             <div className="flex items-center gap-1.5 text-xs text-zinc-400"><TeamLogo src={team.logo} name={team.abbr} size={16} /><span className="truncate">{team.name}</span>{player.starter && <span className="shrink-0">· Titular</span>}</div>

@@ -1,12 +1,17 @@
 // Caché de las peticiones a las fuentes de baloncesto: en memoria y en basket.cache.
 // Si la fuente falla se sirve lo último guardado. keep: los datos que no cambian (box scores terminados, días ya jugados)
 // se leen de la base de datos aunque la memoria esté vacía, sin volver a pedirlos.
+// Lo caducado hace poco (menos de STALE) se devuelve al momento y se renueva por detrás: ESPN tarda 1-2,5 s y nadie tiene
+// que esperarlo si hay algo de hace un rato. También tras reiniciar, con lo que haya en basket.cache. Más viejo que eso se
+// espera a lo nuevo, para no enseñar un marcador de hace media hora.
 const { query } = require('../../shared/db');
 
+const STALE = 10 * 60e3;
 const mem = new Map();
 const pending = new Map(); // lo que ya se está pidiendo: dos pantallas a la vez no repiten la petición
 
-const stored = async key => (await query('SELECT value FROM basket.cache WHERE key = $1', [key]).catch(() => ({ rows: [] }))).rows[0]?.value;
+const storedRow = async key => (await query('SELECT value, t FROM basket.cache WHERE key = $1', [key]).catch(() => ({ rows: [] }))).rows[0];
+const stored = async key => (await storedRow(key))?.value;
 
 async function fetchJSON(url) {
   try {
@@ -21,12 +26,26 @@ async function fetchJSON(url) {
 // Guarda lo que devuelva fn. Sirve para quedarse sólo con lo necesario: el log de un jugador de ESPN pesa 700 KB y de él
 // se usan 15 KB, y una jornada completa son 340 jugadores
 async function remember(key, ttlMs, fn, { keep = false } = {}) {
-  const hit = mem.get(key);
+  let hit = mem.get(key);
   if (hit && (keep || Date.now() - hit.t < ttlMs)) return hit.v;
   if (keep) {
     const v = await stored(key);
     if (v !== undefined) { mem.set(key, { t: Date.now(), v }); return v; }
   }
+  // Recién arrancado: lo de la base de datos, con su hora, por si aún vale como reciente
+  if (!hit && ttlMs > 0) {
+    const row = await storedRow(key);
+    if (row) { hit = { t: new Date(row.t).getTime(), v: row.value }; mem.set(key, hit); }
+  }
+  if (hit && ttlMs > 0 && Date.now() - hit.t < ttlMs) return hit.v;
+  if (hit && ttlMs > 0 && Date.now() - hit.t < ttlMs + STALE) {
+    load(key, fn, hit).catch(() => {});
+    return hit.v;
+  }
+  return load(key, fn, hit);
+}
+
+function load(key, fn, hit) {
   if (pending.has(key)) return pending.get(key);
   const job = (async () => {
     try {

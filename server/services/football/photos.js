@@ -4,7 +4,7 @@
 // al abrir la ficha de un jugador, de una en una y guardando el resultado: Wikipedia corta (429) si se le piden muchas seguidas.
 const { query } = require('../../shared/db');
 
-const UA = 'EsportsStalker/0.3 (uso personal)';
+const UA = 'Statex/0.3 (uso personal)';
 const espnUrl = id => `https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`;
 const GAP = 2000;
 // Tras un 429 de Wikipedia no se le pide nada durante un rato: reintentar enseguida sólo alarga el corte

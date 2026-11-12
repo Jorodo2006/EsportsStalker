@@ -22,6 +22,7 @@ import type { BasketPick } from '@/lib/basket-picks';
 import { useTeamThemes } from '@/lib/team-colors';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { TvTabs } from '@/components/viz';
+import { sized, fallbackTo } from '@/lib/img';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
@@ -227,7 +228,7 @@ function Roster({ game, side, injuries, current, onPick }: {
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <div className="flex items-center gap-2.5 border-b border-zinc-800/60 px-4 py-2.5">
-        {team.logo && <img src={team.logo} alt="" className="h-6 w-6 object-contain" />}
+        {team.logo && <img loading="lazy" decoding="async" src={sized(team.logo, 24)} onError={fallbackTo(team.logo)} alt="" className="h-6 w-6 object-contain" />}
         <span className="font-semibold">{team.name}</span>
         <span className="ml-auto text-xs text-zinc-500">{side === 'home' ? 'Local' : 'Visitante'}</span>
       </div>
@@ -240,7 +241,7 @@ function Roster({ game, side, injuries, current, onPick }: {
                 className={cn('flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left transition hover:bg-zinc-800/40', current === p.id && 'bg-amber-500/10')}>
                 <span className="w-6 text-right font-score text-base text-zinc-500 tnum">{p.jersey}</span>
                 {p.headshot
-                  ? <img src={p.headshot} alt="" className="h-8 w-8 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} />
+                  ? <img loading="lazy" decoding="async" src={sized(p.headshot, 32)} alt="" className="h-8 w-8 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} />
                   : <span className="h-8 w-8 shrink-0 rounded-full bg-zinc-800" />}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{p.name}</div>
@@ -294,7 +295,7 @@ function Periods({ teams }: { teams: BoxTeam[] }) {
         <tbody className="divide-y divide-zinc-800/60">
           {teams.map(t => (
             <tr key={t.side}>
-              <td className={td}><span className="flex items-center gap-2">{t.logo && <img src={t.logo} alt="" className="h-5 w-5 object-contain" />}{t.name}</span></td>
+              <td className={td}><span className="flex items-center gap-2">{t.logo && <img loading="lazy" decoding="async" src={sized(t.logo, 20)} onError={fallbackTo(t.logo)} alt="" className="h-5 w-5 object-contain" />}{t.name}</span></td>
               {Array.from({ length: n }, (_, i) => {
                 const other = teams.find(x => x !== t)?.periods[i] ?? 0, v = t.periods[i];
                 return <td key={i} className={cn(td, 'text-center font-score text-base tnum', v != null && v > other ? 'text-zinc-50' : 'text-zinc-500')}>{v ?? ''}</td>;
@@ -389,7 +390,7 @@ function BoxTable({ team, game, onPick }: { team: BoxTeam; game: BasketGame; onP
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
       <div className="flex items-center gap-2.5 border-b border-zinc-800/60 px-4 py-2.5">
-        {team.logo && <img src={team.logo} alt="" className="h-6 w-6 object-contain" />}
+        {team.logo && <img loading="lazy" decoding="async" src={sized(team.logo, 24)} onError={fallbackTo(team.logo)} alt="" className="h-6 w-6 object-contain" />}
         <span className="font-semibold">{team.name}</span>
         <span className="ml-auto text-xs text-zinc-500">Pulsa un jugador para ver su partido</span>
       </div>

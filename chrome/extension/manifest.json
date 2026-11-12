@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LoL Esports Tracker · cuotas",
+  "name": "Statex · cuotas",
   "version": "1.1.0",
-  "description": "Lee las cuotas de Bet365, Winamax y Betway para LoL Esports Tracker: al pulsar «Actualizar cuotas» y cada pocos minutos.",
+  "description": "Lee las cuotas de Bet365, Winamax y Betway para Statex: al pulsar «Actualizar cuotas» y cada pocos minutos.",
   "permissions": ["tabs", "scripting", "alarms"],
   "host_permissions": [
     "https://*.bet365.es/*",

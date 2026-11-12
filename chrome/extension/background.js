@@ -1,4 +1,4 @@
-// Extensión de LoL Esports Tracker. Hace los trabajos de lectura de cuotas del backend: abre las casas en
+// Extensión de Statex. Hace los trabajos de lectura de cuotas del backend: abre las casas en
 // pestañas de fondo, busca el partido por el nombre de los equipos, lee las cuotas con el mismo lector del
 // marcador (lector.js) y se las manda al gateway. Los trabajos llegan de dos formas:
 //  - al pulsar "Actualizar cuotas", la app abre una página suya en Chrome (pagina.js la ve y avisa);

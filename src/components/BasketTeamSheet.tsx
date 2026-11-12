@@ -10,6 +10,7 @@ import { LEAGUE_NAME, badInjury } from './BasketAnalyzer';
 import { TeamPoints, dec, restart, signed } from './BasketPoints';
 import { Badge, Empty, Loading, TeamLogo, th } from './ui';
 import { FormChips, KpiStrip, Panel, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, logoGlow, panel, tdc } from './viz';
+import { sized } from '@/lib/img';
 
 const esDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 const esWhen = (iso: string) => new Date(iso).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -204,7 +205,7 @@ function Roster({ team, onPlayer }: { team: BasketTeamInfo; onPlayer: (p: Basket
                 <td className={tdc + ' text-right text-zinc-500 tnum'}>{p.jersey}</td>
                 <td className={tdc}>
                   <span className="flex items-center gap-2 whitespace-nowrap">
-                    {p.headshot ? <img src={p.headshot} alt="" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
+                    {p.headshot ? <img loading="lazy" decoding="async" src={sized(p.headshot, 24)} alt="" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
                     <span className="font-medium">{p.name}</span>
                     {p.injury && <Badge tone={badInjury(p.injury) ? 'danger' : 'warning'}>{INJURY[p.injury] ?? p.injury}</Badge>}
                   </span>

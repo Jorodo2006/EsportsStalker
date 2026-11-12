@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 import { wallet } from './format';
+import { listenOdds } from './odds-live';
 
 // today: la portada común a los cuatro deportes (src/views/TodayView.tsx)
 export type View = 'today' | 'matches' | 'players' | 'bets' | 'settings';
@@ -77,6 +78,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // El servidor ha resuelto apuestas solas: se recargan. El aviso llega a todos los conectados (no dice de quién son, para
   // no repartir datos de nadie), así que no se saca mensaje: cada uno ve en su lista lo suyo
   useEffect(() => window.api.onBetsSettled(() => { qc.invalidateQueries({ queryKey: ['bets'] }); }), [qc]);
+  // Cuotas nuevas: se recargan las consultas de ese partido que haya en pantalla (src/lib/odds-live.ts)
+  useEffect(() => listenOdds(qc), [qc]);
 
   const value: Ctx = {
     settings,

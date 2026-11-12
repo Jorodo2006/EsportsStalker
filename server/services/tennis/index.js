@@ -3,6 +3,7 @@
 const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
+const { cachedJSON, warmEvery } = require('../../shared/cached');
 const tml = require('./tml');
 const { photoOf } = require('./photos');
 const { picksFor } = require('./picks');
@@ -16,28 +17,9 @@ const core = t => `https://sports.core.api.espn.com/v2/sports/tennis/leagues/${t
 const HISTORY_TOURNAMENTS = 12; // cada torneo del historial cuesta dos peticiones a ESPN
 
 // ---------- caché ----------
-const mem = new Map();
-const saved = new Map(); // última escritura en tennis.cache: es sólo una copia por si ESPN no responde, no hace falta guardarla cada 20 s
-async function getJSON(url, ttlMs) {
-  const hit = mem.get(url);
-  if (hit && Date.now() - hit.t < ttlMs) return hit.v;
-  try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) throw new Error(`respondió ${res.status}`);
-    const v = await res.json();
-    mem.set(url, { t: Date.now(), v });
-    if (Date.now() - (saved.get(url) || 0) >= 60e3) {
-      saved.set(url, Date.now());
-      query(`INSERT INTO tennis.cache (key, value, t) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, t = EXCLUDED.t`,
-        [url, JSON.stringify(v)]).catch(e => console.error('tennis.cache:', e.message));
-    }
-    return v;
-  } catch (e) {
-    const old = hit?.v ?? (await query('SELECT value FROM tennis.cache WHERE key = $1', [url]).catch(() => ({ rows: [] }))).rows[0]?.value;
-    if (old) return old;
-    throw new Error(`No se pudo leer ESPN (${e.message})`);
-  }
-}
+// En memoria y en tennis.cache, sirviendo lo caducado hace poco mientras se renueva (shared/cached.js). En la tabla, como mucho
+// cada minuto: es sólo una copia por si ESPN no responde, no hace falta guardarla cada 20 s
+const getJSON = cachedJSON({ table: 'tennis.cache', saveEvery: 60e3 });
 
 // ---------- días en hora de España (igual que en basket) ----------
 function tzOffset(t) {
@@ -273,6 +255,13 @@ const routes = [
     return list.filter(m => m.tour === params.tour && (m.a.id === params.id || m.b.id === params.id)).reverse();
   }]
 ];
+
+// Partidos de ayer a mañana (con los Challenger) y los puntos de los que están en juego, siempre preparados (shared/cached.js)
+warmEvery('tennis', 4 * 60e3, async () => {
+  const t = madridDay(Date.now());
+  const list = await withChallengers(await between(addDays(t, -1), addDays(t, 1)), addDays(t, -1), addDays(t, 1));
+  await withPoints(list.filter(m => m.state === 'in'));
+});
 
 migrate('tennis', path.join(__dirname, 'migrations'))
   .then(() => query(`DELETE FROM tennis.cache WHERE t < now() - interval '7 days'`))

@@ -1,6 +1,6 @@
-# LoL Esports Tracker
+# Statex
 
-Web con login, para el ordenador y el móvil, y un backend en Docker para seguir LoL, baloncesto y tenis:
+Web con login, para el ordenador y el móvil, y un backend en Docker para seguir LoL, baloncesto, tenis y fútbol:
 
 - **Partidos**: en directo, calendario y resultados de todas las ligas (LEC, LCK, LPL, LTA, Worlds, MSI…), con la cuota de ganador en cada tarjeta.
 - **Cuotas dentro de cada partido**: el botón **Actualizar cuotas** las trae solas de Winamax y Betway con el lector de Docker (o las envías tú con el marcador), comparadas entre casas (incluidas las líneas de kills, asistencias y muertes de cada jugador), con la mejor cuota resaltada y la probabilidad sin margen. Pulsando una cuota se abre la apuesta ya rellena.

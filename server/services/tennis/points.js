@@ -34,7 +34,8 @@ function wtaRecord(f) {
 
 let feed = { t: 0, v: [], running: null };
 function liveWta() {
-  if (Date.now() - feed.t < LIVE_TTL) return Promise.resolve(feed.v);
+  const age = Date.now() - feed.t;
+  if (age < LIVE_TTL) return Promise.resolve(feed.v);
   // Varias peticiones a la vez comparten la misma lectura
   feed.running ??= (async () => {
     const ts = await tournaments();
@@ -42,6 +43,8 @@ function liveWta() {
     feed = { ...feed, t: Date.now(), v: lists.flat().filter(m => m.DrawMatchType === 'S' && m.MatchState === 'P').map(wtaRecord) };
     return feed.v;
   })().finally(() => { feed.running = null; });
+  // Caducado hace poco: lo de antes mientras llega lo nuevo. Si ya no cuadra con los juegos de ESPN, pointsOf no lo enseña
+  if (feed.t && age < LIVE_TTL + 45e3) { feed.running.catch(() => {}); return Promise.resolve(feed.v); }
   return feed.running;
 }
 

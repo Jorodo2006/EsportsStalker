@@ -65,11 +65,12 @@ function pickFile(accept: string): Promise<File | null> {
 
 // ---------- Avisos en vivo (SSE): cuotas nuevas y progreso de los trabajos ----------
 const onAuto = new Set<(job: AutoJob) => void>();
-const onImported = new Set<() => void>();
+const onImported = new Set<(d?: { matchKey?: string; book?: string }) => void>();
 const onSettled = new Set<() => void>();
 const onStatus = new Set<(up: boolean) => void>();
 let source: EventSource | null = null;
 let connected = false;
+let lost = false; // se cortó la conexión: al volver hay que recargar las cuotas
 
 function setConnected(up: boolean) {
   if (up === connected) return;
@@ -79,17 +80,22 @@ function setConnected(up: boolean) {
 
 function connect() {
   source = new EventSource('/events');
-  source.onopen = () => setConnected(true);
+  source.onopen = () => {
+    // Al volver a conectar se han podido perder avisos de cuotas: sin clave, se recarga lo que haya en pantalla
+    if (lost) onImported.forEach(cb => cb());
+    lost = false;
+    setConnected(true);
+  };
   source.onmessage = e => {
     try {
       const ev = JSON.parse(e.data);
-      if (ev.type === 'odds:imported') onImported.forEach(cb => cb());
+      if (ev.type === 'odds:imported') onImported.forEach(cb => cb(ev.data));
       else if (ev.type === 'odds:auto') onAuto.forEach(cb => cb(ev.data));
       else if (ev.type === 'bets:settled') onSettled.forEach(cb => cb());
     } catch { /* un aviso mal formado no debe romper la conexión */ }
   };
   // Con un 502 del proxy el navegador no reintenta por sí mismo: hay que volver a conectar a mano
-  source.onerror = () => { source?.close(); setConnected(false); setTimeout(connect, 3000); };
+  source.onerror = () => { source?.close(); lost = true; setConnected(false); setTimeout(connect, 3000); };
 }
 
 function listen<T>(set: Set<T>, cb: T) {

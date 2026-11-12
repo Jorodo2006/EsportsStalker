@@ -2,7 +2,7 @@
 // día, los que están en juego, las mejores recomendaciones (baloncesto, tenis y fútbol) y los próximos. Cada partido lleva una nota
 // según su competición, el nivel de los equipos o jugadores y la ronda (importance); los que no llegan al corte no salen.
 // Pulsar un partido abre su ficha en su deporte.
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { BookIcon } from '@/components/BookIcon';
@@ -64,13 +64,32 @@ interface Item {
   ev?: { id: string; a: { name: string; code: string; alt?: string[] }; b: { name: string; code: string; alt?: string[] }; start: string }; go: () => void;
 }
 
+const NO_GAMES: BasketGame[] = [];
+
+// true cuando el elemento entra en pantalla o está a `margin` de entrar, y ya no vuelve a false. Se observa dentro del <main>,
+// que es lo que se desplaza: con la ventana como raíz, el margen no serviría (main recorta lo que queda fuera). Sólo desde que
+// `ready`: mientras carga, lo de arriba está vacío y el panel saldría a la vista aunque luego quede muy abajo
+function useSeen<T extends HTMLElement>(ready: boolean, margin = '300px') {
+  const ref = useRef<T>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !el || !ready) return;
+    if (typeof IntersectionObserver === 'undefined') { setSeen(true); return; }
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { setSeen(true); io.disconnect(); } }, { root: el.closest('main'), rootMargin: margin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen, ready, margin]);
+  return [ref, seen] as const;
+}
+
 export default function TodayView() {
   const { switchApp, go, setFocusId, setOpenMatch, addToSlip } = useApp();
   const day = today();
-  const { data: basketToday = [] } = useQuery({ queryKey: ['basket', 'games', day], queryFn: () => window.api.basket.games(day), refetchInterval: 60_000 });
-  const { data: footballToday = [] } = useQuery({ queryKey: ['football', 'games', day], queryFn: () => window.api.football.games(day), refetchInterval: 60_000 });
-  const { data: tennisToday = [] } = useQuery({ queryKey: ['tennis', 'games', day], queryFn: () => window.api.tennis.games(day), refetchInterval: 60_000 });
-  const { data: lolSchedule } = useQuery({ queryKey: ['today', 'lol'], queryFn: () => window.api.esports.schedule({}), refetchInterval: 60_000 });
+  const { data: basketToday = [], isPending: p1 } = useQuery({ queryKey: ['basket', 'games', day], queryFn: () => window.api.basket.games(day), refetchInterval: 60_000 });
+  const { data: footballToday = [], isPending: p2 } = useQuery({ queryKey: ['football', 'games', day], queryFn: () => window.api.football.games(day), refetchInterval: 60_000 });
+  const { data: tennisToday = [], isPending: p3 } = useQuery({ queryKey: ['tennis', 'games', day], queryFn: () => window.api.tennis.games(day), refetchInterval: 60_000 });
+  const { data: lolSchedule, isPending: p4 } = useQuery({ queryKey: ['today', 'lol'], queryFn: () => window.api.esports.schedule({}), refetchInterval: 60_000 });
   // Los de LoL en juego aunque empezaran ayer (una serie al mejor de cinco pasa de medianoche)
   const { data: lolLive = [] } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
   const u = useUpcomingGames();
@@ -140,7 +159,10 @@ export default function TodayView() {
   });
 
   // ---------- mejores apuestas (baloncesto, tenis y fútbol), sólo las que tienen valor ----------
-  const bp = useBasketPicks(u.games, u.injuries);
+  // Las de baloncesto necesitan los partidos de los jugadores de todos los equipos que juegan (eran tres cuartas partes de lo
+  // que bajaba la portada): sólo se calculan cuando el panel está a la vista o a punto de estarlo
+  const [picksRef, picksSeen] = useSeen<HTMLDivElement>(!p1 && !p2 && !p3 && !p4);
+  const bp = useBasketPicks(picksSeen ? u.games : NO_GAMES, u.injuries);
   const addBasket = usePickAdd();
   const basketBest = useMemo(() => bestPicks(bp.picks, 1.5, 5), [bp.picks]);
   const tq = useQuery({ queryKey: ['tennis', 'picks-day', day], queryFn: () => window.api.tennis.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
@@ -197,8 +219,9 @@ export default function TodayView() {
           )}
         </Panel>
 
+        <div ref={picksRef} className="min-w-0">
         <Panel title="Mejores apuestas del día" aside="baloncesto, tenis y fútbol">
-          {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{bp.loaded < bp.total ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
+          {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{!picksSeen || bp.loaded < bp.total ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
             <div className="divide-y divide-zinc-800/60">
               {best.map(x => (
                 <div key={x.s + x.id} className="flex items-center gap-2.5 px-4 py-2">
@@ -215,6 +238,7 @@ export default function TodayView() {
             </div>
           )}
         </Panel>
+        </div>
       </div>
 
       <Panel title="Próximos partidos importantes" aside="próximas 12 horas">

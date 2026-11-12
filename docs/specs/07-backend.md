@@ -144,3 +144,30 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 - **Copias de seguridad**: `npm run db:backup` (`pg_dump -Fc` desde el contenedor `db`, conserva las últimas 14) y
   `npm run db:restore -- <fichero>`. En producción: `COMPOSE_FILES=docker-compose.yml,docker-compose.prod.yml` y
   programarlo con cron.
+
+## Rendimiento de la web
+
+- **Compresión y caché** (`web/nginx.conf`, `web/Dockerfile`): la compilación deja una copia `.gz` (nivel 9) de cada fichero
+  de texto y nginx la sirve con `gzip_static`; el JSON de la API se comprime al vuelo (`gzip_proxied any`). `/assets/` (con
+  hash en el nombre) va con `Cache-Control: public, max-age=31536000, immutable` e `index.html` con `no-cache`. Las
+  cabeceras de seguridad están en `web/cabeceras.conf` y se incluyen en cada `location` que pone las suyas, porque nginx no
+  hereda `add_header`. Medido en la portada: JS de 1,15 MB a 342 KB y API al abrir de 3,6 MB a 359 KB.
+- **`/events` sin comprimir ni almacenar**: comprimido o en búfer, nginx retendría los avisos. Lo mismo vale para el proxy
+  con HTTPS que se ponga delante en producción: `/events` sin búfer (`X-Accel-Buffering`/`flush_interval -1` según el proxy)
+  y sin compresión, y con HTTP/2 para el resto.
+- **Cuotas por aviso** (`src/lib/odds-live.ts`): las consultas de cuotas llevan la clave del partido en `meta` (`oddsMeta`) y
+  se recargan con el aviso `odds:imported`, que trae esa clave; al reconectar se recarga todo lo que esté en pantalla. Sólo
+  hay un sondeo de respaldo cada 10 minutos. Antes eran 13 peticiones por minuto (1,2 MB) en la portada.
+- **Imágenes a su tamaño** (`sized` en `src/lib/img.ts`): las de ESPN pasan por su redimensionador (`combiner`) y las de la
+  Euroliga por `?width=` de su CDN, al doble de lo que se pintan; si fallan, `fallbackTo` pone la original. De 30–130 KB a 2–8 KB
+  por escudo.
+- **Servir lo caducado mientras se renueva** (stale-while-revalidate): las cachés de ESPN (`basket/cache.js`, y
+  `shared/cached.js` para tenis y fútbol), la de lolesports (`esports/http.js`) y las de los puntos de tenis devuelven al
+  momento lo caducado hace poco (hasta 10 minutos; 45 s en los directos de 15 s) y lo renuevan por detrás. Más viejo, se
+  espera a lo nuevo. Recién arrancado se aprovecha lo guardado en `<esquema>.cache`, con su hora. ESPN tardaba 1–2,5 s.
+- **Precalentado** (`warmEvery` en `shared/cached.js`): baloncesto, tenis y fútbol piden cada 4 minutos los partidos de ayer
+  a mañana y los directos (y las bajas de la NBA), para que el primero que entre no espere. Medido: de 1,1–2,6 s a 5–50 ms.
+- **Recomendaciones de baloncesto de la portada sólo a la vista** (`useSeen` en `src/views/TodayView.tsx`): necesitan los
+  partidos de los jugadores de todos los equipos que juegan (tres cuartas partes de lo que bajaba la portada). Se calculan
+  cuando el panel está a 300 px de verse, y sólo desde que han cargado los partidos (antes, el panel saldría arriba). En el
+  móvil la portada pasa de 44 llamadas (394 KB comprimidos) a 15 (23 KB).

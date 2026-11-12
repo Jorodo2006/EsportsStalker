@@ -7,11 +7,15 @@ const API = 'https://prod-public-api.livescore.com/v1/api/app';
 const LIVE_TTL = 15e3;
 const DAY_TTL = 5 * 60e3;
 
+// Caducado hace poco (hasta tres veces su duración, 45 s en directo): se devuelve lo que había mientras se renueva por detrás
+const staleFor = ttl => Math.min(ttl * 3, 10 * 60e3);
 const mem = new Map();
 function feed(path, ttl) {
   const hit = mem.get(path);
-  if (hit && Date.now() - hit.t < ttl) return Promise.resolve(hit.v);
-  if (hit?.running) return hit.running;
+  const age = hit ? Date.now() - hit.t : Infinity;
+  if (hit && age < ttl) return Promise.resolve(hit.v);
+  const recent = hit?.v != null && age < ttl + staleFor(ttl);
+  if (hit?.running) return recent ? Promise.resolve(hit.v) : hit.running;
   const running = (async () => {
     try {
       const res = await fetch(`${API}${path}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) });
@@ -26,6 +30,7 @@ function feed(path, ttl) {
     }
   })();
   mem.set(path, { ...(hit || { t: 0, v: null }), running });
+  if (recent) { running.catch(() => {}); return Promise.resolve(hit.v); }
   return running;
 }
 

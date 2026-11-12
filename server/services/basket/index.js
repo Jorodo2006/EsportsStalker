@@ -7,6 +7,7 @@ const cache = require('./cache');
 const espn = require('./espn');
 const el = require('./euroleague');
 const { hits, queryOf } = require('../../shared/search');
+const { warmEvery } = require('../../shared/cached');
 
 const LEAGUES = [
   { id: 'nba', name: 'NBA', country: 'EE. UU.', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png', src: espn },
@@ -146,6 +147,10 @@ const routes = [
     return l.src === el ? [] : espn.absences(l.id, params.id, q.team);
   }]
 ];
+
+// Partidos de ayer a mañana de todas las ligas y las bajas de la NBA siempre preparados: ESPN tarda 1-2,5 s y el primero que
+// entra no tiene que esperarlo (la caché sirve lo caducado hace poco mientras se renueva, cache.js)
+warmEvery('basket', 4 * 60e3, () => { const t = madridDay(Date.now()); return Promise.all([between(addDays(t, -1), addDays(t, 1)), espn.injuries('nba')]); });
 
 migrate('basket', path.join(__dirname, 'migrations'))
   .then(() => cache.init())

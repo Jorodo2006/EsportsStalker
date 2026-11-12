@@ -54,7 +54,7 @@ function LoginScreen() {
     <div className="flex h-full items-start justify-center overflow-y-auto px-4 py-10 sm:items-center">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2 text-2xl font-semibold tracking-tight">
-          <span>EsportsStalker</span>
+          <span>Statex</span>
         </div>
         <form onSubmit={submit} className="overflow-hidden rounded-2xl border border-zinc-800 bg-surface">
           <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-5 py-2.5 text-sm font-semibold">

@@ -1,6 +1,6 @@
 {
-  "name": "lol-esports-tracker",
-  "productName": "LoL Esports Tracker",
+  "name": "statex",
+  "productName": "Statex",
   "version": "0.3.0",
   "description": "Cuotas, partidos, stats de jugadores y registro de apuestas de LoL esports",
   "author": "Jordi",

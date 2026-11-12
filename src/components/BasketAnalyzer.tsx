@@ -16,6 +16,7 @@ import type { BasketAbsence, BasketGame, BasketInjury, BasketLeagueId, BasketLog
 import { ValuePanel } from './ValuePanel';
 import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, Tabs, oddBtn, td, th } from './ui';
 import { espnLeague, gameMinutes } from '@/lib/basket-leagues';
+import { sized } from '@/lib/img';
 
 const BOOKS = ['Winamax', 'Betway'];
 export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup', nbl: 'NBL' };
@@ -136,7 +137,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-surface p-4">
-        {player.headshot && <img src={player.headshot} alt="" className="h-16 w-16 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />}
+        {player.headshot && <img loading="lazy" decoding="async" src={sized(player.headshot, 64)} alt="" className="h-16 w-16 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xl font-bold">{player.name}{injury && <Badge tone={badInjury(injury) ? 'danger' : 'warning'}>{injury}</Badge>}</div>
           <div className="text-sm text-zinc-400">{LEAGUE_NAME[player.league]}, {team}{game ? `, ${event}, ${game.state === 'pre' ? esTime(game.date) : game.status}` : ''}</div>

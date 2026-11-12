@@ -19,6 +19,8 @@ import { Badge, Empty, Input, Select, th } from './ui';
 import { ReliabilityMeter } from './ValuePanel';
 import { Panel, TvTabs, panel, tdc } from './viz';
 import { gameMinutes } from '@/lib/basket-leagues';
+import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
+import { sized } from '@/lib/img';
 
 const PREFS = 'basket-scan';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -57,7 +59,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
   });
   // La misma clave que la ficha del partido: comparten las cuotas ya leídas. Mirar muchos partidos no es abrirlos: quiet
   const oddsQ = useQueries({
-    queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), refetchInterval: 60_000 }; })
+    queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), meta: oddsMeta(t.match), refetchInterval: ODDS_FALLBACK }; })
   });
   const logsKey = logs.map(q => q.dataUpdatedAt).join(), oddsKey = oddsQ.map(q => q.dataUpdatedAt).join();
 
@@ -166,7 +168,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
                     <td className={tdc + ' text-right text-zinc-500 tnum'}>{i + 1}</td>
                     <td className={tdc}>
                       <span className="flex items-center gap-2 whitespace-nowrap">
-                        {r.player.headshot ? <img src={r.player.headshot} alt="" loading="lazy" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
+                        {r.player.headshot ? <img src={sized(r.player.headshot, 24)} alt="" loading="lazy" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
                         <button className="cursor-pointer font-medium hover:text-amber-300" title="Ver su análisis">{r.player.name}</button>
                         {r.injury && <Badge tone={badInjury(r.injury) ? 'danger' : 'warning'}>{r.injury}</Badge>}
                         {r.miss > 0 && <span title={`No jugó los últimos ${r.miss} partidos de su equipo`}><Badge tone={r.miss >= 3 ? 'danger' : 'warning'}>Sin jugar: {r.miss}</Badge></span>}

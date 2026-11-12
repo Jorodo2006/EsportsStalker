@@ -453,7 +453,8 @@ export interface Api {
   };
   onOddsAuto(cb: (job: AutoJob) => void): () => void;
   marcador: { url(): Promise<string>; paste(m?: { a: TeamRef; b: TeamRef }): Promise<{ ok: boolean; partido: string | null }> };
-  onOddsImported(cb: () => void): () => void;
+  // d.matchKey: el partido que tiene cuotas nuevas ("equipo A|equipo B"); sin d, una reconexión
+  onOddsImported(cb: (d?: { matchKey?: string; book?: string }) => void): () => void;
   // El servidor ha resuelto alguna apuesta sola
   onBetsSettled(cb: () => void): () => void;
   backend: { status(): Promise<BackendStatus> };

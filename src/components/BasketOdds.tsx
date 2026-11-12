@@ -10,6 +10,7 @@ import type { AutoJob, BasketGame, MarketLine, Sport, TeamRef } from '@/lib/type
 import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
+import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 
 // El partido tal y como lo guardan el lector y el comparador: visitante (a) contra local (b)
 export const matchOfGame = (g: BasketGame) => ({
@@ -30,7 +31,7 @@ export const targetOfGame = (g: BasketGame): OddsTarget => ({
 export function useMatchOdds(t: OddsTarget) {
   return useQuery({
     queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match),
-    refetchInterval: 60_000, enabled: !t.done
+    meta: oddsMeta(t.match), refetchInterval: ODDS_FALLBACK, enabled: !t.done
   });
 }
 export const useBasketOdds = (g: BasketGame) => useMatchOdds(targetOfGame(g));

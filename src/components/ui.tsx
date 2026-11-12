@@ -9,6 +9,7 @@
 import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/format';
+import { sized, fallbackTo } from '@/lib/img';
 
 // ---------- estilos compartidos ----------
 export const panelCls = 'rounded-2xl border border-zinc-800 bg-surface';
@@ -148,7 +149,7 @@ export function Loading({ label = 'Cargando…' }: { label?: string }) {
 
 // Escudo del equipo o, si no hay imagen, su código en una placa
 export function TeamLogo({ src, name, size = 32 }: { src?: string; name: string; size?: number }) {
-  if (src) return <img src={src} alt="" width={size} height={size} className="shrink-0 object-contain" style={{ width: size, height: size }} />;
+  if (src) return <img src={sized(src, size)} onError={fallbackTo(src)} alt="" width={size} height={size} loading="lazy" decoding="async" className="shrink-0 object-contain" style={{ width: size, height: size }} />;
   return (
     <div className="grid shrink-0 place-items-center rounded-md bg-zinc-800 font-semibold text-zinc-300"
       style={{ width: size, height: size, fontSize: Math.max(9, Math.round(size * 0.32)) }}>

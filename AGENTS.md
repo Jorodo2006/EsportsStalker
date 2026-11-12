@@ -1,6 +1,8 @@
 # AGENTS.md
 
-Guía para agentes de código (Claude Code, Codex, Copilot…) que trabajen en **EsportsStalker / LoL Esports Tracker**.
+Guía para agentes de código (Claude Code, Codex, Copilot…) que trabajen en **Statex** (antes EsportsStalker / LoL Esports Tracker).
+Los identificadores internos siguen siendo `lolet` (base de datos y usuario de PostgreSQL, cookie `lolet_session`, canal de avisos
+`lolet`, `window.__lolet_*` del marcador): no los renombres, romperían los datos y las sesiones de un despliegue ya hecho.
 Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte están en [`docs/specs/`](docs/specs/).
 
 ## Qué es
@@ -169,6 +171,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
 - **Modelo de fútbol** (`server/services/football/model.js`, `picks.js`): si tocas algo, repite `backtest.js` dentro del contenedor (ajusta con un periodo y comprueba con otro; cifras en `docs/specs/11-futbol.md`). Los resultados pasados (`hist:` en `football.cache`) no se borran con la limpieza.
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
+- **Rendimiento** (`docs/specs/07-backend.md`, "Rendimiento de la web"): las consultas de cuotas no sondean cada minuto;
+  llevan `meta: oddsMeta(partido)` y las recarga el aviso `odds:imported` (`src/lib/odds-live.ts`). Si añades una, haz lo
+  mismo. Las imágenes de ESPN y de la Euroliga van con `sized(src, píxeles)` (`src/lib/img.ts`), no con el original de
+  500 px. Si tocas `web/nginx.conf`, las cabeceras de seguridad van en `web/cabeceras.conf`. Las cachés de las fuentes sirven lo
+  caducado hace poco mientras lo renuevan y hay un precalentado cada 4 minutos (`server/shared/cached.js`): una caché nueva de
+  tenis o fútbol, con `cachedJSON`; y no alargues `STALE` en datos de directo.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.
 - **Resolución automática** (`server/services/bets/settle.js`): depende de que las claves de mercado del comparador

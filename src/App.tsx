@@ -189,7 +189,7 @@ export default function App() {
 
 function Logo({ big }: { big?: boolean }) {
   return (
-    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>EsportsStalker</div>
+    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>Statex</div>
   );
 }
 

@@ -6,6 +6,7 @@
 const path = require('path');
 const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
+const { cachedJSON, warmEvery } = require('../../shared/cached');
 const { photoOf, photosOf } = require('./photos');
 const { picksFor } = require('./picks');
 const { hits, queryOf } = require('../../shared/search');
@@ -55,30 +56,9 @@ const standingsUrl = espn => `https://site.api.espn.com/apis/v2/sports/soccer/${
 const league = id => { const l = BY_ID[id]; if (!l) throw fail('Competición desconocida'); return l; };
 
 // ---------- caché ----------
-const mem = new Map();
-// Última escritura en football.cache: es sólo una copia por si ESPN no responde, y un mes entero de una liga pesa
-// cientos de KB, así que no se guarda en cada lectura
-const saved = new Map();
-async function getJSON(url, ttlMs) {
-  const hit = mem.get(url);
-  if (hit && Date.now() - hit.t < ttlMs) return hit.v;
-  try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) throw new Error(`respondió ${res.status}`);
-    const v = await res.json();
-    mem.set(url, { t: Date.now(), v });
-    if (Date.now() - (saved.get(url) || 0) >= 5 * 60e3) {
-      saved.set(url, Date.now());
-      query(`INSERT INTO football.cache (key, value, t) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, t = EXCLUDED.t`,
-        [url, JSON.stringify(v)]).catch(e => console.error('football.cache:', e.message));
-    }
-    return v;
-  } catch (e) {
-    const old = hit?.v ?? (await query('SELECT value FROM football.cache WHERE key = $1', [url]).catch(() => ({ rows: [] }))).rows[0]?.value;
-    if (old) return old;
-    throw new Error(`No se pudo leer ESPN (${e.message})`);
-  }
-}
+// En memoria y en football.cache, sirviendo lo caducado hace poco mientras se renueva (shared/cached.js). Un mes entero de una
+// liga pesa cientos de KB: en la tabla se guarda como mucho cada 5 minutos
+const getJSON = cachedJSON({ table: 'football.cache', saveEvery: 5 * 60e3 });
 
 // ---------- días en hora de España (igual que en basket y tennis) ----------
 function tzOffset(t) {
@@ -445,6 +425,9 @@ const routes = [
   }]
 ];
 const dayPicks = new Map();
+
+// Partidos de ayer a mañana y directos siempre preparados: el primero que entra no espera a ESPN (shared/cached.js)
+warmEvery('football', 4 * 60e3, () => { const t = madridDay(Date.now()); return Promise.all([between(addDays(t, -1), addDays(t, 1)), live()]); });
 
 migrate('football', path.join(__dirname, 'migrations'))
   // Las fotos de jugadores duran más: buscarlas cuesta (Wikipedia, de una en una) y casi no cambian

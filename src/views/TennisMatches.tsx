@@ -13,6 +13,7 @@ import { TennisCompare } from '@/components/TennisStats';
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { Panel, panel } from '@/components/viz';
+import { sized, fallbackTo } from '@/lib/img';
 
 const stateOf = (m: TennisMatch): MatchState => (m.state === 'in' ? 'live' : m.state);
 export const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -147,7 +148,7 @@ function Sets({ m }: { m: TennisMatch }) {
   const live = m.state === 'in', pts = m.points ?? null;
   const row = (p: TennisPlayer, o: TennisPlayer, side: 'a' | 'b') => (
     <tr>
-      <td className={td}><span className="flex items-center gap-2">{p.flag && <img src={p.flag} alt="" className="h-4 w-6 rounded-sm object-cover" />}<span className={cn(p.winner && 'font-semibold text-zinc-50')}>{label(p)}</span>{pts?.server === side && <span title="Saca" aria-label="Saca" className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}{p.rank && <span className="hidden text-xs text-zinc-500 sm:inline">n.º {p.rank}</span>}</span></td>
+      <td className={td}><span className="flex items-center gap-2">{p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-4 w-6 rounded-sm object-cover" />}<span className={cn(p.winner && 'font-semibold text-zinc-50')}>{label(p)}</span>{pts?.server === side && <span title="Saca" aria-label="Saca" className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}{p.rank && <span className="hidden text-xs text-zinc-500 sm:inline">n.º {p.rank}</span>}</span></td>
       {Array.from({ length: n }, (_, i) => (
         <td key={i} className={cn(td, 'text-center font-score text-xl tnum', p.setWins[i] ? 'font-semibold text-zinc-50' : (o.setWins[i] ? 'text-zinc-500' : 'text-zinc-200'))}>
           {p.sets[i] ?? ''}{p.tiebreaks[i] != null && <sup className="ml-0.5 text-xs text-zinc-500">{p.tiebreaks[i]}</sup>}
@@ -213,7 +214,7 @@ function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour'];
   return (
     <div className={cn(panel, 'overflow-hidden')}>
       <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50">
-        {p.flag && <img src={p.flag} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
+        {p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
         <div className="min-w-0 flex-1">
           <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate text-[15px] font-semibold hover:text-amber-400">{p.name}</button>
         </div>

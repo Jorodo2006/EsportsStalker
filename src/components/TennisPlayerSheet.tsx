@@ -7,6 +7,7 @@ import type { TennisResult, Tour } from '@/lib/types';
 import { TennisStatsPanel } from './TennisStats';
 import { Empty, ErrorBox, Loading, th } from './ui';
 import { FormChips, TvFrame, TvHeader, TvStat, TvTabs, tdc } from './viz';
+import { sized, fallbackTo } from '@/lib/img';
 
 const esDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
 // ESPN da los premios en dólares
@@ -47,7 +48,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
       {back}
       <TvFrame>
         <TvHeader
-          media={<><img src={p.photo || undefined} alt="" className="h-12 w-12 shrink-0 rounded-full bg-black/30 object-cover object-top md:hidden" onError={e => { e.currentTarget.style.display = 'none'; }} />{p.flag && <img src={p.flag} alt="" className="h-5 w-8 shrink-0 object-cover" />}</>}
+          media={<><img loading="lazy" decoding="async" src={p.photo || undefined} alt="" className="h-12 w-12 shrink-0 rounded-full bg-black/30 object-cover object-top md:hidden" onError={e => { e.currentTarget.style.display = 'none'; }} />{p.flag && <img loading="lazy" decoding="async" src={p.flag} alt="" className="h-5 w-8 shrink-0 object-cover" />}</>}
           title={p.name} sub={<span title={meta.join(' · ')}>{meta.join(' · ')}</span>}>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <TvStat label="Ranking" value={p.rank ? `#${p.rank}` : '–'} sub={<>{p.points ? `${p.points.toLocaleString('es-ES')} pts` : ''}{!!diff && <span className="ml-1">{diff > 0 ? `▲${diff}` : `▼${-diff}`}</span>}</>} />
@@ -80,7 +81,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
                   <td className={tdc + ' whitespace-nowrap text-zinc-500'}>{m.round}</td>
                   <td className={tdc}>
                     <button onClick={() => onPlayer(m.opponent.id)} title="Ver su ficha" className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-left font-medium hover:text-amber-400">
-                      {m.opponent.flag && <img src={m.opponent.flag} alt="" className="h-3 w-4 rounded-[2px] object-cover" />}{m.opponent.name}
+                      {m.opponent.flag && <img loading="lazy" decoding="async" src={sized(m.opponent.flag, 16)} onError={fallbackTo(m.opponent.flag)} alt="" className="h-3 w-4 rounded-[2px] object-cover" />}{m.opponent.name}
                       {m.opponent.rank && <span className="text-[11px] font-normal text-zinc-500">#{m.opponent.rank}</span>}
                     </button>
                   </td>

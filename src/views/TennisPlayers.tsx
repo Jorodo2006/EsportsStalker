@@ -7,6 +7,7 @@ import { cn } from '@/lib/format';
 import type { Tour } from '@/lib/types';
 import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { ErrorBox, Input, Loading, PageHeader, Tabs, td, th } from '@/components/ui';
+import { sized, fallbackTo } from '@/lib/img';
 
 export default function TennisPlayers() {
   const [tour, setTour] = useState<Tour>('atp');
@@ -38,7 +39,7 @@ export default function TennisPlayers() {
                   <tr key={p.id} onClick={() => setOpen(p.id)} className="cursor-pointer hover:bg-zinc-800/30">
                     <td className={td + ' text-right font-score text-lg font-semibold tnum'}>{p.rank}</td>
                     <td className={cn(td, 'text-xs tnum', diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-rose-400' : 'text-zinc-600')} title={`Antes: ${p.previous}`}>{diff > 0 ? `▲${diff}` : diff < 0 ? `▼${-diff}` : '='}</td>
-                    <td className={td}><span className="flex items-center gap-2">{p.flag && <img src={p.flag} alt="" className="h-4 w-6 rounded-sm object-cover" />}{p.name}</span></td>
+                    <td className={td}><span className="flex items-center gap-2">{p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-4 w-6 rounded-sm object-cover" />}{p.name}</span></td>
                     <td className={td + ' text-zinc-400'}>{p.country}</td>
                     <td className={td + ' text-right tnum'}>{p.points.toLocaleString('es-ES')}</td>
                   </tr>
