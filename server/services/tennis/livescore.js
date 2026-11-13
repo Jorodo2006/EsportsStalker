@@ -130,4 +130,23 @@ async function challengers(days) {
   return out;
 }
 
-module.exports = { liveAtp, challengers };
+// Los individuales de la ATP y la WTA (sin Challenger ni ITF) de unos días, sólo la hora y los nombres: para comprobar los
+// cruces de ESPN, que a veces pone a la rival equivocada (en las WTA Finals de 2026 dio a la reserva en lugar de Muchova)
+async function mainTour(days) {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const feeds = await Promise.all(days.map(d => feed(`/date/tennis/${d}/0?MD=1`, d >= today ? LIVE_TTL : DAY_TTL).catch(() => null)));
+  const seen = new Set(), out = [];
+  for (const j of feeds) {
+    for (const st of j?.Stages || []) {
+      if (!/^(ATP|WTA)/.test(st.Cnm) || /challenger|125|ITF/i.test(st.Cnm) || /doubles/i.test(st.Snm)) continue;
+      for (const e of singles(st)) {
+        if (seen.has(e.Eid) || e.Eps === 'Canc.') continue;
+        seen.add(e.Eid);
+        out.push({ at: new Date(dateOf(e.Esd)).getTime(), a: e.T1[0].Nm, b: e.T2[0].Nm });
+      }
+    }
+  }
+  return out;
+}
+
+module.exports = { liveAtp, challengers, mainTour };

@@ -225,6 +225,7 @@ export interface TennisMatch {
   status: string; round: string; court: string; city: string; bestOf: number; note: string; a: TennisPlayer; b: TennisPlayer;
   points?: TennisPoints | null; // sólo en juego, si cuadra con los juegos de ESPN
   level?: 'challenger'; // ATP Challenger (LiveScore): sin modelo, recomendaciones ni fichas de jugador
+  fixed?: string; // el rival de ESPN no cuadraba con LiveScore y se ha cambiado (checkRivals en el servicio): qué daba cada uno
 }
 // Puntos del juego en curso: "15", "40", "AD"; en el tie-break, los que lleven. at: cuándo cambiaron por última vez (ms); source: de dónde salen
 export interface TennisPoints { a: string; b: string; server: 'a' | 'b' | null; tiebreak: boolean; at: number; source: string }
@@ -235,10 +236,14 @@ export interface TennisPick {
   id: string; title: string; market: string; selection: string; family: string; side: 'a' | 'b' | null; book: string; price: number; prices: Record<string, number>;
   p: number; pModel: number; pMarket: number; fair: number; ev: number; rel: Reliability; why: string;
 }
-export interface TennisPicks {
-  ready: boolean; reason?: 'started' | 'finished' | 'noodds'; surface?: TennisSurface | null; indoor?: boolean; bestOf?: number; oddsAge?: number;
-  match?: { pModel: number; pElo: number; pStats: number; pMarket: number | null; pFinal: number; expectedGames: number; holdA: number; holdB: number; weight: number };
-  top?: TennisPick | null; easy?: TennisPick[]; hard?: TennisPick[]; considered?: number; warnings?: string[];
+// summary: el partido según el modelo (pModel, pElo, pStats), las casas (pMarket) y la mezcla (pFinal), todo para el jugador a.
+// picks: las líneas de las casas que el servicio no descarta; la interfaz las separa por riesgo (lib/tennis-picks.ts)
+export interface TennisMatchPicks {
+  surface: TennisSurface | null; indoor: boolean; bestOf: number; oddsAge: number;
+  summary: { pModel: number; pElo: number; pStats: number; pMarket: number | null; pFinal: number; expectedGames: number; holdA: number; holdB: number; weight: number };
+  picks: TennisPick[]; considered: number; warnings: string[];
+  // La más fiable, las fáciles y las complicadas según el servicio: son las que se registran para medir el acierto (lib/predictions.ts)
+  top: TennisPick | null; easy: TennisPick[]; hard: TennisPick[];
 }
 // Recomendaciones de fútbol (server/services/football/picks.js): las mismas piezas que las de tenis. who: de qué equipo es la
 // línea (goles de un equipo) o a quién favorece
@@ -297,6 +302,10 @@ export interface SearchCompetition { sport: Sport; id: string; name: string; sub
 export interface SearchResults { matches: SearchMatch[]; competitions: SearchCompetition[] }
 export interface FootballDayPick { id: string; league: FootballLeagueId; leagueName: string; date: string; home: FootballTeam; away: FootballTeam; top: FootballPick; hard: FootballPick | null }
 export interface TennisDayPick { id: string; tour: Tour; tournament: string; round: string; date: string; a: TennisPlayer; b: TennisPlayer; top: TennisPick; hard: TennisPick | null }
+export type TennisPicks = ({ ready: true } & TennisMatchPicks) | { ready: false; reason: 'started' | 'finished' | 'noodds' };
+// Las recomendaciones de los partidos de un día (day, en hora de España) y los que todavía no tienen cuotas
+export interface TennisBoardMatch extends TennisMatchPicks { m: TennisMatch; day: string }
+export interface TennisBoard { matches: TennisBoardMatch[]; noOdds: { id: string; date: string; a: string; b: string }[] }
 
 // Ficha de un tenista: datos personales, balance y últimos resultados
 export interface TennisRecord { won: number; lost: number; titles: number; doublesTitles: number; prize: number }
@@ -484,6 +493,7 @@ export interface Api {
     surface(tour: Tour, name: string, city: string): Promise<TennisSurface | null>;
     picks(date: string, id: string): Promise<TennisPicks>;
     picksDay(date: string): Promise<TennisDayPick[]>;
+    picksBoard(date: string): Promise<TennisBoard>;
   };
   basket: {
     leagues(): Promise<BasketLeague[]>;

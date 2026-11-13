@@ -81,8 +81,10 @@ const isUnder = n => /under|menos|-/i.test(n || '');
 class Book {
   constructor(a, b, sport) { this.a = a; this.b = b; this.sport = sport; this.markets = new Map(); this.books = new Set(); }
 
-  add({ key, group, period, line, main, outcomes }, bookmaker, prices) {
-    if (!this.markets.has(key)) this.markets.set(key, { key, group, period, line, main: !!main, outcomes: outcomes.map(o => ({ ...o, prices: {} })) });
+  // swapped: la casa pone a los jugadores al revés que nosotros. Sólo en los mercados sueltos de Winamax, donde los marcadores
+  // ("6-3", "2 - 0") van en su orden y quien los lee tiene que darles la vuelta
+  add({ key, group, period, line, main, outcomes, swapped }, bookmaker, prices) {
+    if (!this.markets.has(key)) this.markets.set(key, { key, group, period, line, main: !!main, outcomes: outcomes.map(o => ({ ...o, prices: {} })), ...(swapped ? { swapped: true } : {}) });
     const m = this.markets.get(key);
     m.main = m.main || !!main;
     // Otra fuente puede traer selecciones que faltaban (p. ej. sólo "Más de" en una y "Menos de" en otra)
@@ -281,7 +283,7 @@ function winamaxBasketInto(book, match, st, found) {
     } else {
       const label = (BASKET_PERIOD[period] ? `${BASKET_PERIOD[period]} · ` : '') + rest + (total != null && !/\d/.test(rest) ? ` (${total})` : '');
       book.add({
-        key: `wmx|${title}|${bet.specialBetValue || ''}`, group: label, period: pid ? PLAYER_PERIOD : period || 50, line: total, main: true,
+        key: `wmx|${title}|${bet.specialBetValue || ''}`, group: label, period: pid ? PLAYER_PERIOD : period || 50, line: total, main: true, swapped: o.swapped,
         outcomes: outs.map(x => ({ id: x.id, label: who && bet.template === 'dynamic' ? `${who} · ${x.label}` : x.label }))
       }, BK, Object.fromEntries(outs.map(x => [x.id, x.price])));
     }

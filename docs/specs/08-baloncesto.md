@@ -21,7 +21,7 @@ veredicto, comunes con LoL).
 **NBL**: ESPN sólo tiene jugadores en los box scores desde febrero de 2026 (el final de la 25-26 y su playoff); antes vienen
 vacíos. El modelo ve por eso menos partidos que en la NBA, y la fiabilidad lo refleja. La numeración de la temporada es la de la
 NBA (2027 = 26-27), los cuartos son de 10 minutos (`flow`, `gameMinutes` en `src/lib/basket-leagues.ts`) y tiene jugada a jugada
-con coordenadas, como la NBA. No sale en la portada **Hoy** (nota 40, como la WNBA). El lector la busca en Winamax por el torneo
+con coordenadas, como la NBA. El lector la busca en Winamax por el torneo
 "NBL" y en Betway en `australia/nbl` (si esa lista no existe, en la de baloncesto).
 
 La ACB no tiene fuente gratis conocida. La NCAA está en ESPN, pero tiene cientos de partidos al día y no se ha metido.
@@ -105,8 +105,9 @@ vuelven a pedir.
 ## Interfaz
 
 - *Partidos* (`BasketMatches`): igual que en LoL. Arriba se elige *Partidos* o [*Recomendaciones*](#recomendaciones). Tira de días con el
-  número de partidos, filtro En juego / Próximos / Terminados, interruptor de cuotas de ganador, banda con las mejores de las próximas 24 h
-  y partidos agrupados por competición (se pueden plegar). Al pulsar un partido se abre su ficha a página completa (*Volver a partidos* para
+  número de partidos, filtro En juego / Próximos / Terminados, interruptor de cuotas de ganador y partidos agrupados por competición (se
+  pueden plegar). En pantallas anchas, al lado, las mejores de las próximas 24 h (encima de la lista no: primero los partidos). Se entra
+  siempre en *Partidos*. Al pulsar un partido se abre su ficha a página completa (*Volver a partidos* para
   salir): marcador grande, botón *Apuesta* y pestañas *Estadísticas*, *Recomendaciones* (la primera si no ha empezado), *Cuotas* (si no ha
   terminado), *Puntos*, *Líneas*, *Equipos*, *Plantillas* y *Valor de jugador*.
 - *Estadísticas* (`GET /api/basket/boxscore/:id`, se refresca cada 20 s en juego): puntos por cuarto, comparación de

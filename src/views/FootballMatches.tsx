@@ -1,5 +1,6 @@
 // Fútbol · Partidos: igual que en baloncesto y tenis. Tira de días (hora de España), filtro por estado, los partidos en juego
-// arriba y el resto por competición, con la cuota 1X2 en cada tarjeta; al pulsar uno, su ficha: marcador grande con los
+// arriba y el resto por competición, con la cuota 1X2 en cada tarjeta, y en pantallas anchas las recomendaciones del día al
+// lado. El selector de arriba cambia a la pantalla Recomendaciones. Al pulsar un partido, su ficha: marcador grande con los
 // goleadores, resumen (goles, tarjetas y cambios), cuotas de Winamax y Betway, estadísticas, alineaciones, forma, cara a cara
 // y clasificación.
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
@@ -10,14 +11,17 @@ import { cn } from '@/lib/format';
 import type { FootballDetail, FootballEvent, FootballLeagueId, FootballMatch, FootballPastGame, FootballShot, FootballTeam } from '@/lib/types';
 import { SportOdds, useMatchOdds, type OddsTarget } from '@/components/BasketOdds';
 import { TrendsTable, footballMarkets, footballTrendData } from '@/components/Trends';
-import { FootballDayPicks, FootballPicksPanel } from '@/components/FootballPicks';
-import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { FootballDayPicks, FootballPicksPage, FootballPicksPanel } from '@/components/FootballPicks';
+import { AdSlot } from '@/components/AdSlot';
+import { useMedia } from '@/lib/use-media';
+import { CompetitionBlock, DayStrip, LiveDot, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, addDays, dayName, today, type MatchState, type StateFilter } from '@/components/sport';
 import { FootballIcon, StandingsTable, esTime, themeOf } from '@/components/football';
 import { Button, Dialog, Empty, ErrorBox, Loading, TeamLogo, panelCls, seg, segWrap } from '@/components/ui';
-import { Panel, TvRow } from '@/components/viz';
+import { Panel, TvRow, TvTabs } from '@/components/viz';
 import { sized } from '@/lib/img';
 
 const stateOf = (g: FootballMatch): MatchState => (g.state === 'in' ? 'live' : g.state);
+type Mode = 'games' | 'picks';
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
 function loadList(key: string): string[] { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } }
@@ -41,6 +45,11 @@ export default function FootballMatches() {
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [openTab, setOpenTab] = useState<Tab | undefined>();
+  // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
+  const [mode, pickMode] = useState<Mode>('games');
+  const side = useMedia('(min-width: 1280px)'); // columna de las recomendaciones del día al lado de la lista
+  const wide = useMedia('(min-width: 1400px)'); // con la columna del cupón y los anuncios a la derecha (App.tsx)
   const [closed, setClosed] = useState(() => loadList('football-closed'));
   const [showOdds, setShowOdds] = useState(() => loadFlag('football-odds', true));
   const ok = !!window.api.football;
@@ -72,7 +81,7 @@ export default function FootballMatches() {
     enabled: ok && showOdds && pending.length > 0, refetchInterval: 60_000
   });
   const open = openId ? all.find(g => g.id === openId) ?? null : null;
-  useSections(openId ? [] : [
+  useSections(openId || mode === 'picks' ? [] : [
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(([, list]) => ({ id: sectionId(list[0].leagueName), label: list[0].leagueName, count: list.length, live: 0 }))
   ]);
@@ -81,7 +90,14 @@ export default function FootballMatches() {
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el fútbol hay que volver a lanzar <code>npm run backend</code> y recargar la página.</ErrorBox>;
   // La ficha se carga por su id: también abre los partidos que llegan desde la columna de directo aunque sean de otro día
-  if (openId) return <MatchDetail key={openId} id={openId} preview={open} onClose={() => setOpenId(null)} />;
+  if (openId) return <MatchDetail key={openId} id={openId} preview={open} initialTab={openTab} onClose={() => { setOpenId(null); setOpenTab(undefined); }} />;
+
+  const modes = <TvTabs value={mode} onChange={pickMode} items={[{ value: 'games' as const, label: 'Partidos' }, { value: 'picks' as const, label: 'Recomendaciones' }]} />;
+  const openPick = (id: string) => { setOpenTab('picks'); setOpenId(id); };
+  if (mode === 'picks') {
+    const next = [0, 1, 2].map(n => addDays(today(), n)).map(d => ({ value: d, label: dayName(d) }));
+    return <div className="flex min-w-0 flex-col gap-5">{modes}<FootballPicksPage days={next} onOpen={openPick} /></div>;
+  }
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); saveList('football-closed', n); };
   const card = (g: FootballMatch, featured?: boolean) => {
@@ -99,14 +115,15 @@ export default function FootballMatches() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
+      {modes}
       <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); saveFlag('football-odds', v); }} label="Cuotas" />
       </StateFilterBar>
-      <FootballDayPicks date={date} onOpen={setOpenId} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
         : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de las ligas que sigue la app. Prueba otro día de la tira.</Empty>
-          : <>
+          : <div className={cn('grid items-start gap-4', side && 'grid-cols-[minmax(0,1fr)_minmax(300px,380px)]')}>
+            <div className="flex min-w-0 flex-col gap-5">
             {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
             {byLeague.map(([id, list]) => {
               const meta = leagues.data?.find(l => l.id === id);
@@ -117,7 +134,14 @@ export default function FootballMatches() {
                 </CompetitionBlock>
               );
             })}
-          </>}
+            </div>
+            {side && (
+              <div className="sticky top-0 flex min-w-0 flex-col gap-4">
+                <FootballDayPicks date={date} onOpen={openPick} onAll={() => pickMode('picks')} />
+                {!wide && <AdSlot size="rect" />}
+              </div>
+            )}
+          </div>}
     </div>
   );
 }
@@ -125,14 +149,15 @@ export default function FootballMatches() {
 // ---------- ficha del partido ----------
 type Tab = 'summary' | 'picks' | 'odds' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
 
-function MatchDetail({ id, preview, onClose }: { id: string; preview: FootballMatch | null; onClose: () => void }) {
+// initialTab: la pestaña con la que se abre (desde Recomendaciones, la suya)
+function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview: FootballMatch | null; initialTab?: Tab; onClose: () => void }) {
   const { openBet } = useApp();
   const q = useQuery({
     queryKey: ['football', 'match', id], queryFn: () => window.api.football.match(id),
     refetchInterval: r => (r.state.data?.match.state === 'in' ? 20_000 : false)
   });
   const m = q.data?.match ?? preview;
-  const [tab, setTab] = useState<Tab | null>(null);
+  const [tab, setTab] = useState<Tab | null>(initialTab ?? null);
   const back = (
     <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-[13px] text-zinc-400 transition hover:text-zinc-100">
       <ArrowLeft size={16} />Volver a partidos

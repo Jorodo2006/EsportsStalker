@@ -153,7 +153,9 @@ Como en tenis: el modelo está en el servicio y la interfaz sólo enseña lo que
   un 25 % frente a las casas sin margen (10 % si un equipo tiene pocos partidos) y menos cuanto más se aleja de ellas en
   el 1X2. Salen la más fiable, tres fáciles y tres complicadas. Se registran en `bets.predictions` (Acierto del modelo).
 - **Interfaz** (`src/components/FootballPicks.tsx`): pestaña Recomendaciones en la ficha (se abre en ella antes de empezar),
-  "Recomendaciones del día" encima de la lista y las mejores en la portada Hoy.
+  pantalla *Recomendaciones* con el selector *Partidos / Recomendaciones* de arriba (`FootballPicksPage`: hoy, mañana o pasado,
+  la más fiable de cada partido y las más complicadas; al pulsar una se abre su partido en esa pestaña) y, en pantallas
+  anchas, "Recomendaciones del día" al lado de la lista. Encima de la lista no: primero los partidos.
 
 ## Femenino
 
@@ -179,4 +181,3 @@ En los parones salen la **Nations League** (`uefa.nations`) y los **amistosos in
   320 mercados en Winamax y todas las pestañas en Betway.
 - **Lecturas programadas**: los amistosos sólo si juega una selección grande (`BIG_NATIONS` en `scheduler.js`): en un
   parón hay decenas y la mayoría no los tienen las casas. Los demás, a mano desde su pestaña de cuotas.
-- **Hoy**: la Nations League pesa como una gran liga y los amistosos sólo entran si juega una de las grandes.

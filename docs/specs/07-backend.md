@@ -201,7 +201,3 @@ sale en *Tu cuenta* hasta que se cierra (no en un aviso de unos segundos, que tr
   espera a lo nuevo. Recién arrancado se aprovecha lo guardado en `<esquema>.cache`, con su hora. ESPN tardaba 1–2,5 s.
 - **Precalentado** (`warmEvery` en `shared/cached.js`): baloncesto, tenis y fútbol piden cada 4 minutos los partidos de ayer
   a mañana y los directos (y las bajas de la NBA), para que el primero que entre no espere. Medido: de 1,1–2,6 s a 5–50 ms.
-- **Recomendaciones de baloncesto de la portada sólo a la vista** (`useSeen` en `src/views/TodayView.tsx`): necesitan los
-  partidos de los jugadores de todos los equipos que juegan (tres cuartas partes de lo que bajaba la portada). Se calculan
-  cuando el panel está a 300 px de verse, y sólo desde que han cargado los partidos (antes, el panel saldría arriba). En el
-  móvil la portada pasa de 44 llamadas (394 KB comprimidos) a 15 (23 KB).

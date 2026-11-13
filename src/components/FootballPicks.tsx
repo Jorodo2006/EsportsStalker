@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
-import { odd } from '@/lib/format';
+import { cn, odd } from '@/lib/format';
 import { footballPredictions, logPredictions } from '@/lib/predictions';
+import { verdictOf } from '@/lib/value';
 import type { FootballDayPick, FootballMatch, FootballPick } from '@/lib/types';
 import { PickRow, ValueChip } from './TennisPicks';
 import { ReliabilityMeter } from './ValuePanel';
@@ -100,8 +101,77 @@ export function FootballPicksPanel({ m, onOdds }: { m: FootballMatch; onOdds: ()
   );
 }
 
-// Las mejores del día en la lista de partidos: cinco, y el resto al pulsar
-export function FootballDayPicks({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
+// ---------- Pantalla Recomendaciones ----------
+// Los partidos de un día con cuotas: la más fiable de cada uno (de la más probable a la menos) y, aparte, la más complicada
+// de cada uno (de la de más valor a la de menos). Al pulsar una, se abre su partido; la cuota la manda al cupón
+function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick; onOpen: (id: string) => void; onAdd: (d: FootballDayPick, p: FootballPick) => void }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 transition hover:bg-zinc-800/30">
+      <button onClick={() => onOpen(d.id)} title={`${p.market}: ${p.selection}. ${p.why}. Pulsa para abrir el partido`} className="min-w-0 flex-1 cursor-pointer text-left">
+        <span className="block truncate text-[14px] font-semibold text-zinc-50">{p.title}</span>
+        <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
+      </button>
+      <span className="w-14 shrink-0 text-right">
+        <span className="block font-score text-[18px] font-bold leading-5 text-zinc-50 tnum">{p0(p.p)}</span>
+        <ValueChip pick={p} />
+      </span>
+      <button onClick={() => onAdd(d, p)} title={`Añadir al cupón: ${p.book}. Justa: ${odd(p.fair)}`}
+        className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
+        <span className="font-score text-[16px] font-bold leading-none tnum">{odd(p.price)}</span>
+        <span className="text-[9px] leading-tight opacity-75">{p.book}</span>
+      </button>
+    </div>
+  );
+}
+
+export function FootballPicksPage({ days, onOpen }: { days: { value: string; label: string }[]; onOpen: (id: string) => void }) {
+  const [date, setDate] = useState(days[0].value);
+  const addPick = useFootballAdd();
+  const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const data = q.data ?? [];
+  const tops = data.slice().sort((x, y) => y.top.p - x.top.p);
+  const hard = data.filter(d => d.hard).sort((x, y) => y.hard!.ev - x.hard!.ev);
+  const add = (d: FootballDayPick, p: FootballPick) => addPick(d, p);
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap gap-2">
+        {days.map(d => (
+          <button key={d.value} onClick={() => setDate(d.value)} aria-pressed={date === d.value}
+            className={cn('h-8 cursor-pointer rounded-md px-3 text-[13px] font-medium transition', date === d.value ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100')}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+      {q.isLoading ? <Loading label="Calculando las recomendaciones…" /> : q.error ? <ErrorBox error={q.error} /> : !data.length
+        ? <Empty>Ese día no hay partidos con cuotas leídas todavía, y sin ellas no se puede recomendar nada. El lector las trae unas horas antes de cada partido.</Empty>
+        : (
+          <TvFrame>
+            <TvHeader title="Recomendaciones" sub={`${data.length} ${data.length === 1 ? 'partido' : 'partidos'} con cuotas`}>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                <TvStat label="Con valor" value={[...tops.map(d => d.top), ...hard.map(d => d.hard!)].filter(p => verdictOf(p.ev, p.rel.score) === 'BET').length} sub="valor 2 % o más" />
+              </div>
+            </TvHeader>
+            <div className="grid grid-cols-1 divide-y divide-zinc-800 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+              <div className="min-w-0">
+                <TvBand aside={tops.length}>La más fiable de cada partido</TvBand>
+                {tops.map(d => <BoardRow key={d.id} d={d} p={d.top} onOpen={onOpen} onAdd={add} />)}
+              </div>
+              <div className="min-w-0">
+                <TvBand aside={hard.length || undefined}>Más complicadas</TvBand>
+                {hard.length ? hard.map(d => <BoardRow key={d.id} d={d} p={d.hard!} onOpen={onOpen} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}
+              </div>
+            </div>
+            <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
+              Es una estimación, no una garantía: mezcla un modelo de goles con las casas, y las casas pesan más. En la ficha de cada partido están todas sus recomendaciones.
+            </p>
+          </TvFrame>
+        )}
+    </div>
+  );
+}
+
+// Las mejores del día, al lado de la lista de partidos: cinco, el resto al pulsar y el enlace a la pantalla Recomendaciones
+export function FootballDayPicks({ date, onOpen, onAll }: { date: string; onOpen: (id: string) => void; onAll?: () => void }) {
   const [all, setAll] = useState(false);
   const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const data = q.data ?? [];
@@ -127,6 +197,7 @@ export function FootballDayPicks({ date, onOpen }: { date: string; onOpen: (id: 
           {all ? 'Ver menos' : `Ver las ${data.length}`}
         </button>
       )}
+      {onAll && <button onClick={onAll} className="w-full cursor-pointer border-t border-zinc-800 py-2 text-xs text-zinc-400 transition hover:text-zinc-100">Ver todas las recomendaciones</button>}
     </TvFrame>
   );
 }

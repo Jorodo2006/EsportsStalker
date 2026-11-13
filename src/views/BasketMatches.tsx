@@ -1,5 +1,5 @@
 // Baloncesto · Partidos: igual que en LoL. Tira de días (hora de España), filtro por estado, partidos agrupados por
-// competición y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
+// competición (en pantallas anchas, las más fiables del día al lado) y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, Plus } from 'lucide-react';
@@ -22,6 +22,8 @@ import type { BasketPick } from '@/lib/basket-picks';
 import { useTeamThemes } from '@/lib/team-colors';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { TvTabs } from '@/components/viz';
+import { AdSlot } from '@/components/AdSlot';
+import { useMedia } from '@/lib/use-media';
 import { sized, fallbackTo } from '@/lib/img';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
@@ -38,8 +40,10 @@ function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, 
 export default function BasketMatches() {
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
-  const [mode, setMode] = useState<Mode>(() => { try { return localStorage.getItem('basket-mode') === 'picks' ? 'picks' : 'games'; } catch { return 'games'; } });
-  const pickMode = (m: Mode) => { setMode(m); try { localStorage.setItem('basket-mode', m); } catch { /* sin almacenamiento */ } };
+  // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
+  const [mode, pickMode] = useState<Mode>('games');
+  const side = useMedia('(min-width: 1280px)'); // columna de las más fiables del día al lado de la lista
+  const wide = useMedia('(min-width: 1400px)'); // con la columna del cupón y los anuncios a la derecha (App.tsx)
   const [openId, setOpenId] = useState<string | null>(null);
   // La recomendación puede ser de otro día que el de la tira: se guarda el partido que abre
   const [fromPick, setFromPick] = useState<BasketPick | null>(null);
@@ -108,10 +112,10 @@ export default function BasketMatches() {
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
       </StateFilterBar>
-      <DayBand onOpen={openPick} onAll={() => pickMode('picks')} />
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
         : !all.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de NBA, Euroliga, EuroCup ni WNBA. Prueba otro día de la tira.</Empty>
-          : <>
+          : <div className={cn('grid items-start gap-4', side && 'grid-cols-[minmax(0,1fr)_minmax(300px,380px)]')}>
+            <div className="flex min-w-0 flex-col gap-5">
             {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
             {byLeague.map(({ id, list }) => {
               const meta = leagues.data?.find(l => l.id === id);
@@ -122,7 +126,14 @@ export default function BasketMatches() {
                 </CompetitionBlock>
               );
             })}
-          </>}
+            </div>
+            {side && (
+              <div className="sticky top-0 flex min-w-0 flex-col gap-4">
+                <DayBand onOpen={openPick} onAll={() => pickMode('picks')} />
+                {!wide && <AdSlot size="rect" />}
+              </div>
+            )}
+          </div>}
     </div>
   );
 }

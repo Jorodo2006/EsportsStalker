@@ -95,8 +95,7 @@ descalificación o decisión técnica (`other`) se quedan pendientes** para hace
 
 `MmaFights` (lista por evento con el principal arriba, filtros UFC/PFL/WOW, ficha con Comparativa / Recomendaciones / Cuotas),
 `MmaSpotlight` (el cara a cara de la ficha: fotos a los lados y tabla central con edad, récord, altura, alcance, KO/TKO, sumisiones, decisiones, golpes/min, derribos y Elo; ESPN trae las medidas y el estilo de su ficha y WOW lo que da su web; el que va por delante, con el acento), `MmaFighters` (ranking por Elo del modelo, no oficial: activos con ≥5 combates en los últimos 18 meses), `MmaFighterSheet`,
-`MmaPicks`, `mma.tsx`. En **Hoy** entra el combate principal de cada cartel (`mmaScore`: base UFC 40, PFL 35, WOW 30; principal +25
-(WOW +35), co-principal +10, cinco asaltos +20) y sus recomendaciones. Mercados para el formulario de apuesta: `MMA_MARKETS`.
+`MmaPicks`, `mma.tsx`. Mercados para el formulario de apuesta: `MMA_MARKETS`.
 
 ## Revisión final
 

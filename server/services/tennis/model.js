@@ -19,11 +19,15 @@ const PARAMS = {
   eloSurface: 0.5, // parte del Elo que es de la superficie
   wElo: 0.37, wStats: 0.62, // de logit(Elo) y logit(estadísticas) a la probabilidad del modelo
   formSd: 0.04, // lo que varía de un día a otro la diferencia en puntos entre los dos: un jugador no rinde siempre igual
-  serveShift: 0 // corrección del nivel de saque: los puntos no son independientes y sin esto salen juegos de más
+  serveShift: 0, // corrección del nivel de saque: los puntos no son independientes y sin esto salen juegos de más
+  aceHalfLife: 365, // días hasta que un partido pesa la mitad en los aces: es de lo más estable de un jugador
+  acePrior: 5, // aces ficticios en la media: con poca muestra manda la media del circuito en esa pista
+  aceSize: 8, // dispersión de los aces de un partido (binomial negativa): unos días entra el saque y otros no
+  aceScale: 1.04 // corrección de la media: los puntos al saque de los tie-breaks no se cuentan uno a uno
 };
 
 // Los pesos se aprendieron con 2024 y se evaluaron con 2025 y 2026, por separado en cada circuito
-const paramsOf = tour => (tour === 'wta' ? { ...PARAMS, wElo: 0.33, wStats: 0.73 } : PARAMS);
+const paramsOf = tour => (tour === 'wta' ? { ...PARAMS, wElo: 0.33, wStats: 0.73, aceScale: 1.035 } : PARAMS);
 
 // Cuadratura de Gauss-Hermite: promedia sobre el estado de forma del día con cinco valores en vez de simular
 const FORM = [[0, 0.5333], [0.9586, 0.2221], [-0.9586, 0.2221], [2.0202, 0.01126], [-2.0202, 0.01126]];
@@ -111,8 +115,8 @@ function matchWin(pa, pb, bestOf) {
 function matchDist(pa, pb, bestOf) {
   const need = bestOf === 5 ? 3 : 2;
   const so = { true: setOutcomes(pa, pb, true), false: setOutcomes(pa, pb, false) };
-  // Estado: sets, quién saca primero el siguiente, juegos, si hubo tie-break, quién ganó el primer set
-  let live = new Map([['0|0|1|0|0|0|-', { x: 0, y: 0, f: true, ga: 0, gb: 0, tb: 0, s1: null, p: 0.5 }], ['0|0|0|0|0|0|-', { x: 0, y: 0, f: false, ga: 0, gb: 0, tb: 0, s1: null, p: 0.5 }]]);
+  // Estado: sets, quién saca primero el siguiente, juegos, si hubo tie-break, quién ganó el primer set y si hubo un set a cero (z)
+  let live = new Map([['0|0|1|0|0|0|-|0', { x: 0, y: 0, f: true, ga: 0, gb: 0, tb: 0, s1: null, z: 0, p: 0.5 }], ['0|0|0|0|0|0|-|0', { x: 0, y: 0, f: false, ga: 0, gb: 0, tb: 0, s1: null, z: 0, p: 0.5 }]]);
   const final = [];
   while (live.size) {
     const next = new Map();
@@ -121,12 +125,12 @@ function matchDist(pa, pb, bestOf) {
         const win = o.a > o.b;
         const x = st.x + (win ? 1 : 0), y = st.y + (win ? 0 : 1);
         const f = (o.a + o.b) % 2 === 0 ? st.f : !st.f;
-        const ga = st.ga + o.a, gb = st.gb + o.b, tb = st.tb || (o.tb ? 1 : 0), s1 = st.s1 ?? (win ? 'a' : 'b');
+        const ga = st.ga + o.a, gb = st.gb + o.b, tb = st.tb || (o.tb ? 1 : 0), s1 = st.s1 ?? (win ? 'a' : 'b'), z = st.z || (o.a === 0 || o.b === 0 ? 1 : 0);
         const p = st.p * o.p;
-        if (x === need || y === need) { final.push({ x, y, ga, gb, tb, s1, p }); continue; }
-        const k = `${x}|${y}|${f ? 1 : 0}|${ga}|${gb}|${tb}|${s1}`;
+        if (x === need || y === need) { final.push({ x, y, ga, gb, tb, s1, z, p }); continue; }
+        const k = `${x}|${y}|${f ? 1 : 0}|${ga}|${gb}|${tb}|${s1}|${z}`;
         const cur = next.get(k);
-        if (cur) cur.p += p; else next.set(k, { x, y, f, ga, gb, tb, s1, p });
+        if (cur) cur.p += p; else next.set(k, { x, y, f, ga, gb, tb, s1, z, p });
       }
     }
     live = next;
@@ -154,6 +158,69 @@ function anchor(pa, pb, target, bestOf, P = PARAMS) {
     if (matchWinMix(x, y, bestOf, P) < t) lo = mid; else hi = mid;
   }
   return at((lo + hi) / 2);
+}
+
+// ---------- Mercados de juegos sueltos, breaks y aces ----------
+// Puntos que se juegan de media en un juego al saque si el que saca gana cada punto con probabilidad p
+function pointsPerGame(p) {
+  const q = 1 - p, deuce = 2 / (p * p + q * q), memo = new Map();
+  const go = (x, y) => {
+    if (x === 4 || y === 4) return 0;
+    if (x === 3 && y === 3) return deuce;
+    const k = x * 5 + y;
+    if (!memo.has(k)) memo.set(k, 1 + p * go(x + 1, y) + q * go(x, y + 1));
+    return memo.get(k);
+  };
+  return go(0, 0);
+}
+
+// Cómo acaba un juego al saque: hold[i] gana el que saca con el otro a 0, 15, 30 o 40 (40 incluye los iguales); brk[i], lo pierde
+// con él a 0, 15, 30 o 40
+function gameScores(p) {
+  const q = 1 - p, hold = holdProb(p);
+  const h = [p ** 4, 4 * p ** 4 * q, 10 * p ** 4 * q * q], b = [q ** 4, 4 * q ** 4 * p, 10 * q ** 4 * p * p];
+  return { hold: [...h, hold - h[0] - h[1] - h[2]], brk: [...b, 1 - hold - b[0] - b[1] - b[2]] };
+}
+
+// Juegos de A después de los n primeros del partido (n ≤ 6: todavía en el primer set), sin saber quién saca primero: [{ a, b, p }]
+function afterGames(pa, pb, n) {
+  const ha = holdProb(pa), hb = holdProb(pb), out = new Array(n + 1).fill(0);
+  for (const firstA of [true, false]) {
+    let st = [1];
+    for (let g = 0; g < n; g++) {
+      const w = (g % 2 === 0) === firstA ? ha : 1 - hb; // A gana el juego
+      const next = new Array(st.length + 1).fill(0);
+      st.forEach((p, a) => { next[a + 1] += p * w; next[a] += p * (1 - w); });
+      st = next;
+    }
+    st.forEach((p, a) => { out[a] += p / 2; });
+  }
+  return out.map((p, a) => ({ a, b: n - a, p }));
+}
+
+// Probabilidad de que A rompa el saque antes que B (los tie-breaks no cuentan), sin saber quién saca primero
+function firstBreakA(pa, pb) {
+  const ha = holdProb(pa), hb = holdProb(pb), none = 1 - ha * hb;
+  return ((ha * (1 - hb)) / none + (1 - hb) / none) / 2;
+}
+
+// Aces de un partido: para cada largo posible (dist, de matchDistMix), una binomial negativa con la media de los puntos al saque
+// que se juegan. ra, rb: aces por punto al saque de cada uno (predict). who: 'a', 'b' o 'both'. tail[k]: probabilidad de k o más
+function acesTail(dist, sa, sb, ra, rb, who, P = PARAMS, max = 80) {
+  const ppa = pointsPerGame(sa), ppb = pointsPerGame(sb), r = P.aceSize;
+  const byGames = new Map();
+  for (const o of dist) byGames.set(o.ga + o.gb, (byGames.get(o.ga + o.gb) ?? 0) + o.p);
+  const tail = new Array(max + 1).fill(0);
+  for (const [games, w] of byGames) {
+    const ma = (games / 2) * ppa * ra, mb = (games / 2) * ppb * rb;
+    const mu = who === 'a' ? ma : who === 'b' ? mb : ma + mb;
+    if (mu <= 0) { tail[0] += w; continue; }
+    // La suma de las dos: otra binomial negativa con la misma media y la misma varianza
+    const size = who === 'both' ? (mu * mu) / ((ma * ma + mb * mb) / r) : r;
+    let pk = (size / (size + mu)) ** size, cdf = 0;
+    for (let k = 0; k <= max; k++) { tail[k] += w * (1 - cdf); cdf += pk; pk *= ((k + size) / (k + 1)) * (mu / (size + mu)); }
+  }
+  return tail;
 }
 
 // ---------- Histórico: Elo, saque y resto de cada jugador ----------
@@ -188,6 +255,18 @@ function rates(pl, surface, day, P = PARAMS) {
   };
 }
 
+// Aces por punto al saque de un jugador frente a los que se esperaban ante sus rivales (f) y los que le hacen al resto frente a
+// los esperados (g). 1 es la media del circuito en esa pista; con poca muestra, cerca de 1. seen: aces esperados que lleva medidos
+function aceRates(pl, day, P = PARAMS) {
+  let ac = 0, ae = 0, aa = 0, ar = 0;
+  for (const h of pl.hist) {
+    if (h.ae == null || day - h.day < 0) continue;
+    const w = 0.5 ** ((day - h.day) / P.aceHalfLife);
+    ac += w * h.ac; ae += w * h.ae; aa += w * h.aa; ar += w * h.ar;
+  }
+  return { f: (ac + P.acePrior) / (ae + P.acePrior), g: (aa + P.acePrior) / (ar + P.acePrior), seen: ae };
+}
+
 // Condición de juego: el saque rinde distinto en cada una, y la pista dura bajo techo no es la de fuera
 const conditionOf = (surface, indoor) => (surface === 'Hard' && String(indoor).toUpperCase() === 'I' ? 'HardI' : surface);
 
@@ -196,7 +275,11 @@ const conditionOf = (surface, indoor) => (surface === 'Hard' && String(indoor).t
 function replay(rows, onMatch, P = PARAMS) {
   const players = new Map();
   const totals = {}; // media del circuito por superficie, también acumulada
-  const avgOf = c => { const t = totals[c]?.pts > 2000 ? totals[c] : totals.all; return t && t.pts > 2000 ? { sv: t.won / t.pts } : { sv: 0.635 }; };
+  const avgOf = c => {
+    const t = totals[c]?.pts > 2000 ? totals[c] : totals.all;
+    if (!t || t.pts <= 2000) return { sv: 0.635, ace: 0.07 };
+    return { sv: t.won / t.pts, ace: t.acePts > 2000 ? t.aces / t.acePts : 0.07 };
+  };
   const list = rows.filter(played).slice().sort((x, y) => String(x.tourney_date).localeCompare(String(y.tourney_date)) || (ROUND[x.round] ?? 3) - (ROUND[y.round] ?? 3) || num(x.match_num) - num(y.match_num));
   const get = (name, rank) => { const k = norm(name); if (!players.has(k)) players.set(k, newPlayer(rank)); return players.get(k); };
   for (const m of list) {
@@ -228,7 +311,18 @@ function replay(rows, onMatch, P = PARAMS) {
       });
       add(w, rl, ws, wp, lp - ls, lp);
       add(l, rw, ls, lp, wp - ws, wp);
-      for (const key of [cond, 'all']) { const t = (totals[key] ??= { won: 0, pts: 0 }); t.won += ws + ls; t.pts += wp + lp; }
+      // Aces: los de cada uno frente a los que se esperaban ante ese rival, y los que le hicieron frente a los esperados
+      const aces = m.w_ace !== '' && m.l_ace !== '' && m.w_ace != null && m.l_ace != null;
+      if (aces) {
+        const wa = num(m.w_ace), la = num(m.l_ace), kw = aceRates(w, day, P), kl = aceRates(l, day, P);
+        Object.assign(w.hist[w.hist.length - 1], { ac: wa, ae: wp * avg.ace * kl.g, aa: la, ar: lp * avg.ace * kl.f });
+        Object.assign(l.hist[l.hist.length - 1], { ac: la, ae: lp * avg.ace * kw.g, aa: wa, ar: wp * avg.ace * kw.f });
+      }
+      for (const key of [cond, 'all']) {
+        const t = (totals[key] ??= { won: 0, pts: 0, aces: 0, acePts: 0 });
+        t.won += ws + ls; t.pts += wp + lp;
+        if (aces) { t.aces += num(m.w_ace) + num(m.l_ace); t.acePts += wp + lp; }
+      }
     }
     w.last = l.last = day;
   }
@@ -248,7 +342,14 @@ function predict(a, b, surface, day, avg, bestOf = 3, P = PARAMS) {
   const p3 = sigmoid(P.wElo * logit(clamp(pElo, 0.005, 0.995)) + P.wStats * logit(clamp(pStats, 0.005, 0.995)));
   const [xa, xb] = anchor(sa, sb, p3, 3, P);
   const pModel = bestOf === 3 ? p3 : matchWinMix(xa, xb, bestOf, P);
-  return { pElo, pStats, pModel, sa, sb, serveA: xa, serveB: xb, ra, rb, ea, eb, bestOf };
+  // Aces por punto al saque de cada uno en este partido: la media de la pista, lo que saca él y lo que le hacen al otro
+  const ka = aceRates(a, day, P), kb = aceRates(b, day, P);
+  const base = (avg.ace ?? 0.07) * (P.aceScale ?? 1);
+  const aces = { a: base * ka.f * kb.g, b: base * kb.f * ka.g, seen: Math.min(ka.seen, kb.seen) };
+  return { pElo, pStats, pModel, sa, sb, serveA: xa, serveB: xb, ra, rb, ea, eb, bestOf, aces };
 }
 
-module.exports = { PARAMS, paramsOf, conditionOf, holdProb, tiebreakA, setOutcomes, matchWin, matchWinMix, matchDist, matchDistMix, firstSetDist, anchor, replay, predict, rates, clamp, logit, sigmoid, norm, num, finishedClean };
+module.exports = {
+  PARAMS, paramsOf, conditionOf, holdProb, tiebreakA, setOutcomes, matchWin, matchWinMix, matchDist, matchDistMix, firstSetDist, anchor, replay, predict, rates,
+  forms, aceRates, pointsPerGame, gameScores, afterGames, firstBreakA, acesTail, clamp, logit, sigmoid, norm, num, finishedClean
+};

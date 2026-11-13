@@ -13,6 +13,14 @@ API pública de ESPN (`sports/tennis/atp` y `wta`). El marcador trae todos los p
 juego. Se filtran por **día de España**, se traducen ronda y estado ("1.ª ronda", "2.º set") y se cruzan con el ranking.
 Cada jugador lleva `alt` con los nombres que usan las casas ("Sinner", "J. Sinner", "Sinner J").
 
+**Cruces de ESPN comprobados con LiveScore** (`checkRivals` en `index.js`, `mainTour` en `livescore.js`). ESPN a veces pone a
+la rival equivocada: el 13-11-2026, en las WTA Finals, dio Andreeva - Shnaider (la reserva) cuando LiveScore y las casas seguían
+con Andreeva - Muchova. Con eso el partido se quedaba sin cuotas ni recomendaciones, y el lector buscaba un partido que las casas no
+tenían. Ahora, si LiveScore tiene el partido a la misma hora (±30 min) con uno de los dos y otro rival, se pone el de LiveScore
+con su ficha de ESPN, pero sólo si ESPN lo tiene en ese torneo (sale en otro partido): si no, lo normal es que sea el mismo jugador
+escrito de otra forma y no se toca. El partido lleva `fixed` con lo que daba cada uno, y la app lo avisa en la columna del
+partido y en su ficha. Los terminados no se tocan.
+
 | Ruta | `window.api` | Qué devuelve |
 |---|---|---|
 | `GET /api/tennis/games?date=` | `tennis:games` | Partidos de ATP y WTA de ese día (`id` = `atp:123`): sets, tie-breaks, cabeza de serie, ranking, pista |
@@ -96,26 +104,59 @@ fichero por año y por circuito, más los torneos en curso), que se bajan cada 6
 
 ## Pendiente
 
-- No hay modelo de valor para el tenis (habría que estimar la probabilidad de ganar con el ranking o un Elo).
 - Dobles: no se muestran.
 
-## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/components/TennisPicks.tsx`)
+## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/lib/tennis-picks.ts`, `src/components/TennisPicks.tsx`)
 
-Pestaña *Recomendaciones* de cada partido sin empezar y banda *Las más fiables del día* en la lista. `GET /api/tennis/picks?date=&id=` y `GET /api/tennis/picks/day?date=`; el servicio pide las cuotas a `odds` (`quiet: true`: sólo lee).
+Igual que en el baloncesto, en la ATP y la WTA (los Challenger tienen su propio motor, arriba). Hay tres sitios:
+
+- La pestaña *Recomendaciones* de cada partido sin empezar.
+- La pantalla *Recomendaciones*, que se abre con el selector *Partidos / Recomendaciones* de arriba (se entra siempre en *Partidos*). Junta los partidos con cuotas de las próximas 24 horas o de un día, y se puede quedar en la ATP, en la WTA o en un solo partido. En pantallas anchas, la más fiable y las más fiables del día van en una columna al lado, y en el centro quedan los filtros y las tres listas.
+- La banda *Las más fiables del día* de la lista, con la más fiable de cada partido y el enlace a la pantalla.
+
+Las tres usan el mismo tablero:
+
+- **Filtros:** tipo de apuesta (ganador, hándicap de juegos, total de juegos, sets, saque y primeros juegos, aces u otras), partido entero o un set suelto, cuota mínima (1,15 por defecto) y *Sólo con valor*. Se guardan en `localStorage` (`tennis-picks`).
+- **Orden:** por probabilidad (por defecto) o por valor.
+- **Contenido:** la más fiable y tres listas.
+- **Al pulsar:** una recomendación de la pantalla abre su partido, y la cuota la manda al cupón.
+
+Rutas:
+
+- `GET /api/tennis/picks?date=&id=`: un partido.
+- `GET /api/tennis/picks/board?date=`: los partidos sin empezar de un día, sin la previa ni los cruces sin rival. Devuelve también los que aún no tienen cuotas. Se guarda un minuto.
+- `GET /api/tennis/picks/day?date=`: de cada partido del tablero, la más fiable y la más complicada según el servicio (la usaba la portada *Hoy*, ya quitada).
+
+Cada partido trae también `top`, `easy` y `hard`: la selección de siempre del servicio (la más fiable, tres fáciles y tres complicadas, de familias distintas). Son las que se registran para medir el acierto (`src/lib/predictions.ts`), sea cual sea el filtro que se esté mirando.
+
+El servicio pide las cuotas a `odds` (`quiet: true`: sólo lee) y devuelve todas las líneas que no descarta. La interfaz las filtra y las reparte (`src/lib/tennis-picks.ts`).
 
 **Modelo.** Sale de los CSV de TennisMyLife, reproducidos en orden y sin mirar nunca al futuro:
 
 - Elo general y por superficie (la retirada no cuenta) y puntos al saque y al resto *por encima de la media de cada condición*, con los partidos recientes pesando más y corregidos por el rival. Pista dura bajo techo es una condición propia: mezclarlas daba 0,7 juegos de menos bajo techo y 1,4 en hierba.
 - `logit(p) = wElo·logit(Elo) + wStats·logit(estadísticas)`, con pesos por circuito aprendidos con 2024.
-- Punto → juego → set → partido se calcula exacto, promediando la forma del día (`formSd`). De esa distribución salen ganador, sets, hándicaps, totales, juegos de cada jugador, sets sueltos, tie-break y combinaciones.
+- Punto → juego → set → partido se calcula exacto, promediando la forma del día (`formSd`). De esa distribución salen ganador, sets, hándicaps, totales, juegos de cada jugador, sets sueltos, tie-break, resultado exacto, set a cero, par o impar y combinaciones.
+- Con el saque de cada uno (`holdProb`, `gameScores`, `afterGames`, `firstBreakA`) salen el primer juego al saque de cada jugador y su marcador exacto, cómo van tras 2, 4 o 6 juegos y quién rompe primero. Quién saca primero no se sabe: mitad y mitad.
+- **Aces** (`aceRates`, `acesTail`): aces por punto al saque de cada jugador frente a los esperados ante sus rivales, y los que le hacen al resto, sobre la media de la pista; los partidos recientes pesan más (`aceHalfLife`) y con poca muestra manda la media (`acePrior`). Los puntos al saque salen del largo del partido. Para cada largo, una binomial negativa (`aceSize`), y una corrección de la media por circuito (`aceScale`). Los "Total de aces (logros)" de Winamax no se usan: sus cuotas no son las de un partido (a Sabalenka, que hace 4 o 5 de media, le daban un 58 % de llegar a 10), y parecen del torneo entero.
 
 **Mezcla con la casa.** La probabilidad final mezcla modelo y casa sin margen en logit: 25 % el modelo (10 % con poca muestra), y menos cuanto mayor es la discrepancia. Ese 25 % es una decisión, no una medida: no hay cuotas históricas gratuitas con las que ajustarlo. Los partidos se recalculan con la probabilidad final para que todos los mercados cuadren.
 
-**Selección.**
+**Selección.** El servicio descarta lo que nunca se recomienda:
 
-- *La más fiable*: probabilidad ≥ 60 %, cuota ≥ 1,15, fiabilidad ≥ 50, valor ≥ −7 %. Se ordena por probabilidad + valor. Puede no haber ninguna.
-- *Más fáciles*: probabilidad ≥ 60 %, por valor, sin repetir tipo de mercado.
-- *Más complicadas*: probabilidad entre 15 y 45 %, cuota de 2,20 a 15. Contra el favorito sólo con valor ≥ 3 %.
+- discrepa de la casa en más de 20 puntos;
+- cuota fuera de 1,15-15;
+- probabilidad < 15 %;
+- valor < −12 %;
+- fiabilidad < 35.
+
+Del resto, en la interfaz:
+
+- *La más fiable*: probabilidad ≥ 60 %, fiabilidad ≥ 50, valor ≥ −7 %. Se ordena por probabilidad + valor, y un set suelto cuenta algo menos. Puede no haber ninguna.
+- *Más fáciles*: probabilidad ≥ 60 %, valor ≥ −10 % y fiabilidad ≥ 40.
+- *Equilibradas*: probabilidad de 45 a 60 %, con los mismos mínimos.
+- *Más complicadas*: probabilidad < 45 % y cuota ≥ 2,20. Contra el favorito, sólo con valor ≥ 3 %.
+- *Con valor*: valor ≥ 2 % y fiabilidad ≥ 55, lo mismo que en el baloncesto.
+- Repeticiones: con *Todo* sale una línea por tipo de mercado y partido. Con un tipo elegido salen todas sus líneas, para compararlas. En la pantalla de varios partidos, como mucho dos de cada partido por lista.
 - Fiabilidad 0-100: datos de los jugadores, acuerdo modelo-casa sobre el ganador, tipo de mercado y cuotas. Se descarta lo que discrepa más de 20 puntos de la casa: suele ser un mercado mal leído o algo que el modelo no sabe.
 
 **Comprobación** (`node server/services/tennis/backtest.js <carpeta CSV> atp|wta 20250101`). Sobre partidos de 2025 y 2026, no usados para ajustar:
@@ -129,6 +170,16 @@ Pestaña *Recomendaciones* de cada partido sin empezar y banda *Las más fiables
 | Dice 84 % → pasa | 82,4 % | 84,9 % |
 | Juegos por partido: real / modelo | 26,05 / 26,11 | 22,04 / 22,11 |
 
+Aces (2025-2026; los parámetros, con 2024):
+
+| | ATP | WTA |
+|---|---|---|
+| Aces por partido: real / modelo | 13,65 / 13,87 | 5,82 / 5,98 |
+| Un jugador, "k o más": dice 55 % → pasa | 56,5 % | 54,9 % |
+| Entre los dos: dice 75 % → pasa | 75,5 % | 71,9 % |
+
+En la WTA se pasa algo de confiado en lo más alto. Set a cero (ATP): dice 13 % → pasa 12 %.
+
 Los pesos y `formSd` se ajustaron sólo con 2024, pero el sesgo bajo techo y en hierba se vio mirando 2025-26, así que esta comprobación no es del todo ciega. Queda algo de sesgo en hierba (ATP: 24,97 juegos reales, 24,34 del modelo).
 
-Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: aces, roturas, primeros juegos, lesiones y cansancio. Sólo hay partidos del circuito principal: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.
+Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: dobles faltas, lesiones y cansancio. El primer juego al saque, los primeros juegos y el primer break no se pueden comprobar con el marcador final de los CSV: en la fiabilidad cuentan menos (`trustOf`). Sólo hay partidos del circuito principal: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.

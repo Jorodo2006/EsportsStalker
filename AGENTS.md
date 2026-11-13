@@ -130,17 +130,20 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   competición con tarjetas `MatchCard`, sección `LiveSection` de partidos en juego, marcador).
   Clases con `cn()` de `src/lib/format.ts`. Formato de números y dinero con `money`, `odd`, `pct`, `fmtDate`.
 - Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,
-  competiciones del día y cartera); desde 1400 px además una columna derecha con el cupón fijo (`<Coupon docked />`) y
-  los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
+  competiciones del día y cartera); desde 1400 px además una columna derecha de 300 px (el ancho de los anuncios) con el
+  cupón fijo (`<Coupon docked />`), un anuncio de 300×250, los partidos en directo y otro de 300×600. Por debajo, cabecera
+  arriba, barra inferior y cupón flotante. Los huecos de anuncios son `AdSlot` (`src/components/AdSlot.tsx`), de momento
+  marcadores con su tamaño: cuando haya cuenta de AdSense, el anuncio va ahí. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
-- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): sólo con los partidos importantes y sin nada de dinero
-  (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores recomendaciones y próximos. Enseña el deporte elegido
-  arriba (con más competiciones: desde `ONE_CUT`); el interruptor *Los cinco deportes* vuelve a la portada común (desde `CUT`) y se
-  recuerda en el navegador. "Importante" es una nota por competición, nivel de equipos o jugadores y ronda (`footballScore`,
-  `basketScore`, `tennisScore`, `mmaScore`, `lolScore`): se ajusta ahí. Reutiliza las
-  mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
-  con `useFocus`.
+- La app se abre en **Partidos** del deporte elegido (vista `matches`), que ya empieza en el día de hoy y deja ir a otros días.
+  La portada *Hoy* (`TodayView`) se quitó en la rama `hugodev` porque repetía lo de *Partidos* y confundía. Si vuelve, está en el
+  historial de git. Las recomendaciones de cada deporte van en su pantalla *Recomendaciones* (selector *Partidos / Recomendaciones*)
+  y, en pantallas anchas, al lado de la lista: primero los partidos.
+- **Tenis · Partidos** (`src/components/TennisList.tsx`): cada torneo en su panel, con el logo del circuito (`tennis-logos.tsx`:
+  ATP y WTA de 2025, en el color del texto; el del Challenger, `public/tennis/atp-challenger.png`), la superficie y la ciudad;
+  dentro, sus rondas y una fila por partido. Los que están en juego se quedan en su torneo. Al lado, el partido elegido
+  (`TennisSpotlight`) y las más fiables del día.
 - **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
   con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
   (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
@@ -202,6 +205,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   identificadores distintos y se juntan en `mergeSources` (`src/data.js`): si cambias algo ahí, mira cuántos jugadores se emparejan y
   cuántos partidos se cuentan dos veces. `challenger.historial` sólo admite añadir (un disparador lo impide): nunca metas picks de
   prueba en la base de datos de verdad, no se pueden borrar.
+- **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`). Detalle en `docs/specs/09-tenis.md`.
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Rendimiento** (`docs/specs/07-backend.md`, "Rendimiento de la web"): las consultas de cuotas no sondean cada minuto;
   llevan `meta: oddsMeta(partido)` y las recarga el aviso `odds:imported` (`src/lib/odds-live.ts`). Si añades una, haz lo

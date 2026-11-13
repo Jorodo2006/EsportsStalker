@@ -102,11 +102,47 @@ async function between(from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
   const lists = await Promise.all(Object.keys(TOURS).map(t => matches(t, days).catch(e => { console.error(`[tennis] ${t}:`, e.message); return []; })));
-  return lists.flat().filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; })
-    .sort((x, y) => new Date(x.date) - new Date(y.date));
+  const all = lists.flat();
+  const list = all.filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; }).sort((x, y) => new Date(x.date) - new Date(y.date));
+  return checkRivals(list, all, days);
+}
+
+// ESPN a veces pone a la rival equivocada en un cruce (en las WTA Finals de 2026 dio a Shnaider, la reserva, en lugar de
+// Muchova, mientras LiveScore y las casas seguían con Muchova). Con eso el partido se queda sin cuotas ni recomendaciones,
+// porque las casas no lo tienen. Si LiveScore tiene el partido a la misma hora con uno de los dos y otro rival, se pone el de
+// LiveScore, con su ficha de ESPN. Sólo si ESPN la tiene en ese torneo (sale en otro partido): si no, lo normal es que sea el
+// mismo jugador escrito de otra forma ("Shnaider" y "Shnayder") y no se toca. Se avisa en `fixed`
+const keyOf = n => String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]+/g, ' ').trim().split(/\s+/).pop();
+const told = new Set(); // cada corrección se apunta en el registro una vez, no en cada consulta
+async function checkRivals(list, all, days) {
+  if (!list.some(m => m.state !== 'post')) return list;
+  const ev = await ls.mainTour(days).catch(e => { console.error('[tennis] LiveScore (cruces):', e.message); return []; });
+  if (!ev.length) return list;
+  const fresh = p => ({ ...p, sets: [], setWins: [], tiebreaks: [], winner: false });
+  return list.map(m => {
+    if (m.state === 'post') return m;
+    const t = new Date(m.date).getTime(), ka = keyOf(m.a.name), kb = keyOf(m.b.name);
+    for (const e of ev) {
+      if (Math.abs(e.at - t) > 30 * 60e3) continue;
+      const ea = keyOf(e.a), eb = keyOf(e.b);
+      const keep = [ka, kb].filter(k => k === ea || k === eb);
+      if (keep.length !== 1) continue;
+      const side = keep[0] === ka ? 'b' : 'a', wrong = m[side];
+      if (/^(tbd|por determinar)$/i.test(wrong.name)) continue;
+      const k = keyOf(keep[0] === ea ? e.b : e.a);
+      const known = all.find(x => x.tournamentId === m.tournamentId && (keyOf(x.a.name) === k || keyOf(x.b.name) === k));
+      if (!known) continue;
+      const right = fresh(keyOf(known.a.name) === k ? known.a : known.b);
+      const note = `${m.id}: ESPN da a ${wrong.name} y LiveScore a ${right.name}; se usa LiveScore`;
+      if (!told.has(note)) { told.add(note); console.log(`[tennis] ${note}`); }
+      return { ...m, [side]: right, fixed: `ESPN daba a ${wrong.name}; LiveScore y las casas, a ${right.name}` };
+    }
+    return m;
+  });
 }
 
 // Los Challenger sólo entran en las pantallas de partidos: el modelo, las recomendaciones y las fichas de jugador no tienen sus datos
+// (su motor va aparte, servicio challenger)
 async function withChallengers(list, from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
@@ -177,8 +213,28 @@ async function profile(tour, id) {
   };
 }
 
-// Mirar todo el día cuesta: dos pantallas seguidas no deben repetirlo
-const dayPicks = new Map();
+// Recomendaciones de todos los partidos sin empezar de un día de la ATP y la WTA. Sin la previa: casi nadie la apuesta y el lector no la mira.
+// Mirar todo el día cuesta: se guarda un minuto, y las pantallas que lo piden a la vez esperan al mismo cálculo
+const boards = new Map();
+function boardOf(date) {
+  const hit = boards.get(date);
+  if (hit && Date.now() - hit.t < 60e3) return hit.v;
+  const v = (async () => {
+    // Sin los cruces que aún no tienen rival ("TBD"): no pueden tener cuotas
+    const known = p => p.name && !/^(tbd|por determinar)$/i.test(p.name);
+    const list = (await between(date, date)).filter(m => m.state === 'pre' && !/^previa/i.test(m.round) && known(m.a) && known(m.b));
+    const matches = [], noOdds = [];
+    for (const m of list) {
+      const r = await picksFor(m).catch(e => { console.error('[tennis] recomendaciones:', m.id, e.message); return null; });
+      if (r?.ready) matches.push({ m, day: date, ...r });
+      else if (r?.reason === 'noodds') noOdds.push({ id: m.id, date: m.date, a: m.a.name, b: m.b.name });
+    }
+    return { matches, noOdds };
+  })();
+  boards.set(date, { t: Date.now(), v });
+  v.catch(() => boards.delete(date));
+  return v;
+}
 
 // Buscador: partidos de ayer a dentro de una semana (sin los Challenger, que salen aparte) y torneos de esos días
 async function search(raw) {
@@ -217,25 +273,17 @@ const routes = [
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     return profile(params.tour, params.id);
   }],
-  // Recomendaciones de un partido, o las mejores de un día entre los partidos con cuotas leídas
+  // Recomendaciones de un partido; las de todos los partidos de un día que tienen cuotas leídas (board), y la más fiable y la
+  // más complicada de cada uno, de la más probable a la menos (day: la portada Hoy)
   ['GET', '/api/tennis/picks', async ({ query: q }) => {
     const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
     if (!m) throw fail('Partido no encontrado');
     return picksFor(m);
   }],
-  ['GET', '/api/tennis/picks/day', async ({ query: q }) => {
-    const hit = dayPicks.get(q.date);
-    if (hit && Date.now() - hit.t < 60e3) return hit.v;
-    const list = (await between(valid(q.date), valid(q.date))).filter(m => m.state === 'pre' && !/^previa/i.test(m.round));
-    const out = [];
-    for (const m of list) {
-      const r = await picksFor(m).catch(e => { console.error('[tennis] recomendaciones:', m.id, e.message); return null; });
-      if (r?.ready && r.top) out.push({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top: r.top, hard: r.hard[0] ?? null });
-    }
-    out.sort((x, y) => y.top.p - x.top.p);
-    dayPicks.set(q.date, { t: Date.now(), v: out });
-    return out;
-  }],
+  ['GET', '/api/tennis/picks/board', ({ query: q }) => boardOf(valid(q.date))],
+  ['GET', '/api/tennis/picks/day', async ({ query: q }) => (await boardOf(valid(q.date))).matches.filter(x => x.top)
+    .map(({ m, top, hard }) => ({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top, hard: hard[0] ?? null }))
+    .sort((x, y) => y.top.p - x.top.p)],
   ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await between(valid(q.date), valid(q.date)), q.date, q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Sun, Swords, Users, Wallet } from 'lucide-react';
+import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Swords, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -11,6 +11,8 @@ import { LiveDot } from '@/components/sport';
 import { panelCls } from '@/components/ui';
 import { FooterJuego } from '@/components/FooterJuego';
 import { surname } from '@/components/viz';
+import { AdSlot } from '@/components/AdSlot';
+import { useMedia } from '@/lib/use-media';
 import MatchesView from '@/views/MatchesView';
 import PlayersView from '@/views/PlayersView';
 import BasketMatches from '@/views/BasketMatches';
@@ -24,7 +26,6 @@ import MmaFights from '@/views/MmaFights';
 import MmaFighters from '@/views/MmaFighters';
 import { MmaIcon } from '@/components/mma';
 import BetsView from '@/views/BetsView';
-import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
 import AccountView from '@/views/AccountView';
 import { useUser } from '@/components/AuthGate';
@@ -34,11 +35,11 @@ import { SearchDialog, useSearchShortcut } from '@/components/Search';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
 //   - desde lg: menú lateral a la izquierda (deportes, navegación, competiciones del día y cartera) y el contenido;
-//   - desde 1400 px: además, a la derecha, el cupón fijo y los partidos en directo;
+//   - desde 1400 px: además, a la derecha (300 px, el ancho de los anuncios), el cupón fijo, un anuncio, los partidos en directo
+//     y otro anuncio;
 //   - por debajo de lg: cabecera arriba, barra de navegación abajo y el cupón flotante.
 
 const NAV: { view: View; label: string; icon: typeof Users }[] = [
-  { view: 'today', label: 'Hoy', icon: Sun },
   { view: 'matches', label: 'Partidos', icon: CalendarDays },
   { view: 'players', label: 'Jugadores', icon: Users },
   { view: 'bets', label: 'Apuestas', icon: Wallet }
@@ -63,18 +64,6 @@ const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: {
   { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon },
   { id: 'mma', label: 'MMA', long: 'MMA', color: '#bf5a5a', icon: MmaIcon }
 ];
-
-// Si la pantalla cumple una media query (para montar el cupón fijo o el flotante, no los dos)
-function useMedia(query: string) {
-  const [on, setOn] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const m = window.matchMedia(query);
-    const h = () => setOn(m.matches);
-    m.addEventListener('change', h);
-    return () => m.removeEventListener('change', h);
-  }, [query]);
-  return on;
-}
 
 // Un partido en juego para la lista de la columna derecha
 interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactNode; info: string; open: () => void }
@@ -167,7 +156,6 @@ export default function App() {
             <div className="min-w-0 flex-1">
               <BackendBanner />
               <ScreenGuard key={`${app}:${view}`}>
-              {view === 'today' && <TodayView />}
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && <BetsView key={app} />}
@@ -176,16 +164,18 @@ export default function App() {
               </ScreenGuard>
             </div>
             {wide && (
-              <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[340px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">
+              <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[300px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">
                 <Coupon docked />
+                <AdSlot size="rect" />
                 <LiveNow items={liveItems} onAll={() => go('matches')} />
+                <AdSlot size="half" />
               </aside>
             )}
           </div>
           <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} inner="max-w-[1680px] px-3 lg:px-5" />
         </main>
 
-        <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <nav className="grid shrink-0 grid-cols-3 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
           {NAV.map(({ view: v, label, icon: Icon }) => (
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
