@@ -4,7 +4,7 @@
 const { query } = require('../../shared/db');
 const { fail } = require('../../shared/service');
 
-const SPORTS = ['basket', 'tennis', 'football', 'lol'];
+const SPORTS = ['basket', 'tennis', 'football', 'mma', 'lol'];
 // null y '' no son 0: una recomendación sin probabilidad de la casa no dice que la casa dé 0 %
 const num = (v, lo, hi) => { if (v == null || v === '') return null; const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
 const txt = (v, max) => String(v ?? '').trim().slice(0, max);
@@ -43,11 +43,11 @@ async function record(list) {
 
 // Las que ya deberían haber acabado. resultOf y evaluate son los del resolvedor de apuestas
 async function settle(resultOf, evaluate, dayOf) {
-  const { rows } = await query(`SELECT id, sport, match, key, out, start FROM bets.predictions
+  const { rows } = await query(`SELECT id, sport, match, key, out, start, event FROM bets.predictions
     WHERE status = 'pending' AND start < now() - interval '2 hours' ORDER BY start LIMIT 800`);
   let n = 0;
   for (const r of rows) {
-    const ref = { sport: r.sport, match: r.match, key: r.key, out: r.out, start: r.start.toISOString() };
+    const ref = { sport: r.sport, match: r.match, key: r.key, out: r.out, start: r.start.toISOString(), event: r.event };
     const R = await resultOf({ ...ref, date: dayOf(r.start) });
     const v = R ? evaluate(ref, R) : null;
     if (v) {

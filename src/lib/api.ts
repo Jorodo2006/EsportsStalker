@@ -2,8 +2,8 @@
 // Se publica en window.api para que las vistas no tengan que saber cómo se habla con el backend.
 import marcador from '../../chrome/bookmarklet/marcador.js?raw';
 import { fromCsv, toCsv } from './csv';
-import { footballPredictions, logPredictions, tennisPredictions } from './predictions';
-import type { Api, AutoJob, FootballDayPick, TeamRef, TennisDayPick } from './types';
+import { footballPredictions, logPredictions, mmaPredictions, tennisPredictions } from './predictions';
+import type { Api, AutoJob, FootballDayPick, MmaDayPick, TeamRef, TennisDayPick } from './types';
 
 const DOWN = 'El servidor no responde. Arranca el backend con «npm run backend» (hace falta Docker Desktop encendido).';
 const TIMEOUT = 180e3; // las stats esperan en la cola de Leaguepedia
@@ -37,10 +37,11 @@ const get = (path: string, params?: Record<string, unknown>) => {
 };
 const part = encodeURIComponent;
 
-type MatchRef = { a?: TeamRef; b?: TeamRef; start?: string; sport?: string; league?: string };
+type MatchRef = { a?: TeamRef; b?: TeamRef; start?: string; sport?: string; league?: string; event?: string };
 const team = (t?: TeamRef) => ({ name: t?.name, code: t?.code, ...(t?.alt?.length ? { alt: t.alt } : {}) });
 // sport y league: el lector de Docker busca el partido en la sección de ese deporte
-const matchOf = (m?: MatchRef) => ({ a: team(m?.a), b: team(m?.b), start: m?.start, ...(m?.sport ? { sport: m.sport, league: m.league } : {}) });
+// event: el cartel de MMA ("UFC 334: …"), con el que el lector encuentra el grupo del evento en Betway
+const matchOf = (m?: MatchRef) => ({ a: team(m?.a), b: team(m?.b), start: m?.start, ...(m?.sport ? { sport: m.sport, league: m.league } : {}), ...(m?.event ? { event: m.event } : {}) });
 
 function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
@@ -174,6 +175,22 @@ export const api: Api = {
     // Las del día se registran para medir si el modelo acierta (las ve la lista de fútbol y la portada Hoy)
     picksDay: date => get('/api/football/picks/day', { date }).then((list: FootballDayPick[]) => {
       logPredictions(list.flatMap(d => footballPredictions(d, [d.top, d.hard])));
+      return list;
+    })
+  },
+  mma: {
+    leagues: () => get('/api/mma/leagues'),
+    games: date => get('/api/mma/games', { date }),
+    days: (from, n) => get('/api/mma/days', { from, n }),
+    live: () => get('/api/mma/live'),
+    match: id => get('/api/mma/match', { id }),
+    fighter: id => get('/api/mma/fighter', { id }),
+    ranking: () => get('/api/mma/ranking'),
+    profile: id => get('/api/mma/profile', { id }),
+    picks: (date, id) => get('/api/mma/picks', { date, id }),
+    // Las del día se registran para medir si el modelo acierta (las ven la lista de MMA y la portada Hoy)
+    picksDay: date => get('/api/mma/picks/day', { date }).then((list: MmaDayPick[]) => {
+      logPredictions(list.flatMap(d => mmaPredictions(d, [d.top, d.hard])));
       return list;
     })
   },

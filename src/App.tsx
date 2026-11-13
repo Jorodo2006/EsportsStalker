@@ -19,6 +19,9 @@ import TennisPlayers from '@/views/TennisPlayers';
 import FootballMatches from '@/views/FootballMatches';
 import FootballStandings from '@/views/FootballStandings';
 import { FootballIcon } from '@/components/football';
+import MmaFights from '@/views/MmaFights';
+import MmaFighters from '@/views/MmaFighters';
+import { MmaIcon } from '@/components/mma';
 import BetsView from '@/views/BetsView';
 import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
@@ -38,8 +41,8 @@ const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'players', label: 'Jugadores', icon: Users },
   { view: 'bets', label: 'Apuestas', icon: Wallet }
 ];
-// En fútbol la segunda sección son las clasificaciones de las ligas
-const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : label);
+// En fútbol la segunda sección son las clasificaciones de las ligas; en MMA, los luchadores
+const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : v === 'players' && app === 'mma' ? 'Luchadores' : label);
 
 // Pelota de tenis (lucide no tiene): círculo con las dos curvas de la costura
 function TennisBall({ size = 16 }: { size?: number }) {
@@ -55,7 +58,8 @@ const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: {
   { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords },
   { id: 'basket', label: 'Baloncesto', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
   { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall },
-  { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon }
+  { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon },
+  { id: 'mma', label: 'MMA', long: 'MMA', color: '#bf5a5a', icon: MmaIcon }
 ];
 
 // Si la pantalla cumple una media query (para montar el cupón fijo o el flotante, no los dos)
@@ -84,7 +88,8 @@ export default function App() {
   const { data: basketLive } = useQuery({ queryKey: ['basket', 'live'], queryFn: () => window.api.basket.live(), refetchInterval: 60_000, enabled: !!window.api.basket });
   const { data: tennisLive } = useQuery({ queryKey: ['tennis', 'live'], queryFn: () => window.api.tennis.live(), refetchInterval: 60_000, enabled: !!window.api.tennis });
   const { data: footballLive } = useQuery({ queryKey: ['football', 'live'], queryFn: () => window.api.football.live(), refetchInterval: 60_000, enabled: !!window.api.football });
-  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0, tennis: tennisLive?.length ?? 0, football: footballLive?.length ?? 0 };
+  const { data: mmaLive } = useQuery({ queryKey: ['mma', 'live'], queryFn: () => window.api.mma.live(), refetchInterval: 60_000, enabled: !!window.api.mma });
+  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0, tennis: tennisLive?.length ?? 0, football: footballLive?.length ?? 0, mma: mmaLive?.length ?? 0 };
   // Cada sección empieza arriba (si no, se hereda el desplazamiento de la anterior)
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
@@ -106,14 +111,19 @@ export default function App() {
           id: t.id, a: surname(t.a.name), b: surname(t.b.name), sa: t.a.setWins.filter(Boolean).length, sb: t.b.setWins.filter(Boolean).length,
           info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id)
         }))
-        : (footballLive ?? []).map(g => ({
-          id: g.id, a: g.home.short || g.home.name, b: g.away.short || g.away.name, sa: g.home.score ?? 0, sb: g.away.score ?? 0,
-          info: [g.leagueName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
-        }));
+        : app === 'football'
+          ? (footballLive ?? []).map(g => ({
+            id: g.id, a: g.home.short || g.home.name, b: g.away.short || g.away.name, sa: g.home.score ?? 0, sb: g.away.score ?? 0,
+            info: [g.leagueName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+          }))
+          : (mmaLive ?? []).map(g => ({
+            id: g.id, a: surname(g.a.name), b: surname(g.b.name), sa: '', sb: '',
+            info: [g.orgName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+          }));
 
   // Selector de app del móvil: control segmentado; la elegida en gris claro y cada una con el punto de su color
   const appTabs = (
-    <div className="grid grid-cols-4 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
+    <div className="grid grid-cols-5 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist" aria-label="App">
       {APPS.map(({ id, label, color }) => (
         <button key={id} role="tab" aria-selected={app === id} onClick={() => switchApp(id)} data-app={id}
           className={cn('flex h-8 min-w-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-md px-1 text-xs font-medium transition sm:gap-1.5 sm:px-2 sm:text-[13px]',
@@ -154,8 +164,8 @@ export default function App() {
             <div className="min-w-0 flex-1">
               <BackendBanner />
               {view === 'today' && <TodayView />}
-              {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : <FootballMatches />)}
-              {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : <FootballStandings />)}
+              {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
+              {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && <BetsView key={app} />}
               {view === 'settings' && <SettingsView />}
               {view === 'account' && <AccountView />}
@@ -190,10 +200,9 @@ export default function App() {
   );
 }
 
+// El logo (public/logo.png, con fondo transparente): el icono y el nombre
 function Logo({ big }: { big?: boolean }) {
-  return (
-    <div className={cn('shrink-0 font-semibold tracking-tight text-zinc-50', big ? 'text-[17px]' : 'text-base')}>Sharpex</div>
-  );
+  return <img src="/logo.png" alt="Sharpex" className={cn('block w-auto shrink-0', big ? 'h-7' : 'h-6')} />;
 }
 
 // Menú lateral de escritorio: deportes, navegación, competiciones de la lista de partidos y la cartera abajo

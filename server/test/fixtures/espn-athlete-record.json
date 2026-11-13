@@ -1,0 +1,49 @@
+{
+ "summary": "14-2-0",
+ "stats": [
+  {
+   "name": "losses",
+   "value": 2
+  },
+  {
+   "name": "wins",
+   "value": 14
+  },
+  {
+   "name": "draws",
+   "value": 0
+  },
+  {
+   "name": "noContests",
+   "value": 1
+  },
+  {
+   "name": "submissionLosses",
+   "value": 1
+  },
+  {
+   "name": "submissions",
+   "value": 3
+  },
+  {
+   "name": "titleDraws",
+   "value": 2
+  },
+  {
+   "name": "titleLosses",
+   "value": 2
+  },
+  {
+   "name": "titleWins",
+   "value": 5
+  },
+  {
+   "name": "tkoLosses",
+   "value": 0
+  },
+  {
+   "name": "tkos",
+   "value": 7
+  }
+ ]
+}

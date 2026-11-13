@@ -101,7 +101,36 @@ function winamaxFind(teams, cfg) {
   const norm = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const strip = x => norm(x).replace(/\b(e ?sports?|gaming|team|club|academy|bc|bk|kk|fc|basket(ball)?)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const al = t => [...new Set([t.name, t.code, ...(t.alt || [])].flatMap(x => [norm(x), strip(x)]).filter(x => x && x.length >= 2))];
-  const eq = (name, t) => { const n = norm(name), st = strip(name); return al(t).some(x => x === n || x === st || (x.length > 3 && (n.includes(x) || x.includes(n)))); };
+  // Errata de una letra en el apellido con la misma inicial ("Charlie Radke" por "Charles Radtke"): las casas no escriben igual
+  const near = (x, y) => {
+    if (Math.abs(x.length - y.length) > 1) return false;
+    let i = 0;
+    while (i < x.length && i < y.length && x[i] === y[i]) i++;
+    return x.slice(i + 1) === y.slice(i + 1) || x.slice(i) === y.slice(i + 1) || x.slice(i + 1) === y.slice(i);
+  };
+  const fuzzy = (name, t) => {
+    const wn = norm(name).split(' ').filter(Boolean), ln = wn[wn.length - 1];
+    return [t.name, ...(t.alt || [])].some(full => {
+      const wt = norm(full).split(' ').filter(Boolean), lt = wt[wt.length - 1];
+      return wt.length >= 2 && wn.length >= 2 && wt[0][0] === wn[0][0] && lt.length >= 5 && ln.length >= 5 && lt !== ln && near(lt, ln);
+    });
+  };
+  // MMA: nombre y apellido (o su inicial); el apellido solo no basta ("Silva", "Rodriguez" son de muchos luchadores)
+  const wordsOf = s => norm(s).split(' ').filter(Boolean);
+  const dist = (a, b) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  };
+  const strictEq = (name, t) => {
+    const nw = wordsOf(name), tw = wordsOf(t.name);
+    if (!nw.length || !tw.length) return false;
+    if (tw.length === 1) return nw.join('').includes(tw[0]);
+    const ln = tw[tw.length - 1], fn = tw[0];
+    return nw.some(x => x === ln || (ln.length >= 5 && x.length >= 5 && dist(x, ln) <= 1)) && nw.some(x => x.startsWith(fn) || fn.startsWith(x) || (fn.length >= 6 && x.length >= 6 && dist(fn, x) <= 2));
+  };
+  const eq = (name, t) => { if (cfg.sport === 117) return strictEq(name, t); const n = norm(name), st = strip(name); return al(t).some(x => x === n || x === st || (x.length > 3 && (n.includes(x) || x.includes(n)))) || fuzzy(name, t); };
   const pick = matches => {
     for (const m of Object.values(matches || {})) {
       if (!m || !m.competitor1Name || (cfg.sport && m.sportId !== cfg.sport)) continue;
@@ -271,6 +300,17 @@ const SPORT_CFG = {
     wm: 1, tours: job => FOOTBALL_TOURS[job.match.league] || '^\\s*laliga\\s*$|^premier league$|^champions league$',
     bw: job => (FOOTBALL_LISTS[job.match.league] ? 'grp/soccer/' + FOOTBALL_LISTS[job.match.league] : null), bwCat: 'cat/soccer',
     skip: /^(SGP|marketGroup\.fullTime|1st half)$/
+  },
+  // MMA: Winamax tiene el deporte 117 (torneos "UFC 334: …", "PFL Dubai"). Betway agrupa por cartel: "ufc-334", "ufc-fight-night", "pfl"
+  mma: {
+    wm: 117, tours: job => ({ ufc: 'ufc', pfl: 'pfl', wow: 'wow' })[job.match.league] || 'ufc|pfl',
+    bw: job => {
+      const ev = String(job.match.event || '');
+      const n = /^UFC (\d+)/i.exec(ev);
+      const base = 'grp/ufc---martial-arts/upcoming-fights/';
+      return job.match.league === 'pfl' ? base + 'pfl' : n ? `${base}ufc-${n[1]}` : /fight night/i.test(ev) ? base + 'ufc-fight-night' : null;
+    },
+    bwCat: 'cat/ufc---martial-arts'
   }
 };
 const cfgOf = job => SPORT_CFG[job.match.sport] || SPORT_CFG.basket;

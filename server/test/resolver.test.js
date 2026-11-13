@@ -98,3 +98,57 @@ test('ref: se guarda si es válida y se descarta si no (la apuesta se guarda igu
   assert.equal(combo.odds, 2); // la nula cuenta 1
   assert.equal(combo.legs[0].ref.out, 'a');
 });
+
+// MMA: a es la esquina roja. Resultado: gana b por KO en el asalto 1, 4:16
+const mma = (r = {}) => ({ sport: 'mma', label: 'A vs B', score: () => null, mma: { winner: 'b', method: 'ko', round: 1, time: '4:16', draw: false, noContest: false, ...r } });
+
+test('MMA: ganador y método por luchador', () => {
+  assert.equal(ev('moneyline|0||', 'b', mma()), 'won');
+  assert.equal(ev('moneyline|0||', 'a', mma()), 'lost');
+  assert.equal(ev('method|0|ko|', 'b', mma()), 'won');
+  assert.equal(ev('method|0|ko|', 'a', mma()), 'lost'); // ganó el otro
+  assert.equal(ev('method|0|sub|', 'b', mma()), 'lost'); // ganó, pero no por sumisión
+  assert.equal(ev('method|0|dec|', 'b', mma({ method: 'dec', round: 3, time: '5:00' })), 'won');
+});
+
+test('MMA: llega a decisión sólo si acaba por decisión', () => {
+  assert.equal(ev('distance|0||', 'yes', mma()), 'lost');
+  assert.equal(ev('distance|0||', 'no', mma()), 'won');
+  assert.equal(ev('distance|0||', 'yes', mma({ method: 'dec', round: 3, time: '5:00' })), 'won');
+});
+
+test('MMA: total de asaltos por tiempo (asaltos de 5 minutos)', () => {
+  // 1.º asalto 4:16 = 4,27 min: menos de 1,5 asaltos (7,5 min) y de 0,5; no más
+  assert.equal(ev('total_rounds|0||1.5', 'under', mma()), 'won');
+  assert.equal(ev('total_rounds|0||1.5', 'over', mma()), 'lost');
+  // 3.er asalto 2:00 = 12 min: más de 2,5 (12,5)? no: menos
+  const late = mma({ method: 'ko', round: 3, time: '2:00' });
+  assert.equal(ev('total_rounds|0||2.5', 'under', late), 'won');
+  assert.equal(ev('total_rounds|0||2.5', 'over', late), 'lost');
+  // decisión a 3 asaltos: 15 minutos, más de 2,5 y de 2,5 asaltos
+  const dec = mma({ method: 'dec', round: 3, time: '5:00' });
+  assert.equal(ev('total_rounds|0||2.5', 'over', dec), 'won');
+  assert.equal(ev('total_rounds|0||1.5', 'over', dec), 'won');
+});
+
+test('MMA: empate, anulado, sin ganador o método desconocido se quedan para hacerlo a mano', () => {
+  for (const odd of [{ draw: true, winner: null }, { noContest: true, winner: null }, { winner: null }]) {
+    for (const [key, out] of [['moneyline|0||', 'a'], ['method|0|ko|', 'a'], ['distance|0||', 'yes'], ['total_rounds|0||1.5', 'over']]) {
+      assert.equal(ev(key, out, mma(odd)), null, `${key} ${JSON.stringify(odd)}`);
+    }
+  }
+  assert.equal(ev('method|0|ko|', 'b', mma({ method: '' })), null); // no sé cómo acabó
+  assert.equal(ev('method|0|ko|', 'b', mma({ method: 'other' })), null); // descalificación u otra: según la casa
+  assert.equal(ev('distance|0||', 'yes', mma({ method: 'other' })), null);
+  assert.equal(ev('total_rounds|0||1.5', 'over', mma({ round: null })), null);
+  assert.equal(ev('total_rounds|0||2.0', 'over', mma({ method: 'dec', round: 3, time: '5:00' })), 'won');
+  assert.equal(ev('total_rounds|0||3', 'over', mma({ method: 'dec', round: 3, time: '5:00' })), 'void'); // línea exacta: 15 min
+});
+
+test('MMA: una apuesta con deporte mma y su ref se guarda', () => {
+  const b = normalizeBet({ odds: 2.2, stake: 5, selection: 'Gana Ciryl Gane', sport: 'mma', ref: { sport: 'mma', match: 'ufc:401932012', key: 'moneyline|0||', out: 'a' } });
+  assert.equal(b.sport, 'mma');
+  assert.equal(b.ref.match, 'ufc:401932012');
+  const wow = normalizeBet({ odds: 2, stake: 1, selection: 'x', sport: 'mma', ref: { sport: 'mma', match: 'wow:wow-35-madrid:1', key: 'method|0|ko|', out: 'b' } });
+  assert.equal(wow.ref.match, 'wow:wow-35-madrid:1');
+});

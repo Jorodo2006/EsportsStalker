@@ -7,6 +7,7 @@
 const { query, notify } = require('../../shared/db');
 const client = require('../../shared/client');
 const store = require('./store');
+const { mentions } = require('../../shared/fighters');
 const predictions = require('./predictions');
 
 const TICK = 5 * 60e3;
@@ -88,7 +89,25 @@ async function tennisResult(ref) {
   };
 }
 
-const FETCH = { basket: basketResult, football: footballResult, tennis: tennisResult };
+// MMA: el combate tiene que estar terminado y no anulado. Un empate o un "sin resultado" no se resuelven solos: cada casa los paga a
+// su manera (la anulación devuelve la apuesta, un empate puede ser pérdida). El método sólo si ESPN o WOW lo dan
+async function mmaResult(ref) {
+  const day = ref.start ? madridDay(ref.start) : ref.date;
+  const f = (await client.call('mma', 'GET', `/api/mma/match?id=${encodeURIComponent(ref.match)}${day ? `&date=${day}` : ''}`)).fight;
+  if (!f || f.state !== 'post' || f.cancelled || !f.result) return null;
+  return { sport: 'mma', label: `${f.a.name} vs ${f.b.name}`, score: () => null, mma: f.result, fight: { a: { name: f.a.name }, b: { name: f.b.name } } };
+}
+
+// ¿La apuesta es de este combate? Se compara el cartel de la apuesta ("A vs B") con los dos luchadores del resultado: si un id
+// cambia de combate (WOW añade uno, un sustituto entra con el mismo id), la apuesta no se resuelve con el resultado de otro
+function fightMatches(event, f) {
+  const parts = String(event || '').split(/\s+(?:vs\.?|-|–|—)\s+/i);
+  if (parts.length !== 2 || !f?.a?.name || !f?.b?.name) return false;
+  const [x, y] = parts;
+  return (mentions(f.a.name, x) && mentions(f.b.name, y)) || (mentions(f.a.name, y) && mentions(f.b.name, x));
+}
+
+const FETCH = { basket: basketResult, football: footballResult, tennis: tennisResult, mma: mmaResult };
 
 // ---------- evaluar un mercado ----------
 // Líneas de jugador de baloncesto: los mismos nombres de estadística que el analizador y las casas
@@ -100,6 +119,26 @@ const PLAYER_STAT = {
 
 // Más / Menos de una línea: igual a la línea es nula
 const overUnder = (v, line, out) => (v === line ? 'void' : (v > line) === (out === 'over') ? 'won' : 'lost');
+
+// MMA: ganador, método de cada luchador, "llega a decisión" y total de asaltos (claves de odds.js: moneyline|0||, method|0|<ko|sub|dec>|,
+// distance|0||, total_rounds|0||<línea>). El tiempo se mide en minutos: asaltos de 5, y el combate acaba en (asalto-1)*5 + tiempo
+function evaluateMma(type, kind, line, out, R) {
+  const r = R.mma;
+  if (!r || r.draw || r.noContest || (r.winner !== 'a' && r.winner !== 'b')) return null;
+  const text = `${R.label}: gana ${r.winner === 'a' ? 'la esquina roja' : 'la azul'}${r.method ? ` por ${{ ko: 'KO/TKO', sub: 'sumisión', dec: 'decisión' }[r.method] || 'otro método'}` : ''}`;
+  if (type === 'moneyline') return { status: r.winner === out ? 'won' : 'lost', text };
+  // Sin método conocido, o uno que cada casa paga a su manera (descalificación…), no se resuelve solo
+  if (!['ko', 'sub', 'dec'].includes(r.method)) return null;
+  if (type === 'method') return ['ko', 'sub', 'dec'].includes(kind) && (out === 'a' || out === 'b') ? { status: r.winner === out && r.method === kind ? 'won' : 'lost', text } : null;
+  if (type === 'distance') return { status: (r.method === 'dec') === (out === 'yes') ? 'won' : 'lost', text };
+  if (type === 'total_rounds') {
+    const m = /^(\d+):(\d{2})$/.exec(String(r.time || ''));
+    if (!m || !Number.isInteger(r.round) || r.round < 1 || !isFinite(line)) return null;
+    const minutes = (r.round - 1) * 5 + Number(m[1]) + Number(m[2]) / 60;
+    return { status: overUnder(Math.round(minutes * 1000) / 1000, line * 5, out), text: `${text} (${es(minutes)} min)` };
+  }
+  return null;
+}
 
 // → { status: 'won' | 'lost' | 'void', text } o null si no se sabe resolver
 function evaluate(ref, R) {
@@ -125,6 +164,7 @@ function evaluate(ref, R) {
     const v = pair[0] + pair[1];
     return { status: overUnder(v, line, out), text: `${es(v)} ${type === 'corners' ? 'córners' : 'tarjetas'}` };
   }
+  if (R.sport === 'mma') return R.fight && !fightMatches(ref.event, R.fight) ? null : evaluateMma(type, parts[2], line, out, R);
   const sc = R.score(period);
   if (sc === 'unplayed') return { status: 'void', text: 'Ese set no se jugó' };
   if (!sc || sc.some(v => !isFinite(v))) return null;
@@ -236,7 +276,7 @@ async function run() {
         if (!it.ref || it.ref.settled) continue;
         const R = await resultOf({ ...it.ref, date: bet.date });
         if (!R) continue;
-        const v = evaluate(it.ref, R);
+        const v = evaluate({ ...it.ref, event: it.event }, R);
         if (!v) continue;
         it.status = v.status;
         it.ref = { ...it.ref, settled: { at: new Date().toISOString(), text: v.text } };
@@ -269,4 +309,4 @@ function startSettler() {
 // El resultado de un partido tal y como lo usa evaluate (para probar sin guardar nada)
 const resultFor = ref => (FETCH[ref.sport] ? FETCH[ref.sport](ref) : Promise.resolve(null));
 
-module.exports = { startSettler, run, evaluate, guessBasket, resultFor };
+module.exports = { startSettler, run, evaluate, guessBasket, resultFor, fightMatches };

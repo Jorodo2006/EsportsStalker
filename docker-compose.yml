@@ -88,6 +88,11 @@ services:
     <<: *servicio
     command: ["node", "services/football/index.js"]
 
+  # MMA: UFC y PFL (ESPN) y WOW (wowmma.com)
+  mma:
+    <<: *servicio
+    command: ["node", "services/mma/index.js"]
+
   gateway:
     <<: *servicio
     build: ./server

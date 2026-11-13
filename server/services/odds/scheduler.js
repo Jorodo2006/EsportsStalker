@@ -9,7 +9,7 @@ const FAR_HOURS = 48; // hasta dónde llegan las lecturas espaciadas
 // El tenis y el fútbol tienen decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
 const TENNIS_NEAR_HOURS = 3;
 const TENNIS_FAR_HOURS = 24;
-const CROWDED = ['tennis', 'football'];
+const CROWDED = ['tennis', 'football', 'mma'];
 const MAX_QUEUE = 10; // unos 6 min de trabajo: así la cola no llega a caducar y un partido cercano entra enseguida
 const clamp = (v, lo, hi, def) => Math.min(hi, Math.max(lo, Number(v) || def));
 const TBD = /^(tbd|tba|por determinar)$/i;
@@ -108,6 +108,15 @@ async function upcomingFootball(hours) {
     .map(g => ({ id: g.id, league: g.league, start: g.date, sport: 'football', a: team(g.home), b: team(g.away) }));
 }
 
+// MMA: UFC, PFL y WOW. A es el luchador de la esquina roja (el primero del cartel). Los combates anulados no se leen
+async function upcomingMma(hours) {
+  const until = Date.now() + hours * 3600e3;
+  const games = (await Promise.all(daysUntil(until).map(d => client.call('mma', 'GET', `/api/mma/games?date=${d}`).catch(() => [])))).flat();
+  const fighter = x => ({ name: x.name, code: '', alt: x.alt || [] });
+  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && !g.cancelled && t >= Date.now() && t <= until && g.a?.name && g.b?.name; })
+    .map(g => ({ id: g.id, league: g.org, event: g.event, start: g.date, sport: 'mma', a: fighter(g.a), b: fighter(g.b) }));
+}
+
 // ¿Toca leerlo? No si tiene un trabajo abierto o uno (manual o programado) de hace menos de `minutes`
 async function due(key, minutes) {
   const { rowCount } = await query(`SELECT 1 FROM odds.jobs WHERE match_key = $1
@@ -126,13 +135,14 @@ async function tick() {
     const far = s.oddsFarEnabled !== false;
     // Si una de las fuentes falla, las otras siguen
     const crowdedHours = far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS);
-    const [lol, basket, tennis, football] = await Promise.all([
+    const [lol, basket, tennis, football, mma] = await Promise.all([
       upcoming(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
       upcomingBasket(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
       upcomingTennis(crowdedHours).catch(e => { console.error('Programador (tenis):', e.message); return []; }),
-      upcomingFootball(crowdedHours).catch(e => { console.error('Programador (fútbol):', e.message); return []; })
+      upcomingFootball(crowdedHours).catch(e => { console.error('Programador (fútbol):', e.message); return []; }),
+      upcomingMma(crowdedHours).catch(e => { console.error('Programador (MMA):', e.message); return []; })
     ]);
-    const matches = [...lol, ...basket, ...tennis, ...football].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const matches = [...lol, ...basket, ...tennis, ...football, ...mma].sort((x, y) => new Date(x.start) - new Date(y.start));
     const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
     let queued = rows[0].n;
     // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes

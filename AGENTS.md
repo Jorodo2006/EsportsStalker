@@ -7,11 +7,12 @@ Lee esto antes de tocar nada. Las especificaciones detalladas de cada parte est�
 
 ## Qué es
 
-Web con login, para el ordenador y el móvil, con backend en Docker, que son **cuatro apps en una**, con un selector arriba:
+Web con login, para el ordenador y el móvil, con backend en Docker, que son **cinco apps en una**, con un selector arriba:
 **LoL** (esports, verde azulado), **Baloncesto** (NBA, WNBA, Euroliga, EuroCup y NBL, naranja), **Tenis** (ATP, Challengers y WTA, verde) y
-**Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas, Copa del Rey, selecciones: Nations League y amistosos, y femenino: Champions, Liga F y WSL, azul).
+**Fútbol** (LaLiga, Segunda, Premier, Serie A, Bundesliga, Ligue 1, competiciones europeas, Copa del Rey, selecciones: Nations League y amistosos, y femenino: Champions, Liga F y WSL, azul) y
+**MMA** (UFC, PFL y WOW, la organización española; rojo apagado).
 Cada una tiene sus partidos y directo, el comparador de cuotas de Winamax / Betway, sus stats y su registro de
-apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las cuatro apps**, y las cuotas que se pulsan van a un **cupón** desde
+apuestas con beneficio, ROI y gráficas. Cada usuario tiene su **cartera, común a las cinco apps**, y las cuotas que se pulsan van a un **cupón** desde
 el que se registran como simples o combinada. La interfaz es React en el navegador; la lógica y los datos están en
 microservicios Node con PostgreSQL (`server/`, `docker-compose.yml`). Las cuotas las lee solo, cada pocos minutos,
 un Chromium sin cabeza dentro de Docker (contenedor `lector`).
@@ -33,7 +34,7 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 5. **Las peticiones a internet las hace el backend** (`server/`). La interfaz (`src/`) sólo habla con `window.api`
    (`src/lib/api.ts`), que llama al gateway por el mismo origen. Sólo la web se abre a la red (puerto 8090); el gateway, PostgreSQL y
    Adminer se quedan en `127.0.0.1`.
-6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`, `football`). Si necesita datos de otro, llama a
+6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`, `football`, `mma`). Si necesita datos de otro, llama a
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Los datos de cada usuario son suyos.** Toda consulta de `bets.bets` y `bets.user_settings` filtra por `user_id`, que sale
    de la cabecera `x-user-id` que pone el gateway tras comprobar la sesión; nunca de lo que mande el cliente. Toda ruta `/api`
@@ -85,6 +86,8 @@ Docker Compose (docker-compose.yml)
   │                                                     y Challengers (LiveScore) → esquema tennis
   ├─ football :4006          server/services/football/  fútbol (ESPN): partidos por día en hora de España, ficha (goles, tarjetas,
   │                                                     estadísticas, alineaciones, forma), clasificaciones, modelo de goles y recomendaciones → esquema football
+  ├─ mma      :4007          server/services/mma/       MMA: UFC y PFL (ESPN) y WOW (wowmma.com): combates por día en hora de España, ficha del luchador,
+  │                                                     ranking y modelo Elo, previsión de victoria/método/duración y recomendaciones → esquema mma
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -128,21 +131,22 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
-- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cuatro deportes, sólo con
+- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cinco deportes, sólo con
   los partidos importantes y sin nada de dinero (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores
   recomendaciones de baloncesto, tenis y fútbol, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
-  y ronda (`footballScore`, `basketScore`, `tennisScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
+  y ronda (`footballScore`, `basketScore`, `tennisScore`, `mmaScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
   mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
   con `useFocus`.
 - **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
   con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
   (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
   (`USER_KEYS` en `server/services/bets/store.js`).
-- Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
+- Estado global (app activa `lol` | `basket` | `tennis` | `football` | `mma`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cinco deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
 - Preferencias de UI (secciones plegadas, boleto) en `localStorage`, siempre dentro de `try/catch`; el boleto se borra al salir.
+- **Logo e iconos** en `public/` (Vite los sirve tal cual y `web/Dockerfile` los copia): `logo.png` (icono y nombre, fondo transparente, es el de la cabecera, el menú y la entrada), `logo-mark.png` (sólo el icono), `favicon.ico`/`favicon-32.png`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png` y `manifest.webmanifest` (la app se puede instalar). Salen del logo original; si se cambia, hay que regenerarlos. Sin `og:image`: necesita la URL absoluta de la web desplegada.
 - **Móvil:** todo tiene que caber en 375 px sin que la página se desplace de lado. Se diseña de móvil hacia arriba con `sm:` y `lg:`; desde `lg` se ve la navegación de escritorio, y por debajo la barra inferior. Las tablas anchas van dentro de `overflow-x-auto` o tienen versión en tarjetas (`BetCard`).
 
 ## Cosas que se rompen con facilidad
@@ -174,6 +178,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Recomendaciones de baloncesto** (`src/lib/basket-picks.ts`, `blendWithMarket` y `tooFar` en `src/lib/value.ts`): no ordenes por el EV del modelo a secas. Sube a la cabeza sus propios errores: en la prueba salían EV de +65 % con el modelo diciendo 29 % y la casa 10 %. Los pesos frente a la casa son una decisión, no una medida (`docs/specs/08-baloncesto.md`).
 - **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
 - **Modelo de fútbol** (`server/services/football/model.js`, `picks.js`): si tocas algo, repite `backtest.js` dentro del contenedor (ajusta con un periodo y comprueba con otro; cifras en `docs/specs/11-futbol.md`). Los resultados pasados (`hist:` en `football.cache`) no se borran con la limpieza.
+- **WOW** (`server/services/mma/wow.js`): se lee del HTML de wowmma.com (Webflow, sin API); si rediseñan la web deja de salir y sólo queda el aviso en el log. Su `robots.txt` permite todo menos `/*?*`: nunca pidas URLs con parámetros. La cartelera se publica tarde. Cuotas de WOW: Betway y Winamax no las listan siempre.
+- **Modelo de MMA** (`server/services/mma/model.js`, `history.js`, `picks.js`): bien calibrado pero discrimina poco (57,6 % de ganadores acertados; cifras en `docs/specs/12-mma.md`). Si lo tocas, repite `docker compose exec mma node services/mma/backtest.js` (ajusta con un periodo y comprueba con otro). Las claves de mercado de MMA (`moneyline|0||`, `method|0|<ko|sub|dec>|`, `distance|0||`, `total_rounds|0||<línea>`) las usan las recomendaciones y `settle.js`: si cambias una en `odds.js`, ajusta los dos. En los mercados de método la casa no suma 100 % entre A y B (`open` en `picks.js`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Rendimiento** (`docs/specs/07-backend.md`, "Rendimiento de la web"): las consultas de cuotas no sondean cada minuto;
   llevan `meta: oddsMeta(partido)` y las recarga el aviso `odds:imported` (`src/lib/odds-live.ts`). Si añades una, haz lo
@@ -202,4 +208,5 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 | [`docs/specs/08-baloncesto.md`](docs/specs/08-baloncesto.md) | App de baloncesto, lector de Docker, modelo de props y valor/fiabilidad común con LoL |
 | [`docs/specs/09-tenis.md`](docs/specs/09-tenis.md) | App de tenis: datos de ESPN, cuotas por sets y juegos, modelo y recomendaciones |
 | [`docs/specs/11-futbol.md`](docs/specs/11-futbol.md) | App de fútbol: ligas de ESPN, ficha del partido, clasificaciones, cuotas, modelo de goles y recomendaciones, selecciones y femenino |
+| [`docs/specs/12-mma.md`](docs/specs/12-mma.md) | App de MMA: UFC y PFL de ESPN, WOW de wowmma.com, modelo Elo y su prueba, cuotas de Winamax y Betway, resolución de apuestas |
 | [`docs/specs/10-base-de-datos.md`](docs/specs/10-base-de-datos.md) | Esquema de PostgreSQL: tablas, relaciones, diagramas y puntos a vigilar |

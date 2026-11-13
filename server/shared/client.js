@@ -5,7 +5,8 @@ const URLS = {
   odds: process.env.ODDS_URL || 'http://odds:4002',
   basket: process.env.BASKET_URL || 'http://basket:4004',
   tennis: process.env.TENNIS_URL || 'http://tennis:4005',
-  football: process.env.FOOTBALL_URL || 'http://football:4006'
+  football: process.env.FOOTBALL_URL || 'http://football:4006',
+  mma: process.env.MMA_URL || 'http://mma:4007'
 };
 
 async function call(service, method, path, body, timeout = 30000) {

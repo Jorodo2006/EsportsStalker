@@ -76,6 +76,10 @@
   --acc-200: #cad7f1; --acc-300: #a2b9e6; --acc-400: #7d9bd9; --acc-500: #5f84cc; --acc-600: #4b6cb0;
   --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #7d9bd9; --tv-bg: #18181c;
 }
+[data-app="mma"] {
+  --acc-200: #efcaca; --acc-300: #e2a1a1; --acc-400: #d27a7a; --acc-500: #bf5a5a; --acc-600: #a24747;
+  --tv-band: #1d1d22; --tv-band-2: #1d1d22; --tv-mark: #d27a7a; --tv-bg: #18181c;
+}
 /* Las variables que apuntan a otras se resuelven donde se declaran: hay que repetirlas en cada app */
 [data-app] {
   --color-amber-200: var(--acc-200); --color-amber-300: var(--acc-300); --color-amber-400: var(--acc-400);

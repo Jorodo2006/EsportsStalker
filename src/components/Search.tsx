@@ -1,4 +1,4 @@
-// Buscador de los cuatro deportes: equipos, jugadores y competiciones. Busca el servidor (GET /api/search, que pregunta a cada
+// Buscador de los cinco deportes: equipos, jugadores y competiciones. Busca el servidor (GET /api/search, que pregunta a cada
 // servicio); aquí se escribe, se elige con el ratón o con las flechas y se abre el partido (cambiando de deporte y de día si
 // hace falta) o la lista de la competición. Se abre con Ctrl+K (o "/") desde cualquier sitio.
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,7 +11,7 @@ import { Dialog, ErrorBox } from './ui';
 
 const SPORT: Record<AppId, { label: string; color: string }> = {
   lol: { label: 'LoL', color: '#3aa894' }, basket: { label: 'Baloncesto', color: '#dc7d41' },
-  tennis: { label: 'Tenis', color: '#67ad53' }, football: { label: 'Fútbol', color: '#5f84cc' }
+  tennis: { label: 'Tenis', color: '#67ad53' }, football: { label: 'Fútbol', color: '#5f84cc' }, mma: { label: 'MMA', color: '#bf5a5a' }
 };
 const madridDay = (iso: string) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 // "Hoy 21:00", "Mañana 18:30", "vie 13, 20:45"

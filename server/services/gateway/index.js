@@ -26,6 +26,7 @@ const ROUTES = [
   [/^\/api\/basket(\/|$)/, 'basket'],
   [/^\/api\/tennis(\/|$)/, 'tennis'],
   [/^\/api\/football(\/|$)/, 'football'],
+  [/^\/api\/mma(\/|$)/, 'mma'],
   [/^\/(odds|bet365|snapshot|auto|jobs)(\/|$)/, 'odds']
 ];
 
@@ -67,7 +68,7 @@ function proxy(req, res, service, user) {
 // Buscador de la cabecera: pregunta a la vez a los cuatro deportes (cada uno busca en lo suyo, /api/<servicio>/search) y
 // junta lo que respondan; si uno tarda o falla, salen los demás. Primero lo que está en juego, luego lo que encaja por
 // equipo o jugador (no sólo por la competición) y, dentro de eso, lo más cercano a ahora, antes lo que viene que lo pasado
-const SEARCH = ['esports', 'basket', 'tennis', 'football'];
+const SEARCH = ['esports', 'basket', 'tennis', 'football', 'mma'];
 async function search(q) {
   const qs = String(q || '').trim().slice(0, 60);
   if (qs.length < 2) return { matches: [], competitions: [] };

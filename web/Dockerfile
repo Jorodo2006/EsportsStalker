@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY index.html vite.config.ts tsconfig.json ./
 COPY src src
+COPY public public
 COPY chrome/bookmarklet chrome/bookmarklet
 RUN npx vite build
 # Copia comprimida al máximo de cada fichero de texto, para el gzip_static de nginx (no comprime en cada petición)

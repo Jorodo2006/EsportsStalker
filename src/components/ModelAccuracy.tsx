@@ -16,7 +16,7 @@ type ScopeF = 'picks' | 'lines';
 // (hasValue en basket-picks.ts). De tenis y fútbol sólo se guardan las que enseña
 const isPick = (r: PredictionRow) => r.sport !== 'basket' || verdictOf(r.ev, r.rel ?? 0) === 'BET';
 
-const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', lol: 'LoL' };
+const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', lol: 'LoL' };
 const decided = (r: PredictionRow) => r.status !== 'void';
 const won = (r: PredictionRow) => r.status === 'won';
 // Beneficio de apostar 1 unidad: la nula devuelve lo apostado

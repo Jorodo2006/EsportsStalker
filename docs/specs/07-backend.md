@@ -26,6 +26,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `basket` | `server/services/basket/` | 4004 (interno) | `basket` | Baloncesto: NBA, WNBA y NBL (ESPN), Euroliga y EuroCup (API de la Euroliga); partidos, plantillas, bajas y partidos de cada jugador |
 | `tennis` | `server/services/tennis/` | 4005 (interno) | `tennis` | Tenis ATP y WTA (ESPN): partidos de los torneos en juego, sets, rankings |
 | `football` | `server/services/football/` | 4006 (interno) | `football` | Fútbol (ESPN): partidos por día, ficha del partido, clasificaciones |
+| `mma` | `server/services/mma/` | 4007 (interno) | `mma` | MMA: UFC y PFL (ESPN) y WOW (wowmma.com): combates, fichas, ranking Elo, previsión y recomendaciones (`docs/specs/12-mma.md`) |
 | `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `chrome/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |
 | `db` | `postgres:17-alpine` | `127.0.0.1:55432` (para depurar) | — | Volumen `pgdata` |
 | `adminer` | `adminer` | `127.0.0.1:8080` (`ADMINER_PORT`) | — | Visor web de la base de datos (tema oscuro, servidor `db`) |
@@ -55,11 +56,12 @@ Reglas:
 | `/api/basket` | basket |
 | `/api/tennis` | tennis |
 | `/api/football` | football |
+| `/api/mma` | mma |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
-| `/api/search?q=` | el propio gateway: pregunta a la vez a `/api/<esports\|basket\|tennis\|football>/search` (8 s como mucho cada uno; si uno falla salen los demás) y junta los resultados |
+| `/api/search?q=` | el propio gateway: pregunta a la vez a `/api/<esports\|basket\|tennis\|football\|mma>/search` (8 s como mucho cada uno; si uno falla salen los demás) y junta los resultados |
 
 **Buscador** (`/api/search`, componente `src/components/Search.tsx`, Ctrl+K o "/"): partidos de ayer a dentro de una semana
-y competiciones de los cuatro deportes. Cada servicio busca en lo suyo con `server/shared/search.js` (sin tildes ni
+y competiciones de los cinco deportes. Cada servicio busca en lo suyo con `server/shared/search.js` (sin tildes ni
 mayúsculas; cada palabra al principio de una palabra del nombre, también en los otros nombres de equipos y selecciones) y
 devuelve `{ matches, competitions }`. Orden: lo que está en juego, lo que encaja por equipo o jugador antes que por
 competición y lo más cercano a ahora. Al elegir un partido la app cambia de deporte, lleva la lista a su día
@@ -98,7 +100,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 | `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt e `is_admin` |
 | `bets.sessions` | Sesiones de 30 días. Sólo se guarda el SHA-256 del token |
 | `bets.user_settings` | Lo de cada usuario: banca inicial y filtro de ligas (el resto de ajustes son comunes, `bets.settings`) |
-| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football` o `mix` (migraciones 002, 003, 004 y 007) |
+| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football`, `mma` o `mix` (migraciones 002, 003, 004, 007 y 011) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes comunes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |
 | `esports.cache` | Caché de Leaguepedia (6 h) |

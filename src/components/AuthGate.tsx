@@ -89,10 +89,10 @@ function LoginScreen() {
       <div className="mx-auto grid min-h-full max-w-6xl grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
         <section className="flex flex-col justify-center gap-8 px-5 pb-2 pt-10 sm:px-10 lg:py-16">
           <div>
-            <div className="text-xl font-semibold tracking-tight text-zinc-50">Sharpex</div>
+            <img src="/logo.png" alt="Sharpex" className="block h-9 w-auto" />
             <h1 className="mt-6 max-w-lg text-3xl font-semibold leading-tight tracking-tight text-zinc-50 sm:text-4xl">Apuesta con datos, no con corazonadas.</h1>
             <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-zinc-400">
-              Partidos, cuotas, recomendaciones del modelo y tu registro de apuestas de LoL, baloncesto, tenis y fútbol, en un mismo sitio.
+              Partidos, cuotas, recomendaciones del modelo y tu registro de apuestas de LoL, baloncesto, tenis, fútbol y MMA, en un mismo sitio.
             </p>
           </div>
           <ul className="hidden max-w-lg flex-col gap-5 lg:flex">

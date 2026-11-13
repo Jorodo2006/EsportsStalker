@@ -22,7 +22,7 @@ export const matchOfGame = (g: BasketGame) => ({
 // Lo que necesita el comparador de cualquier deporte: el partido para el lector y cómo apuntarlo en el cupón
 export interface OddsTarget {
   id: string; done: boolean; sport: Sport; event: string; league: string;
-  match: { a: TeamRef; b: TeamRef; start?: string; sport: Sport; league?: string };
+  match: { a: TeamRef; b: TeamRef; start?: string; sport: Sport; league?: string; event?: string };
 }
 export const targetOfGame = (g: BasketGame): OddsTarget => ({
   id: g.id, done: g.state === 'post', sport: 'basket', event: `${g.away.abbr} @ ${g.home.abbr}`, league: LEAGUE_NAME[g.league], match: matchOfGame(g)

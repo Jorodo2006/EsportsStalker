@@ -5,7 +5,7 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'void' | 'cashout' | 'halfw
 
 // Selección de una combinada
 export type LegStatus = 'pending' | 'won' | 'lost' | 'void';
-export type Sport = 'lol' | 'basket' | 'tennis' | 'football';
+export type Sport = 'lol' | 'basket' | 'tennis' | 'football' | 'mma';
 // A qué partido y mercado pertenece una apuesta o selección, para que el servidor la resuelva sola (server/services/bets/settle.js).
 // key: la clave del comparador ("total|0||212.5", "player|Asistencias|naji marshall|2.5"); out: la selección ("over", "a", "x"…).
 // settled: lo puso el servidor al resolverla; guessed: la reconoció por el texto (apuestas de antes)
@@ -175,7 +175,7 @@ export interface AutoStatus {
 }
 
 // true si responde cada pieza del backend
-export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean };
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean; mma?: boolean };
 
 // ---------- Fútbol (servicio football: ESPN) ----------
 export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
@@ -245,6 +245,45 @@ export interface FootballPicks {
   match?: { home: number; draw: number; away: number; pMarketHome: number | null; goalsHome: number; goalsAway: number; weight: number; fav: 'a' | 'b'; pFav: number };
   top?: FootballPick | null; easy?: FootballPick[]; hard?: FootballPick[]; considered?: number; warnings?: string[];
 }
+
+// ---------- MMA (servicio mma: UFC y PFL de ESPN, WOW de wowmma.com) ----------
+export type MmaOrg = 'ufc' | 'pfl' | 'wow';
+export interface MmaLeague { id: MmaOrg; name: string; logo: string; source: 'espn' | 'wow' }
+// a: esquina roja (el primero del cartel); b: esquina azul. age, weightKg y heightM sólo los da WOW
+export interface MmaFighter {
+  id: string; name: string; short: string; country: string; flag: string; record: string; photo: string; alt: string[];
+  age?: number | null; weightKg?: number | null; heightM?: number | null;
+}
+export type MmaMethod = 'ko' | 'sub' | 'dec' | 'other' | '';
+export interface MmaResult { winner: 'a' | 'b' | null; method: MmaMethod; round: number | null; time: string; draw: boolean; noContest: boolean }
+export interface MmaFight {
+  id: string; org: MmaOrg; orgName: string; event: string; eventId: string; date: string; state: 'pre' | 'in' | 'post'; status: string;
+  weightClass: string; title: boolean; rounds: number; cardPos: number; venue: string; city: string; cancelled?: boolean;
+  a: MmaFighter; b: MmaFighter; result?: MmaResult;
+}
+export interface MmaHistoryRow { id: string; date: string; org: MmaOrg; event: string; opponent: { id: string; name: string }; result: 'G' | 'P' | 'E' | 'N'; method: MmaMethod; round: number | null; time: string }
+// Ficha de un luchador de ESPN (GET /api/mma/profile): medidas en métrico, KO y sumisiones ganados y estilo. null: ESPN no lo da
+export interface MmaProfile {
+  age: number | null; heightCm: number | null; reachCm: number | null; weightKg: number | null; stance: string; country: string;
+  wins: number | null; losses: number | null; draws: number | null; kos: number | null; subs: number | null; decisions: number | null; titleWins: number | null;
+  strikesPerMin: number | null; strikeAccuracy: number | null; takedownAvg: number | null; submissionAvg: number | null;
+}
+// Ranking por Elo del modelo (no es el oficial de ninguna organización): luchadores activos con al menos 5 combates
+export interface MmaRank { id: string; rank: number; name: string; record: string; org: MmaOrg; elo: number; fights: number; lastDate: string }
+export interface MmaFighterCard {
+  id: string; name: string; record: string; rating: { elo: number; fights: number; lastDate: string } | null;
+  stats: { fights: number; wins: number; losses: number; streak: number; methods: { ko: number; sub: number; dec: number } | null };
+  history: MmaHistoryRow[];
+}
+// Recomendaciones (server/services/mma/picks.js): las mismas piezas que las de tenis y fútbol
+export type MmaPick = TennisPick & { who?: 'a' | 'b' | null };
+export interface MmaPred { pA: number; pB: number; method: { ko: number; sub: number; dec: number }; goesDistance: number; reliability: 'alta' | 'media' | 'baja' }
+export interface MmaPicks {
+  ready: boolean; reason?: 'started' | 'finished' | 'noodds'; pred?: MmaPred;
+  match?: { pModel: number; pMarket: number | null; pFinal: number; weight: number };
+  top?: MmaPick | null; easy?: MmaPick[]; hard?: MmaPick[]; considered?: number; warnings?: string[];
+}
+export interface MmaDayPick { id: string; org: MmaOrg; orgName: string; date: string; a: MmaFighter; b: MmaFighter; top: MmaPick; hard: MmaPick | null }
 // Buscador (GET /api/search): partidos de ayer a dentro de una semana y competiciones de los cuatro deportes. team: encaja por
 // equipo o jugador (no sólo por la competición). event: en LoL, el partido entero para abrirlo
 export interface SearchMatch {
@@ -394,9 +433,9 @@ export interface Api {
   };
   odds: {
     // quiet: sólo leer, sin apuntarlo como el último partido abierto (el marcador lo usa para repartir sus capturas)
-    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
+    match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number; x?: number }>>; // x: empate (fútbol)
-    auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<AutoJob>;
+    auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
   };
   football: {
@@ -416,6 +455,18 @@ export interface Api {
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
     picks(date: string, id: string): Promise<FootballPicks>;
     picksDay(date: string): Promise<FootballDayPick[]>;
+  };
+  mma: {
+    leagues(): Promise<MmaLeague[]>;
+    games(date: string): Promise<MmaFight[]>;
+    days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
+    live(): Promise<MmaFight[]>;
+    match(id: string): Promise<{ fight: MmaFight }>;
+    fighter(id: string): Promise<MmaFighterCard>;
+    ranking(): Promise<MmaRank[]>;
+    profile(id: string): Promise<MmaProfile>;
+    picks(date: string, id: string): Promise<MmaPicks>;
+    picksDay(date: string): Promise<MmaDayPick[]>;
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;

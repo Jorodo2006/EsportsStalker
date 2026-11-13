@@ -51,7 +51,7 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
-  const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' || a === 'football' ? a : 'lol'; } catch { return 'lol'; } });
+  const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' || a === 'football' || a === 'mma' ? a : 'lol'; } catch { return 'lol'; } });
   const [view, setView] = useState<View>('today'); // se abre en Hoy
   const [viewParam, setViewParam] = useState<string>();
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);

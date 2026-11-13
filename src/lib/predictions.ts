@@ -7,7 +7,7 @@ import { BASKET_MARKETS } from './basket-model';
 import { POINT_PERIODS } from './basket-teams';
 import type { BasketPick } from './basket-picks';
 import { alert, firstTime } from './notify';
-import type { FootballPick, PredictionIn, TennisPick } from './types';
+import type { FootballPick, MmaPick, PredictionIn, TennisPick } from './types';
 
 const sent = new Map<string, string>();
 let queue: PredictionIn[] = [];
@@ -64,7 +64,7 @@ export function basketPrediction(p: BasketPick): PredictionIn | null {
 }
 
 // Sólo los mercados que sabe resolver el servidor (settle.js); el resto ("betway|Ganará un set|", sin normalizar) no se cerraría nunca
-const KNOWN = /^(moneyline|total|team_total|spread|double|dnb|btts|player)\|/;
+const KNOWN = /^(moneyline|total|team_total|spread|double|dnb|btts|player|method|distance|total_rounds)\|/;
 
 // Tenis: el id de cada recomendación es "<clave del mercado>#<selección>"
 export function tennisPredictions(m: { id: string; date: string; tournament?: string; a: { name: string }; b: { name: string } }, picks: (TennisPick | null | undefined)[]): PredictionIn[] {
@@ -84,6 +84,17 @@ export function footballPredictions(m: { id: string; date: string; leagueName: s
     return {
       sport: 'football', match: m.id, start: m.date, key, out, group: x.market, title: x.title, event: `${m.home.name} - ${m.away.name}`,
       league: m.leagueName, book: x.book, price: x.price, p: x.p, pModel: x.pModel, pMarket: x.pMarket, ev: x.ev, rel: x.rel.score
+    };
+  }).filter(x => x.key && x.out && KNOWN.test(x.key));
+}
+
+// MMA: el mismo formato de id (clave del mercado + "#" + selección); a es la esquina roja
+export function mmaPredictions(m: { id: string; date: string; orgName: string; a: { name: string }; b: { name: string } }, picks: (MmaPick | null | undefined)[]): PredictionIn[] {
+  return picks.filter((x): x is MmaPick => !!x).map((x): PredictionIn => {
+    const [key, out] = x.id.split('#');
+    return {
+      sport: 'mma', match: m.id, start: m.date, key, out, group: x.market, title: x.title, event: `${m.a.name} - ${m.b.name}`,
+      league: m.orgName, book: x.book, price: x.price, p: x.p, pModel: x.pModel, pMarket: x.pMarket, ev: x.ev, rel: x.rel.score
     };
   }).filter(x => x.key && x.out && KNOWN.test(x.key));
 }

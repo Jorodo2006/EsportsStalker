@@ -1,0 +1,19 @@
+{
+ "id": "4426000",
+ "fullName": "Ciryl Gane",
+ "age": 36,
+ "height": 76,
+ "weight": 248,
+ "reach": 81,
+ "stance": {
+  "id": "75",
+  "text": "Orthodox"
+ },
+ "citizenship": "France",
+ "weightClass": {
+  "id": "982",
+  "text": "Heavyweight",
+  "shortName": "Heavyweight",
+  "slug": "heavyweight"
+ }
+}

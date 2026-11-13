@@ -1,5 +1,5 @@
-// Hoy: la portada común a los cuatro deportes, sólo con los partidos importantes (sin nada de dinero): los destacados del
-// día, los que están en juego, las mejores recomendaciones (baloncesto, tenis y fútbol) y los próximos. Cada partido lleva una nota
+// Hoy: la portada común a los cinco deportes, sólo con los partidos importantes (sin nada de dinero): los destacados del
+// día, los que están en juego, las mejores recomendaciones (baloncesto, tenis, fútbol y MMA) y los próximos. Cada partido lleva una nota
 // según su competición, el nivel de los equipos o jugadores y la ronda (importance); los que no llegan al corte no salen.
 // Pulsar un partido abre su ficha en su deporte.
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,7 +9,7 @@ import { BookIcon } from '@/components/BookIcon';
 import { useApp, type AppId } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
 import { bestPicks, type BasketPick } from '@/lib/basket-picks';
-import type { BasketGame, FootballMatch, MatchEvent, TennisMatch } from '@/lib/types';
+import type { BasketGame, FootballMatch, MatchEvent, MmaFight, TennisMatch } from '@/lib/types';
 import { useBasketPicks, usePickAdd } from '@/components/BasketPicks';
 import { targetOfGame } from '@/components/BasketOdds';
 import { LEAGUE_NAME } from '@/components/BasketAnalyzer';
@@ -17,12 +17,13 @@ import { useUpcomingGames } from '@/components/BasketRange';
 import { LiveDot, MatchCard, today, type MatchState, type RowTeam } from '@/components/sport';
 import { Empty, oddBtn } from '@/components/ui';
 import { Panel, surname } from '@/components/viz';
+import { targetOfFight, surname as fighterSurname } from '@/components/mma';
 import { targetOfFootball } from './FootballMatches';
 import { targetOfMatch } from './TennisMatches';
 
 const SPORT: Record<AppId, { label: string; color: string }> = {
   lol: { label: 'LoL', color: '#3aa894' }, basket: { label: 'Baloncesto', color: '#dc7d41' },
-  tennis: { label: 'Tenis', color: '#67ad53' }, football: { label: 'Fútbol', color: '#5f84cc' }
+  tennis: { label: 'Tenis', color: '#67ad53' }, football: { label: 'Fútbol', color: '#5f84cc' }, mma: { label: 'MMA', color: '#bf5a5a' }
 };
 const Dot = ({ s }: { s: AppId }) => <span title={SPORT[s].label} className="h-2 w-2 shrink-0 rounded-full" style={{ background: SPORT[s].color }} />;
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -53,6 +54,9 @@ const tennisScore = (m: TennisMatch) => {
   const tour = m.major ? 60 : /masters|1000|finals/i.test(m.tournament) ? 40 : 20;
   return tour + rank(m.a.rank) + rank(m.b.rank) + round;
 };
+// MMA: el principal de cada cartel, y el co-principal si es a cinco asaltos (título). WOW cuenta algo más: es la organización española
+const mmaScore = (f: MmaFight) =>
+  ({ ufc: 40, pfl: 35, wow: 30 }[f.org] ?? 30) + (f.cardPos === 1 ? (f.org === 'wow' ? 35 : 25) : f.cardPos === 2 ? 10 : 0) + (f.rounds >= 5 ? 20 : 0) + (f.title ? 20 : 0);
 const lolScore = (e: MatchEvent) => {
   const l = `${e.league} ${e.leagueSlug}`;
   return /worlds|mundial|msi|first stand/i.test(l) ? 100 : /lck|lpl/i.test(l) ? 70 : /lec/i.test(l) ? 65 : /lcs|lta|lcp/i.test(l) ? 45 : 25;
@@ -89,6 +93,7 @@ export default function TodayView() {
   const { data: basketToday = [], isPending: p1 } = useQuery({ queryKey: ['basket', 'games', day], queryFn: () => window.api.basket.games(day), refetchInterval: 60_000 });
   const { data: footballToday = [], isPending: p2 } = useQuery({ queryKey: ['football', 'games', day], queryFn: () => window.api.football.games(day), refetchInterval: 60_000 });
   const { data: tennisToday = [], isPending: p3 } = useQuery({ queryKey: ['tennis', 'games', day], queryFn: () => window.api.tennis.games(day), refetchInterval: 60_000 });
+  const { data: mmaToday = [] } = useQuery({ queryKey: ['mma', 'games', day], queryFn: () => window.api.mma.games(day), refetchInterval: 60_000, enabled: !!window.api.mma });
   const { data: lolSchedule, isPending: p4 } = useQuery({ queryKey: ['today', 'lol'], queryFn: () => window.api.esports.schedule({}), refetchInterval: 60_000 });
   // Los de LoL en juego aunque empezaran ayer (una serie al mejor de cinco pasa de medianoche)
   const { data: lolLive = [] } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
@@ -131,6 +136,15 @@ export default function TodayView() {
           ev: { id: m.id, ...targetOfMatch(m).match, start: m.date }, go: () => open('tennis', m.id)
         };
       }),
+      ...mmaToday.filter(g => !g.cancelled).map(g => {
+        const s = st(g.state), r = g.result;
+        return {
+          s: 'mma' as const, id: g.id, date: g.date, state: s, score: mmaScore(g), comp: `${g.event} · ${g.weightClass}`, status: g.status,
+          a: { name: g.a.name, short: fighterSurname(g.a.name), logo: g.a.flag, score: null, win: !!r && r.winner === 'a', lose: s === 'post' && !!r?.winner && r.winner !== 'a' },
+          b: { name: g.b.name, short: fighterSurname(g.b.name), logo: g.b.flag, score: null, win: !!r && r.winner === 'b', lose: s === 'post' && !!r?.winner && r.winner !== 'b' },
+          ev: { id: g.id, ...targetOfFight(g).match, start: g.date }, go: () => open('mma', g.id)
+        };
+      }),
       ...[...new Map([...(lolSchedule?.events ?? []).filter(e => new Date(e.startTime).toLocaleDateString('en-CA') === day), ...lolLive].map(e => [e.id, e])).values()]
         .filter(e => e.teams.length === 2).map(e => {
         const s = st(e.state), [x, y] = e.teams;
@@ -143,7 +157,7 @@ export default function TodayView() {
       })
     ];
     return out.filter(x => x.score >= CUT);
-  }, [basketToday, u.byLeague, footballToday, tennisToday, lolSchedule, lolLive, day]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [basketToday, u.byLeague, footballToday, tennisToday, mmaToday, lolSchedule, lolLive, day]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Destacados: en juego primero, luego los que faltan y al final los acabados; dentro, por nota y hora
   const order: Record<MatchState, number> = { live: 0, pre: 1, post: 2 };
@@ -158,7 +172,7 @@ export default function TodayView() {
     enabled: withOdds.length > 0, refetchInterval: 60_000
   });
 
-  // ---------- mejores apuestas (baloncesto, tenis y fútbol), sólo las que tienen valor ----------
+  // ---------- mejores apuestas (baloncesto, tenis, fútbol y MMA), sólo las que tienen valor ----------
   // Las de baloncesto necesitan los partidos de los jugadores de todos los equipos que juegan (eran tres cuartas partes de lo
   // que bajaba la portada): sólo se calculan cuando el panel está a la vista o a punto de estarlo
   const [picksRef, picksSeen] = useSeen<HTMLDivElement>(!p1 && !p2 && !p3 && !p4);
@@ -167,6 +181,7 @@ export default function TodayView() {
   const basketBest = useMemo(() => bestPicks(bp.picks, 1.5, 5), [bp.picks]);
   const tq = useQuery({ queryKey: ['tennis', 'picks-day', day], queryFn: () => window.api.tennis.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const fq = useQuery({ queryKey: ['football', 'picks-day', day], queryFn: () => window.api.football.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const mq = useQuery({ queryKey: ['mma', 'picks-day', day], queryFn: () => window.api.mma.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false, enabled: !!window.api.mma });
   type Best = { id: string; s: AppId; title: string; event: string; date: string; p: number; ev: number; price: number; book?: string; open: () => void; add: () => void };
   const best: Best[] = [
     ...basketBest.map((p: BasketPick) => ({ id: p.id, s: 'basket' as const, title: p.title, event: `${p.game.away.abbr} @ ${p.game.home.abbr}`, date: p.game.date, p: p.p, ev: p.ev, price: p.price, book: p.book, open: () => open('basket', p.game.id), add: () => addBasket(p) })),
@@ -180,6 +195,15 @@ export default function TodayView() {
       open: () => open('football', d.id),
       add: () => addToSlip({ sport: 'football', league: d.leagueName, event: `${d.home.name} - ${d.away.name}`, market: d.top.market, selection: d.top.selection, bookmaker: d.top.book, odds: d.top.price, status: 'pending' })
     }))
+    ,
+    ...(mq.data ?? []).slice(0, 5).map(d => ({
+      id: d.id, s: 'mma' as const, title: d.top.title, event: `${fighterSurname(d.a.name)} - ${fighterSurname(d.b.name)}`, date: d.date, p: d.top.p, ev: d.top.ev, price: d.top.price, book: d.top.book,
+      open: () => open('mma', d.id),
+      add: () => addToSlip({
+        sport: 'mma', league: d.orgName, event: `${d.a.name} vs ${d.b.name}`, market: d.top.market, selection: d.top.selection, bookmaker: d.top.book, odds: d.top.price, status: 'pending',
+        ref: { sport: 'mma', match: d.id, key: d.top.id.split('#')[0], out: d.top.id.split('#')[1], start: d.date }
+      })
+    }))
   ].filter(x => x.ev > 0).sort((x, y) => y.ev - x.ev).slice(0, 6);
 
   const longDate = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -192,7 +216,7 @@ export default function TodayView() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-2xl font-semibold text-zinc-50">Hoy</h1>
-        <p className="text-sm text-zinc-400 first-letter:uppercase">{longDate} · los partidos importantes de los cuatro deportes</p>
+        <p className="text-sm text-zinc-400 first-letter:uppercase">{longDate} · los partidos importantes de los cinco deportes</p>
       </div>
 
       <section className="flex flex-col gap-2.5">
@@ -209,7 +233,7 @@ export default function TodayView() {
                 <button key={x.s + x.id} onClick={x.go} className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2 text-left hover:bg-zinc-900/60">
                   <Dot s={x.s} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-zinc-100">{x.a.short && x.s !== 'tennis' ? x.a.short : x.a.name} <span className="font-semibold tnum">{x.a.score ?? 0}-{x.b.score ?? 0}</span> {x.b.short && x.s !== 'tennis' ? x.b.short : x.b.name}</span>
+                    <span className="block truncate text-[13px] font-medium text-zinc-100">{x.a.short && x.s !== 'tennis' ? x.a.short : x.a.name} <span className="font-semibold tnum">{x.s === 'mma' ? 'vs' : `${x.a.score ?? 0}-${x.b.score ?? 0}`}</span> {x.b.short && x.s !== 'tennis' ? x.b.short : x.b.name}</span>
                     <span className="flex items-center gap-1.5 truncate text-xs text-rose-300"><LiveDot />{[x.comp, x.status].filter(Boolean).join(' · ')}</span>
                   </span>
                   <ChevronRight size={14} className="shrink-0 text-zinc-600" />
@@ -220,7 +244,7 @@ export default function TodayView() {
         </Panel>
 
         <div ref={picksRef} className="min-w-0">
-        <Panel title="Mejores apuestas del día" aside="baloncesto, tenis y fútbol">
+        <Panel title="Mejores apuestas del día" aside="baloncesto, tenis, fútbol y MMA">
           {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{!picksSeen || bp.loaded < bp.total ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
             <div className="divide-y divide-zinc-800/60">
               {best.map(x => (

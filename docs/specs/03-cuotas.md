@@ -9,6 +9,7 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 > sin abrir el Chrome del usuario. No usa trucos anti-bot. Bet365 se quitó porque no se deja leer así. El marcador y la
 > extensión de más abajo siguen funcionando como reserva. Cada trabajo lleva `match.sport` (`basket` o, sin él, LoL) y
 > `match.league`, que eligen dónde se busca el partido; el normalizador usa `winamaxBasketInto` para el baloncesto.
+> MMA (UFC, PFL y WOW): ver [12-mma.md](12-mma.md) (`winamaxMmaInto` y `betwayMmaInto`, claves de mercado y emparejado de luchadores; sin lector de reserva).
 
 ## Piezas
 

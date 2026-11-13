@@ -6,6 +6,7 @@ const bridge = require('./bridge');
 const round2 = x => Math.round(x * 100) / 100;
 
 const { norm, teamScore, orient } = require('./equipos');
+const { mentions } = require('../../shared/fighters');
 
 // ---------- Nombres de mercado ----------
 // Baloncesto: periodo 0 = partido, 1-2 = mitades, 11-14 = cuartos. Tenis: 21-25 = sets
@@ -115,6 +116,19 @@ class Book {
       group: marketLabel(type, period, team ? team.code || team.name : '', this.sport),
       period, line: noLine ? null : line, main, outcomes
     }, bookmaker, prices);
+  }
+
+  // MMA: ganador, método (por luchador), llega a decisión y total de asaltos. Claves estables (las usan las recomendaciones y la
+  // resolución de apuestas): moneyline|0|| · method|0|<ko|sub|dec>| · distance|0|| · total_rounds|0||<línea>
+  addMma(type, kind, line, bookmaker, prices) {
+    const A = this.a.name, B = this.b.name;
+    const METHOD = { ko: 'KO/TKO', sub: 'sumisión', dec: 'decisión' };
+    let outcomes, group;
+    if (type === 'moneyline') { outcomes = [{ id: 'a', label: A }, { id: 'b', label: B }]; group = 'Ganador'; }
+    else if (type === 'method') { outcomes = [{ id: 'a', label: A }, { id: 'b', label: B }]; group = `Gana por ${METHOD[kind]}`; }
+    else if (type === 'distance') { outcomes = [{ id: 'yes', label: 'Sí' }, { id: 'no', label: 'No' }]; group = 'El combate llega a decisión'; }
+    else { outcomes = [{ id: 'over', label: `Más de ${line}` }, { id: 'under', label: `Menos de ${line}` }]; group = 'Total de asaltos'; }
+    this.add({ key: `${type}|0|${type === 'method' ? kind : ''}|${type === 'total_rounds' ? line : ''}`, group, period: 0, line: type === 'total_rounds' ? line : null, main: true, outcomes }, bookmaker, prices);
   }
 
   result(sources) {
@@ -433,6 +447,108 @@ function betwayFootballInto(book, imp, match) {
   return n;
 }
 
+// ---------- MMA (Winamax y Betway) ----------
+// Ganador, método de victoria de cada luchador, "llega a decisión" y total de asaltos van a filas comunes entre las dos casas;
+// lo demás (asalto exacto, doble oportunidad, método y ronda…) sale como mercado propio de cada una
+// Nombre y apellido (o su inicial): "Silva" solo no basta, hay muchos luchadores con el mismo apellido
+const mmaSide = (match, name) => {
+  const sa = mentions(match.a.name, name), sb = mentions(match.b.name, name);
+  return sa && !sb ? 'a' : sb && !sa ? 'b' : null;
+};
+const mmaKind = s => (/sumisi|submission/i.test(s) ? 'sub' : /decisi|puntos/i.test(s) ? 'dec' : /\bko\b|tko|descalific|dsq/i.test(s) ? 'ko' : null);
+
+function winamaxMmaInto(book, match, st, found) {
+  const { e, o } = found;
+  const m = st.matches?.[e.id];
+  if (!m?.bets?.length) return 0;
+  const BK = 'Winamax';
+  const sideOf = code => ((code === '1') !== o.swapped ? 'a' : 'b');
+  let n = 0;
+  for (const betId of m.bets) {
+    const bet = st.bets?.[betId];
+    if (!bet || bet.available === false) continue;
+    const outs = (bet.outcomes || []).map(id => ({ ...(st.outcomes?.[id] || {}), id: String(id), price: st.odds?.[id] }))
+      .filter(x => x.price > 1 && x.available !== false);
+    if (!outs.length) continue;
+    const title = String(bet.betTitle || bet.betTypeName || '').trim();
+    const lo = title.toLowerCase();
+    const total = num(parseSbv(bet.specialBetValue).total);
+    const over = outs.find(x => /^más/i.test(x.label) || x.code === 'over');
+    const under = outs.find(x => /^menos/i.test(x.label) || x.code === 'under');
+    n++;
+    if (/^ganador$/.test(lo) && outs.length === 2 && outs.every(x => x.code === '1' || x.code === '2')) {
+      book.addMma('moneyline', '', null, BK, Object.fromEntries(outs.map(x => [sideOf(x.code), x.price])));
+      continue;
+    }
+    if (/^n[uú]mero total de asaltos$/.test(lo) && bet.template === 'OverUnder' && total != null && over && under) {
+      book.addMma('total_rounds', '', total, BK, { over: over.price, under: under.price });
+      continue;
+    }
+    if (/^el combate llegar[aá] al final$/.test(lo)) {
+      const yes = outs.find(x => /^s[ií]$/i.test(x.label)), no = outs.find(x => /^no$/i.test(x.label));
+      if (yes && no) { book.addMma('distance', '', null, BK, { yes: yes.price, no: no.price }); continue; }
+    }
+    if (/^ganador y m[eé]todo de victoria$/.test(lo)) {
+      const byKind = {};
+      for (const x of outs) {
+        const side = mmaSide(match, String(x.label).replace(/\s+gana por.*$/i, '')), kind = mmaKind(x.label);
+        if (side && kind) (byKind[kind] ||= {})[side] = x.price;
+      }
+      for (const [kind, p] of Object.entries(byKind)) book.addMma('method', kind, null, BK, p);
+      if (Object.keys(byKind).length) continue;
+    }
+    book.add({
+      key: `wmx|${title}|${bet.specialBetValue || ''}`, group: title + (total != null && !/\d/.test(title) ? ` (${total})` : ''), period: 50, line: total, main: true,
+      outcomes: outs.map(x => ({ id: x.id, label: x.label }))
+    }, BK, Object.fromEntries(outs.map(x => [x.id, x.price])));
+  }
+  return n;
+}
+
+function betwayMmaInto(book, imp, match) {
+  const BK = BOOK_LABEL[imp.book];
+  const markets = imp.markets || [];
+  // Sin el ganador con los dos luchadores del combate, la página es de otro combate (un sustituto, otra pelea): no se mezcla
+  const win = markets.find(mk => /^ganador del combate$/i.test(mk.title));
+  const sides = (win?.outcomes || []).map(x => mmaSide(match, x.name));
+  if (!sides.includes('a') || !sides.includes('b')) return 0;
+  let n = 0;
+  for (const mk of markets) {
+    const outs = (mk.outcomes || []).filter(x => x.price > 1);
+    if (!outs.length) continue;
+    const title = String(mk.title || '').trim(), lo = title.toLowerCase();
+    n++;
+    if (mk === win) {
+      book.addMma('moneyline', '', null, BK, Object.fromEntries(outs.map(x => [mmaSide(match, x.name), x.price]).filter(([s]) => s)));
+      continue;
+    }
+    const tr = /^total de asaltos\s*-\s*(\d+(?:[.,]\d+)?)$/.exec(lo);
+    if (tr) {
+      const line = Number(tr[1].replace(',', '.'));
+      const ov = outs.find(x => /^(m[aá]s|over)/i.test(x.name)), un = outs.find(x => /^(menos|under)/i.test(x.name));
+      if (ov || un) { book.addMma('total_rounds', '', line, BK, { over: ov?.price, under: un?.price }); continue; }
+    }
+    if (/^el combate terminar[aá] en empate o se decidir[aá] por puntos$/.test(lo)) {
+      const yes = outs.find(x => /^s[ií]$/i.test(x.name)), no = outs.find(x => /^no$/i.test(x.name));
+      if (yes && no) { book.addMma('distance', '', null, BK, { yes: yes.price, no: no.price }); continue; }
+    }
+    if (/^m[eé]todo de victoria$/.test(lo)) {
+      const byKind = {};
+      for (const x of outs) {
+        const side = mmaSide(match, x.name), kind = mmaKind(x.name);
+        if (side && kind) (byKind[kind] ||= {})[side] = x.price;
+      }
+      for (const [kind, p] of Object.entries(byKind)) book.addMma('method', kind, null, BK, p);
+      if (Object.keys(byKind).length) continue;
+    }
+    book.add({
+      key: `${imp.book}|${title}|${mk.line || ''}`, group: title, period: 50, line: null, main: true,
+      outcomes: outs.map((x, i) => ({ id: String(i), label: x.hcap && !/^[OU]\s/.test(x.hcap) && x.hcap !== x.name ? `${x.name} ${x.hcap}` : x.name }))
+    }, BK, Object.fromEntries(outs.map((x, i) => [String(i), x.price])));
+  }
+  return n;
+}
+
 // ---------- Cuotas recibidas del marcador ----------
 const STAT_NAME = { k: 'Kills', a: 'Asistencias', d: 'Muertes' };
 const BOOK_LABEL = { bet365: 'Bet365', winamax: 'Winamax', betway: 'Betway' };
@@ -565,13 +681,20 @@ function marketsInto(book, imp, match) {
 
 // Mete una importación (una casa, una página) en el acumulador; devuelve cuántos mercados ha leído
 function intoBook(book, match, imp) {
-  const football = book.sport === 'football';
+  const football = book.sport === 'football', mma = book.sport === 'mma';
   if (imp.book === 'winamax') {
     const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
+    // En MMA un combate cambiado (sustituto, otra pelea) no se lee como el de la app: los dos luchadores tienen que ser los mismos
+    if (mma) {
+      const direct = mentions(match.a.name, imp.home) && mentions(match.b.name, imp.away);
+      const swap = !direct && mentions(match.a.name, imp.away) && mentions(match.b.name, imp.home);
+      return direct || swap ? winamaxMmaInto(book, match, imp.state, { e: { id: imp.matchId }, o: { swapped: swap, score: 2 } }) : 0;
+    }
     const into = football ? winamaxFootballInto : PERIOD_SPORTS.includes(book.sport) ? winamaxBasketInto : winamaxInto;
     return into(book, match, imp.state, { e: { id: imp.matchId }, o });
   }
   if (football) return betwayFootballInto(book, imp, match);
+  if (mma) return betwayMmaInto(book, imp, match);
   return sectionsInto(book, imp) + marketsInto(book, imp, match);
 }
 
@@ -636,4 +759,4 @@ async function getBoardFor(events) {
   return out;
 }
 
-module.exports = { getMatchOdds, getBoardFor, afterImport, orient, winamaxInto };
+module.exports = { getMatchOdds, getBoardFor, afterImport, orient, winamaxInto, Book, intoBook };
