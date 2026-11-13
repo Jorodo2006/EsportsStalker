@@ -3,7 +3,8 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CalendarDays, Check, Eye, EyeOff, Loader2, Scale, Target, Wallet } from 'lucide-react';
 import { cn } from '@/lib/format';
-import { AgeBadge, Button, ErrorBox, Field, Input, Loading, SAFE_PLAY_URL, seg } from './ui';
+import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
+import { FooterJuego } from './FooterJuego';
 
 // Usuario conectado (ya cargado por AuthGate cuando se usa dentro de la app)
 export function useUser() {
@@ -108,8 +109,8 @@ function LoginScreen() {
   // En el ordenador, a la izquierda qué es la app y a la derecha el formulario. En el móvil, el titular arriba, el formulario
   // y debajo lo que ofrece
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto grid min-h-full max-w-6xl grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
         <section className="flex flex-col justify-center gap-8 px-5 pb-2 pt-10 sm:px-10 lg:py-16">
           <div>
             <div className="text-xl font-semibold tracking-tight text-zinc-50">Sharpex</div>
@@ -209,12 +210,9 @@ function LoginScreen() {
               </li>
             ))}
           </ul>
-          <p className="mx-auto mt-10 max-w-sm text-center text-xs text-zinc-600">
-            <AgeBadge className="mr-1.5" />Sólo para mayores de edad. Juega con responsabilidad: apuesta sólo lo que puedas permitirte perder.
-            Ayuda en <a href={SAFE_PLAY_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-zinc-700 underline-offset-2 transition hover:text-zinc-300">juegoseguro.es</a>.
-          </p>
         </section>
       </div>
+      <FooterJuego className="mt-6" />
     </div>
   );
 }
