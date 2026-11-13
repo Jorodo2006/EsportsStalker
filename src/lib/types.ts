@@ -61,6 +61,7 @@ export interface Settings {
   favoriteLeagues: string[];
   oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace el lector de Docker)
   oddsFarEnabled: boolean; // leer también, más espaciados, los partidos de hasta 48 h
+  challengerOddsEnabled?: boolean; // leer los Challenger: una vez hasta 12 h antes y la de cierre
   signupOpen: boolean; // si se pueden crear cuentas nuevas (lo cambia el administrador)
   oddsRefreshMinutes: number; // cada cuántos minutos se vuelve a leer cada partido
   oddsAutoHours: number; // partidos que empiezan en las próximas N horas
@@ -169,13 +170,15 @@ export interface AutoStatus {
   error: string | null;
   matches: { id: string; league: string; start: string; a: TeamRef; b: TeamRef }[]; // partidos cercanos que entran ahora
   far: number; // partidos más lejanos que se leen más espaciados
+  challengerEnabled?: boolean;
+  challenger?: number; // Challenger con lecturas programadas (de las próximas 12 h o con retraso)
   queued: number; // trabajos esperando al lector
   running: number;
   lastPoll: number | null; // última vez que el lector preguntó si había trabajo (null: no lo ha visto)
 }
 
 // true si responde cada pieza del backend
-export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean; mma?: boolean };
+export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean; mma?: boolean; challenger?: boolean };
 
 // ---------- Fútbol (servicio football: ESPN) ----------
 export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';

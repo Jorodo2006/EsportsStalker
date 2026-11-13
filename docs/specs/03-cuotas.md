@@ -66,6 +66,10 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
   | Hasta 48 h (tenis: no entra) | 180 min |
 
   Los dos tramos lejanos se apagan con `oddsFarEnabled`. Si `oddsRefreshMinutes` es mayor, manda ese valor.
+- **Challenger** (sólo cuadro final, con `challengerOddsEnabled`): no siguen la tabla. Una lectura cuando faltan 12 h o
+  menos (una al día) y la de cierre a 20 min de la hora prevista; si sigue sin empezar, cada 40 min hasta 5 h después.
+  Van en su propio turno: el cierre con los cercanos y la de la mañana con los lejanos. Lo leído lo usa el motor de
+  los Challenger (`/api/challenger/comparar`) para medirse con la casa.
 - Crea un trabajo `auto` para cada uno que no tenga un trabajo abierto ni uno (manual o programado) de hace menos de
   lo que le toque, sin pasar de **10 en cola**. Entran primero los cercanos y luego los lejanos, y en cada grupo por
   turnos entre deportes, para que el tenis no deje sin sitio al baloncesto, que suele jugarse de noche.

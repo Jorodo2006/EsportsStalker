@@ -34,7 +34,7 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
 5. **Las peticiones a internet las hace el backend** (`server/`). La interfaz (`src/`) sólo habla con `window.api`
    (`src/lib/api.ts`), que llama al gateway por el mismo origen. Sólo la web se abre a la red (puerto 8090); el gateway, PostgreSQL y
    Adminer se quedan en `127.0.0.1`.
-6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`, `football`, `mma`). Si necesita datos de otro, llama a
+6. **Cada servicio sólo toca su esquema de PostgreSQL** (`bets`, `esports`, `odds`, `basket`, `tennis`, `football`, `mma`, `challenger`). Si necesita datos de otro, llama a
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Los datos de cada usuario son suyos.** Toda consulta de `bets.bets` y `bets.user_settings` filtra por `user_id`, que sale
    de la cabecera `x-user-id` que pone el gateway tras comprobar la sesión; nunca de lo que mande el cliente. Toda ruta `/api`
@@ -88,6 +88,9 @@ Docker Compose (docker-compose.yml)
   │                                                     estadísticas, alineaciones, forma), clasificaciones, modelo de goles y recomendaciones → esquema football
   ├─ mma      :4007          server/services/mma/       MMA: UFC y PFL (ESPN) y WOW (wowmma.com): combates por día en hora de España, ficha del luchador,
   │                                                     ranking y modelo Elo, previsión de victoria/método/duración y recomendaciones → esquema mma
+  ├─ challenger :4008        server/services/challenger/ motor de valor de los Challenger (server/sharpex-tenis): Elo con el histórico de
+  │                                                     Sackmann y TennisMyLife (volumen challenger, se reentrena cada día), escáner de
+  │                                                     cuotas e historial de picks encadenado con hashes → esquema challenger
   ├─ lector                  server/lector/             Chromium sin cabeza (Playwright): GET /jobs/next cada 5 s,
   │                                                     abre Winamax y Betway, pasa el lector del marcador, POST /odds
   └─ db       PostgreSQL 17  (volumen pgdata; 127.0.0.1:55432 para depurar)
@@ -190,10 +193,15 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **B2B y vuelta de baja en el modelo** (`gameCtx` en `src/lib/basket-context.ts`, `CTX_FACTORS` en `basket-model.ts`): los factores están medidos con `scripts/backtest-basket.ts`. Si tocas el modelo, repítelo (ajuste y comprobación con periodos distintos) y mira la calibración. El contexto tiene que calcularse igual en el analizador, el escáner y las recomendaciones, también las bajas de compañeros (`matesOut` de `src/lib/basket-mates.ts`), que no cambian la proyección, sólo bajan la fiabilidad de los "menos".
 - **Acierto del modelo** (`bets.predictions`, `src/lib/predictions.ts`): las claves de mercado son las de las apuestas; si cambias una en `odds.js`, las recomendaciones dejarán de resolverse.
 - **Recomendaciones de baloncesto** (`src/lib/basket-picks.ts`, `blendWithMarket` y `tooFar` en `src/lib/value.ts`): no ordenes por el EV del modelo a secas. Sube a la cabeza sus propios errores: en la prueba salían EV de +65 % con el modelo diciendo 29 % y la casa 10 %. Los pesos frente a la casa son una decisión, no una medida (`docs/specs/08-baloncesto.md`).
-- **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no deben entrar en las lecturas programadas ni en el modelo. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
+- **Puntos y Challengers de tenis** (`points.js`, `livescore.js`): salen de APIs sin documentar que pueden cambiar sin aviso. Si fallan, el marcador tiene que seguir saliendo. Los Challenger no entran en el modelo de tenis ni en las lecturas programadas del resto del tenis: sólo con su política propia de dos lecturas (una hasta 12 h antes y la de cierre, `challengerOddsEnabled`, `scheduler.js`), que no hay que hacer más seguida: son decenas al día y las casas pueden bloquear. Antes de añadir otra fuente, mira su `robots.txt` (`docs/specs/09-tenis.md`).
 - **Modelo de fútbol** (`server/services/football/model.js`, `picks.js`): si tocas algo, repite `backtest.js` dentro del contenedor (ajusta con un periodo y comprueba con otro; cifras en `docs/specs/11-futbol.md`). Los resultados pasados (`hist:` en `football.cache`) no se borran con la limpieza.
 - **WOW** (`server/services/mma/wow.js`): se lee del HTML de wowmma.com (Webflow, sin API); si rediseñan la web deja de salir y sólo queda el aviso en el log. Su `robots.txt` permite todo menos `/*?*`: nunca pidas URLs con parámetros. La cartelera se publica tarde. Cuotas de WOW: Betway y Winamax no las listan siempre.
 - **Modelo de MMA** (`server/services/mma/model.js`, `history.js`, `picks.js`): bien calibrado pero discrimina poco (57,6 % de ganadores acertados; cifras en `docs/specs/12-mma.md`). Si lo tocas, repite `docker compose exec mma node services/mma/backtest.js` (ajusta con un periodo y comprueba con otro). Las claves de mercado de MMA (`moneyline|0||`, `method|0|<ko|sub|dec>|`, `distance|0||`, `total_rounds|0||<línea>`) las usan las recomendaciones y `settle.js`: si cambias una en `odds.js`, ajusta los dos. En los mercados de método la casa no suma 100 % entre A y B (`open` en `picks.js`).
+- **Motor de los Challenger** (`server/sharpex-tenis`, servicio `challenger`): si tocas el modelo, repite `validar` (ajuste con un
+  año, evaluación con otro, sólo Challengers) con los datos de `sharpex-tenis datos`; cifras en su `README.md`. Las dos fuentes usan
+  identificadores distintos y se juntan en `mergeSources` (`src/data.js`): si cambias algo ahí, mira cuántos jugadores se emparejan y
+  cuántos partidos se cuentan dos veces. `challenger.historial` sólo admite añadir (un disparador lo impide): nunca metas picks de
+  prueba en la base de datos de verdad, no se pueden borrar.
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **Rendimiento** (`docs/specs/07-backend.md`, "Rendimiento de la web"): las consultas de cuotas no sondean cada minuto;
   llevan `meta: oddsMeta(partido)` y las recarga el aviso `odds:imported` (`src/lib/odds-live.ts`). Si añades una, haz lo

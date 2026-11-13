@@ -1,0 +1,65 @@
+{
+  "type": "LOL_ET",
+  "book": "winamax",
+  "url": "https://www.winamax.es/apuestas-deportivas/match/73812345",
+  "matchId": 73812345,
+  "home": "Pablo Llamas Ruiz",
+  "away": "Daniel Rincon",
+  "title": "Pablo Llamas Ruiz - Daniel Rincon",
+  "ts": 1794640000000,
+  "state": {
+    "matches": {
+      "73812345": {
+        "title": "Pablo Llamas Ruiz - Daniel Rincon",
+        "period": "not_started",
+        "status": "PREMATCH",
+        "matchId": 73812345,
+        "sportId": 5,
+        "available": true,
+        "mainBetId": 742300001,
+        "categoryId": 1003,
+        "matchStart": 1794654000,
+        "tournamentId": 41234,
+        "competitor1Id": 501234,
+        "competitor2Id": 501235,
+        "competitor1Name": "Pablo Llamas Ruiz",
+        "competitor2Name": "Daniel Rincon",
+        "bets": [742300002, 742300001, 742300003]
+      }
+    },
+    "bets": {
+      "742300001": {
+        "betId": 742300001, "betType": 2706, "matchId": 73812345, "betTitle": "Ganador", "betTypeName": "Ganador",
+        "marketId": 186, "outcomes": [2298500001, 2298500002], "template": "2way", "available": true,
+        "betTypeCategory": "Resultado", "specialBetValue": "type=prematch"
+      },
+      "742300002": {
+        "betId": 742300002, "betType": 2710, "matchId": 73812345, "betTitle": "1er set - Ganador", "betTypeName": "1er set - Ganador",
+        "marketId": 204, "outcomes": [2298500003, 2298500004], "template": "2way", "available": true,
+        "specialBetValue": "setnr=1"
+      },
+      "742300003": {
+        "betId": 742300003, "betType": 2730, "matchId": 73812345, "betTitle": "Número total de juegos", "betTypeName": "Número total de juegos",
+        "marketId": 189, "outcomes": [2298500005, 2298500006], "template": "OverUnder", "available": true,
+        "specialBetValue": "total=21.5"
+      }
+    },
+    "outcomes": {
+      "2298500001": { "code": "1", "betId": 742300001, "label": "Pablo Llamas Ruiz", "available": true },
+      "2298500002": { "code": "2", "betId": 742300001, "label": "Daniel Rincon", "available": true },
+      "2298500003": { "code": "1", "betId": 742300002, "label": "Pablo Llamas Ruiz", "available": true },
+      "2298500004": { "code": "2", "betId": 742300002, "label": "Daniel Rincon", "available": true },
+      "2298500005": { "code": "over", "betId": 742300003, "label": "Más de 21.5", "available": true },
+      "2298500006": { "code": "under", "betId": 742300003, "label": "Menos de 21.5", "available": true }
+    },
+    "odds": {
+      "2298500001": 1.62,
+      "2298500002": 2.25,
+      "2298500003": 1.7,
+      "2298500004": 2.08,
+      "2298500005": 1.85,
+      "2298500006": 1.87
+    },
+    "players": {}
+  }
+}

@@ -27,6 +27,7 @@ npm run backend:stop   # docker compose down (los datos se quedan en el volumen 
 | `tennis` | `server/services/tennis/` | 4005 (interno) | `tennis` | Tenis ATP y WTA (ESPN): partidos de los torneos en juego, sets, rankings |
 | `football` | `server/services/football/` | 4006 (interno) | `football` | Fútbol (ESPN): partidos por día, ficha del partido, clasificaciones |
 | `mma` | `server/services/mma/` | 4007 (interno) | `mma` | MMA: UFC y PFL (ESPN) y WOW (wowmma.com): combates, fichas, ranking Elo, previsión y recomendaciones (`docs/specs/12-mma.md`) |
+| `challenger` | `server/services/challenger/` y el motor `server/sharpex-tenis/` | 4008 (interno) | `challenger` | Motor de valor de los Challenger: baja el histórico (Sackmann y TennisMyLife) al volumen `challenger` y reentrena cada día en un proceso aparte (256 MB), escáner de cuotas e historial de picks. Ver `server/sharpex-tenis/README.md` |
 | `lector` | `server/lector/` (imagen de Playwright) | — | — | Chromium sin cabeza: recoge los trabajos de `/jobs/next`, lee Winamax y Betway con `chrome/bookmarklet/marcador.js` (montado en `/lector-src`) y manda las cuotas |
 | `db` | `postgres:17-alpine` | `127.0.0.1:55432` (para depurar) | — | Volumen `pgdata` |
 | `adminer` | `adminer` | `127.0.0.1:8080` (`ADMINER_PORT`) | — | Visor web de la base de datos (tema oscuro, servidor `db`) |
@@ -57,6 +58,7 @@ Reglas:
 | `/api/tennis` | tennis |
 | `/api/football` | football |
 | `/api/mma` | mma |
+| `/api/challenger` | challenger: `POST escanear`, `GET historial`, `POST picks/:id/cierre`, `POST picks/:id/resultado`, `GET estado`, `POST actualizar` (escribir y actualizar, sólo el administrador) |
 | `/ping`, `/api/health`, `/events` | el propio gateway |
 | `/api/search?q=` | el propio gateway: pregunta a la vez a `/api/<esports\|basket\|tennis\|football\|mma>/search` (8 s como mucho cada uno; si uno falla salen los demás) y junta los resultados |
 

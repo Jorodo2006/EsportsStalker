@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   oddsRefreshMinutes: 5,
   oddsAutoHours: 6, // partidos que empiezan en las próximas N horas: se leen cada oddsRefreshMinutes
   oddsFarEnabled: true, // el resto, hasta 48 h: cada hora, o cada 3 h a más de un día
+  challengerOddsEnabled: true, // los Challenger: una lectura hasta 12 h antes y la de cierre (scheduler.js)
   signupOpen: true // si se pueden crear cuentas nuevas desde la pantalla de entrada
 };
 

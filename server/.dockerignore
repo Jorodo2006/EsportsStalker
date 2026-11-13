@@ -1,2 +1,7 @@
 node_modules
 npm-debug.log
+# Datos locales del motor de Challengers (60 MB, no van en la imagen)
+sharpex-tenis/datos
+sharpex-tenis/demo
+sharpex-tenis/modelo.json
+sharpex-tenis/picks.jsonl

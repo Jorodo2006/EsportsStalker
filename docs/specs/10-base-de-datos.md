@@ -6,7 +6,7 @@ servicios, ver [07-backend.md](07-backend.md).
 
 ## Reglas
 
-- **Un esquema por servicio**: `bets`, `esports`, `odds`, `basket`, `tennis`, `football`, `mma`. Un servicio no toca las tablas de otro; si
+- **Un esquema por servicio**: `bets`, `esports`, `odds`, `basket`, `tennis`, `football`, `mma`, `challenger`. Un servicio no toca las tablas de otro; si
   necesita datos de otro, llama a su API.
 - No hay claves foráneas entre esquemas. La única relación entre servicios es por valor (`odds.matches.key` es el
   `match_key` de `odds.imports`, `odds.price_history`, `odds.jobs` y `odds.book_urls`, sin restricción).
@@ -293,6 +293,27 @@ Los cinco tienen una única tabla con la misma forma (migración `001` de cada u
 | `football.cache` | igual | Respuestas de ESPN (fútbol), por si no responde. Un mes de una liga pesa cientos de KB: se guarda como mucho cada 5 minutos |
 
 Cada una tiene un índice `cache_t_idx` sobre `t`. Son datos recuperables: se pueden vaciar sin perder nada del usuario.
+
+## Esquema `challenger` (servicio challenger)
+
+### `challenger.historial`
+
+Historial de picks del motor de los Challenger, uno para todos (lo escribe el administrador). **Sólo se añade:** cada
+registro lleva el hash del anterior (`server/sharpex-tenis/src/ledger.js`), así que cambiar o borrar uno rompe la cadena
+y `GET /api/challenger/historial` lo dice; además, un disparador (`challenger.solo_anadir`) no deja hacer `UPDATE`,
+`DELETE` ni `TRUNCATE`. Un error se corrige añadiendo un registro (otro resultado o cierre: vale el último).
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `n` | bigserial PK | Orden de alta |
+| `hash` | text, único | SHA-256 del registro |
+| `prev` | text, único | Hash del registro anterior (`GENESIS` el primero). Único: la cadena no se puede bifurcar |
+| `tipo` | text | `pick`, `close` (cuota de cierre) o `settle` (resultado) |
+| `pick_id` | text | Pick al que se refiere (índice `historial_pick_idx`) |
+| `registro` | text | El registro en JSON, tal cual: es lo que firma el hash (en `jsonb` cambiaría al volver a escribirlo) |
+
+El histórico de partidos y el modelo no van en la base de datos: están en el volumen `challenger` y se vuelven a bajar
+solos si se pierde.
 
 ## Puntos a vigilar
 

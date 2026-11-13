@@ -17,10 +17,11 @@ const TBD = /^(tbd|tba|por determinar)$/i;
 let last = { at: null, matches: [], far: 0, error: null };
 
 // Reparte por turnos entre deportes (cada uno ya ordenado por inicio): si no, las decenas de partidos de tenis
-// que empiezan antes llenan la cola y el baloncesto, que suele jugarse de noche, no llega a entrar
+// que empiezan antes llenan la cola y el baloncesto, que suele jugarse de noche, no llega a entrar. Los Challenger
+// van en su propio turno (turn), aparte del resto del tenis
 function byTurns(list) {
   const groups = new Map();
-  for (const m of list) groups.set(m.sport || 'lol', [...(groups.get(m.sport || 'lol') || []), m]);
+  for (const m of list) { const g = m.turn || m.sport || 'lol'; groups.set(g, [...(groups.get(g) || []), m]); }
   const out = [];
   for (let i = 0; out.length < list.length; i++) for (const g of groups.values()) if (g[i]) out.push(g[i]);
   return out;
@@ -37,8 +38,8 @@ function everyMinutes(m, minutes, hours) {
 }
 
 // Días de España entre ahora y `until`, los dos incluidos
+const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
 function daysUntil(until) {
-  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
   const days = new Set([day(until)]);
   for (let t = Date.now(); t < until; t += 864e5) days.add(day(t));
   return [...days];
@@ -88,6 +89,33 @@ async function upcomingTennis(hours) {
     .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
 }
 
+// Challenger: decenas al día, así que no se leen como el resto del tenis (cada pocos minutos), sino dos veces: una hasta
+// 12 h antes (la cuota de la mañana, para buscar valor) y la de cierre, a 20 min de la hora prevista. Si a esa hora sigue
+// sin empezar (las horas de LiveScore son aproximadas), otra cada 40 min, hasta 5 h después: la última antes de empezar
+// es la de cierre. Unas 2 o 3 por partido, 50-75 al día de las ~2.400 que puede hacer el lector. Con ellas, el motor de
+// los Challenger (servicio challenger, /api/challenger/comparar) mide si gana a la casa. Sólo el cuadro final
+const CH_EARLY_HOURS = 12;
+const CH_CLOSE_MINUTES = 20;
+const CH_LATE_EVERY = 40;
+const CH_LATE_HOURS = 5;
+const challengerClose = m => hoursLeft(m) * 60 <= CH_CLOSE_MINUTES;
+const challengerEvery = m => (challengerClose(m) ? CH_LATE_EVERY : 24 * 60);
+
+async function upcomingChallenger() {
+  const now = Date.now();
+  const days = [...new Set([...daysUntil(now + CH_EARLY_HOURS * 3600e3), day(now - CH_LATE_HOURS * 3600e3)])];
+  const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
+  const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
+  const seen = new Set();
+  return games.filter(g => {
+    const t = new Date(g.date).getTime();
+    if (g.level !== 'challenger' || g.state !== 'pre' || /^previa/i.test(g.round || '') || !g.a?.name || !g.b?.name || seen.has(g.id)) return false;
+    seen.add(g.id);
+    return t <= now + CH_EARLY_HOURS * 3600e3 && t >= now - CH_LATE_HOURS * 3600e3;
+  }).map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', turn: 'challenger', a: p(g.a), b: p(g.b) }))
+    .sort((x, y) => new Date(x.start) - new Date(y.start));
+}
+
 // Fútbol: local (a) contra visitante (b), como en la app. Sin los aplazados. Los otros nombres de ESPN ayudan a encontrarlo
 // en las casas ("UE Tavernes"), pero no la abreviatura: "VAL" está dentro de "Valladolid". Los filiales de ESPN ("Real
 // Sociedad II") en las casas son "Real Sociedad B"
@@ -135,27 +163,30 @@ async function tick() {
     const far = s.oddsFarEnabled !== false;
     // Si una de las fuentes falla, las otras siguen
     const crowdedHours = far ? TENNIS_FAR_HOURS : Math.min(hours, TENNIS_NEAR_HOURS);
-    const [lol, basket, tennis, football, mma] = await Promise.all([
+    const [lol, basket, tennis, football, mma, chall] = await Promise.all([
       upcoming(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (LoL):', e.message); return []; }),
       upcomingBasket(far ? FAR_HOURS : hours).catch(e => { console.error('Programador (baloncesto):', e.message); return []; }),
       upcomingTennis(crowdedHours).catch(e => { console.error('Programador (tenis):', e.message); return []; }),
       upcomingFootball(crowdedHours).catch(e => { console.error('Programador (fútbol):', e.message); return []; }),
-      upcomingMma(crowdedHours).catch(e => { console.error('Programador (MMA):', e.message); return []; })
+      upcomingMma(crowdedHours).catch(e => { console.error('Programador (MMA):', e.message); return []; }),
+      s.challengerOddsEnabled === false ? [] : upcomingChallenger().catch(e => { console.error('Programador (Challenger):', e.message); return []; })
     ]);
     const matches = [...lol, ...basket, ...tennis, ...football, ...mma].sort((x, y) => new Date(x.start) - new Date(y.start));
+    const chClose = chall.filter(challengerClose), chEarly = chall.filter(m => !challengerClose(m));
     const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
     let queued = rows[0].n;
-    // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes
-    const order = [...byTurns(matches.filter(m => isNear(m, hours))), ...byTurns(matches.filter(m => !isNear(m, hours)))];
+    // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes. El cierre de un Challenger va con
+    // los cercanos (no puede esperar); su lectura de la mañana, con los lejanos
+    const order = [...byTurns([...matches.filter(m => isNear(m, hours)), ...chClose]), ...byTurns([...matches.filter(m => !isNear(m, hours)), ...chEarly])];
     for (const m of order) {
       if (queued >= MAX_QUEUE) break;
-      if (!(await due(bridge.keyOf(m), everyMinutes(m, minutes, hours)))) continue;
+      if (!(await due(bridge.keyOf(m), m.turn === 'challenger' ? challengerEvery(m) : everyMinutes(m, minutes, hours)))) continue;
       await bridge.noteMatch(m);
       await bridge.newJob(m, 'auto');
       queued++;
     }
     const near = matches.filter(m => isNear(m, hours));
-    last = { at: Date.now(), matches: near, far: matches.length - near.length, error: null };
+    last = { at: Date.now(), matches: [...near, ...chClose], far: matches.length - near.length + chEarly.length, challenger: chall.length, error: null };
   } catch (e) {
     console.error('Programador de cuotas:', e.message);
     last = { ...last, at: Date.now(), error: e.message };
@@ -174,6 +205,8 @@ async function status() {
     FROM odds.jobs WHERE done_at IS NULL`);
   return {
     enabled: s.oddsAutoEnabled !== false,
+    challengerEnabled: s.challengerOddsEnabled !== false,
+    challenger: last.challenger || 0,
     minutes: clamp(s.oddsRefreshMinutes, 2, 240, 5),
     hours: clamp(s.oddsAutoHours, 1, 48, 6),
     lastRun: last.at,

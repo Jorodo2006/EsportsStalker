@@ -1,0 +1,15 @@
+{
+  "name": "sharpex-tenis",
+  "version": "0.1.0",
+  "description": "Motor de valor para tenis Challenger: modelo Elo por superficie, escáner de cuotas y registro de picks con CLV.",
+  "type": "module",
+  "bin": { "sharpex-tenis": "./bin/sharpex-tenis.js" },
+  "main": "./src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "demo": "node bin/sharpex-tenis.js demo"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}

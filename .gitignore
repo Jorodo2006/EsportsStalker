@@ -18,6 +18,13 @@ data.json
 # Versión antigua guardada a mano
 _old_v1/
 
+# Motor de Challengers: histórico de Sackmann (sharpex-tenis datos; 60 MB y licencia no comercial),
+# modelo entrenado, historial de picks y datos de la demo
+server/sharpex-tenis/datos/
+server/sharpex-tenis/demo/
+server/sharpex-tenis/modelo.json
+server/sharpex-tenis/picks.jsonl
+
 # Copias de seguridad de la base de datos (datos personales)
 backups/
 *.dump

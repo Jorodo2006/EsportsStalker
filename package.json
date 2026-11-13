@@ -17,7 +17,7 @@
     "backend:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build",
     "db:backup": "node scripts/backup.js",
     "db:restore": "node scripts/restore.js",
-    "test": "node --test \"server/test/**/*.test.js\"",
+    "test": "node --test \"server/test/**/*.test.js\" \"server/sharpex-tenis/test/*.test.js\"",
     "extension": "node scripts/extension.js"
   },
   "dependencies": {

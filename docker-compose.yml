@@ -5,7 +5,7 @@
 # Para cerrar la web a la red: WEB_BIND=127.0.0.1 en el .env.
 # Las credenciales salen del .env de esta carpeta (no se sube a git; plantilla en .env.example).
 
-# Los servicios de Node comparten una imagen. La construye sólo el gateway: si la construyeran los siete a la vez, la primera
+# Los servicios de Node comparten una imagen. La construye sólo el gateway: si la construyeran todos a la vez, la primera
 # vez (un servidor nuevo, o tras cambiar el nombre) Docker falla al crear la misma etiqueta desde varios sitios ("already
 # exists"). Los demás la usan tal cual y no la buscan en Docker Hub
 x-servicio: &servicio
@@ -93,6 +93,17 @@ services:
     <<: *servicio
     command: ["node", "services/mma/index.js"]
 
+  # Motor de valor de los Challenger (server/sharpex-tenis): baja el histórico (Sackmann y TennisMyLife) y reentrena cada día
+  challenger:
+    <<: *servicio
+    command: ["node", "services/challenger/index.js"]
+    environment:
+      <<: *entorno
+      CHALLENGER_DATA: /data
+    volumes:
+      # Histórico (unos 60 MB) y modelo: si se borra, se vuelve a bajar solo. El historial de picks va en PostgreSQL
+      - challenger:/data
+
   gateway:
     <<: *servicio
     build: ./server
@@ -130,3 +141,4 @@ services:
 
 volumes:
   pgdata:
+  challenger:

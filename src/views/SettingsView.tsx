@@ -140,9 +140,9 @@ function SignupCard() {
 // Lecturas programadas: el backend crea un trabajo por partido según lo que falte para que empiece y el lector de Docker lo recoge solo
 function AutoOddsCard() {
   const { settings, saveSettings, toast } = useApp();
-  const [f, setF] = useState({ on: true, far: true, min: '5', hours: '6' });
+  const [f, setF] = useState({ on: true, far: true, chall: true, min: '5', hours: '6' });
   useEffect(() => {
-    if (settings) setF({ on: settings.oddsAutoEnabled !== false, far: settings.oddsFarEnabled !== false, min: String(settings.oddsRefreshMinutes ?? 5), hours: String(settings.oddsAutoHours ?? 6) });
+    if (settings) setF({ on: settings.oddsAutoEnabled !== false, far: settings.oddsFarEnabled !== false, chall: settings.challengerOddsEnabled !== false, min: String(settings.oddsRefreshMinutes ?? 5), hours: String(settings.oddsAutoHours ?? 6) });
   }, [settings]);
   const { data: st } = useQuery({
     queryKey: ['autoStatus'],
@@ -154,6 +154,7 @@ function AutoOddsCard() {
     await saveSettings({
       oddsAutoEnabled: f.on,
       oddsFarEnabled: f.far,
+      challengerOddsEnabled: f.chall,
       oddsRefreshMinutes: Math.min(240, Math.max(2, parseInt(f.min, 10) || 5)),
       oddsAutoHours: Math.min(48, Math.max(1, parseInt(f.hours, 10) || 6))
     });
@@ -174,11 +175,16 @@ function AutoOddsCard() {
           <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.far} onChange={e => setF(p => ({ ...p, far: e.target.checked }))} />
           Leer también los de más adelante
         </label>
+        <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={f.chall} onChange={e => setF(p => ({ ...p, chall: e.target.checked }))} />
+          Leer los Challenger
+        </label>
         <Button type="submit" size="sm" className="h-9">Guardar</Button>
       </form>
       <p className="mt-3 text-xs text-zinc-500">
         El lector de Docker lee los partidos de uno en uno, primero los más cercanos, y guarda cada cambio de cuota en el histórico.
         Los de más adelante se leen cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (el tenis, cada 3 h y sólo desde 24 h antes). Cuantas más lecturas, más fácil es que una casa bloquee.
+        Los Challenger del cuadro final sólo se leen dos veces: una hasta 12 h antes y la de cierre, justo antes de empezar. Sirven para medir el motor de los Challenger frente a la casa.
       </p>
       {st && (
         <div className="mt-4 space-y-2 border-t border-zinc-800 pt-4 text-sm">
@@ -194,6 +200,7 @@ function AutoOddsCard() {
             ))}</ul>
             : <div className="text-zinc-500">Ningún partido empieza en las próximas {st.hours} h.</div>)}
           {st.enabled && st.far > 0 && <div className="text-xs text-zinc-500">Y {st.far} más adelante, con lecturas más espaciadas.</div>}
+          {st.enabled && st.challengerEnabled && !!st.challenger && <div className="text-xs text-zinc-500">{st.challenger} Challenger con lectura de la mañana y de cierre.</div>}
         </div>
       )}
     </Card>

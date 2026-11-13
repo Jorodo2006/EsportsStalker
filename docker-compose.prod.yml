@@ -49,6 +49,11 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
 
+  challenger:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lolet}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lolet}
+      CHALLENGER_DATA: /data
+
   gateway:
     # Sin puerto publicado: sólo lo alcanzan la web y el lector por la red de Docker
     ports: !reset []
