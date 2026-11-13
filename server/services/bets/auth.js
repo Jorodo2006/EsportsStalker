@@ -4,6 +4,7 @@ const { promisify } = require('util');
 const { query, tx } = require('../../shared/db');
 const { fail } = require('../../shared/service');
 const store = require('./store');
+const google = require('./google');
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'lolet_session';
@@ -12,7 +13,9 @@ const MAX_FAILS = 5, LOCK_MS = 60e3;
 const FIRST_USER_LOCK = 727001; // dos registros a la vez no pueden ser los dos el primero
 
 const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
-const toUser = r => ({ id: String(r.id), username: r.username, isAdmin: r.is_admin });
+// google y googleEmail: si tiene Google vinculado; hasPassword: si puede entrar también con contraseña (quien se registró con
+// Google no tiene hasta que se la pone en «Tu cuenta»)
+const toUser = r => ({ id: String(r.id), username: r.username, isAdmin: r.is_admin, google: !!r.google_sub, googleEmail: r.google_email || null, hasPassword: !!r.password_hash });
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -20,6 +23,7 @@ async function hashPassword(password) {
 }
 
 async function checkPassword(password, stored) {
+  if (!stored) return false;
   const [salt, hash] = stored.split(':');
   return crypto.timingSafeEqual(await scrypt(String(password), salt, 64), Buffer.from(hash, 'hex'));
 }
@@ -42,8 +46,10 @@ function cookieOf(req) {
 // Con HTTPS (COOKIE_SECURE=1 en el .env, o el proxy avisa con X-Forwarded-Proto) la cookie sólo viaja cifrada
 const isSecure = req => process.env.COOKIE_SECURE === '1' || String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
 
+// Se añade a las que ya haya: al volver de Google se borra además la cookie del intento (google.js)
 function setCookie(res, token, maxAge, secure) {
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`);
+  const prev = res.getHeader('Set-Cookie');
+  res.setHeader('Set-Cookie', [...(prev ? [].concat(prev) : []), `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`]);
 }
 
 async function openSession(res, userId, secure) {
@@ -74,7 +80,7 @@ const registerIp = limiter(5, 60 * 60e3);               // altas desde una IP: 5
 async function config() {
   const { rows } = await query('SELECT count(*)::int AS n FROM bets.users');
   const first = rows[0].n === 0;
-  return { first, signupOpen: first || (await store.getSettings(null)).signupOpen !== false };
+  return { first, signupOpen: first || (await store.getSettings(null)).signupOpen !== false, google: google.enabled() };
 }
 
 // ADMIN_USER y ADMIN_PASSWORD en el .env: si aún no hay usuarios se crea ese administrador al arrancar, y así el primer
@@ -149,13 +155,31 @@ async function userOf(token) {
   return rows[0] ? toUser(rows[0]) : null;
 }
 
-// Al cambiarla se cierran las sesiones de los demás dispositivos, pero no la de éste
+// Al cambiarla se cierran las sesiones de los demás dispositivos, pero no la de éste. Quien entró sólo con Google no tiene
+// contraseña: se pone una sin que se le pida la actual
 async function changePassword(userId, req, body) {
   validPassword(body?.next);
   const { rows } = await query('SELECT password_hash FROM bets.users WHERE id = $1', [userId]);
-  if (!rows[0] || !(await checkPassword(body?.current ?? '', rows[0].password_hash))) throw fail('La contraseña actual no es correcta', 403);
+  if (!rows[0]) throw fail('Inicia sesión', 401);
+  if (rows[0].password_hash && !(await checkPassword(body?.current ?? '', rows[0].password_hash))) throw fail('La contraseña actual no es correcta', 403);
   await query('UPDATE bets.users SET password_hash = $2 WHERE id = $1', [userId, await hashPassword(body.next)]);
   await query('DELETE FROM bets.sessions WHERE user_id = $1 AND token_hash <> $2', [userId, sha(cookieOf(req))]);
 }
 
-module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword };
+// ---------- Google (google.js) ----------
+const googleStart = (req, res, q) => google.start(req, res, q, { secure: isSecure(req) });
+function googleCallback(req, res, q) {
+  const ip = ipOf(req);
+  return google.callback(req, res, q, {
+    secure: isSecure(req),
+    firstUserLock: FIRST_USER_LOCK,
+    currentUser: r => userOf(cookieOf(r)),
+    signupOpen: async () => (await store.getSettings(null)).signupOpen !== false,
+    claimExisting: store.claimExisting,
+    registerBlocked: () => registerIp.blocked(ip),
+    registered: () => registerIp.add(ip),
+    openSession: (r, id) => openSession(r, id, isSecure(req))
+  });
+}
+
+module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword, googleStart, googleCallback };

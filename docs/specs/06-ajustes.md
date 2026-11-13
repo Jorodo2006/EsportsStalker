@@ -38,6 +38,7 @@ Variables (plantilla en `.env.example`):
 | `LEAGUEPEDIA_USER` | `leaguepediaUser` |
 | `LEAGUEPEDIA_PASSWORD` | `leaguepediaPassword` |
 | `LOLESPORTS_KEY` | `lolesportsKey` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `PUBLIC_URL` | Entrar con Google (no son ajustes: los lee `bets/google.js`; ver `07-backend.md`) |
 | `WEB_PORT` / `WEB_BIND` | Puerto de la web (8090) e interfaz donde escucha (`0.0.0.0`; `127.0.0.1` la cierra a la red) |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Base de datos (por defecto `lolet`). Sólo cuentan antes del primer arranque |
 

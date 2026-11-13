@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CalendarDays, Check, Eye, EyeOff, Loader2, Scale, Target, Wallet } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
+import { FooterJuego } from './FooterJuego';
 
 // Usuario conectado (ya cargado por AuthGate cuando se usa dentro de la app)
 export function useUser() {
@@ -32,6 +33,29 @@ export function AuthGate({ children }: { children: ReactNode }) {
 const USERNAME = /^[\p{L}\p{N}_.-]{3,30}$/u;
 const MIN_PASSWORD = 8;
 
+// La "G" de Google con sus colores, como piden sus normas de marca para el botón
+export function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
+// Errores que vuelven de Google en la dirección (/?login_error=…): se enseñan una vez y se quitan de la barra
+function errorFromUrl() {
+  try {
+    const u = new URL(location.href), msg = u.searchParams.get('login_error');
+    if (!msg) return '';
+    u.searchParams.delete('login_error');
+    history.replaceState(null, '', u.pathname + (u.search === '?' ? '' : u.search) + u.hash);
+    return msg;
+  } catch { return ''; }
+}
+
 const FEATURES: { icon: typeof CalendarDays; title: string; text: string }[] = [
   { icon: CalendarDays, title: 'Cuatro deportes, en directo', text: 'LoL, NBA, Euroliga, NBL, ATP, WTA, LaLiga, Champions y más, con marcadores y estadísticas.' },
   { icon: Scale, title: 'Cuotas comparadas', text: 'Winamax y Betway, leídas solas cada pocos minutos, con la mejor de cada línea a la vista.' },
@@ -49,7 +73,7 @@ function LoginScreen() {
   const [show, setShow] = useState(false);
   const [caps, setCaps] = useState(false);
   const [touched, setTouched] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(errorFromUrl);
   const [busy, setBusy] = useState(false);
   // La primera cuenta sólo se puede crear; con el registro cerrado, sólo se puede entrar
   const mode = cfg?.first ? 'register' : cfg && !cfg.signupOpen ? 'login' : choice;
@@ -85,8 +109,8 @@ function LoginScreen() {
   // En el ordenador, a la izquierda qué es la app y a la derecha el formulario. En el móvil, el titular arriba, el formulario
   // y debajo lo que ofrece
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto grid min-h-full max-w-6xl grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
         <section className="flex flex-col justify-center gap-8 px-5 pb-2 pt-10 sm:px-10 lg:py-16">
           <div>
             <img src="/logo.png" alt="Sharpex" className="block h-9 w-auto" />
@@ -125,7 +149,16 @@ function LoginScreen() {
               </p>
             )}
 
-            <div className="mt-6 space-y-4">
+            {cfg?.google && (
+              <>
+                <a href="/api/auth/google" className="mt-6 flex h-11 w-full items-center justify-center gap-2.5 rounded-md bg-zinc-100 text-sm font-medium text-zinc-900 transition hover:bg-white">
+                  <GoogleMark />Continuar con Google
+                </a>
+                <div className="mt-5 flex items-center gap-3 text-xs text-zinc-500"><span className="h-px flex-1 bg-zinc-800" />o con usuario y contraseña<span className="h-px flex-1 bg-zinc-800" /></div>
+              </>
+            )}
+
+            <div className={cn('space-y-4', cfg?.google ? 'mt-5' : 'mt-6')}>
               <Field label="Usuario" hint={register ? 'De 3 a 30 letras, números o . _ -' : undefined}>
                 <Input required autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={username}
                   aria-invalid={register && touched && !nameOk} onChange={e => setUsername(e.target.value)} onBlur={() => register && username && setTouched(true)} />
@@ -177,9 +210,9 @@ function LoginScreen() {
               </li>
             ))}
           </ul>
-          <p className="mx-auto mt-10 max-w-sm text-center text-xs text-zinc-600">Sólo para mayores de 18 años. Juega con responsabilidad: apuesta sólo lo que puedas permitirte perder.</p>
         </section>
       </div>
+      <FooterJuego className="mt-6" />
     </div>
   );
 }

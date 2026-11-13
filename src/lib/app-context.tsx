@@ -79,6 +79,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // El servidor ha resuelto apuestas solas: se recargan. El aviso llega a todos los conectados (no dice de quién son, para
   // no repartir datos de nadie), así que no se saca mensaje: cada uno ve en su lista lo suyo
   useEffect(() => window.api.onBetsSettled(() => { qc.invalidateQueries({ queryKey: ['bets'] }); }), [qc]);
+  // Vuelta de vincular Google (/?google=vinculada o /?login_error=…, google.js): se avisa y se limpia la barra de direcciones
+  useEffect(() => {
+    try {
+      const u = new URL(location.href), done = u.searchParams.get('google'), err = u.searchParams.get('login_error'), gone = u.searchParams.get('borrada');
+      if (!done && !err) return;
+      for (const k of ['google', 'login_error', 'borrada']) u.searchParams.delete(k);
+      history.replaceState(null, '', u.pathname + (u.search === '?' ? '' : u.search) + u.hash);
+      // El resultado se queda en «Tu cuenta» hasta cerrarlo (AccountView): un aviso de tres segundos, tras volver de Google, no se ve
+      const notice = done
+        ? { ok: true, text: `Cuenta de Google vinculada: ya puedes entrar con ella.${gone ? ` La cuenta vacía «${gone}», que se había creado al entrar con Google, se ha borrado.` : ''}` }
+        : { ok: false, text: String(err) };
+      try { sessionStorage.setItem('account-notice', JSON.stringify(notice)); } catch { toast(notice.text); }
+      if (done) qc.invalidateQueries({ queryKey: ['me'] });
+      setView('account');
+    } catch { /* sin URL */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // El administrador ha cambiado los ajustes de la app: valen para todos, así que se recargan aquí también (moneda, casas…)
   useEffect(() => window.api.onSettingsChanged(() => {
     qc.invalidateQueries({ queryKey: ['settings'] });

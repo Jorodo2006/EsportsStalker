@@ -33,8 +33,9 @@ export function ReliabilityMeter({ rel, compact }: { rel: Reliability; compact?:
 }
 
 // Panel completo. onSlip (u onBet) añade el lado elegido al cupón, donde se pone el stake y se registra.
-export function ValuePanel({ v, bank, onBet, onSlip }: {
-  v: ValueData; bank?: number; onBet?: (s: SideValue) => void; onSlip?: (s: SideValue) => void;
+// side y onSide: el lado elegido (Más o Menos), que se marca y se elige pulsando su tarjeta; la gráfica de la ficha lo sigue
+export function ValuePanel({ v, bank, onBet, onSlip, side: chosen, onSide }: {
+  v: ValueData; bank?: number; onBet?: (s: SideValue) => void; onSlip?: (s: SideValue) => void; side?: Side; onSide?: (s: Side) => void;
 }) {
   const cur = useCurrency();
   const { verdict: vd } = v;
@@ -63,8 +64,12 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
           const p = side === 'over' ? v.pOver : v.pUnder, fair = side === 'over' ? v.fairOver : v.fairUnder;
           const good = !!s && s.ev >= LEAN_EV;
           return (
-            <div key={side} className={cn('rounded-xl border bg-surface p-3', good ? 'border-emerald-500/50' : 'border-zinc-700/80')}>
-              <div className="flex items-baseline justify-between">
+            <div key={side} role={onSide ? 'button' : undefined} tabIndex={onSide ? 0 : undefined} aria-pressed={onSide ? chosen === side : undefined}
+              title={onSide ? `Ver ${SIDE_LABEL[side].toLowerCase()} de ${v.line} en la gráfica` : undefined}
+              onClick={onSide ? () => onSide(side) : undefined} onKeyDown={onSide ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSide(side); } } : undefined}
+              className={cn('rounded-xl border bg-surface p-3', good ? 'border-emerald-500/50' : 'border-zinc-700/80', onSide && 'cursor-pointer transition hover:bg-zinc-900',
+                onSide && chosen === side && 'ring-2 ring-amber-500/70')}>
+              <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold">{SIDE_LABEL[side]} de {v.line}</span>
                 <span className="font-mono text-xl font-bold tabular-nums">{pct(p)}</span>
               </div>
@@ -78,7 +83,7 @@ export function ValuePanel({ v, bank, onBet, onSlip }: {
                 </div>
                 {(onBet || onSlip) && (
                   <div className="mt-3 flex gap-2">
-                    <Button size="sm" variant={good ? 'primary' : 'secondary'} onClick={() => (onSlip ?? onBet)!(s)}><Plus size={13} />Añadir al cupón</Button>
+                    <Button size="sm" variant={good ? 'primary' : 'secondary'} onClick={e => { e.stopPropagation(); (onSlip ?? onBet)!(s); }}><Plus size={13} />Añadir al cupón</Button>
                   </div>
                 )}
               </> : <div className="mt-2 text-xs text-zinc-600">Sin cuota</div>}

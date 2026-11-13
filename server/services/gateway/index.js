@@ -31,7 +31,7 @@ const ROUTES = [
 ];
 
 // Lo único de /api que se puede usar sin sesión: entrar y registrarse
-const PUBLIC = /^\/api\/auth\/(config|me|register|login|logout)$/;
+const PUBLIC = /^\/api\/auth\/(config|me|register|login|logout|google|google\/callback)$/;
 
 const json = (res, code, v) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(v)); };
 

@@ -131,19 +131,33 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
-- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cinco deportes, sólo con
-  los partidos importantes y sin nada de dinero (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores
-  recomendaciones de baloncesto, tenis y fútbol, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
-  y ronda (`footballScore`, `basketScore`, `tennisScore`, `mmaScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
+- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): sólo con los partidos importantes y sin nada de dinero
+  (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores recomendaciones y próximos. Enseña el deporte elegido
+  arriba (con más competiciones: desde `ONE_CUT`); el interruptor *Los cinco deportes* vuelve a la portada común (desde `CUT`) y se
+  recuerda en el navegador. "Importante" es una nota por competición, nivel de equipos o jugadores y ronda (`footballScore`,
+  `basketScore`, `tennisScore`, `mmaScore`, `lolScore`): se ajusta ahí. Reutiliza las
   mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
   con `useFocus`.
 - **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
   con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
   (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
   (`USER_KEYS` en `server/services/bets/store.js`).
-- Estado global (app activa `lol` | `basket` | `tennis` | `football` | `mma`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cinco deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
+- **Entrar con Google** (`server/services/bets/google.js`, `docs/specs/07-backend.md`): sólo sale si están `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET` y `PUBLIC_URL` en el `.env`. No quites la comprobación del `state` ni la del `id_token` (`claimsOf`), y
+  las cuentas nuevas siguen las reglas del registro (primero administrador, registro cerrado, límite por IP).
+- Estado global (app activa `lol` | `basket` | `tennis` | `football` | `mma`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
+- Cada pantalla va dentro de `ScreenGuard` (`src/components/ScreenGuard.tsx`, en `App.tsx`): si falla al pintarse sale un aviso
+  con «Reintentar» en su sitio, en vez de quedarse la app en negro. No es excusa para no arreglar el fallo: mira la consola.
+- **Avisos de juego**: `FooterJuego` (`src/components/FooterJuego.tsx`: «El juego es un riesgo», +18, AutoProhibición,
+  juegoseguro.es, FEJAR y que Sharpex no es operador, con los colores del tema y sólo el +18 en rojo) al final de cada
+  pantalla (`App.tsx`) y de la entrada; `PlayNotice`
+  (`ui.tsx`, «+18 · Juega con responsabilidad») en el cupón. Lo pide el Real Decreto 958/2020 (arts. 10.3 y 11.3) porque se
+  enseñan cuotas de las casas: no los quites, y pon el aviso en cualquier sitio nuevo con cuotas que quede fuera de esa estructura.
+  Nada de sellos «Juego Seguro» / «Juego Autorizado» de la DGOJ ni logos de pago: son de operadores con licencia.
+- Rutas: dos rutas con el mismo método y camino en un servicio no dan error, gana la primera (así se rompió la búsqueda de
+  jugadores de baloncesto). `/api/<servicio>/search` es la del buscador de la cabecera; no la reutilices.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
 - Preferencias de UI (secciones plegadas, boleto) en `localStorage`, siempre dentro de `try/catch`; el boleto se borra al salir.
 - **Logo e iconos** en `public/` (Vite los sirve tal cual y `web/Dockerfile` los copia): `logo.png` (icono y nombre, fondo transparente, es el de la cabecera, el menú y la entrada), `logo-mark.png` (sólo el icono), `favicon.ico`/`favicon-32.png`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png` y `manifest.webmanifest` (la app se puede instalar). Salen del logo original; si se cambia, hay que regenerarlos. Sin `og:image`: necesita la URL absoluta de la web desplegada.

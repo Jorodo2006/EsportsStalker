@@ -9,6 +9,7 @@ import { Coupon } from '@/components/Coupon';
 import { LEAGUE_NAME } from '@/components/BasketAnalyzer';
 import { LiveDot } from '@/components/sport';
 import { panelCls } from '@/components/ui';
+import { FooterJuego } from '@/components/FooterJuego';
 import { surname } from '@/components/viz';
 import MatchesView from '@/views/MatchesView';
 import PlayersView from '@/views/PlayersView';
@@ -27,6 +28,7 @@ import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
 import AccountView from '@/views/AccountView';
 import { useUser } from '@/components/AuthGate';
+import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
 
@@ -78,8 +80,9 @@ function useMedia(query: string) {
 interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactNode; info: string; open: () => void }
 
 export default function App() {
-  const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId } = useApp();
+  const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId, slip } = useApp();
   const wide = useMedia('(min-width: 1400px)');
+  // El cupón flotante (móvil y pantallas medianas) tapa el final de la pantalla: el pie deja hueco para que se lea entero
   const [searching, setSearching] = useState(false);
   const openSearch = useCallback(() => setSearching(true), []);
   useSearchShortcut(openSearch);
@@ -159,16 +162,18 @@ export default function App() {
           <div className="pb-2.5">{appTabs}</div>
         </header>
 
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex max-w-[1680px] items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
+        <main ref={mainRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-[1680px] flex-1 items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
             <div className="min-w-0 flex-1">
               <BackendBanner />
+              <ScreenGuard key={`${app}:${view}`}>
               {view === 'today' && <TodayView />}
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && <BetsView key={app} />}
               {view === 'settings' && <SettingsView />}
               {view === 'account' && <AccountView />}
+              </ScreenGuard>
             </div>
             {wide && (
               <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[340px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">
@@ -177,6 +182,7 @@ export default function App() {
               </aside>
             )}
           </div>
+          <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} inner="max-w-[1680px] px-3 lg:px-5" />
         </main>
 
         <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">

@@ -88,7 +88,7 @@ por luchador) y la de **llegar a decisión**; `pOver` da la probabilidad de que 
 dos luchadores del resultado** (`fightMatches`, con `server/shared/fighters.js`): si un id cambia de combate, la apuesta no se resuelve con el
 resultado de otro. `evaluateMma` resuelve ganador, método, "llega a decisión" y total de asaltos
 (`(asalto−1)×5 + tiempo` frente a `línea×5`; línea exacta = nula). **Empate, sin resultado, cancelado, método desconocido o
-descalificación o decisión técnica (`other`) se quedan pendientes** para hacerlo a mano: cada casa los paga a su manera. Migración `011_mma.sql`
+descalificación o decisión técnica (`other`) se quedan pendientes** para hacerlo a mano: cada casa los paga a su manera. Migración `012_mma.sql`
 (`sport` admite `mma` en `bets.bets` y `bets.bet_legs`). Las recomendaciones del día se registran en `bets.predictions` (`mmaPredictions`).
 
 ## Interfaz

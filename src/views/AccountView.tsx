@@ -2,10 +2,11 @@
 // los avisos de este navegador. Los ajustes de la app (moneda, casas, cuotas automáticas…) son del administrador y valen para
 // todos: están en SettingsView
 import { useEffect, useState, type FormEvent } from 'react';
-import { LogOut, Settings as Cog } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CheckCircle2, LogOut, Settings as Cog, X } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
-import { money } from '@/lib/format';
-import { useUser } from '@/components/AuthGate';
+import { cn, money } from '@/lib/format';
+import { GoogleMark, useUser } from '@/components/AuthGate';
 import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
 import { Toggle } from '@/components/sport';
 import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
@@ -17,6 +18,7 @@ export default function AccountView() {
     <>
       <PageHeader title="Tu cuenta" subtitle="Tu contraseña, tu cartera y tus avisos" />
       <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+        <Notice />
         <AccountCard isAdmin={isAdmin} />
         <WalletCard />
         <AlertsCard />
@@ -28,6 +30,20 @@ export default function AccountView() {
         )}
       </div>
     </>
+  );
+}
+
+// Resultado de vincular Google (lo deja app-context al volver de Google): se queda hasta cerrarlo
+function Notice() {
+  const [n, setN] = useState<{ ok: boolean; text: string } | null>(() => { try { return JSON.parse(sessionStorage.getItem('account-notice') || 'null'); } catch { return null; } });
+  if (!n) return null;
+  const close = () => { setN(null); try { sessionStorage.removeItem('account-notice'); } catch { /* sin almacenamiento */ } };
+  return (
+    <div role="status" className={cn('flex items-start gap-3 rounded-xl border px-4 py-3 text-sm 2xl:col-span-2', n.ok ? 'border-emerald-500/40 bg-emerald-500/5 text-emerald-200' : 'border-rose-500/40 bg-rose-500/5 text-rose-200')}>
+      {n.ok ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-400" /> : <AlertTriangle size={18} className="mt-0.5 shrink-0 text-rose-400" />}
+      <span className="min-w-0 flex-1">{n.text}</span>
+      <button onClick={close} aria-label="Cerrar" className="shrink-0 cursor-pointer text-zinc-400 transition hover:text-zinc-100"><X size={16} /></button>
+    </div>
   );
 }
 
@@ -62,7 +78,11 @@ function WalletCard() {
 // Contraseña y salir
 function AccountCard({ isAdmin }: { isAdmin: boolean }) {
   const { toast } = useApp();
+  const qc = useQueryClient();
   const user = useUser().data;
+  const { data: cfg } = useQuery({ queryKey: ['authConfig'], queryFn: () => window.api.auth.config(), staleTime: 10 * 60e3 });
+  // Quien se registró con Google no tiene contraseña: se pone una sin que se le pida la actual
+  const hasPassword = user?.hasPassword !== false;
   const [pw, setPw] = useState({ current: '', next: '', repeat: '' });
   const [busy, setBusy] = useState(false);
 
@@ -71,9 +91,10 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
     if (pw.next !== pw.repeat) { toast('Las contraseñas no coinciden'); return; }
     setBusy(true);
     try {
-      await window.api.auth.changePassword(pw.current, pw.next);
+      await window.api.auth.changePassword(hasPassword ? pw.current : '', pw.next);
       setPw({ current: '', next: '', repeat: '' });
-      toast('Contraseña cambiada');
+      toast(hasPassword ? 'Contraseña cambiada' : 'Contraseña puesta: ya puedes entrar también con tu usuario');
+      if (!hasPassword) qc.invalidateQueries({ queryKey: ['me'] });
     } catch (err) { toast((err as Error).message); }
     finally { setBusy(false); }
   }
@@ -90,12 +111,24 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
       <p className="mb-4 text-sm text-zinc-400">
         Has entrado como <b className="text-zinc-100">{user?.username}</b>{isAdmin ? ' (administrador)' : ''}. Tus apuestas, tu cartera y tus avisos son sólo tuyos.
       </p>
-      <form onSubmit={change} className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
-        <Field label="Contraseña actual"><Input required type="password" autoComplete="current-password" value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} /></Field>
+      {!hasPassword && <p className="mb-3 text-sm text-zinc-400">Entras con Google. Si quieres entrar también con tu usuario, ponte una contraseña:</p>}
+      <form onSubmit={change} className={cn('grid grid-cols-1 items-end gap-3', hasPassword ? 'sm:grid-cols-[1fr_1fr_1fr_auto]' : 'sm:grid-cols-[1fr_1fr_auto]')}>
+        {hasPassword && <Field label="Contraseña actual"><Input required type="password" autoComplete="current-password" value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} /></Field>}
         <Field label="Contraseña nueva"><Input required minLength={8} type="password" autoComplete="new-password" value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} /></Field>
         <Field label="Repítela"><Input required minLength={8} type="password" autoComplete="new-password" value={pw.repeat} onChange={e => setPw(p => ({ ...p, repeat: e.target.value }))} /></Field>
-        <Button type="submit" variant="secondary" disabled={busy}>Cambiar</Button>
+        <Button type="submit" variant="secondary" disabled={busy}>{hasPassword ? 'Cambiar' : 'Poner contraseña'}</Button>
       </form>
+      {(user?.google || cfg?.google) && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
+          <div className="flex min-w-0 items-center gap-2.5 text-sm">
+            <GoogleMark />
+            {user?.google
+              ? <span className="min-w-0 truncate text-zinc-300">Google vinculado{user.googleEmail ? <>: <b className="text-zinc-100">{user.googleEmail}</b></> : ''}</span>
+              : <span className="text-zinc-400">Vincula tu cuenta de Google para entrar con ella.</span>}
+          </div>
+          {!user?.google && <a href="/api/auth/google?link=1" className="inline-flex h-8 items-center rounded-md bg-zinc-800 px-3 text-xs font-medium text-zinc-100 transition hover:bg-zinc-700">Vincular con Google</a>}
+        </div>
+      )}
     </Card>
   );
 }

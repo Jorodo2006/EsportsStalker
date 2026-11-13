@@ -100,7 +100,7 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 | `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt e `is_admin` |
 | `bets.sessions` | Sesiones de 30 días. Sólo se guarda el SHA-256 del token |
 | `bets.user_settings` | Lo de cada usuario: banca inicial y filtro de ligas (el resto de ajustes son comunes, `bets.settings`) |
-| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football`, `mma` o `mix` (migraciones 002, 003, 004, 007 y 011) |
+| `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football`, `mma` o `mix` (migraciones 002, 003, 004, 007 y 012) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
 | `bets.settings` | Ajustes comunes clave/valor (`jsonb`). Las credenciales del `.env` nunca se guardan aquí |
 | `esports.cache` | Caché de Leaguepedia (6 h) |
@@ -146,6 +146,36 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 - **Copias de seguridad**: `npm run db:backup` (`pg_dump -Fc` desde el contenedor `db`, conserva las últimas 14) y
   `npm run db:restore -- <fichero>`. En producción: `COMPOSE_FILES=docker-compose.yml,docker-compose.prod.yml` y
   programarlo con cron.
+
+## Entrar con Google
+
+`server/services/bets/google.js`, rutas abiertas `GET /api/auth/google` y `GET /api/auth/google/callback` (están en `PUBLIC` del
+gateway). OAuth 2.0 con OpenID Connect, flujo de código con PKCE, sin librerías:
+
+1. `/api/auth/google` guarda en la cookie `lolet_google` (10 minutos, `HttpOnly`, `SameSite=Lax`, sólo para `/api/auth/google`) un
+   `state` y un verificador PKCE al azar, y manda a Google con `prompt=select_account`. Con `?link=1` es para vincular Google a
+   la cuenta con la que ya se ha entrado.
+2. Google vuelve a `/callback` con `code` y `state`. Si el `state` no coincide con el de la cookie, se descarta: así nadie puede
+   meter su cuenta de Google en la sesión de otro.
+3. El código se cambia por el `id_token` directamente con Google por HTTPS, y se comprueban emisor, destinatario (`aud` = el ID de
+   cliente), caducidad y correo verificado (`claimsOf`). Al venir de Google por TLS no hace falta comprobar la firma (OpenID
+   Connect, 3.1.3.7).
+4. Si ese `sub` de Google ya tiene usuario, se abre la sesión. Si no, se crea con las reglas del registro: el primero es el
+   administrador, con el registro cerrado no se crea y cuenta para el límite de altas por IP. El usuario sale de la parte del
+   correo antes de la `@` (`usernameBase`, `freeUsername`). No tiene contraseña (`password_hash` nulo, migración `011_google.sql`)
+   hasta que se la pone en *Tu cuenta*.
+5. Vuelve a `/` (o a `/?google=vinculada`); los errores, en `/?login_error=…`, que la pantalla de entrada o *Tu cuenta* enseñan
+   y quitan de la barra.
+
+Configuración: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `PUBLIC_URL` en el `.env` (pasos en `.env.example`); la dirección de
+vuelta autorizada en Google tiene que ser exactamente `<PUBLIC_URL>/api/auth/google/callback`. Sin las tres, `GET /api/auth/config`
+da `google: false` y el botón no sale. Las cuentas de Google no se enlazan solas por correo con las de usuario y contraseña (éstas no
+guardan correo): se vinculan a mano desde *Tu cuenta*.
+
+Al vincular, si esa cuenta de Google ya tiene usuario: si es una cuenta **vacía** (la que se crea sola al entrar con Google:
+sin contraseña, sin apuestas ni ajustes propios y sin ser administrador), el vínculo pasa a la cuenta actual y la vacía se
+borra, porque es la misma persona entrando dos veces. Si tiene algo suyo, no se toca y se dice de qué usuario es. El resultado
+sale en *Tu cuenta* hasta que se cierra (no en un aviso de unos segundos, que tras volver de Google no se ve).
 
 ## Rendimiento de la web
 
