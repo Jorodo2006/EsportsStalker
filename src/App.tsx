@@ -172,7 +172,7 @@ export default function App() {
               </aside>
             )}
           </div>
-          <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} />
+          <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} inner="max-w-[1680px] px-3 lg:px-5" />
         </main>
 
         <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">

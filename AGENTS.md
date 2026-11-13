@@ -148,7 +148,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - Cada pantalla va dentro de `ScreenGuard` (`src/components/ScreenGuard.tsx`, en `App.tsx`): si falla al pintarse sale un aviso
   con «Reintentar» en su sitio, en vez de quedarse la app en negro. No es excusa para no arreglar el fallo: mira la consola.
 - **Avisos de juego**: `FooterJuego` (`src/components/FooterJuego.tsx`: «El juego es un riesgo», +18, AutoProhibición,
-  juegoseguro.es, FEJAR y que Sharpex no es operador) al final de cada pantalla (`App.tsx`) y de la entrada; `PlayNotice`
+  juegoseguro.es, FEJAR y que Sharpex no es operador, con los colores del tema y sólo el +18 en rojo) al final de cada
+  pantalla (`App.tsx`) y de la entrada; `PlayNotice`
   (`ui.tsx`, «+18 · Juega con responsabilidad») en el cupón. Lo pide el Real Decreto 958/2020 (arts. 10.3 y 11.3) porque se
   enseñan cuotas de las casas: no los quites, y pon el aviso en cualquier sitio nuevo con cuotas que quede fuera de esa estructura.
   Nada de sellos «Juego Seguro» / «Juego Autorizado» de la DGOJ ni logos de pago: son de operadores con licencia.
