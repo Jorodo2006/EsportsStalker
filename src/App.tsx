@@ -8,7 +8,7 @@ import { BetFormDialog } from '@/components/BetForm';
 import { Coupon } from '@/components/Coupon';
 import { LEAGUE_NAME } from '@/components/BasketAnalyzer';
 import { LiveDot } from '@/components/sport';
-import { panelCls } from '@/components/ui';
+import { panelCls, PlayNotice } from '@/components/ui';
 import { surname } from '@/components/viz';
 import MatchesView from '@/views/MatchesView';
 import PlayersView from '@/views/PlayersView';
@@ -75,7 +75,7 @@ function useMedia(query: string) {
 interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactNode; info: string; open: () => void }
 
 export default function App() {
-  const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId } = useApp();
+  const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId, slip } = useApp();
   const wide = useMedia('(min-width: 1400px)');
   const [searching, setSearching] = useState(false);
   const openSearch = useCallback(() => setSearching(true), []);
@@ -162,6 +162,9 @@ export default function App() {
               {view === 'settings' && <SettingsView />}
               {view === 'account' && <AccountView />}
               </ScreenGuard>
+              <footer className={cn('mt-10 border-t border-zinc-800 pt-4', !wide && slip.length > 0 && 'pb-16')}>
+                <PlayNotice className="text-center" />
+              </footer>
             </div>
             {wide && (
               <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[340px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">

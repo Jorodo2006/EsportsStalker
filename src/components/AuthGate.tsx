@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CalendarDays, Check, Eye, EyeOff, Loader2, Scale, Target, Wallet } from 'lucide-react';
 import { cn } from '@/lib/format';
-import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
+import { AgeBadge, Button, ErrorBox, Field, Input, Loading, SAFE_PLAY_URL, seg } from './ui';
 
 // Usuario conectado (ya cargado por AuthGate cuando se usa dentro de la app)
 export function useUser() {
@@ -209,7 +209,10 @@ function LoginScreen() {
               </li>
             ))}
           </ul>
-          <p className="mx-auto mt-10 max-w-sm text-center text-xs text-zinc-600">Sólo para mayores de 18 años. Juega con responsabilidad: apuesta sólo lo que puedas permitirte perder.</p>
+          <p className="mx-auto mt-10 max-w-sm text-center text-xs text-zinc-600">
+            <AgeBadge className="mr-1.5" />Sólo para mayores de edad. Juega con responsabilidad: apuesta sólo lo que puedas permitirte perder.
+            Ayuda en <a href={SAFE_PLAY_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-zinc-700 underline-offset-2 transition hover:text-zinc-300">juegoseguro.es</a>.
+          </p>
         </section>
       </div>
     </div>

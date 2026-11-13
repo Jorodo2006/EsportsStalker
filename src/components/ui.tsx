@@ -183,5 +183,28 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
   );
 }
 
+// Aviso de juego donde se ven cuotas de las casas (Real Decreto 958/2020: «+18», art. 11.3, y mensaje de juego responsable,
+// art. 10.3). juegoseguro.es lleva a la página de juego seguro de la Dirección General de Ordenación del Juego (jugarbien.es,
+// la de antes, ya no existe).
+export const SAFE_PLAY_URL = 'https://www.juegoseguro.es';
+// «+18» en un círculo rojo, como la señal de prohibido a menores. Dibujado y no con el emoji 🔞, que cada sistema pinta a su
+// manera (o no pinta)
+export function AgeBadge({ className }: { className?: string }) {
+  return (
+    <span role="img" aria-label="Sólo para mayores de 18 años" title="Sólo para mayores de 18 años"
+      className={cn('inline-grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-rose-500 align-middle text-[9px] font-bold leading-none tracking-tight text-rose-400 tnum', className)}>
+      +18
+    </span>
+  );
+}
+export function PlayNotice({ className }: { className?: string }) {
+  return (
+    <p className={cn('text-xs text-zinc-500', className)}>
+      <AgeBadge className="mr-1.5" />Juega con responsabilidad<span className="text-zinc-600"> · </span>
+      <a href={SAFE_PLAY_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-zinc-700 underline-offset-2 transition hover:text-zinc-200">juegoseguro.es</a>
+    </p>
+  );
+}
+
 export const th = 'px-3 py-2 text-left text-xs font-medium text-zinc-500';
 export const td = 'px-3 py-2.5 text-[13px]';

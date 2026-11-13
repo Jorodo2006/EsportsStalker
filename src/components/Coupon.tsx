@@ -10,7 +10,7 @@ import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money, odd } from '@/lib/format';
 import type { BetDraft, SlipLeg } from '@/lib/types';
 import { comboOdds } from './BetForm';
-import { Button, chip, seg } from './ui';
+import { Button, chip, PlayNotice, seg } from './ui';
 
 const QUICK = [5, 10, 25, 50];
 const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol' };
@@ -141,6 +141,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
               onClick={() => openBet({ legs: slip.map(({ bookmaker: _, ...l }) => l), stake: num(comboStake) || undefined, bookmaker: books.length === 1 ? books[0] : '', fromSlip: true })}><Pencil size={15} /></Button>}
             <Button variant="secondary" className="h-10 w-10" size="icon" title="Vaciar el cupón" onClick={clearSlip}><Trash2 size={15} /></Button>
           </div>
+          <PlayNotice className="text-center" />
         </div>
       </>}
     </div>
@@ -154,6 +155,7 @@ function EmptyCoupon({ balance }: { balance: string }) {
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Ticket size={15} className="text-zinc-500" />Cupón</div>
       <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">Pulsa una cuota en la ficha de un partido para añadirla. Aquí eliges simples o combinada y la registras.</p>
       <div className="mt-3 flex justify-between border-t border-zinc-800 pt-2.5 text-xs text-zinc-500">Saldo <span className="text-zinc-200 tnum">{balance}</span></div>
+      <PlayNotice className="mt-2.5" />
     </div>
   );
 }
