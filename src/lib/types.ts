@@ -354,13 +354,15 @@ export interface BasketPlayerGame {
 export interface BoxTeam { id: string; name: string; abbr: string; logo: string; side: 'home' | 'away'; periods: number[]; players: (BoxLine & { id: string; name: string; starter: boolean })[]; out?: { id: string; name: string; reason: string }[]; totals: BoxLine }
 export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
-export interface AuthUser { id: string; username: string; isAdmin: boolean }
+// google: tiene Google vinculado (googleEmail, su correo); hasPassword: también puede entrar con contraseña
+export interface AuthUser { id: string; username: string; isAdmin: boolean; google?: boolean; googleEmail?: string | null; hasPassword?: boolean }
 
 export interface Api {
   search(q: string): Promise<SearchResults>;
   auth: {
     me(): Promise<AuthUser | null>;
-    config(): Promise<{ first: boolean; signupOpen: boolean }>;
+    // google: si está configurado «Continuar con Google» (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y PUBLIC_URL en el .env)
+    config(): Promise<{ first: boolean; signupOpen: boolean; google?: boolean }>;
     login(username: string, password: string): Promise<AuthUser>;
     register(username: string, password: string): Promise<AuthUser>;
     logout(): Promise<void>;

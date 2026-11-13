@@ -40,6 +40,9 @@ const routes = [
   ['POST', '/api/auth/register', ({ body, req, res }) => auth.register(body, req, res)],
   ['POST', '/api/auth/login', ({ body, req, res }) => auth.login(body, req, res)],
   ['POST', '/api/auth/logout', ({ req, res }) => auth.logout(req, res)],
+  // Entrar o crear la cuenta con Google (google.js): la primera manda a Google y la segunda es la vuelta. También abiertas
+  ['GET', '/api/auth/google', ({ req, res, query: q }) => auth.googleStart(req, res, q)],
+  ['GET', '/api/auth/google/callback', ({ req, res, query: q }) => auth.googleCallback(req, res, q)],
   ['POST', '/api/auth/password', ({ req, body }) => auth.changePassword(who(req).id, req, body)],
   // El gateway pregunta aquí de quién es cada sesión (no se publica)
   ['POST', '/internal/auth/session', ({ body }) => auth.userOf(body?.token)],

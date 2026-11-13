@@ -128,19 +128,27 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   los partidos en directo. Por debajo, cabecera arriba, barra inferior y cupón flotante. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
-- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): la portada común a los cuatro deportes, sólo con
-  los partidos importantes y sin nada de dinero (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores
-  recomendaciones de baloncesto, tenis y fútbol, y próximos. "Importante" es una nota por competición, nivel de equipos o jugadores
-  y ronda (`footballScore`, `basketScore`, `tennisScore`, `lolScore`; entran desde `CUT`): se ajusta ahí. Reutiliza las
+- La app se abre en **Hoy** (`src/views/TodayView.tsx`, vista `today`): sólo con los partidos importantes y sin nada de dinero
+  (así lo quiso Jordi): destacados del día en tarjetas, en directo, mejores recomendaciones y próximos. Enseña el deporte elegido
+  arriba (con más competiciones: desde `ONE_CUT`); el interruptor *Los cuatro deportes* vuelve a la portada común (desde `CUT`) y se
+  recuerda en el navegador. "Importante" es una nota por competición, nivel de equipos o jugadores y ronda (`footballScore`,
+  `basketScore`, `tennisScore`, `lolScore`): se ajusta ahí. Reutiliza las
   mismas consultas y claves de TanStack Query que las vistas de cada deporte; pulsar un partido cambia de deporte y lo abre
   con `useFocus`.
 - **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
   con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
   (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
   (`USER_KEYS` en `server/services/bets/store.js`).
+- **Entrar con Google** (`server/services/bets/google.js`, `docs/specs/07-backend.md`): sólo sale si están `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET` y `PUBLIC_URL` en el `.env`. No quites la comprobación del `state` ni la del `id_token` (`claimsOf`), y
+  las cuentas nuevas siguen las reglas del registro (primero administrador, registro cerrado, límite por IP).
 - Estado global (app activa `lol` | `basket` | `tennis` | `football`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
+- Cada pantalla va dentro de `ScreenGuard` (`src/components/ScreenGuard.tsx`, en `App.tsx`): si falla al pintarse sale un aviso
+  con «Reintentar» en su sitio, en vez de quedarse la app en negro. No es excusa para no arreglar el fallo: mira la consola.
+- Rutas: dos rutas con el mismo método y camino en un servicio no dan error, gana la primera (así se rompió la búsqueda de
+  jugadores de baloncesto). `/api/<servicio>/search` es la del buscador de la cabecera; no la reutilices.
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
 - Preferencias de UI (secciones plegadas, boleto) en `localStorage`, siempre dentro de `try/catch`; el boleto se borra al salir.
 - **Móvil:** todo tiene que caber en 375 px sin que la página se desplace de lado. Se diseña de móvil hacia arriba con `sm:` y `lg:`; desde `lg` se ve la navegación de escritorio, y por debajo la barra inferior. Las tablas anchas van dentro de `overflow-x-auto` o tienen versión en tarjetas (`BetCard`).

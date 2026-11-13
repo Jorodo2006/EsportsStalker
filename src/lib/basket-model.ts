@@ -139,7 +139,8 @@ export interface BasketAnalysis {
   rel: ReturnType<typeof reliability>; // la del lado con más valor
   relBySide: Record<Side, ReturnType<typeof reliability>>;
   verdict: ReturnType<typeof verdict>;
-  splits: { label: string; n: number; avg: number | null; hit: number | null; min: number | null }[];
+  // hit: proporción de partidos por encima de la línea; under, por debajo (con línea entera no suman 1: el resto son nulas)
+  splits: { label: string; n: number; avg: number | null; hit: number | null; under: number | null; min: number | null }[];
   ladder: { line: number; pOver: number; fairOver: number; fairUnder: number }[];
 }
 
@@ -198,7 +199,7 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: Li
   const reg = games.filter(g => g.type !== 'pre');
   const split = (label: string, arr: G[]) => {
     const v = arr.map(M.f);
-    return { label, n: arr.length, avg: v.length ? mean(v) : null, hit: v.length ? v.filter(x => x > line).length / v.length : null, min: arr.length ? mean(arr.map(g => g.min)) : null };
+    return { label, n: arr.length, avg: v.length ? mean(v) : null, hit: v.length ? v.filter(x => x > line).length / v.length : null, under: v.length ? v.filter(x => x < line).length / v.length : null, min: arr.length ? mean(arr.map(g => g.min)) : null };
   };
   const splits = [
     split('Últimos 5', reg.slice(0, 5)),

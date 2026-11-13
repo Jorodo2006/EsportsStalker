@@ -24,6 +24,7 @@ import TodayView from '@/views/TodayView';
 import SettingsView from '@/views/SettingsView';
 import AccountView from '@/views/AccountView';
 import { useUser } from '@/components/AuthGate';
+import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
 
@@ -153,12 +154,14 @@ export default function App() {
           <div className="mx-auto flex max-w-[1680px] items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
             <div className="min-w-0 flex-1">
               <BackendBanner />
+              <ScreenGuard key={`${app}:${view}`}>
               {view === 'today' && <TodayView />}
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : <FootballMatches />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : <FootballStandings />)}
               {view === 'bets' && <BetsView key={app} />}
               {view === 'settings' && <SettingsView />}
               {view === 'account' && <AccountView />}
+              </ScreenGuard>
             </div>
             {wide && (
               <aside className="sticky top-5 flex max-h-[calc(100dvh-2.5rem)] w-[340px] shrink-0 flex-col gap-4 overflow-y-auto no-scrollbar">

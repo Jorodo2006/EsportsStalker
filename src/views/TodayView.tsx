@@ -14,7 +14,7 @@ import { useBasketPicks, usePickAdd } from '@/components/BasketPicks';
 import { targetOfGame } from '@/components/BasketOdds';
 import { LEAGUE_NAME } from '@/components/BasketAnalyzer';
 import { useUpcomingGames } from '@/components/BasketRange';
-import { LiveDot, MatchCard, today, type MatchState, type RowTeam } from '@/components/sport';
+import { LiveDot, MatchCard, Toggle, today, type MatchState, type RowTeam } from '@/components/sport';
 import { Empty, oddBtn } from '@/components/ui';
 import { Panel, surname } from '@/components/viz';
 import { targetOfFootball } from './FootballMatches';
@@ -31,6 +31,11 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: 
 // Nota de 0 a ~150; entra en la portada desde CUT. Por competición, y dentro de ella, por el nivel de los equipos o jugadores
 // y la ronda. Es una decisión, no una medida: se ajusta aquí
 const CUT = 60;
+// Con un solo deporte (el elegido arriba) hay sitio para más: entran también las competiciones de segunda fila (WNBA, NBL,
+// EuroCup, LCS, los torneos 500 y 250 de tenis, la Ligue 1 o la Conference). Los Challenger y la previa siguen fuera (nota 0)
+const ONE_CUT = 20;
+const ALL_KEY = 'today-all';
+const loadAll = () => { try { return localStorage.getItem(ALL_KEY) === '1'; } catch { return false; } };
 const FOOTBALL_LEAGUE: Record<string, number> = {
   champions: 100, laliga: 90, premier: 85, europa: 70, seriea: 65, bundesliga: 65, copa: 55, ligue1: 55, conference: 50, segunda: 30,
   // Selecciones: la Nations League cuenta como una gran liga; los amistosos, sólo si juega una de las grandes
@@ -84,8 +89,13 @@ function useSeen<T extends HTMLElement>(ready: boolean, margin = '300px') {
 }
 
 export default function TodayView() {
-  const { switchApp, go, setFocusId, setOpenMatch, addToSlip } = useApp();
+  const { app, switchApp, go, setFocusId, setOpenMatch, addToSlip } = useApp();
   const day = today();
+  // Con el deporte elegido arriba, sólo ese; «Los cuatro deportes» vuelve a la portada común. Se recuerda en este navegador
+  const [everything, setEverything] = useState(loadAll);
+  const toggleAll = (v: boolean) => { setEverything(v); try { localStorage.setItem(ALL_KEY, v ? '1' : '0'); } catch { /* sin almacenamiento */ } };
+  const only: AppId | null = everything ? null : app;
+  const shows = (s: AppId) => !only || only === s;
   const { data: basketToday = [], isPending: p1 } = useQuery({ queryKey: ['basket', 'games', day], queryFn: () => window.api.basket.games(day), refetchInterval: 60_000 });
   const { data: footballToday = [], isPending: p2 } = useQuery({ queryKey: ['football', 'games', day], queryFn: () => window.api.football.games(day), refetchInterval: 60_000 });
   const { data: tennisToday = [], isPending: p3 } = useQuery({ queryKey: ['tennis', 'games', day], queryFn: () => window.api.tennis.games(day), refetchInterval: 60_000 });
@@ -98,7 +108,7 @@ export default function TodayView() {
   const openLol = (m: MatchEvent) => { switchApp('lol'); setOpenMatch(m); go('matches'); };
 
   // ---------- todos los partidos de hoy (y los de baloncesto de esta noche) con su nota ----------
-  const items = useMemo<Item[]>(() => {
+  const scored = useMemo<Item[]>(() => {
     const st = (s: string): MatchState => (s === 'in' || s === 'inProgress' ? 'live' : s === 'post' || s === 'completed' ? 'post' : 'pre');
     const basket = new Map<string, BasketGame>();
     for (const g of [...basketToday, ...u.byLeague]) basket.set(g.id, g);
@@ -142,8 +152,9 @@ export default function TodayView() {
         };
       })
     ];
-    return out.filter(x => x.score >= CUT);
+    return out;
   }, [basketToday, u.byLeague, footballToday, tennisToday, lolSchedule, lolLive, day]); // eslint-disable-line react-hooks/exhaustive-deps
+  const items = useMemo(() => scored.filter(x => (only ? x.s === only && x.score >= ONE_CUT : x.score >= CUT)), [scored, only]);
 
   // Destacados: en juego primero, luego los que faltan y al final los acabados; dentro, por nota y hora
   const order: Record<MatchState, number> = { live: 0, pre: 1, post: 2 };
@@ -162,11 +173,11 @@ export default function TodayView() {
   // Las de baloncesto necesitan los partidos de los jugadores de todos los equipos que juegan (eran tres cuartas partes de lo
   // que bajaba la portada): sólo se calculan cuando el panel está a la vista o a punto de estarlo
   const [picksRef, picksSeen] = useSeen<HTMLDivElement>(!p1 && !p2 && !p3 && !p4);
-  const bp = useBasketPicks(picksSeen ? u.games : NO_GAMES, u.injuries);
+  const bp = useBasketPicks(picksSeen && shows('basket') ? u.games : NO_GAMES, u.injuries);
   const addBasket = usePickAdd();
   const basketBest = useMemo(() => bestPicks(bp.picks, 1.5, 5), [bp.picks]);
-  const tq = useQuery({ queryKey: ['tennis', 'picks-day', day], queryFn: () => window.api.tennis.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
-  const fq = useQuery({ queryKey: ['football', 'picks-day', day], queryFn: () => window.api.football.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const tq = useQuery({ queryKey: ['tennis', 'picks-day', day], queryFn: () => window.api.tennis.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false, enabled: shows('tennis') });
+  const fq = useQuery({ queryKey: ['football', 'picks-day', day], queryFn: () => window.api.football.picksDay(day), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false, enabled: shows('football') });
   type Best = { id: string; s: AppId; title: string; event: string; date: string; p: number; ev: number; price: number; book?: string; open: () => void; add: () => void };
   const best: Best[] = [
     ...basketBest.map((p: BasketPick) => ({ id: p.id, s: 'basket' as const, title: p.title, event: `${p.game.away.abbr} @ ${p.game.home.abbr}`, date: p.game.date, p: p.p, ev: p.ev, price: p.price, book: p.book, open: () => open('basket', p.game.id), add: () => addBasket(p) })),
@@ -180,7 +191,9 @@ export default function TodayView() {
       open: () => open('football', d.id),
       add: () => addToSlip({ sport: 'football', league: d.leagueName, event: `${d.home.name} - ${d.away.name}`, market: d.top.market, selection: d.top.selection, bookmaker: d.top.book, odds: d.top.price, status: 'pending' })
     }))
-  ].filter(x => x.ev > 0).sort((x, y) => y.ev - x.ev).slice(0, 6);
+  ].filter(x => x.ev > 0 && shows(x.s)).sort((x, y) => y.ev - x.ev).slice(0, 6);
+  const sportName = only ? SPORT[only].label.toLowerCase() : '';
+  const picksSports = only ? (only === 'lol' ? '' : sportName) : 'baloncesto, tenis y fútbol';
 
   const longDate = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   const card = (x: Item) => (
@@ -190,20 +203,23 @@ export default function TodayView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-50">Hoy</h1>
-        <p className="text-sm text-zinc-400 first-letter:uppercase">{longDate} · los partidos importantes de los cuatro deportes</p>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold text-zinc-50">Hoy{only ? ` en ${only === 'lol' ? 'LoL' : sportName}` : ''}</h1>
+          <p className="text-sm text-zinc-400 first-letter:uppercase">{longDate} · {only ? `lo importante de ${only === 'lol' ? 'LoL' : sportName}` : 'los partidos importantes de los cuatro deportes'}</p>
+        </div>
+        <Toggle on={everything} onChange={toggleAll} label="Los cuatro deportes" />
       </div>
 
       <section className="flex flex-col gap-2.5">
         <h2 className="text-[15px] font-semibold text-zinc-100">Partidos destacados</h2>
-        {!featured.length ? <Empty>Hoy no hay partidos importantes en las competiciones que sigue la app.</Empty>
+        {!featured.length ? <Empty>{only ? `Hoy no hay partidos de ${only === 'lol' ? 'LoL' : sportName} en las competiciones que sigue la app.` : 'Hoy no hay partidos importantes en las competiciones que sigue la app.'}</Empty>
           : <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">{featured.map(card)}</div>}
       </section>
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <Panel title="En directo" aside={live.length ? `${live.length}` : undefined}>
-          {!live.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">Ahora mismo no se juega ningún partido importante.</p> : (
+          {!live.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{only ? `Ahora mismo no se juega ningún partido de ${only === 'lol' ? 'LoL' : sportName}.` : 'Ahora mismo no se juega ningún partido importante.'}</p> : (
             <div className="divide-y divide-zinc-800/60">
               {live.slice(0, 10).map(x => (
                 <button key={x.s + x.id} onClick={x.go} className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2 text-left hover:bg-zinc-900/60">
@@ -220,8 +236,8 @@ export default function TodayView() {
         </Panel>
 
         <div ref={picksRef} className="min-w-0">
-        <Panel title="Mejores apuestas del día" aside="baloncesto, tenis y fútbol">
-          {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{!picksSeen || bp.loaded < bp.total ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
+        <Panel title="Mejores apuestas del día" aside={picksSports || undefined}>
+          {!best.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{only === 'lol' ? 'LoL no tiene recomendaciones del día: el valor de cada línea de jugador está en la ficha del partido.' : (shows('basket') && (!picksSeen || bp.loaded < bp.total)) || (shows('tennis') && tq.isLoading) || (shows('football') && fq.isLoading) ? 'Calculando las recomendaciones…' : 'Hoy no hay recomendaciones con valor: las casas aún no tienen las cuotas o no hay partidos.'}</p> : (
             <div className="divide-y divide-zinc-800/60">
               {best.map(x => (
                 <div key={x.s + x.id} className="flex items-center gap-2.5 px-4 py-2">
@@ -242,7 +258,7 @@ export default function TodayView() {
       </div>
 
       <Panel title="Próximos partidos importantes" aside="próximas 12 horas">
-        {!next.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">No hay más partidos importantes en las próximas 12 horas.</p> : (
+        {!next.length ? <p className="px-4 py-3 text-[13px] text-zinc-500">{only ? `No hay más partidos de ${only === 'lol' ? 'LoL' : sportName} en las próximas 12 horas.` : 'No hay más partidos importantes en las próximas 12 horas.'}</p> : (
           <div className="divide-y divide-zinc-800/60">
             {next.map(x => {
               const o = board.data?.[x.id];

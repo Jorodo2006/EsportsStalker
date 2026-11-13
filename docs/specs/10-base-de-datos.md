@@ -163,6 +163,9 @@ Usuarios, sesiones, apuestas y ajustes. Migraciones `001` a `006`.
 |---|---|---|
 | `user_id` | bigint FK → `users` | `ON DELETE CASCADE` |
 | `key` | text | `initialBankroll`, `favoriteLeagues` (moneda, casas y refresco pasaron a `bets.settings` en la migración 010) |
+
+`bets.users` tiene además `google_sub` (único si no es nulo) y `google_email` para entrar con Google, y `password_hash` puede
+ser nulo en las cuentas creadas con Google (migración `011_google.sql`).
 | `value` | jsonb | |
 | `updated_at` | timestamptz | |
 

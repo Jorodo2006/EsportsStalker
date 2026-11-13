@@ -37,6 +37,8 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
 
   const [market, setMarket] = useState<BasketMarket>(player.market ?? 'pts');
+  // Más o Menos: lo que se mira en la gráfica y en los tramos. Si viene de una recomendación, su lado
+  const [side, setSide] = useState<Side>(player.seen?.side ?? 'over');
   const [line, setLine] = useState('');
   // La línea con la que se abrió se respeta hasta que se cambie de mercado
   const wanted = useRef<{ market: BasketMarket; line: number } | null>(player.market && player.line != null ? { market: player.market, line: player.line } : null);
@@ -173,6 +175,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
           <ValuePanel bank={bank}
             v={{ line: L!, pOver: R.pOver, pUnder: R.pUnder, pPush: R.pPush, fairOver: R.fairOver, fairUnder: R.fairUnder, margin: R.market.margin, exact: R.market.exact, sides: R.sides, rel: R.rel, verdict: R.verdict }}
+            side={side} onSide={setSide}
             onSlip={s => addToSlip({ sport: 'basket', status: 'pending', ...betOf(s) })} />
           <div className="flex flex-col gap-5">
             <Card title={`Proyección: ${fx(R.mu)} ${M.short}`} action={<span className="text-xs text-zinc-500">{fx(R.projMin)} min previstos</span>}>
@@ -184,19 +187,19 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
                 <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400">Modelo {pct(R.modelOver)} · histórico {pct(R.histOver)} de Más</span>
               </div>
             </Card>
-            <LastGames games={all} missed={absences.data} market={market} line={L!} mu={R.mu} season={cs} />
+            <LastGames games={all} missed={absences.data} market={market} line={L!} mu={R.mu} season={cs} side={side} onSide={setSide} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
           <Card className="overflow-hidden" title="Tramos">
             <table className="-m-5 w-[calc(100%+2.5rem)]">
-              <thead className="bg-zinc-900/60"><tr><th className={th}>Tramo</th><th className={th + ' text-right'}>PJ</th><th className={th + ' text-right'}>Media</th><th className={th + ' text-right'}>Min</th><th className={th + ' text-right'}>% Más</th></tr></thead>
+              <thead className="bg-zinc-900/60"><tr><th className={th}>Tramo</th><th className={th + ' text-right'}>PJ</th><th className={th + ' text-right'}>Media</th><th className={th + ' text-right'}>Min</th><th className={th + ' text-right'}>% {SIDE_LABEL[side]}</th></tr></thead>
               <tbody className="divide-y divide-zinc-800/70">
                 {R.splits.map(s => (
                   <tr key={s.label}><td className={td}>{s.label}</td><td className={td + ' text-right tabular-nums text-zinc-400'}>{s.n}</td><td className={td + ' text-right tabular-nums'}>{fx(s.avg)}</td>
                     <td className={td + ' text-right tabular-nums text-zinc-400'}>{fx(s.min)}</td>
-                    <td className={cn(td, 'text-right tabular-nums', s.hit != null && (s.hit >= 0.6 ? 'text-emerald-400' : s.hit <= 0.4 ? 'text-rose-400' : ''))}>{s.n ? pct(s.hit!) : '–'}</td></tr>
+                    {(() => { const h = side === 'over' ? s.hit : s.under; return <td className={cn(td, 'text-right tabular-nums', h != null && (h >= 0.6 ? 'text-emerald-400' : h <= 0.4 ? 'text-rose-400' : ''))}>{s.n && h != null ? pct(h) : '–'}</td>; })()}</tr>
                 ))}
               </tbody>
             </table>
@@ -297,15 +300,18 @@ const Lbl = ({ label, children }: { label: string; children: ReactNode }) => (
   <label className="flex flex-col gap-1.5"><span className="text-xs font-medium text-zinc-400">{label}</span>{children}</label>
 );
 
-// Últimos 20 partidos frente a la línea: verde si superó, rojo si no. Entre medias, en gris, los de su equipo que no jugó
-// (con el motivo en el tooltip), para no confundirlos con un 0: un 0 jugando sale como una barra roja corta
+// Últimos 20 partidos frente a la línea, según el lado elegido: verde si esa apuesta habría ganado (Más: superó la línea;
+// Menos: se quedó por debajo), rojo si no, gris si fue justo la línea (nula). Entre medias, en gris oscuro, los de su equipo
+// que no jugó (con el motivo en el tooltip), para no confundirlos con un 0
 type LastRow = { k: number; x: string; date: string; v: number | null; na: number | null; reason?: string };
 // Qué partidos enseña la gráfica: los 20 últimos (pueden ser de la temporada pasada) o todos los de esta temporada. Se recuerda
 const RANGE_KEY = 'basket.lastGames.range';
 type Range = 'last' | 'season';
 const loadRange = (): Range => { try { return localStorage.getItem(RANGE_KEY) === 'season' ? 'season' : 'last'; } catch { return 'last'; } };
 
-function LastGames({ games, missed = [], market, line, mu, season }: { games: BasketLogGame[]; missed?: BasketAbsence[]; market: BasketMarket; line: number; mu: number; season: number }) {
+function LastGames({ games, missed = [], market, line, mu, season, side, onSide }: {
+  games: BasketLogGame[]; missed?: BasketAbsence[]; market: BasketMarket; line: number; mu: number; season: number; side: Side; onSide: (s: Side) => void;
+}) {
   const M = BASKET_MARKETS[market];
   const [range, setRangeState] = useState<Range>(loadRange);
   const setRange = (r: Range) => { setRangeState(r); try { localStorage.setItem(RANGE_KEY, r); } catch { /* sin almacenamiento */ } };
@@ -323,15 +329,17 @@ function LastGames({ games, missed = [], market, line, mu, season }: { games: Ba
     ...missed.filter(m => +new Date(m.date) >= since).map(m => ({ t: +new Date(m.date), x: vs(m.home, m.opp), date: shortDate(m.date), v: null, na: Math.max(line, 1), reason: m.reason }))
   ].sort((a, b) => a.t - b.t).map(({ t: _t, ...r }, k) => ({ ...r, k }));
   const n = played.length, out = data.length - n;
-  const hits = played.filter(g => M.f(g) > line).length;
+  const wins = (v: number) => (side === 'over' ? v > line : v < line);
+  const hits = played.filter(g => wins(M.f(g))).length;
   const avg = n ? played.reduce((a, g) => a + M.f(g), 0) / n : null;
   // Con muchos partidos no caben todos los rivales debajo: se deja que la gráfica salte los que no quepan
   const many = data.length > 24;
   return (
     <Card title={`${M.label}: ${range === 'season' ? 'esta temporada' : `últimos ${n}`}${out ? ` (y ${out} sin jugar)` : ''}`}
       action={<Tabs value={range} onChange={setRange} items={[{ value: 'last', label: 'Últimos 20' }, { value: 'season', label: 'Esta temporada' }]} />}>
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
-        <span className={cn('font-semibold', !n ? 'text-zinc-500' : hits / n >= 0.6 ? 'text-emerald-400' : hits / n <= 0.4 ? 'text-rose-400' : 'text-zinc-400')}>Más de {line} en {hits}/{n}{n ? ` (${Math.round((hits / n) * 100)} %)` : ''}</span>
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <Tabs value={side} onChange={onSide} items={[{ value: 'over' as const, label: 'Más de' }, { value: 'under' as const, label: 'Menos de' }]} />
+        <span className={cn('font-semibold', !n ? 'text-zinc-500' : hits / n >= 0.6 ? 'text-emerald-400' : hits / n <= 0.4 ? 'text-rose-400' : 'text-zinc-400')}>{SIDE_LABEL[side]} de {line} en {hits}/{n}{n ? ` (${Math.round((hits / n) * 100)} %)` : ''}</span>
         {avg != null && <span className="text-zinc-500">Media <span className="tnum text-zinc-200">{fx(avg)}</span></span>}
       </div>
       {!n ? <Empty>Todavía no ha jugado esta temporada.</Empty> : <div className="h-52">
@@ -346,7 +354,7 @@ function LastGames({ games, missed = [], market, line, mu, season }: { games: Ba
             <ReferenceLine y={line} stroke="var(--acc-400)" strokeDasharray="4 4" />
             <ReferenceLine y={mu} stroke="#9aaaa4" strokeDasharray="2 4" />
             <Bar dataKey="v" stackId="g" radius={[3, 3, 0, 0]} minPointSize={v => (v === 0 ? 3 : 0)} isAnimationActive={false}>
-              {data.map((d, i) => <Cell key={i} fill={d.v == null ? 'transparent' : d.v > line ? '#55f28c' : d.v < line ? '#ff8a7f' : '#85948f'} />)}
+              {data.map((d, i) => <Cell key={i} fill={d.v == null ? 'transparent' : d.v === line ? '#85948f' : wins(d.v) ? 'var(--color-emerald-400)' : 'var(--color-rose-400)'} />)}
             </Bar>
             <Bar dataKey="na" stackId="g" radius={[3, 3, 0, 0]} fill="#3f3f46" fillOpacity={0.55} isAnimationActive={false} />
           </BarChart>

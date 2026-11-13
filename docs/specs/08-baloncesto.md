@@ -40,7 +40,7 @@ vuelven a pedir.
 | `GET /api/basket/roster/:league/:team` | `basket:roster` | Plantilla |
 | `GET /api/basket/injuries` | `basket:injuries` | Bajas de la NBA |
 | `GET /api/basket/boxscore/:id` | `basket:boxscore` | Estadísticas del partido: puntos por cuarto, jugadores, totales y enfrentamientos de la temporada |
-| `GET /api/basket/search?q=` | `basket:search` | Jugadores de NBA, Euroliga y EuroCup |
+| `GET /api/basket/players/search?q=` | `basket:search` | Jugadores de NBA, Euroliga, EuroCup y NBL (`/api/basket/search` es la del buscador de la cabecera) |
 | `GET /api/basket/gamelog/:league/:id?team=` | `basket:gamelog` | Partidos del jugador (en la Euroliga hace falta su equipo) |
 | `GET /api/basket/absences/:league/:id?team=` | `basket:absences` | Partidos recientes de su equipo que no jugó, con el motivo (sólo las ligas de ESPN: NBA, WNBA y NBL). El registro de ESPN se los salta; salen del boxscore de cada partido (`didNotPlay`), guardados para siempre en `keep:dnp:<liga>:<partido>`. En la gráfica del analizador van en gris, y un 0 jugando como barra roja corta. El boxscore del partido trae también `out` (los que no jugaron) |
 | `GET /api/basket/schedule/:league/:team` | `basket:schedule` | Calendario del equipo esta temporada (para saber si un jugador vuelve de una baja). Sólo las ligas de ESPN (NBA, WNBA y NBL) |

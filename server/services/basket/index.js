@@ -115,7 +115,9 @@ const routes = [
     const l = league(lg);
     return l.src.flow ? l.src.flow(l.id, rest.join(':')) : { available: false };
   }],
-  ['GET', '/api/basket/search', async ({ query: q }) => {
+  // Jugadores (pantalla Jugadores). No es /api/basket/search: ésa es la del buscador de la cabecera (partidos y competiciones),
+  // y con la misma ruta ganaba la primera y la pantalla recibía un objeto en vez de la lista: se quedaba en negro
+  ['GET', '/api/basket/players/search', async ({ query: q }) => {
     const lists = await Promise.all(LEAGUES.filter(l => l.id !== 'wnba').map(l => l.src.search(l.id, q.q).catch(() => [])));
     return lists.flat().slice(0, 30);
   }],
