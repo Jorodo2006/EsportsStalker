@@ -289,16 +289,26 @@ export interface CasaLine { line: number; over?: number; under?: number; overBoo
 
 // Líneas de un jugador que tienen las casas, para rellenar el analizador: { "Puntos": [{ line, over, under, books }] }
 export function playerLines(odds: MatchOdds | undefined, name: string) {
-  // Sin "Jr." ni "III": ESPN y las casas no siempre lo ponen
-  const bare = (s: string) => s.trim().replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, '');
-  const norm = (s: string) => bare(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
-  const n = norm(name), last = norm(bare(name).split(' ').slice(-1)[0] || '');
+  // Sin "Jr." ni "III" (ESPN y las casas no siempre lo ponen) ni el equipo entre paréntesis que añade alguna casa en la
+  // Euroliga ("Kenneth Faried (BAS)")
+  const bare = (s: string) => s.trim().replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, '');
+  // Nombre y apellido sin tildes ni signos ("S. Gilgeous-Alexander" → ["s", "gilgeousalexander"])
+  const toks = (s: string) => bare(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, '').trim().split(/\s+/).filter(Boolean);
+  const T = toks(name), n = T.join(''), first = T[0] ?? '', last = T[T.length - 1] ?? '';
+  // Otro nombre del mismo jugador: mismo apellido y un nombre que empieza como el suyo ("D." o "Don" para Donovan). Antes bastaba
+  // con la inicial, y en un CLE-MIA las líneas de Davion Mitchell se mezclaron con las de Donovan: su más de 29,5 a 10,5 pasó
+  // por el de Donovan (1,76) con un valor de +272 %
+  const compatible = (w: string[]) => w.length >= 2 && last.length >= 4 && w[w.length - 1] === last && (w[0].startsWith(first) || first.startsWith(w[0]));
+  const players = [...new Set((odds?.markets ?? []).filter(m => m.key.startsWith('player|')).map(m => m.key.split('|')[2]))].map(toks);
+  // Una abreviatura ("D. Mitchell") que también puede ser otro jugador del partido con el mismo apellido no se usa: mejor
+  // quedarse sin esa línea que darle la de otro
+  const others = players.filter(w => w.join('') !== n && w[0].length > 2 && w[w.length - 1] === last && !compatible(w));
+  const sure = (w: string[]) => w.join('') === n || (compatible(w) && !(w[0].length <= 2 && others.some(o => o[0].startsWith(w[0]))));
   const out: Record<string, CasaLine[]> = {};
   for (const m of odds?.markets ?? []) {
     if (!m.key.startsWith('player|') || m.line == null) continue;
     const [, stat, who] = m.key.split('|');
-    const w = norm(who);
-    if (w !== n && !(last.length >= 4 && w.endsWith(last) && w[0] === n[0])) continue;
+    if (!sure(toks(who))) continue;
     // Una casa puede escribir el nombre de otra forma ("Trey Murphy III" / "Trey Murphy"): misma línea, se juntan
     const list = (out[stat] ??= []);
     let row = list.find(r => r.line === m.line);

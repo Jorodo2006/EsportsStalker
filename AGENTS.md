@@ -49,7 +49,8 @@ npm install
 npm run backend    # docker compose up -d --build: web (http://127.0.0.1:8090) + PostgreSQL + gateway + servicios (Docker Desktop encendido)
 npm run dev        # Vite (http://127.0.0.1:5173) con recarga al momento; necesita el backend en marcha
 npm run typecheck  # tsc --noEmit
-npm test           # pruebas del servidor (node:test, sin base de datos): validación de apuestas y firmas
+npm test           # pruebas del servidor (node:test, sin base de datos) y de la lógica de la interfaz (Vitest, src/**/*.test.ts)
+npm run test:ui    # Vitest en modo vigilancia, mientras se toca un modelo
 npm run backend:debug  # como backend, más Adminer (http://127.0.0.1:8080); Adminer no arranca con npm run backend
 npm run backend:prod   # producción: docker-compose.prod.yml (exige secretos en el .env, ver .env.example)
 npm run db:backup      # copia de PostgreSQL en backups/ (ignorada por git); npm run db:restore -- <fichero> la restaura
@@ -58,7 +59,7 @@ npm run extension  # prepara extension-chrome/, la extensión de reserva
 npm run backend:logs  # registros del backend;  npm run backend:stop para pararlo
 ```
 
-- Hay pocas pruebas automáticas (`npm test`, sólo lógica sin base de datos). Antes de dar algo por terminado: `npm run typecheck` y `npm test` sin errores y probar en `npm run dev`.
+- Las pruebas son de lógica, sin base de datos ni navegador: las del servidor en `server/test/` (node:test) y las de la interfaz junto a su fichero (`src/lib/value.test.ts`, `basket-model.test.ts`; Vitest, que entiende el alias `@/`). Si tocas el valor, el veredicto, quitar el margen o un modelo de `src/lib/`, añade o ajusta su prueba. Antes de dar algo por terminado: `npm run typecheck` y `npm test` sin errores y probar en `npm run dev`. La CI (`.github/workflows/ci.yml`) pasa lo mismo en cada push.
 - `npm run dev` recarga los cambios de `src/` al momento. La web de `127.0.0.1:8090` es una imagen compilada: para verlos
   ahí hay que volver a ejecutar `npm run backend`.
 - **Si cambias algo en `server/` hay que volver a ejecutar `npm run backend`** (reconstruye la imagen y reinicia los
@@ -152,6 +153,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   `GOOGLE_CLIENT_SECRET` y `PUBLIC_URL` en el `.env`. No quites la comprobación del `state` ni la del `id_token` (`claimsOf`), y
   las cuentas nuevas siguen las reglas del registro (primero administrador, registro cerrado, límite por IP).
 - Estado global (app activa `lol` | `basket` | `tennis` | `football` | `mma`, vista, partido abierto, formulario de apuesta, boleto de combinada, avisos, competiciones del menú lateral, partido y día que abrir desde el directo o el buscador) en `src/lib/app-context.tsx`. Buscador de los cuatro deportes (Ctrl+K): `src/components/Search.tsx` y `/api/search` en el gateway, que pregunta a la ruta `search` de cada servicio (`docs/specs/07-backend.md`).
+- **Favoritos** (`src/components/Favorites.tsx`): la estrella junto al nombre en la ficha del partido (`Scoreboard` en `sport.tsx` y la cabecera del fútbol) guarda el equipo, jugador o luchador en el ajuste de usuario `favorites` (`cleanFavorites` en `server/services/bets/store.js` lo valida: deporte, nombre y escudo https; 60 como mucho). Arriba de Partidos de cada deporte, `FavoritesStrip` enseña su partido en juego o el próximo, buscándolo con `/api/search` (la misma clave de consulta que el buscador), y se abre con `useOpenMatch` de `Search.tsx`. En *Tu cuenta* se ven todos y se quitan. Se identifican por deporte y nombre: si una fuente cambia el nombre de un equipo, ese favorito deja de encontrar sus partidos.
+- **Vista de fútbol:** `src/views/FootballMatches.tsx` es la lista y la ficha que junta las pestañas; cada parte de la ficha está en `src/views/football/` (`MatchHeader`, `Timeline`, `Stats`, `Lineups`, `PlayerStats`, `Shots`, `Form`, y lo común en `shared.ts`). Sigue esa forma si otra vista crece demasiado.
 - El backend es CommonJS (`require`), la interfaz ESM. El backend no usa framework: sólo
   `node:http` (`server/shared/service.js`) y `pg`. Comentarios cortos, en español, explicando el *porqué*.
 - Cada pantalla va dentro de `ScreenGuard` (`src/components/ScreenGuard.tsx`, en `App.tsx`): si falla al pintarse sale un aviso

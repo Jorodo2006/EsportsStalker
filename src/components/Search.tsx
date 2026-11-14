@@ -50,8 +50,20 @@ function scrollToSection(name: string) {
 
 type Row = { kind: 'match'; m: SearchMatch } | { kind: 'comp'; c: SearchCompetition };
 
-export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+// Abre un partido encontrado: cambia de deporte, va a su día y lo abre. Lo usan el buscador y los favoritos
+export function useOpenMatch() {
   const { switchApp, go, setFocusId, setFocusDay, setOpenMatch } = useApp();
+  return (m: SearchMatch) => {
+    switchApp(m.sport);
+    if (m.sport === 'lol' && m.event) setOpenMatch(m.event);
+    else { setFocusDay(madridDay(m.date)); setFocusId(m.id); }
+    go('matches');
+  };
+}
+
+export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { switchApp, go, setFocusDay, setOpenMatch } = useApp();
+  const openMatch = useOpenMatch();
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -70,14 +82,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   const choose = (r: Row) => {
     onClose();
-    if (r.kind === 'match') {
-      const m = r.m;
-      switchApp(m.sport);
-      if (m.sport === 'lol' && m.event) setOpenMatch(m.event);
-      else { setFocusDay(madridDay(m.date)); setFocusId(m.id); }
-      go('matches');
-      return;
-    }
+    if (r.kind === 'match') { openMatch(r.m); return; }
     const c = r.c;
     switchApp(c.sport);
     setOpenMatch(null);

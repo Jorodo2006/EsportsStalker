@@ -41,6 +41,8 @@ export interface PredictionIn {
   sport: Sport; match: string; key: string; out: string; start: string; group: string; title: string; event: string; league: string;
   book?: string; price: number; p: number; pModel?: number | null; pMarket?: number | null; ev: number; rel?: number;
 }
+// Un favorito: se identifica por deporte y nombre; el escudo es para pintarlo
+export interface Favorite { sport: Sport; name: string; logo?: string }
 export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
@@ -59,6 +61,7 @@ export interface Settings {
   lolesportsKey: string;
   refreshSeconds: number;
   favoriteLeagues: string[];
+  favorites?: Favorite[]; // equipos, jugadores y luchadores que sigue el usuario (components/Favorites.tsx)
   oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace el lector de Docker)
   oddsFarEnabled: boolean; // leer también, más espaciados, los partidos de hasta 48 h
   challengerOddsEnabled?: boolean; // leer los Challenger: una vez hasta 12 h antes y la de cierre

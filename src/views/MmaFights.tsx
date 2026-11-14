@@ -15,6 +15,7 @@ import { fightTime, METHOD_ES, resultShort, surname, targetOfFight, winnerText }
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading } from '@/components/ui';
 import { Panel, TvFrame, TvHeader, panel } from '@/components/viz';
+import { FavoritesStrip } from '@/components/Favorites';
 
 const stateOf = (f: MmaFight): MatchState => (f.state === 'in' ? 'live' : f.state);
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
@@ -82,6 +83,7 @@ export default function MmaFights() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
+      <FavoritesStrip />
       <DayStrip value={date} onChange={setDate} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
         {ORGS.map(o => <Toggle key={o.id} on={orgs[o.id]} onChange={v => setOrg(o.id, v)} label={o.label} />)}

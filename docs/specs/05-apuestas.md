@@ -110,16 +110,20 @@ solas con el resultado del partido.
 ## Acierto del modelo (`bets.predictions`, `server/services/bets/predictions.js`)
 
 En Mis apuestas → **Acierto del modelo** se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
-app (Recomendaciones, la columna de al lado de la lista, la ficha del partido), `src/lib/predictions.ts` manda al servidor las de valor de baloncesto
-(`hasValue`) y todas las que enseña el tenis (la principal es "la más fiable", que puede no tener valor), con su partido
+app (Recomendaciones, la columna de al lado de la lista, la ficha del partido), `src/lib/predictions.ts` manda al servidor todas las líneas
+que calcula el modelo de baloncesto y las recomendaciones que enseñan tenis, fútbol y MMA (la principal es "la más fiable", que puede no tener valor), con su partido
 y mercado (la misma clave que el `ref` de una apuesta), la probabilidad que enseña la app (`p`) y sus dos partes (modelo y
 casa sin margen), la cuota, el EV y la fiabilidad. Se guarda la última opinión antes de empezar y la cuota de la primera
 vez. El resolvedor (`settle.js`) las cierra en la misma pasada que las apuestas; si a los 4 días no ha podido, quedan como
 `unknown` y fuera de las cuentas. Sólo se guardan mercados que sabe resolver.
 
-La página enseña: acierto real frente al esperado (con el margen que da el azar), beneficio y ROI apostando 1 unidad a
-cada una, calibración por tramos de probabilidad, Brier del modelo solo, de la casa y de la mezcla sobre las mismas
-recomendaciones, si la cuota bajó mientras se recomendaba, y el desglose por mercado, por EV y por casa.
+La página enseña, de los deportes que ya tengan alguna resuelta (selector *Todo / Baloncesto / Tenis / Fútbol / MMA / LoL*) y de las
+recomendadas o de todas las líneas: acierto real frente al esperado (con el margen que da el azar), beneficio y ROI apostando 1 unidad
+a cada una, el **movimiento de la cuota (CLV)** (cuánto bajó de media desde la primera vez que se recomendó hasta la última antes de
+empezar, y en qué parte de las veces bajó: si baja, el mercado fue hacia lo que decía el modelo; la última es la última que se vio en la app,
+no siempre la de cierre), la curva del **beneficio acumulado** frente al que esperaba el modelo (la suma de sus EV), el desglose **por
+deporte**, calibración por tramos de probabilidad, Brier del modelo solo, de la casa y de la mezcla sobre las mismas recomendaciones, y el
+desglose por mercado, por EV y por casa.
 
 No son de ningún usuario (la recomendación es la misma para todos), pero las manda el navegador de cualquiera con sesión:
 el servidor valida cada campo (`clean`, `server/test/predicciones.test.js`).

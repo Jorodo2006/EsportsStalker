@@ -1,14 +1,16 @@
-// Acierto del modelo: las recomendaciones que ha hecho la app (se apostaran o no), ya resueltas, frente a lo que
-// decía. ¿Cuando dice 60 % sale un 60 %? ¿Daría dinero apostar 1 unidad a cada una? ¿En qué mercados y casas? ¿Acierta
-// más el modelo o la casa? Las guarda bets.predictions (server/services/bets/predictions.js).
+// Acierto del modelo, de los cinco deportes: las recomendaciones que ha hecho la app (se apostaran o no), ya resueltas, frente
+// a lo que decía. ¿Cuando dice 60 % sale un 60 %? ¿Daría dinero apostar 1 unidad a cada una? ¿En qué deportes, mercados y
+// casas? ¿Acierta más el modelo o la casa? ¿Se mueve la cuota hacia lo que decía (CLV)? Las guarda bets.predictions
+// (server/services/bets/predictions.js).
 import { useMemo, useState } from 'react';
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { cn, odd, pct, tone } from '@/lib/format';
 import { verdictOf } from '@/lib/value';
-import type { PredictionRow } from '@/lib/types';
+import type { PredictionRow, Sport } from '@/lib/types';
 import { Card, Empty, ErrorBox, Loading, Stat, Tabs, td, th } from './ui';
 
-type SportF = 'all' | 'basket' | 'tennis';
+type SportF = 'all' | Sport;
 type RangeF = '30' | '90' | 'all';
 type ScopeF = 'picks' | 'lines';
 
@@ -17,6 +19,11 @@ type ScopeF = 'picks' | 'lines';
 const isPick = (r: PredictionRow) => r.sport !== 'basket' || verdictOf(r.ev, r.rel ?? 0) === 'BET';
 
 const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', lol: 'LoL' };
+const SPORT_ORDER: Sport[] = ['basket', 'tennis', 'football', 'mma', 'lol'];
+// Movimiento de la cuota desde la primera vez que se recomendó hasta la última antes de empezar (CLV): +5 % es que la
+// cuota bajó un 5 %, es decir, que el mercado fue hacia lo que decía el modelo. La última es la que se vio por última vez en la
+// app antes del partido, que suele estar cerca del cierre, pero no siempre
+const clv = (r: PredictionRow) => (r.firstPrice > 1 && r.price > 1 ? r.firstPrice / r.price - 1 : null);
 const decided = (r: PredictionRow) => r.status !== 'void';
 const won = (r: PredictionRow) => r.status === 'won';
 // Beneficio de apostar 1 unidad: la nula devuelve lo apostado
@@ -48,6 +55,8 @@ export function ModelAccuracy() {
     const since = range === 'all' ? 0 : Date.now() - Number(range) * 864e5;
     return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && +new Date(r.start) >= since && (scope === 'lines' || isPick(r)));
   }, [q.data, sport, range, scope]);
+  // Sólo los deportes que ya tienen alguna resuelta
+  const sports = useMemo(() => SPORT_ORDER.filter(s => (q.data?.rows ?? []).some(r => r.sport === s)), [q.data]);
 
   if (q.isLoading) return <Loading label="Cargando las recomendaciones resueltas…" />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -55,7 +64,7 @@ export function ModelAccuracy() {
 
   const filters = (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <Tabs value={sport} onChange={setSport} items={[{ value: 'all', label: 'Todo' }, { value: 'basket', label: 'Baloncesto' }, { value: 'tennis', label: 'Tenis' }]} />
+      <Tabs value={sport} onChange={setSport} items={[{ value: 'all' as SportF, label: 'Todo' }, ...sports.map(s => ({ value: s as SportF, label: SPORT_NAME[s] }))]} />
       <Tabs value={range} onChange={setRange} items={[{ value: '30', label: '30 días' }, { value: '90', label: '90 días' }, { value: 'all', label: 'Todo' }]} />
       <Tabs value={scope} onChange={setScope} items={[{ value: 'picks', label: 'Recomendadas' }, { value: 'lines', label: 'Todas las líneas' }]} />
       <span className="text-xs text-zinc-500">{data.pending} por resolver{data.since ? ` · registro desde el ${new Date(data.since).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}` : ''}</span>
@@ -65,9 +74,9 @@ export function ModelAccuracy() {
     <>
       {filters}
       <Empty>
-        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${SPORT_NAME[sport].toLowerCase()}` : ''}. Desde ahora se guardan todas las líneas que calcula el modelo de baloncesto y todas
-        las de tenis mientras las ves en la app (Hoy, Recomendaciones, la ficha de cada partido), las apuestes o no; cuando acaban sus partidos se
-        resuelven solas y salen aquí. Hacen falta unas cuantas decenas para que las cifras digan algo.
+        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${SPORT_NAME[sport].toLowerCase()}` : ''}. Se guardan todas las líneas que calcula el modelo de baloncesto y
+        las recomendaciones de tenis, fútbol y MMA mientras las ves en la app (Recomendaciones, la ficha de cada partido), las apuestes o no; cuando
+        acaban sus partidos se resuelven solas y salen aquí. Hacen falta unas cuantas decenas para que las cifras digan algo.
       </Empty>
     </>
   );
@@ -81,6 +90,10 @@ export function ModelAccuracy() {
     return { lo, hi, ...sum(rs) };
   }).filter(b => b.n);
   const byGroup = groupRows(rows, r => `${SPORT_NAME[r.sport] ?? r.sport} · ${r.group}`);
+  const bySport = groupRows(rows, r => SPORT_NAME[r.sport] ?? r.sport);
+  const clvs = rows.map(clv).filter((v): v is number => v != null);
+  const clvAvg = clvs.length ? clvs.reduce((a, v) => a + v, 0) / clvs.length : null;
+  const clvBeat = clvs.length ? clvs.filter(v => v > 0).length / clvs.length : null;
   const byBook = groupRows(rows, r => r.book || 'Sin casa');
   const byEv = [[-99, 0, 'EV negativo (las más fiables de tenis)'], [0, 0.05, 'EV hasta 5 %'], [0.05, 0.1, '5-10 %'], [0.1, 0.2, '10-20 %'], [0.2, 99, 'Más de 20 %']].map(([lo, hi, label]) => ({ key: label as string, ...sum(rows.filter(r => r.ev >= (lo as number) && r.ev < (hi as number))) })).filter(x => x.n);
   // Quién acierta más, con las mismas recomendaciones: el modelo solo, la casa sin margen o la mezcla que enseña la app
@@ -97,9 +110,13 @@ export function ModelAccuracy() {
         <Stat label="Recomendaciones resueltas" value={S.n} sub={`${nWon} ganada${nWon === 1 ? '' : 's'} · ${nLost} perdida${nLost === 1 ? '' : 's'}`} />
         <Stat label="Acierto" value={pct(S.hit)} valueClass={Math.abs(S.hit - S.said) > margin(S.said, S.decided) ? tone(S.hit - S.said) : undefined} sub={`esperaba ${pct(S.said)} (±${pct(margin(S.said, S.decided))} por azar)`} />
         <Stat label="A 1 unidad cada una" value={units(S.pl)} valueClass={tone(S.pl)} sub={`ROI ${pct(S.roi)} · esperaba ${pct(S.ev)}`} />
-        <Stat label="Cuota media" value={odd(rows.reduce((s, r) => s + r.price, 0) / rows.length)} sub={`EV medio ${pct(S.ev)}`} />
+        <Stat label="Movimiento de la cuota (CLV)" value={clvAvg == null ? '–' : `${clvAvg >= 0 ? '+' : ''}${pct(clvAvg)}`} valueClass={clvAvg == null ? undefined : tone(clvAvg)}
+          sub={clvBeat == null ? 'sin datos' : `bajó en ${pct(clvBeat)} · cuota media ${odd(rows.reduce((s, r) => s + r.price, 0) / rows.length)}`} />
       </div>
       {few && <p className="-mt-2 mb-4 text-xs text-zinc-500">Con menos de 100 resueltas, las cifras se mueven mucho de un día a otro: míralas como orientación.</p>}
+
+      <ProfitCurve rows={rows} />
+      {sport === 'all' && bySport.length > 1 && <div className="mb-5"><GroupTable title="Por deporte" rows={bySport} /></div>}
 
       <div className="mb-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <Card title="¿Cuando dice X %, sale X %?" action={<span className="text-[11px] text-zinc-500">Calibración</span>}>
@@ -213,5 +230,46 @@ function CalBar({ said, got }: { said: number; got: number }) {
       <div className="absolute inset-y-0 left-0 rounded-sm bg-zinc-500" style={{ width: `${Math.min(100, got * 100)}%` }} />
       <div className="absolute -inset-y-1 w-0.5 bg-amber-400" style={{ left: `calc(${Math.min(100, said * 100)}% - 1px)` }} />
     </div>
+  );
+}
+
+// Beneficio acumulado a 1 unidad por recomendación, día a día, frente a lo que esperaba el modelo (la suma de sus EV). Si la línea
+// real va muy por debajo de la esperada durante semanas, el modelo es optimista
+function ProfitCurve({ rows }: { rows: PredictionRow[] }) {
+  const data = useMemo(() => {
+    const byDay = new Map<string, { pl: number; ev: number }>();
+    for (const r of rows) {
+      const d = new Date(r.start).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+      const x = byDay.get(d) ?? { pl: 0, ev: 0 };
+      x.pl += profit(r); x.ev += r.ev;
+      byDay.set(d, x);
+    }
+    let pl = 0, ev = 0;
+    return [...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([d, x]) => {
+      pl += x.pl; ev += x.ev;
+      return { d: new Date(d + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }), pl: +pl.toFixed(2), ev: +ev.toFixed(2) };
+    });
+  }, [rows]);
+  if (data.length < 2) return null;
+  return (
+    <Card title="Beneficio acumulado" action={<span className="text-[11px] text-zinc-500">a 1 unidad por recomendación</span>} className="mb-5">
+      <div className="h-52">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+            <CartesianGrid stroke="#2b3034" vertical={false} />
+            <XAxis dataKey="d" stroke="#85948f" fontSize={10} tickLine={false} axisLine={false} minTickGap={16} />
+            <YAxis stroke="#85948f" fontSize={11} tickLine={false} axisLine={false} />
+            <ReferenceLine y={0} stroke="#52525b" />
+            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 12 }} labelStyle={{ color: '#d4d4d8' }}
+              formatter={(v, name) => [units(Number(v)), name === 'pl' ? 'Real' : 'Esperado']} />
+            <Line dataKey="ev" stroke="#85948f" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+            <Line dataKey="pl" stroke="var(--acc-400)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-zinc-500">
+        <span><span className="text-amber-400">—</span> real</span><span><span className="text-zinc-300">- -</span> lo que esperaba el modelo</span>
+      </div>
+    </Card>
   );
 }

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { TeamLogo, chip, oddBtn, panelCls } from './ui';
 import { sized, fallbackTo } from '@/lib/img';
+import { FavStar } from './Favorites';
 
 export type MatchState = 'pre' | 'live' | 'post';
 
@@ -219,7 +220,10 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
     <div className={cn('flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
       <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
       <div className="min-w-0 max-w-full">
-        <div className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</div>
+        <div className={cn('flex min-w-0 items-center justify-center gap-0.5', which === 'a' ? 'sm:justify-start' : 'sm:flex-row-reverse sm:justify-start')}>
+          <span className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</span>
+          <FavStar name={t.name} logo={t.logo} />
+        </div>
         {t.short && t.short !== t.name && <div className="hidden text-xs text-zinc-500 sm:block">{t.short}</div>}
       </div>
     </div>

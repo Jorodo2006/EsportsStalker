@@ -25,6 +25,7 @@ import { TvTabs } from '@/components/viz';
 import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
 import { sized, fallbackTo } from '@/lib/img';
+import { FavoritesStrip } from '@/components/Favorites';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
@@ -107,6 +108,7 @@ export default function BasketMatches() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
+      <FavoritesStrip />
       {modes}
       <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>

@@ -149,8 +149,10 @@ function evaluate(ref, R) {
     const [, stat, who, l] = parts, line = Number(l), f = PLAYER_STAT[stat];
     if (!f || !isFinite(line)) return null;
     const n = norm(who);
-    const p = R.players.find(x => norm(x.name) === n)
-      || R.players.find(x => { const a = norm(x.name); return a.length > 4 && n.length > 4 && (a.endsWith(n.slice(1)) || n.endsWith(a.slice(1))) && a[0] === n[0]; });
+    // Por el nombre exacto; si no, por la inicial y el apellido ("D. Mitchell"), pero sólo si encaja con un único jugador del
+    // partido: con Donovan y Davion Mitchell en la pista, cualquiera de los dos sería adivinar, y se resuelve a mano
+    const near = R.players.filter(x => { const a = norm(x.name); return a.length > 4 && n.length > 4 && (a.endsWith(n.slice(1)) || n.endsWith(a.slice(1))) && a[0] === n[0]; });
+    const p = R.players.find(x => norm(x.name) === n) || (near.length === 1 ? near[0] : null);
     if (!p) return null;
     if (!p.min) return { status: 'void', text: `${p.name} no jugó` };
     const v = f(p);

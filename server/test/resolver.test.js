@@ -45,6 +45,19 @@ test('líneas de jugador: por nombre (con o sin Jr.) y nula si no jugó', () => 
   assert.equal(ev('player|Puntos|alguien que no está|4.5', 'over'), null); // no se adivina: a mano
 });
 
+test('líneas de jugador: una abreviatura que encaja con dos jugadores se resuelve a mano', () => {
+  // CLE-MIA de noviembre de 2026: Donovan y Davion Mitchell en la pista
+  const R = { ...basket, players: [
+    { name: 'Donovan Mitchell', min: 36, pts: 31, reb: 4, ast: 6, stl: 1, blk: 0, tov: 3, fg3: '4-10' },
+    { name: 'Davion Mitchell', min: 24, pts: 8, reb: 2, ast: 5, stl: 1, blk: 0, tov: 1, fg3: '1-4' }
+  ] };
+  assert.equal(ev('player|Puntos|donovan mitchell|29.5', 'over', R), 'won');
+  assert.equal(ev('player|Puntos|davion mitchell|29.5', 'over', R), 'lost');
+  assert.equal(ev('player|Puntos|d. mitchell|29.5', 'over', R), null);
+  // Con un solo Mitchell, la abreviatura sí vale
+  assert.equal(ev('player|Puntos|d. mitchell|29.5', 'over', { ...basket, players: [R.players[0]] }), 'won');
+});
+
 test('lo que no sabe resolver se queda pendiente', () => {
   assert.equal(ev('wmx|Primera canasta|', '123'), null);
   assert.equal(ev('total|0||212.25', 'over'), null); // línea de cuarto

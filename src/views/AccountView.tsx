@@ -7,8 +7,9 @@ import { AlertTriangle, CheckCircle2, LogOut, Settings as Cog, X } from 'lucide-
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money } from '@/lib/format';
 import { GoogleMark, useUser } from '@/components/AuthGate';
-import { Button, Card, Field, Input, PageHeader } from '@/components/ui';
+import { Button, Card, Field, Input, PageHeader, TeamLogo } from '@/components/ui';
 import { Toggle } from '@/components/sport';
+import { useFavorites } from '@/components/Favorites';
 import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
 
 export default function AccountView() {
@@ -16,12 +17,13 @@ export default function AccountView() {
   const { go } = useApp();
   return (
     <>
-      <PageHeader title="Tu cuenta" subtitle="Tu contraseña, tu cartera y tus avisos" />
+      <PageHeader title="Tu cuenta" subtitle="Tu contraseña, tu cartera, tus avisos y tus favoritos" />
       <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <Notice />
         <AccountCard isAdmin={isAdmin} />
         <WalletCard />
         <AlertsCard />
+        <FavoritesCard />
         {isAdmin && (
           <Card title="Ajustes de la app">
             <p className="mb-4 text-sm text-zinc-400">Moneda, casas del comparador, cuotas automáticas, registro de cuentas… Eres administrador: lo que cambies allí vale para todos los usuarios.</p>
@@ -163,6 +165,31 @@ function AlertsCard() {
         ))}
       </div>
       <p className="mt-3 text-xs text-zinc-500">{note}</p>
+    </Card>
+  );
+}
+
+// Favoritos de los cinco deportes: se añaden con la estrella de la ficha del partido; aquí se ven todos y se quitan
+const SPORT_NAME = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' } as const;
+function FavoritesCard() {
+  const { list, remove } = useFavorites();
+  return (
+    <Card title="Tus favoritos" action={<span className="text-[11px] text-zinc-500">{list.length || 'ninguno'}</span>}>
+      {!list.length ? (
+        <p className="text-sm text-zinc-400">Pulsa la estrella junto al nombre de un equipo, jugador o luchador en la ficha de su partido. Saldrán arriba de Partidos con su próximo partido, en el móvil y en el ordenador.</p>
+      ) : (
+        <ul className="-mx-5 -my-3 divide-y divide-zinc-800/60">
+          {list.map(f => (
+            <li key={`${f.sport}|${f.name}`} className="flex items-center gap-3 px-5 py-2">
+              <TeamLogo src={f.logo} name={f.name} size={22} />
+              <span className="min-w-0 flex-1 truncate text-sm text-zinc-100">{f.name}</span>
+              <span className="text-xs text-zinc-500">{SPORT_NAME[f.sport]}</span>
+              <button type="button" onClick={() => remove(f)} title={`Dejar de seguir a ${f.name}`} aria-label={`Dejar de seguir a ${f.name}`}
+                className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"><X size={14} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

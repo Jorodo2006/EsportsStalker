@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   lolesportsKey: '0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z',
   refreshSeconds: 30,
   favoriteLeagues: [],
+  favorites: [], // equipos, jugadores y luchadores que sigue cada usuario: [{ sport, name, logo }]
   // Lecturas de cuotas programadas (las hace el lector de Docker)
   oddsAutoEnabled: true,
   oddsRefreshMinutes: 5,
@@ -22,8 +23,29 @@ const DEFAULT_SETTINGS = {
 };
 
 // Los ajustes son de la app entera: sólo los cambia el administrador y valen para todos (migración 010). De cada usuario
-// quedan su banca inicial (cada uno tiene su cartera) y el filtro de ligas de la lista de LoL, que no son ajustes de la app
-const USER_KEYS = ['initialBankroll', 'favoriteLeagues'];
+// quedan su banca inicial (cada uno tiene su cartera), el filtro de ligas de la lista de LoL y sus favoritos, que no son
+// ajustes de la app
+const USER_KEYS = ['initialBankroll', 'favoriteLeagues', 'favorites'];
+
+// Favoritos: lo manda el navegador, así que se limpia. Se identifican por deporte y nombre (el mismo que buscan /api/search
+// y la ficha del partido); el escudo es sólo para pintarlo, y sólo se admite una dirección https
+const FAV_SPORTS = ['lol', 'basket', 'tennis', 'football', 'mma'];
+const MAX_FAVORITES = 60;
+function cleanFavorites(v) {
+  if (!Array.isArray(v)) throw fail('Los favoritos tienen que ser una lista');
+  const seen = new Set(), out = [];
+  for (const x of v) {
+    const sport = String(x?.sport || ''), name = String(x?.name || '').trim().slice(0, 80);
+    if (!FAV_SPORTS.includes(sport) || !name) continue;
+    const key = `${sport}|${name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const logo = typeof x.logo === 'string' && /^https:\/\/[^\s"'<>]{1,300}$/.test(x.logo) ? x.logo : undefined;
+    out.push(logo ? { sport, name, logo } : { sport, name });
+    if (out.length >= MAX_FAVORITES) break;
+  }
+  return out;
+}
 const SECRET_KEYS = ['leaguepediaUser', 'leaguepediaPassword', 'lolesportsKey'];
 
 const OLD_FEATURED = ['Pinnacle,Bet365,Bwin,Betfair Ex,William Hill,Unibet,Betway,1xBet,Codere,Betsson,Marathonbet,Stake', 'Bet365,Winamax,Betway,Betfair,William Hill', 'Bet365,Winamax,William Hill,Betway'];
@@ -47,7 +69,8 @@ async function getSettings(userId) {
 // Cada uno guarda lo suyo (USER_KEYS); el resto, sólo el administrador, y vale para todos. Quien no lo es y manda un ajuste
 // común recibe un 403: la interfaz no se lo enseña, así que sería una petición a mano
 async function setSettings(userId, isAdmin, patch) {
-  const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined);
+  const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined)
+    .map(([k, v]) => [k, k === 'favorites' ? cleanFavorites(v) : v]);
   if (!isAdmin && entries.some(([k]) => !USER_KEYS.includes(k))) throw fail('Sólo el administrador puede cambiar los ajustes', 403);
   await tx(async c => {
     for (const [k, v] of entries) {
@@ -259,4 +282,4 @@ function normalizeCombo(b, legs, money, text) {
   };
 }
 
-module.exports = { USER_KEYS, getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };
+module.exports = { USER_KEYS, cleanFavorites, getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

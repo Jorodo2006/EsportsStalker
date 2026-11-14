@@ -10,6 +10,7 @@ import type { MatchEvent } from '@/lib/types';
 import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, StateFilterBar, Toggle, isoDay, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Button, Empty, ErrorBox, Loading, Select } from '@/components/ui';
 import MatchDetail from './MatchDetail';
+import { FavoritesStrip } from '@/components/Favorites';
 
 const stateOf = (m: MatchEvent): MatchState => (m.state === 'inProgress' ? 'live' : m.state === 'completed' ? 'post' : 'pre');
 const dayOf = (m: MatchEvent) => isoDay(new Date(m.startTime));
@@ -86,6 +87,7 @@ export default function MatchesView() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
+      <FavoritesStrip />
       <DayStrip value={date} onChange={setDate} counts={counts} />
       <StateFilterBar value={filter} onChange={setFilter} counts={stateCounts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('lol-odds', v); }} label="Cuotas" />

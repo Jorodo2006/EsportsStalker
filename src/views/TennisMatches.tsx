@@ -19,6 +19,7 @@ import { DayStrip, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, 
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { sized, fallbackTo } from '@/lib/img';
 import { Panel, TvTabs, panel } from '@/components/viz';
+import { FavoritesStrip } from '@/components/Favorites';
 
 const stateOf = (m: TennisMatch): MatchState => (m.state === 'in' ? 'live' : m.state);
 type Mode = 'games' | 'picks';
@@ -108,6 +109,7 @@ export default function TennisMatches() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
+      <FavoritesStrip />
       {modes}
       <DayStrip value={date} onChange={setDate} counts={days.data} />
       <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
