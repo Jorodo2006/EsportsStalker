@@ -20,6 +20,7 @@ import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui
 import { sized, fallbackTo } from '@/lib/img';
 import { Panel, TvTabs, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
+import { TennisMatchStats } from '@/components/TennisMatchStats';
 
 const stateOf = (m: TennisMatch): MatchState => (m.state === 'in' ? 'live' : m.state);
 type Mode = 'games' | 'picks';
@@ -169,7 +170,7 @@ function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: s
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'tennis', league: m.tournament, event: t.event })}><Plus size={14} />Apuesta</Button>} />
       </Scoreboard>
       {m.fixed && <p className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={13} className="shrink-0" />{m.fixed}</p>}
-      {tab === 'score' ? <Sets m={m} /> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <Form m={m} onPlayer={setSheet} />}
+      {tab === 'score' ? <><Sets m={m} /><TennisMatchStats m={m} onForm={full ? () => setTab('form') : undefined} /></> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <Form m={m} onPlayer={setSheet} />}
     </div>
   );
 }
@@ -240,10 +241,14 @@ function HeadToHead({ m }: { m: TennisMatch }) {
   );
 }
 
+// Sus últimos partidos, sean de cuando sean: antes eran sólo los de los últimos 10 días, y quien llegaba a las ATP Finals tras
+// dos semanas sin jugar salía con «Sin partidos». Salen del perfil de ESPN (la misma consulta que los enfrentamientos)
+const FORM_N = 8;
 function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour']; p: TennisPlayer; current: string; onPlayer: (id: string) => void }) {
-  const q = useQuery({ queryKey: ['tennis', 'player', tour, p.id], queryFn: () => window.api.tennis.player(tour, p.id), staleTime: 5 * 60e3 });
-  const done = (q.data ?? []).filter(x => x.state === 'post' && x.id !== current);
-  const wins = done.filter(x => (x.a.id === p.id ? x.a : x.b).winner).length;
+  const q = useQuery({ queryKey: ['tennis', 'profile', tour, p.id], queryFn: () => window.api.tennis.profile(tour, p.id), staleTime: 30 * 60e3, retry: false });
+  const done = (q.data?.matches ?? []).filter(x => x.id !== current).slice(0, FORM_N);
+  const wins = done.filter(x => x.win).length;
+  const ago = (iso: string) => { const d = Math.round((Date.now() - +new Date(iso)) / 864e5); return d <= 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`; };
   return (
     <div className={cn(panel, 'overflow-hidden')}>
       <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50">
@@ -253,19 +258,22 @@ function PlayerForm({ tour, p, current, onPlayer }: { tour: TennisMatch['tour'];
         </div>
         {p.rank && <div className="font-mono text-[13px] font-bold text-zinc-400">#{p.rank}</div>}
       </div>
-      {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-3.5 py-2.5 text-[13px] text-zinc-500">Sin partidos en los últimos días.</div> : <>
-        <div className="px-3.5 pt-2 text-[11px] text-zinc-500">Últimos días: {wins} de {done.length}</div>
+      {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-3.5 py-2.5 text-[13px] text-zinc-500">ESPN no tiene sus partidos anteriores.</div> : <>
+        <div className="flex items-center justify-between gap-2 px-3.5 pt-2 text-[11px] text-zinc-500">
+          <span>Últimos {done.length}: <span className="font-semibold text-zinc-300">{wins} ganados</span></span>
+          <span className="flex gap-0.5" aria-hidden>{done.slice().reverse().map(x => <span key={x.id} className={cn('h-2 w-2 rounded-sm', x.win ? 'bg-emerald-500' : 'bg-rose-500')} />)}</span>
+        </div>
         <div className="divide-y divide-zinc-800/60">
-          {done.slice(0, 5).map(x => {
-            const me = x.a.id === p.id ? x.a : x.b, rival = x.a.id === p.id ? x.b : x.a;
-            return (
-              <div key={x.id} className="flex items-center gap-2.5 px-3.5 py-1.5 text-[13px]">
-                <Badge tone={me.winner ? 'success' : 'danger'}>{me.winner ? 'G' : 'P'}</Badge>
-                <div className="min-w-0 flex-1"><div className="truncate">vs {rival.name}</div><div className="truncate text-xs text-zinc-500">{x.tournament}, {x.round}</div></div>
-                <span className="font-score tnum text-zinc-300">{me.sets.map((s, i) => `${s}-${rival.sets[i] ?? ''}`).join(' ')}</span>
+          {done.map(x => (
+            <div key={x.id} className="flex items-center gap-2.5 px-3.5 py-1.5 text-[13px]">
+              <Badge tone={x.win ? 'success' : 'danger'}>{x.win ? 'G' : 'P'}</Badge>
+              <div className="min-w-0 flex-1">
+                <div className="truncate">vs {x.opponent.name}{x.opponent.rank ? <span className="text-xs text-zinc-500"> · n.º {x.opponent.rank}</span> : null}</div>
+                <div className="truncate text-xs text-zinc-500">{x.tournament}{x.round ? `, ${x.round}` : ''} · {ago(x.date)}</div>
               </div>
-            );
-          })}
+              <span className="font-score tnum text-zinc-300">{x.score}{x.note ? <span className="text-xs text-zinc-500"> {x.note}</span> : null}</span>
+            </div>
+          ))}
         </div>
       </>}
     </div>

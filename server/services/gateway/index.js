@@ -82,8 +82,14 @@ async function search(q) {
   return { matches, competitions };
 }
 
-const clients = new Set();
-function broadcast(text) { for (const res of clients) res.write(`data: ${text}\n\n`); }
+// Cada conexión con su usuario: los avisos con destinatario (data.to, p. ej. un mensaje de un amigo) sólo le llegan a él,
+// para que nadie sepa quién escribe a quién
+const clients = new Map();
+function broadcast(text) {
+  let to = null;
+  try { to = JSON.parse(text)?.data?.to ?? null; } catch (_) { /* sin destinatario: a todos */ }
+  for (const [res, uid] of clients) if (to == null || String(to) === String(uid)) res.write(`data: ${text}\n\n`);
+}
 
 async function listen() {
   const c = new Client({ connectionString: process.env.DATABASE_URL });
@@ -142,7 +148,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
     res.write(': conectado\n\n');
-    clients.add(res);
+    clients.set(res, user.id);
     const ping = setInterval(() => res.write(': ping\n\n'), 25e3);
     req.on('close', () => { clearInterval(ping); clients.delete(res); });
     return;

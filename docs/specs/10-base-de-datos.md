@@ -229,7 +229,14 @@ Apuestas que un usuario le ha pasado a un amigo (migración `013_amigos.sql`). `
 (deporte, fecha, liga, partido, mercado, selección, casa, cuota, `ref` y, si es combinada, sus selecciones sin su estado), **sin
 el importe, el estado, el cobro ni las notas** de quien la envía (`shareable` en `friends.js`): si la cambia después, la copia no
 cambia. `note` es el mensaje (200 caracteres); `seen_at`, `copied_at` y `hidden_at`, cuándo la vio, la copió o la quitó quien la
-recibe. Sólo se enseñan las de los últimos 60 días.
+recibe. Sólo se enseñan las de los últimos 60 días en la lista de recibidas; en el chat salen todas (quitarla es sólo de la lista).
+
+### `bets.messages`
+
+El chat entre amigos (migración `014_mensajes.sql`): `from_user`, `to_user`, `body` (de 1 a 1000 letras), `created_at` y `read_at`
+(cuándo lo leyó quien lo recibe, al abrir la conversación). Sólo se escribe a amigos aceptados (`friends.js`); si dejan de serlo,
+los mensajes no se borran, pero no se pueden leer ni escribir hasta que vuelvan a serlo. Se borran con cualquiera de los dos
+usuarios (`ON DELETE CASCADE`). Índices por pareja y fecha y por los sin leer de cada uno.
 
 ## Esquema `odds` (servicio odds)
 

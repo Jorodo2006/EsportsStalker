@@ -83,6 +83,24 @@ fichero por año y por circuito, más los torneos en curso), que se bajan cada 6
 - Fuentes descartadas: atptour.com y Sofascore (403), Tennis Abstract y tennis-data.co.uk (su `robots.txt` lo prohíbe),
   Sackmann (el repositorio ya no existe), Ultimate Tennis Statistics (se quedó en 2024).
 
+## Estadísticas del partido (`server/services/tennis/matchstats.js`, `src/components/TennisMatchStats.tsx`)
+
+Bajo el marcador, en *Marcador*: aces, dobles faltas, primer saque dentro, puntos ganados con el primero y con el segundo, bolas de
+break salvadas y convertidas, juegos al saque y puntos ganados, de los dos jugadores, con selector *Partido / Set N* si hay sets.
+`GET /api/tennis/match-stats?tour&date&state&a&b` (nombres como los da ESPN). **ESPN no tiene estadísticas de partido de tenis**
+(`statsSource: none`). Fuentes, por este orden:
+
+- **WTA:** la API de su web oficial (`api.wtatennis.com/tennis/tournaments/<torneo>/<año>/matches/<partido>/stats`, la misma de los
+  puntos en directo; su robots.txt no pone límites). En directo (se renueva cada minuto) y al acabar, por sets y con lo que duró
+  cada uno. El partido se busca por apellidos (`samePlayer` de `points.js`) en los torneos de esos días.
+- **TennisMyLife** (ATP y WTA, sólo partidos acabados): las mismas columnas que usa la forma (`w_ace`, `w_1stIn`, `w_bpFaced`…), del
+  partido entero. Su fichero del año se actualiza cada semana y el de torneos en curso (`ongoing_tourneys.csv`) a diario, así que en la
+  ATP salen al día siguiente o unos días después, según el torneo.
+
+No hay ninguna fuente permitida que dé las de la ATP al acabar: la web de la ATP tiene el muro anti-bots de Cloudflare y LiveScore
+las tiene, pero su robots.txt prohíbe `/api/` y se decidió (noviembre de 2026, con la web ya pública) no ampliar su uso para esto.
+Sin estadísticas, el panel lo dice y lleva a *Forma de los jugadores*.
+
 ## Cuotas
 
 - Winamax: deporte 5; si el partido no está en la portada, se buscan los torneos por la palabra más larga del nombre del

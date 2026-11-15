@@ -45,10 +45,16 @@ export interface PredictionIn {
 export interface Favorite { sport: Sport; name: string; logo?: string }
 // Amigos (server/services/bets/friends.js): los aceptados, las solicitudes que te han hecho y las que has hecho tú
 export interface Friend { id: string; username: string; since: string }
-export interface FriendsList { friends: Friend[]; incoming: Friend[]; outgoing: Friend[] }
+// De los aceptados, también los mensajes sin leer y cuándo fue lo último de la conversación
+export interface FriendRow extends Friend { unread: number; last: string | null }
+export interface FriendsList { friends: FriendRow[]; incoming: Friend[]; outgoing: Friend[] }
 // Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni su resultado)
 export type SharedBetData = Pick<Bet, 'sport' | 'date' | 'league' | 'event' | 'market' | 'selection' | 'bookmaker' | 'odds' | 'legs' | 'ref'>;
 export interface SharedBet { id: string; from: string; bet: SharedBetData; note: string; created: string; seen: boolean; copied: boolean }
+// La conversación con un amigo: mensajes y apuestas pasadas, por fecha (mine: lo has enviado tú)
+export type ChatItem =
+  | { kind: 'msg'; id: string; mine: boolean; body: string; created: string; read: boolean }
+  | { kind: 'bet'; id: string; shareId: string; mine: boolean; bet: SharedBetData; note: string; created: string; copied: boolean };
 export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
@@ -231,6 +237,16 @@ export type Tour = 'atp' | 'wta';
 export interface TennisPlayer {
   id: string; name: string; short: string; flag: string; country: string; seed: number | null; rank: number | null;
   sets: number[]; setWins: boolean[]; tiebreaks: (number | null)[]; winner: boolean; alt: string[];
+}
+// Estadísticas de un jugador en un partido (server/services/tennis/matchstats.js); null si la fuente no lo da
+export interface TennisStatSide {
+  aces: number | null; df: number | null; servePts: number | null; firstIn: number | null; firstWon: number | null; secondWon: number | null;
+  bpConv: number | null; bpChances: number | null; bpSaved: number | null; bpFaced: number | null; serveGames: number | null; totalPts: number | null;
+}
+export interface TennisMatchStats {
+  source: string; live: boolean; minutes?: number | null;
+  total: { a: TennisStatSide; b: TennisStatSide } | null;
+  sets: { n: number; time: string | null; a: TennisStatSide; b: TennisStatSide }[];
 }
 export interface TennisMatch {
   id: string; tour: Tour; tournament: string; tournamentId: string; major: boolean; date: string; state: 'pre' | 'in' | 'post';
@@ -448,6 +464,8 @@ export interface Api {
     request(username: string): Promise<{ username: string; status: 'pending' | 'accepted' }>;
     accept(id: string): Promise<FriendsList>;
     remove(id: string): Promise<FriendsList>;
+    chat(id: string): Promise<{ items: ChatItem[] }>;
+    send(id: string, text: string): Promise<ChatItem>;
   };
   shared: {
     inbox(): Promise<{ unseen: number; list: SharedBet[] }>;
@@ -512,6 +530,8 @@ export interface Api {
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;
+    // Estadísticas de un partido: de la web de la WTA o, ya acabado, de TennisMyLife (null si aún no hay)
+    matchStats(q: { tour: Tour; date: string; state: TennisMatch['state']; a: string; b: string }): Promise<TennisMatchStats | null>;
     days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
     live(): Promise<TennisMatch[]>;
     rankings(tour: Tour): Promise<TennisRank[]>;
@@ -553,6 +573,8 @@ export interface Api {
   onBetsSettled(cb: () => void): () => void;
   // El administrador ha cambiado los ajustes de la app: valen para todos y se recargan
   onSettingsChanged(cb: () => void): () => void;
+  // Un amigo te ha escrito o pasado una apuesta (new), o ha leído lo tuyo (read). Sólo le llega al destinatario
+  onChat(cb: (type: 'new' | 'read') => void): () => void;
   backend: { status(): Promise<BackendStatus> };
   onBackendStatus(cb: (up: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;

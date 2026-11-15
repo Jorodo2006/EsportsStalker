@@ -1,9 +1,9 @@
-// Amigos y apuestas compartidas (migración 013). Cada usuario añade a otro por su nombre; cuando el otro acepta, cada uno
-// puede enviarle apuestas suyas. Lo que se envía es una copia de lo que se apuesta (sin el importe, el resultado ni las notas
+// Amigos, apuestas compartidas (migración 013) y chat (014). Cada usuario añade a otro por su nombre; cuando el otro acepta,
+// cada uno puede escribirle y enviarle apuestas suyas. Lo que se envía es una copia de lo que se apuesta (sin el importe, el resultado ni las notas
 // de quien la envía) y el amigo la puede copiar a sus apuestas con su propio importe.
 // El usuario sale siempre del gateway (who(req) en index.js), nunca de lo que mande el navegador: sólo se ven las solicitudes
 // y las recibidas propias, sólo se envían apuestas propias y sólo a amigos aceptados.
-const { query, tx } = require('../../shared/db');
+const { query, tx, notify } = require('../../shared/db');
 const { fail } = require('../../shared/service');
 const store = require('./store');
 
@@ -11,18 +11,28 @@ const MAX_FRIENDS = 200;
 const MAX_PENDING = 30; // solicitudes enviadas sin contestar: que nadie las mande a todos los nombres que se le ocurran
 const MAX_TO = 20; // amigos a los que se envía una apuesta de una vez
 const KEEP_DAYS = 60; // lo recibido que se enseña
+const MAX_BODY = 1000; // letras de un mensaje
+const PER_MINUTE = 20; // mensajes por minuto: que nadie llene el chat de otro
+const THREAD = 150; // lo que se enseña de una conversación
 
 const txt = (v, max) => String(v ?? '').trim().slice(0, max);
 const idOf = v => { const s = String(v ?? ''); if (!/^\d{1,18}$/.test(s)) throw fail('Usuario no válido'); return s; };
 
+// unread: mensajes suyos sin leer; last: lo último de la conversación (mensaje o apuesta), para ordenar como un chat
 async function list(me) {
   const { rows } = await query(`
-    SELECT f.status, f.user_id = $1 AS mine, u.id, u.username, coalesce(f.accepted_at, f.created_at) AS since
+    SELECT f.status, f.user_id = $1 AS mine, u.id, u.username, coalesce(f.accepted_at, f.created_at) AS since,
+      (SELECT count(*)::int FROM bets.messages m WHERE m.to_user = $1 AND m.from_user = u.id AND m.read_at IS NULL) AS unread,
+      greatest(
+        (SELECT max(created_at) FROM bets.messages m WHERE (m.from_user = $1 AND m.to_user = u.id) OR (m.from_user = u.id AND m.to_user = $1)),
+        (SELECT max(created_at) FROM bets.shared_bets s WHERE (s.from_user = $1 AND s.to_user = u.id) OR (s.from_user = u.id AND s.to_user = $1))
+      ) AS last
     FROM bets.friends f JOIN bets.users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
     WHERE f.user_id = $1 OR f.friend_id = $1 ORDER BY lower(u.username)`, [me]);
   const one = r => ({ id: String(r.id), username: r.username, since: r.since });
+  const byLast = (a, b) => (+new Date(b.last || 0) - +new Date(a.last || 0)) || a.username.localeCompare(b.username);
   return {
-    friends: rows.filter(r => r.status === 'accepted').map(one),
+    friends: rows.filter(r => r.status === 'accepted').sort(byLast).map(r => ({ ...one(r), unread: r.unread, last: r.last })),
     incoming: rows.filter(r => r.status === 'pending' && !r.mine).map(one),
     outgoing: rows.filter(r => r.status === 'pending' && r.mine).map(one)
   };
@@ -63,6 +73,12 @@ async function accept(me, otherId) {
   return list(me);
 }
 
+async function isFriend(me, other) {
+  const { rowCount } = await query(`SELECT 1 FROM bets.friends WHERE status = 'accepted'
+    AND ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))`, [me, other]);
+  return rowCount > 0;
+}
+
 // Rechazar, cancelar o dejar de ser amigos: cualquiera de los dos puede
 async function remove(me, otherId) {
   const other = idOf(otherId);
@@ -93,7 +109,10 @@ async function share(me, betId, to, note) {
   const ok = ids.filter(id => friends.has(id));
   if (!ok.length) throw fail('Sólo puedes enviar apuestas a tus amigos');
   const payload = JSON.stringify(shareable(bet)), msg = txt(note, 200);
-  for (const id of ok) await query('INSERT INTO bets.shared_bets (from_user, to_user, bet, note) VALUES ($1, $2, $3::jsonb, $4)', [me, id, payload, msg]);
+  for (const id of ok) {
+    await query('INSERT INTO bets.shared_bets (from_user, to_user, bet, note) VALUES ($1, $2, $3::jsonb, $4)', [me, id, payload, msg]);
+    notify('chat:new', { to: id });
+  }
   return { sent: ok.length };
 }
 
@@ -117,4 +136,45 @@ const mark = (col) => async (me, id) => {
   return { ok: true };
 };
 
-module.exports = { list, request, accept, remove, share, inbox, seen, copied: mark('copied_at'), hide: mark('hidden_at'), shareable };
+// ---------- Chat ----------
+// La conversación con un amigo: los mensajes y las apuestas que os habéis pasado, por fecha. Al abrirla, lo suyo queda leído
+async function thread(me, otherId) {
+  const other = idOf(otherId);
+  if (!(await isFriend(me, other))) throw fail('Sólo puedes hablar con tus amigos', 403);
+  const pair = '((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))';
+  const [m, b] = await Promise.all([
+    query(`SELECT id, from_user, body, created_at, read_at FROM bets.messages WHERE ${pair} ORDER BY created_at DESC LIMIT ${THREAD}`, [me, other]),
+    // Las que has quitado de tu lista de recibidas siguen en el chat: quitarlas es sólo de esa lista
+    query(`SELECT id, from_user, bet, note, created_at, copied_at FROM bets.shared_bets WHERE ${pair} ORDER BY created_at DESC LIMIT ${THREAD}`, [me, other])
+  ]);
+  const items = [
+    ...m.rows.map(r => ({ kind: 'msg', id: `m${r.id}`, mine: String(r.from_user) === String(me), body: r.body, created: r.created_at, read: !!r.read_at })),
+    ...b.rows.map(r => {
+      const mine = String(r.from_user) === String(me);
+      return { kind: 'bet', id: `b${r.id}`, shareId: String(r.id), mine, bet: r.bet, note: r.note, created: r.created_at, copied: !mine && !!r.copied_at };
+    })
+  ].sort((x, y) => +new Date(x.created) - +new Date(y.created)).slice(-THREAD);
+  const [read] = await Promise.all([
+    query('UPDATE bets.messages SET read_at = now() WHERE to_user = $1 AND from_user = $2 AND read_at IS NULL', [me, other]),
+    query('UPDATE bets.shared_bets SET seen_at = now() WHERE to_user = $1 AND from_user = $2 AND seen_at IS NULL', [me, other])
+  ]);
+  // Que el otro vea que lo has leído
+  if (read.rowCount) notify('chat:read', { to: other });
+  return { items };
+}
+
+async function send(me, otherId, text) {
+  const other = idOf(otherId);
+  const body = txt(text, MAX_BODY + 1);
+  if (!body) throw fail('Escribe algo');
+  if (body.length > MAX_BODY) throw fail(`Un mensaje puede tener hasta ${MAX_BODY} letras`);
+  if (!(await isFriend(me, other))) throw fail('Sólo puedes escribir a tus amigos', 403);
+  const { rows: [n] } = await query(`SELECT count(*)::int AS n FROM bets.messages WHERE from_user = $1 AND created_at > now() - interval '1 minute'`, [me]);
+  if (n.n >= PER_MINUTE) throw fail('Vas muy deprisa: espera un poco antes de enviar más', 429);
+  const { rows: [r] } = await query('INSERT INTO bets.messages (from_user, to_user, body) VALUES ($1, $2, $3) RETURNING id, created_at', [me, other, body]);
+  // Al otro sólo le llega que tiene algo nuevo, no el texto: lo pide él con su sesión
+  notify('chat:new', { to: other });
+  return { kind: 'msg', id: `m${r.id}`, mine: true, body, created: r.created_at, read: false };
+}
+
+module.exports = { list, request, accept, remove, share, inbox, seen, copied: mark('copied_at'), hide: mark('hidden_at'), shareable, thread, send };

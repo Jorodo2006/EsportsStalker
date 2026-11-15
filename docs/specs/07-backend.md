@@ -51,7 +51,7 @@ Reglas:
 
 | Prefijo | Servicio |
 |---|---|
-| `/api/auth`, `/api/bets`, `/api/settings`, `/api/friends`, `/api/shared` | bets (amigos y apuestas compartidas en `friends.js`: `GET/POST /api/friends`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id`, `POST /api/bets/:id/share`, `GET /api/shared`, `POST /api/shared/seen`, `POST /api/shared/:id/copied`, `DELETE /api/shared/:id`) |
+| `/api/auth`, `/api/bets`, `/api/settings`, `/api/friends`, `/api/shared` | bets (amigos y apuestas compartidas en `friends.js`: `GET/POST /api/friends`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id`, `GET/POST /api/friends/:id/chat`, `POST /api/bets/:id/share`, `GET /api/shared`, `POST /api/shared/seen`, `POST /api/shared/:id/copied`, `DELETE /api/shared/:id`) |
 | `/api/esports`, `/api/stats` | esports |
 | `/api/odds`, `/odds`, `/bet365`, `/snapshot`, `/auto`, `/jobs` | odds |
 | `/api/basket` | basket |
@@ -90,7 +90,11 @@ en `/events`. `src/lib/api.ts` se conecta a `/events` (y se reconecta solo) y lo
 |---|---|
 | `odds:imported` | `odds:imported` (el comparador se recarga) |
 | `odds:auto` | `odds:auto` (progreso de un trabajo, manual o programado) |
+| `chat:new`, `chat:read` | `onChat` (amigos, apuestas recibidas y chat se recargan). Llevan `data.to`: el gateway sólo se lo manda a las conexiones de ese usuario |
 | conexión / caída del SSE | `backend:status` (la interfaz enseña un aviso si el backend no responde) |
+
+Un aviso con `data.to` es de un usuario: el gateway guarda el usuario de cada conexión a `/events` y no se lo reenvía a nadie más.
+No metas en él datos del usuario (el texto de un mensaje, una apuesta): que la interfaz los pida a la API con su sesión.
 
 ## Base de datos
 

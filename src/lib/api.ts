@@ -69,6 +69,7 @@ const onAuto = new Set<(job: AutoJob) => void>();
 const onImported = new Set<(d?: { matchKey?: string; book?: string }) => void>();
 const onSettled = new Set<() => void>();
 const onSettingsChanged = new Set<() => void>();
+const onChat = new Set<(type: 'new' | 'read') => void>();
 const onStatus = new Set<(up: boolean) => void>();
 let source: EventSource | null = null;
 let connected = false;
@@ -95,6 +96,7 @@ function connect() {
       else if (ev.type === 'odds:auto') onAuto.forEach(cb => cb(ev.data));
       else if (ev.type === 'bets:settled') onSettled.forEach(cb => cb());
       else if (ev.type === 'settings:changed') onSettingsChanged.forEach(cb => cb());
+      else if (ev.type === 'chat:new' || ev.type === 'chat:read') onChat.forEach(cb => cb(ev.type === 'chat:new' ? 'new' : 'read'));
     } catch { /* un aviso mal formado no debe romper la conexión */ }
   };
   // Con un 502 del proxy el navegador no reintenta por sí mismo: hay que volver a conectar a mano
@@ -122,7 +124,9 @@ export const api: Api = {
     list: () => get('/api/friends'),
     request: username => call('POST', '/api/friends', { username }),
     accept: id => call('POST', `/api/friends/${part(id)}/accept`, {}),
-    remove: id => call('DELETE', `/api/friends/${part(id)}`)
+    remove: id => call('DELETE', `/api/friends/${part(id)}`),
+    chat: id => get(`/api/friends/${part(id)}/chat`),
+    send: (id, text) => call('POST', `/api/friends/${part(id)}/chat`, { text })
   },
   shared: {
     inbox: () => get('/api/shared'),
@@ -210,6 +214,7 @@ export const api: Api = {
   },
   tennis: {
     games: date => get('/api/tennis/games', { date }),
+    matchStats: q => get('/api/tennis/match-stats', q),
     days: (from, n) => get('/api/tennis/days', { from, n }),
     live: () => get('/api/tennis/live'),
     rankings: tour => get(`/api/tennis/rankings/${part(tour)}`),
@@ -258,6 +263,7 @@ export const api: Api = {
   onOddsImported: cb => listen(onImported, cb),
   onBetsSettled: cb => listen(onSettled, cb),
   onSettingsChanged: cb => listen(onSettingsChanged, cb),
+  onChat: cb => listen(onChat, cb),
   backend: { status: () => get('/api/health') },
   onBackendStatus: cb => listen(onStatus, cb),
   openExternal: async url => { if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener'); }

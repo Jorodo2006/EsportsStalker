@@ -78,7 +78,9 @@ const routes = [
   ['GET', '/api/shared', ({ req }) => friends.inbox(who(req).id)],
   ['POST', '/api/shared/seen', ({ req }) => friends.seen(who(req).id)],
   ['POST', '/api/shared/:id/copied', ({ req, params }) => friends.copied(who(req).id, params.id)],
-  ['DELETE', '/api/shared/:id', ({ req, params }) => friends.hide(who(req).id, params.id)]
+  ['DELETE', '/api/shared/:id', ({ req, params }) => friends.hide(who(req).id, params.id)],
+  ['GET', '/api/friends/:id/chat', ({ req, params }) => friends.thread(who(req).id, params.id)],
+  ['POST', '/api/friends/:id/chat', ({ req, params, body }) => friends.send(who(req).id, params.id, body?.text)]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))

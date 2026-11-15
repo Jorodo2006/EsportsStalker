@@ -8,6 +8,7 @@ const tml = require('./tml');
 const { photoOf } = require('./photos');
 const { picksFor } = require('./picks');
 const { withPoints } = require('./points');
+const { matchStats } = require('./matchstats');
 const ls = require('./livescore');
 const { hits, queryOf } = require('../../shared/search');
 
@@ -259,6 +260,13 @@ async function search(raw) {
 
 const routes = [
   ['GET', '/api/tennis/search', ({ query: q }) => search(q.q)],
+  // Estadísticas de un partido (matchstats.js): de la web de la WTA o, ya acabado, de TennisMyLife. null si aún no hay
+  ['GET', '/api/tennis/match-stats', ({ query: q }) => {
+    if (!TOURS[q.tour]) throw fail('Circuito desconocido');
+    const name = v => String(v || '').trim().slice(0, 80);
+    if (!name(q.a) || !name(q.b)) throw fail('Faltan los jugadores');
+    return matchStats({ tour: q.tour, date: valid(q.date), state: ['pre', 'in', 'post'].includes(q.state) ? q.state : 'post', a: name(q.a), b: name(q.b) });
+  }],
   // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
   ['GET', '/api/tennis/stats/:tour/:id', async ({ params }) => {
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');

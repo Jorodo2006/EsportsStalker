@@ -130,12 +130,19 @@ el servidor valida cada campo (`clean`, `server/test/predicciones.test.js`).
 
 ## Amigos (`src/views/FriendsView.tsx`, `server/services/bets/friends.js`)
 
-En **Amigos** (menú lateral y barra de abajo del móvil, con un número si hay solicitudes o apuestas sin ver) se añade a alguien
+En **Amigos** (menú lateral y barra de abajo del móvil, con un número si hay solicitudes, mensajes o apuestas sin ver) se añade a alguien
 por su **nombre de usuario**; tiene que aceptar. Desde **Mis apuestas**, el botón ✈ de cada apuesta («Pasar a un amigo») la envía
 a uno o varios amigos con un mensaje opcional. Al amigo le llega en *Apuestas que te han pasado* **lo apostado, sin el importe, el
 resultado ni las notas** de quien la envía; **Copiar a mis apuestas** abre *Nueva apuesta* rellena (también las combinadas, con su
 `ref` para que se resuelva sola) y con el importe vacío, y apunta en las notas quién se la pasó. Las cuotas son las que tenía el
 amigo al apostar: el aviso de la lista lo recuerda.
+
+**Chat.** Pulsando en un amigo (o en *Escribir*) se abre su conversación en lugar de *Apuestas que te han pasado* (en el móvil,
+arriba): los mensajes y las apuestas que os habéis pasado, por fecha, con *Copiar a mis apuestas* en las suyas. *Pasar una apuesta*
+abre tus apuestas (las pendientes primero) para enviarle una con un mensaje opcional. Al aceptar una solicitud se abre el chat.
+Los amigos se ordenan por lo último que os dijisteis y llevan el número de mensajes sin leer, que también suma en el menú; al abrir
+la conversación queda leída y el otro ve «Leído» bajo su último mensaje. Mensajes de hasta 1000 letras y 20 por minuto. Lo nuevo
+llega en vivo con el aviso `chat:new`, que sólo recibe el destinatario y no lleva el texto (lo pide él con su sesión).
 
 Todo sale del usuario de la sesión (la cabecera del gateway): sólo se envían apuestas propias (`getOwnBet`) y sólo a amigos
 aceptados; cada uno ve sólo sus solicitudes y lo que le han enviado. Tablas en [10-base-de-datos.md](10-base-de-datos.md);

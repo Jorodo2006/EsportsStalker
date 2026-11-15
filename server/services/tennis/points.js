@@ -95,4 +95,4 @@ async function withPoints(matches) {
   return matches;
 }
 
-module.exports = { withPoints, pointsOf, wtaRecord };
+module.exports = { withPoints, pointsOf, wtaRecord, samePlayer };
