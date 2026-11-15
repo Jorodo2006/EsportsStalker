@@ -61,9 +61,13 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 
   | Falta | Se lee cada |
   |---|---|
-  | Hasta `oddsAutoHours` (tenis: hasta 3 h como mucho) | `oddsRefreshMinutes` min |
-  | Hasta 24 h | 60 min (tenis: 180 min) |
-  | Hasta 48 h (tenis: no entra) | 180 min |
+  | Hasta `oddsAutoHours` (tenis, fútbol y MMA: hasta 3 h como mucho) | `oddsRefreshMinutes` min |
+  | Hasta 24 h | 60 min (tenis, fútbol y MMA: 180 min) |
+  | Hasta 48 h | 180 min (tenis, fútbol y MMA: 480 min) |
+
+  Hasta noviembre de 2026 el tenis, el fútbol y la MMA no se leían a más de 24 h, y no se veían las cuotas de los partidos de
+  mañana. A más de un día van cada 8 h: unas tres lecturas al día por partido, porque son decenas y una lectura tarda casi un
+  minuto (el lector hace unas 60 por hora).
 
   Los dos tramos lejanos se apagan con `oddsFarEnabled`. Si `oddsRefreshMinutes` es mayor, manda ese valor.
 - **Challenger** (sólo cuadro final, con `challengerOddsEnabled`): no siguen la tabla. Una lectura cuando faltan 12 h o

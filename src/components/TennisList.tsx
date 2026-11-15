@@ -11,6 +11,8 @@ import { sized, fallbackTo } from '@/lib/img';
 import { LiveDot } from './sport';
 import { AtpLogo, ChallengerLogo, WtaLogo } from './tennis-logos';
 import { panelCls } from './ui';
+import { useApp } from '@/lib/app-context';
+import { cardNote } from '@/lib/odds-window';
 
 type Odds = { a: number; b: number } | null | undefined;
 type St = 'pre' | 'live' | 'post';
@@ -146,6 +148,7 @@ function MatchRow({ m, odds, active, onClick }: { m: TennisMatch; odds: Odds; ac
 export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odds: Odds; date: string; onOpen: (tab?: 'odds' | 'picks') => void }) {
   const st = stOf(m);
   const surface = useSurface(m);
+  const { settings } = useApp();
   const board = useQuery({
     queryKey: ['tennis', 'board', date], queryFn: () => window.api.tennis.picksBoard(date), staleTime: 60_000, retry: false,
     enabled: st === 'pre' && !m.level
@@ -215,6 +218,13 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
           </div>
           <div className="mt-1 flex justify-between text-[11px] text-zinc-400 tnum"><span>{pct(pa)}</span><span>{pct(1 - pa)}</span></div>
         </div>
+      )}
+
+      {!(odds && pa != null) && st === 'pre' && (
+        <button onClick={() => onOpen('odds')} title="Ver por qué todavía no hay cuotas"
+          className="flex w-full cursor-pointer items-center justify-center border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500 transition hover:bg-zinc-900/70">
+          {cardNote(m.date, { sport: 'tennis', challenger: m.level === 'challenger', qualifying: /^previa/i.test(m.round || '') }, settings)}
+        </button>
       )}
 
       {top && (

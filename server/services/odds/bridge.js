@@ -6,12 +6,18 @@ const path = require('path');
 const { query, tx, notify } = require('../../shared/db');
 const { orient } = require('./equipos');
 
-const TTL_SQL = `interval '6 hours'`; // una importación vale 6 horas: el doble del tramo más espaciado del programador
+// Cuánto vale una importación: el doble de lo que tarda en volver a leerse ese partido (scheduler.js). Los de dentro de un día se
+// leen como mucho cada 3 h y valen 6; los de más de un día (tenis, fútbol y MMA, cada 8 h) valen 16, o sus cuotas desaparecerían
+// 2 horas de cada 8. No se alarga para los cercanos: una línea que la casa ya ha quitado seguiría saliendo más tiempo
+const TTL_SQL = `interval '6 hours'`;
+const TTL_FAR_SQL = `interval '16 hours'`;
+// Condición de vigencia de una importación (alias i) según el inicio de su partido (subconsulta a odds.matches)
+const fresh = `i.ts > now() - CASE WHEN (SELECT start FROM odds.matches WHERE key = i.match_key) > now() + interval '20 hours' THEN ${TTL_FAR_SQL} ELSE ${TTL_SQL} END`;
 const HISTORY_DAYS = 365; // lo que se guarda del histórico de cuotas
 const SAME_MATCH = 12 * 3600; // misma pareja con el inicio a menos de 12 h: es el mismo partido, aunque se haya movido la hora
 const BOOKS = ['winamax', 'betway'];
 const MANUAL_WAIT = 30e3; // si ningún lector coge un trabajo manual en 30 s, se da por perdido
-const AUTO_WAIT_MIN = 10; // los programados esperan en cola hasta 10 min (el lector puede estar ocupado)
+const AUTO_WAIT_MIN = 15; // los programados esperan en cola hasta 15 min: son 10 y cada lectura tarda casi un minuto
 const CAPTURAS = process.env.CAPTURAS_DIR || null;
 
 const keyOf = m => `${m.a?.name}|${m.b?.name}`;
@@ -75,9 +81,17 @@ async function add(payload) {
 const toImport = r => ({ ...r.payload, id: r.id, map: r.map, matchKey: r.match_key, ts: ms(r.ts) });
 
 async function forMatch(m) {
-  const { rows } = await query(`SELECT id, match_key, map, payload, ts FROM odds.imports
-    WHERE match_key = $1 AND ts > now() - ${TTL_SQL} ORDER BY ts DESC`, [keyOf(m)]);
+  const { rows } = await query(`SELECT id, match_key, map, payload, ts FROM odds.imports i
+    WHERE match_key = $1 AND ${fresh} ORDER BY ts DESC`, [keyOf(m)]);
   return rows.map(toImport);
+}
+
+// La última lectura terminada de un partido: qué dijo cada casa ("No encuentro el partido en Betway"). Sin esto, una casa que
+// no tiene el partido no deja rastro (no hay importación) y la app no puede decir por qué no hay cuotas
+async function lastJob(m) {
+  const { rows } = await query(`SELECT steps, done_at FROM odds.jobs WHERE match_key = $1 AND done_at IS NOT NULL
+    ORDER BY done_at DESC LIMIT 1`, [keyOf(m)]);
+  return rows[0] ? { steps: rows[0].steps || {}, at: ms(rows[0].done_at) } : null;
 }
 
 const setMoneyline = (id, ml) => query('UPDATE odds.imports SET ml = $2::jsonb WHERE id = $1', [id, JSON.stringify(ml)]);
@@ -87,7 +101,7 @@ async function moneylines(events) {
   const keys = [...new Set(events.map(keyOf))];
   if (!keys.length) return {};
   const { rows } = await query(`SELECT match_key, max((ml->>'a')::float) AS a, max((ml->>'b')::float) AS b, max((ml->>'x')::float) AS x FROM odds.imports
-    WHERE match_key = ANY($1) AND ml IS NOT NULL AND ts > now() - ${TTL_SQL} GROUP BY match_key`, [keys]);
+    i WHERE match_key = ANY($1) AND ml IS NOT NULL AND ${fresh} GROUP BY match_key`, [keys]);
   return Object.fromEntries(rows.map(r => [r.match_key, { a: r.a, b: r.b, ...(r.x ? { x: r.x } : {}) }]));
 }
 
@@ -188,13 +202,16 @@ async function pickJob(id) {
   return { ...job, urls: await urlsFor(r.match_key) };
 }
 
-// El lector pregunta cada poco si hay algo que hacer: primero los manuales, luego los programados que empiezan antes
+// El lector pregunta cada poco si hay algo que hacer.
 let lastPoll = null;
+// Primero los que pide alguien a mano y luego en el orden en que los puso en cola el programador (scheduler.js), que ya decide
+// qué va antes: lo que no se ha leído nunca, y lo cercano antes que lo lejano. Antes se cogían por hora del partido, y las
+// relecturas de los de esta noche se colaban siempre delante de la primera lectura de los de mañana, que caducaba sin leerse
 async function nextJob() {
   lastPoll = Date.now();
   const { rows } = await query(`UPDATE odds.jobs SET picked_at = now() WHERE id = (
       SELECT id FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL
-      ORDER BY (source = 'manual') DESC, start NULLS LAST, created LIMIT 1 FOR UPDATE SKIP LOCKED
+      ORDER BY (source = 'manual') DESC, created, start NULLS LAST LIMIT 1 FOR UPDATE SKIP LOCKED
     ) RETURNING *`);
   if (!rows[0]) return null;
   const job = toJob(rows[0]);
@@ -204,7 +221,7 @@ async function nextJob() {
 
 // Limpieza periódica: importaciones caducadas, histórico antiguo, trabajos viejos y programados que nadie ha cogido
 async function cleanup() {
-  await query(`DELETE FROM odds.imports WHERE ts < now() - ${TTL_SQL}`);
+  await query(`DELETE FROM odds.imports WHERE ts < now() - ${TTL_FAR_SQL}`);
   await query(`DELETE FROM odds.price_history WHERE ts < now() - interval '${HISTORY_DAYS} days'`);
   await query(`DELETE FROM odds.jobs WHERE created < now() - interval '2 days'`);
   const { rows } = await query(`UPDATE odds.jobs SET done_at = now(), error = 'ningún lector lo ha cogido'
@@ -228,6 +245,6 @@ async function importUrls(urls) {
 }
 
 module.exports = {
-  BOOKS, keyOf, noteMatch, add, forMatch, setMoneyline, moneylines, recordPrices, priceHistory, saveSnapshot,
+  BOOKS, keyOf, noteMatch, add, forMatch, lastJob, setMoneyline, moneylines, recordPrices, priceHistory, saveSnapshot,
   newJob, getJob, pickJob, nextJob, jobProgress, cleanup, importUrls, lastPoll: () => lastPoll
 };

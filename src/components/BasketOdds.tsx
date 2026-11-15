@@ -11,6 +11,7 @@ import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
+import { oddsExplanation } from '@/lib/odds-window';
 
 // El partido tal y como lo guardan el lector y el comparador: visitante (a) contra local (b)
 export const matchOfGame = (g: BasketGame) => ({
@@ -49,7 +50,7 @@ const typeOf = (m: MarketLine) => m.key.split('|')[0];
 export const BasketOdds = ({ game }: { game: BasketGame }) => <SportOdds target={targetOfGame(game)} />;
 
 export function SportOdds({ target }: { target: OddsTarget }) {
-  const { addToSlip, toast } = useApp();
+  const { addToSlip, toast, settings } = useApp();
   const qc = useQueryClient();
   const { data, isLoading, error, dataUpdatedAt, isFetching } = useMatchOdds(target);
   const [job, setJob] = useState<AutoJob | null>(null);
@@ -101,7 +102,10 @@ export function SportOdds({ target }: { target: OddsTarget }) {
       </div>
 
       {isLoading ? <Loading label="Cargando cuotas…" /> : error ? <ErrorBox error={error} /> : !data?.markets.length ? (
-        <Empty>Todavía no hay cuotas de este partido. Pulsa Actualizar cuotas: el lector las trae de Winamax y Betway en un minuto, sin abrir Chrome.</Empty>
+        <Empty>
+          <span className="block font-medium text-zinc-200">Todavía no hay cuotas de este partido</span>
+          {oddsExplanation(target.match.start, { sport: target.sport, challenger: target.id.startsWith('ch:') }, settings, data?.sources).map(t => <span key={t} className="mt-1.5 block">{t}</span>)}
+        </Empty>
       ) : <>
         <div className="flex flex-wrap gap-1">
           {SECTIONS.filter(([n]) => counts[n]).map(([n]) => (

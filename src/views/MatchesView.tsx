@@ -11,6 +11,7 @@ import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, State
 import { Button, Empty, ErrorBox, Loading, Select } from '@/components/ui';
 import MatchDetail from './MatchDetail';
 import { FavoritesStrip } from '@/components/Favorites';
+import { cardNote } from '@/lib/odds-window';
 
 const stateOf = (m: MatchEvent): MatchState => (m.state === 'inProgress' ? 'live' : m.state === 'completed' ? 'post' : 'pre');
 const dayOf = (m: MatchEvent) => isoDay(new Date(m.startTime));
@@ -76,7 +77,7 @@ export default function MatchesView() {
   const card = (m: MatchEvent, featured?: boolean) => {
     const [a, b] = m.teams, st = stateOf(m);
     return (
-      <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} odds={showOdds ? board.data?.[m.id] : null} featured={featured}
+      <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} odds={showOdds ? board.data?.[m.id] : null} noOdds={showOdds && board.data ? cardNote(m.startTime, { sport: 'lol' }, settings) : null} featured={featured}
         competition={featured ? m.league : undefined} status={featured ? m.blockName : undefined}
         time={st === 'pre' ? fmtTime(m.startTime) : st === 'live' ? 'En juego' : 'Final'} tag={m.bestOf ? `Bo${m.bestOf}` : undefined}
         a={{ name: a.name, short: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}

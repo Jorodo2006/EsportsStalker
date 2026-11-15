@@ -183,7 +183,7 @@ function AutoOddsCard() {
       </form>
       <p className="mt-3 text-xs text-zinc-500">
         El lector de Docker lee los partidos de uno en uno, primero los más cercanos, y guarda cada cambio de cuota en el histórico.
-        Los de más adelante se leen cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (el tenis, cada 3 h y sólo desde 24 h antes). Cuantas más lecturas, más fácil es que una casa bloquee.
+        Los de más adelante se leen cada hora hasta 24 h antes y cada 3 h hasta 48 h antes (tenis, fútbol y MMA: cada 3 h el último día y cada 8 h el anterior). Cuantas más lecturas, más fácil es que una casa bloquee.
         Los Challenger del cuadro final sólo se leen dos veces: una hasta 12 h antes y la de cierre, justo antes de empezar. Sirven para medir el motor de los Challenger frente a la casa.
       </p>
       {st && (

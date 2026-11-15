@@ -25,6 +25,7 @@ import { MatchShotMap } from './football/Shots';
 import { Stats } from './football/Stats';
 import { Lineups } from './football/Lineups';
 import { FootballTrends, Form, Table } from './football/Form';
+import { cardNote } from '@/lib/odds-window';
 
 type Mode = 'games' | 'picks';
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
@@ -47,6 +48,8 @@ export const targetOfFootball = (m: FootballMatch): OddsTarget => ({
 });
 
 export default function FootballMatches() {
+  // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
+  const { settings } = useApp();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -109,7 +112,7 @@ export default function FootballMatches() {
     const st = stateOf(g), done = st === 'post' && !g.off;
     const hs = g.home.score ?? 0, as = g.away.score ?? 0;
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} featured={featured} odds={showOdds ? board.data?.[g.id] : null}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} featured={featured} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.off ? cardNote(g.date, { sport: 'football' }, settings) : null}
         competition={featured ? g.leagueName : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : g.off ? g.status : 'Final'}
         status={st === 'live' ? g.status : g.stage || undefined}

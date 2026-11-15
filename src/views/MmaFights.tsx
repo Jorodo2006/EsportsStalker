@@ -16,6 +16,7 @@ import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Score
 import { Badge, Button, Empty, ErrorBox, Loading } from '@/components/ui';
 import { Panel, TvFrame, TvHeader, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
+import { cardNote } from '@/lib/odds-window';
 
 const stateOf = (f: MmaFight): MatchState => (f.state === 'in' ? 'live' : f.state);
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
@@ -25,6 +26,8 @@ function loadPref<T>(key: string, def: T): T { try { const v = localStorage.getI
 function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
 
 export default function MmaFights() {
+  // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
+  const { settings } = useApp();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export default function MmaFights() {
     const st = stateOf(g), r = g.result;
     const side = (f: MmaFighter, w: 'a' | 'b') => ({ name: f.name, logo: f.flag, win: !!r && r.winner === w, lose: st === 'post' && !!r && r.winner != null && r.winner !== w });
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.cancelled ? cardNote(g.date, { sport: 'mma' }, settings) : null} featured={featured}
         competition={featured ? g.event : undefined} tag={g.cardPos === 1 ? 'Principal' : g.cardPos === 2 ? 'Co-principal' : undefined}
         time={g.cancelled ? 'Cancelado' : st === 'pre' ? fightTime(g) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'post' ? [resultShort(g), g.weightClass].filter(Boolean).join(' · ') : st === 'live' ? g.status : [g.weightClass, g.rounds >= 5 ? '5 asaltos' : ''].filter(Boolean).join(' · ')}

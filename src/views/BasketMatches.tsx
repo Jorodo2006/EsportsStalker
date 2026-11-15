@@ -26,6 +26,7 @@ import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
 import { sized, fallbackTo } from '@/lib/img';
 import { FavoritesStrip } from '@/components/Favorites';
+import { cardNote } from '@/lib/odds-window';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
@@ -39,6 +40,8 @@ function loadSet(key: string) { try { return new Set<string>(JSON.parse(localSto
 function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, JSON.stringify([...s])); } catch { /* sin almacenamiento */ } }
 
 export default function BasketMatches() {
+  // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
+  const { settings } = useApp();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
@@ -96,7 +99,7 @@ export default function BasketMatches() {
     const st = stateOf(g), done = st === 'post';
     const sa = Number(g.away.score), sh = Number(g.home.score);
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data ? cardNote(g.date, { sport: 'basket' }, settings) : null} featured={featured}
         competition={featured ? LEAGUE_NAME[g.league] : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'live' ? g.status : undefined}

@@ -725,6 +725,13 @@ async function getMatchOdds(match) {
       sources[name] = { ok: counts[name].n > 0, ts: counts[name].ts, msg: `${counts[name].n} mercados · enviadas hace ${mins} min` };
     } catch (e) { if (!sources[name]?.ok) sources[name] = { ok: false, msg: e.message }; }
   }
+  // Las casas que no han dado nada: lo que dijeron en la última lectura si falló (no tienen el partido, no se pudo leer…), con la
+  // hora. Si aquella lectura fue bien pero sus cuotas ya caducaron, no se dice nada: "137 mercados" no explica por qué no hay
+  const last = await bridge.lastJob(match).catch(() => null);
+  for (const [bk, step] of Object.entries(last?.steps ?? {})) {
+    const name = BOOK_LABEL[bk];
+    if (name && !sources[name] && step?.estado === 'error' && step.msg) sources[name] = { ok: false, msg: step.msg, ts: last.at };
+  }
   return book.result(sources);
 }
 

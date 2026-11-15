@@ -156,8 +156,10 @@ const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.na
 // featured: más grande, para "En directo", con la competición en la cabecera.
 // En tenis en juego, tras los sets van los juegos del set y los puntos del juego.
 // items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
-export function MatchCard({ state, time, status, a, b, odds, active, onClick, tag, competition, featured }: {
-  state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number; x?: number } | null;
+// noOdds: lo que se dice en lugar de las cuotas cuando todavía no hay ("Cuotas desde el dom 15, 18:00"), de cardNote en
+// lib/odds-window.ts; así el usuario sabe que no es un fallo
+export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onClick, tag, competition, featured }: {
+  state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number; x?: number } | null; noOdds?: string | null;
   active?: boolean; onClick: () => void; tag?: string; competition?: string; featured?: boolean;
 }) {
   const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
@@ -199,6 +201,7 @@ export function MatchCard({ state, time, status, a, b, odds, active, onClick, ta
       {odds && (odds.x
         ? <div className="mt-auto grid grid-cols-3 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.x, 'X')}{oddChip(odds.b, oddsTag(b))}</div>
         : <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.b, oddsTag(b))}</div>)}
+      {!odds && noOdds && state === 'pre' && <div className="mt-auto flex h-10 items-center justify-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-500">{noOdds}</div>}
     </button>
   );
 }

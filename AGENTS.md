@@ -191,9 +191,11 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
   "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.
 - **Leaguepedia** limita mucho las peticiones anónimas: no quites la cola ni la caché de `leaguepedia.js`.
-- **Lecturas programadas** (`server/services/odds/scheduler.js`): LoL, baloncesto y tenis, más seguidas cuanto más cerca
-  está el partido; el lector las hace de una en una, primero las más cercanas. No subas mucho la frecuencia: las casas
-  pueden bloquear.
+- **Lecturas programadas** (`server/services/odds/scheduler.js`): los cinco deportes, desde 48 h antes y más seguidas cuanto más
+  cerca está el partido (tenis, fútbol y MMA, cada 8 h a más de un día); el lector las hace de una en una, primero las más cercanas.
+  No subas mucho la frecuencia: las casas pueden bloquear. La interfaz repite esos plazos para decir desde cuándo habrá cuotas
+  (`src/lib/odds-window.ts`, con sus pruebas): si cambias uno, cambia el otro. Cuando una casa no tiene el partido, lo que dijo
+  en la última lectura llega en `sources` (`bridge.lastJob`) y se enseña en la pestaña de cuotas.
 - **Escáner de líneas y puntos de equipo** (`scanLine` en `src/lib/basket-model.ts`, `src/lib/basket-teams.ts`): el escáner debe dar la misma probabilidad que el analizador, y los parámetros de los puntos están ajustados con datos (cifras y límites en `docs/specs/08-baloncesto.md`). No guardes logs de ESPN enteros en la caché: pesan 700 KB cada uno (`remember` y `bulk` en `cache.js`).
 - **Proyección de baloncesto** (`PROJ` en `src/lib/basket-model.ts`: lo que vale la temporada pasada, minutos altos, varianza): medida con `scripts/calib-basket.ts` en líneas de toda la escalera, no sólo en la proyección. Si la tocas, repítela y compara el sesgo de 26-27 y la log-loss por temporada (`docs/specs/08-baloncesto.md`). De baloncesto se guardan en `bets.predictions` todas las líneas calculadas, no sólo las de valor: así se puede medir el peso frente a la casa sin sesgo.
 - **B2B y vuelta de baja en el modelo** (`gameCtx` en `src/lib/basket-context.ts`, `CTX_FACTORS` en `basket-model.ts`): los factores están medidos con `scripts/backtest-basket.ts`. Si tocas el modelo, repítelo (ajuste y comprobación con periodos distintos) y mira la calibración. El contexto tiene que calcularse igual en el analizador, el escáner y las recomendaciones, también las bajas de compañeros (`matesOut` de `src/lib/basket-mates.ts`), que no cambian la proyección, sólo bajan la fiabilidad de los "menos".

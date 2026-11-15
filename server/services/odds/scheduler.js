@@ -6,11 +6,13 @@ const bridge = require('./bridge');
 
 const TICK = 60e3;
 const FAR_HOURS = 48; // hasta dónde llegan las lecturas espaciadas
-// El tenis y el fútbol tienen decenas de partidos al día: de cerca sólo las últimas 3 horas y de lejos sólo el último día
+// El tenis, el fútbol y la MMA tienen decenas de partidos al día: de cerca sólo las últimas 3 horas. De lejos, hasta 48 h,
+// para que se vean las cuotas de mañana (antes sólo 24 h, y se echaban en falta); lo que falta más de un día, cada 8 horas
 const TENNIS_NEAR_HOURS = 3;
-const TENNIS_FAR_HOURS = 24;
+const TENNIS_FAR_HOURS = 48;
+const CROWDED_DAY_AFTER_MINUTES = 8 * 60;
 const CROWDED = ['tennis', 'football', 'mma'];
-const MAX_QUEUE = 10; // unos 6 min de trabajo: así la cola no llega a caducar y un partido cercano entra enseguida
+const MAX_QUEUE = 10; // unos 10 min de trabajo (cada lectura tarda casi un minuto) y caducan a los 15: así no se pierden y uno cercano entra enseguida
 const clamp = (v, lo, hi, def) => Math.min(hi, Math.max(lo, Number(v) || def));
 const TBD = /^(tbd|tba|por determinar)$/i;
 
@@ -31,9 +33,11 @@ const hoursLeft = m => (new Date(m.start).getTime() - Date.now()) / 3600e3;
 const isNear = (m, hours) => hoursLeft(m) <= (CROWDED.includes(m.sport) ? Math.min(hours, TENNIS_NEAR_HOURS) : hours);
 
 // Cada cuántos minutos se lee un partido: lo cercano cada X min (ajuste), lo lejano cada hora o cada 3 horas.
-// El tenis y el fútbol lejanos siempre cada 3 horas: con una hora, sus partidos solos llenarían las ~100 lecturas por hora del lector
+// El tenis, el fútbol y la MMA lejanos, cada 3 horas en el último día y cada 8 a más de un día: con una hora, sus partidos solos
+// llenarían las ~60 lecturas por hora del lector (una tarda casi un minuto), y leer mucho lo de pasado mañana no aporta
 function everyMinutes(m, minutes, hours) {
   if (isNear(m, hours)) return minutes;
+  if (CROWDED.includes(m.sport) && hoursLeft(m) > 24) return Math.max(minutes, CROWDED_DAY_AFTER_MINUTES);
   return Math.max(minutes, hoursLeft(m) <= 24 && !CROWDED.includes(m.sport) ? 60 : 180);
 }
 
@@ -85,7 +89,7 @@ async function upcomingTennis(hours) {
   const days = daysUntil(until);
   const games = (await Promise.all(days.map(d => client.call('tennis', 'GET', `/api/tennis/games?date=${d}`).catch(() => [])))).flat();
   const p = x => ({ name: x.name, code: '', alt: x.alt || [] });
-  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.level !== 'challenger' && g.a?.name && g.b?.name; })
+  return games.filter(g => { const t = new Date(g.date).getTime(); return g.state === 'pre' && t >= Date.now() && t <= until && !/^previa/i.test(g.round) && g.level !== 'challenger' && g.a?.name && g.b?.name && !TBD.test(g.a.name) && !TBD.test(g.b.name); })
     .map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', a: p(g.a), b: p(g.b) }));
 }
 
@@ -109,7 +113,7 @@ async function upcomingChallenger() {
   const seen = new Set();
   return games.filter(g => {
     const t = new Date(g.date).getTime();
-    if (g.level !== 'challenger' || g.state !== 'pre' || /^previa/i.test(g.round || '') || !g.a?.name || !g.b?.name || seen.has(g.id)) return false;
+    if (g.level !== 'challenger' || g.state !== 'pre' || /^previa/i.test(g.round || '') || !g.a?.name || !g.b?.name || TBD.test(g.a.name) || TBD.test(g.b.name) || seen.has(g.id)) return false;
     seen.add(g.id);
     return t <= now + CH_EARLY_HOURS * 3600e3 && t >= now - CH_LATE_HOURS * 3600e3;
   }).map(g => ({ id: g.id, league: g.tournament, start: g.date, sport: 'tennis', turn: 'challenger', a: p(g.a), b: p(g.b) }))
@@ -145,10 +149,11 @@ async function upcomingMma(hours) {
     .map(g => ({ id: g.id, league: g.org, event: g.event, start: g.date, sport: 'mma', a: fighter(g.a), b: fighter(g.b) }));
 }
 
-// ¿Toca leerlo? No si tiene un trabajo abierto o uno (manual o programado) de hace menos de `minutes`
+// Toca leerlo si no está ya en cola y no se ha leído hace menos de `minutes`. Un trabajo que caducó sin que el lector lo cogiera
+// no cuenta: si no, un partido de mañana se quedaba 8 horas sin cuotas por una lectura que no se hizo
 async function due(key, minutes) {
   const { rowCount } = await query(`SELECT 1 FROM odds.jobs WHERE match_key = $1
-    AND (done_at IS NULL OR created > now() - make_interval(mins => $2)) LIMIT 1`, [key, minutes]);
+    AND (done_at IS NULL OR (picked_at IS NOT NULL AND created > now() - make_interval(mins => $2))) LIMIT 1`, [key, minutes]);
   return rowCount === 0;
 }
 
@@ -175,9 +180,21 @@ async function tick() {
     const chClose = chall.filter(challengerClose), chEarly = chall.filter(m => !challengerClose(m));
     const { rows } = await query(`SELECT count(*)::int AS n FROM odds.jobs WHERE done_at IS NULL AND picked_at IS NULL AND source = 'auto'`);
     let queued = rows[0].n;
-    // Primero los cercanos y luego los lejanos, en cada grupo por turnos entre deportes. El cierre de un Challenger va con
-    // los cercanos (no puede esperar); su lectura de la mañana, con los lejanos
-    const order = [...byTurns([...matches.filter(m => isNear(m, hours)), ...chClose]), ...byTurns([...matches.filter(m => !isNear(m, hours)), ...chEarly])];
+    // Primero los partidos que todavía no se han leído nunca (cercanos y luego lejanos) y después volver a leer los que ya tienen
+    // cuotas; en cada grupo, por turnos entre deportes. Si no, las relecturas cada pocos minutos de los cercanos (una noche de NBA)
+    // llenaban la cola y los de mañana no entraban: en hora y media se leyeron 3 de 22 partidos de fútbol. La primera lectura
+    // vale mucho más que la decimosexta. El cierre de un Challenger va siempre con lo primero (no puede esperar); su lectura de
+    // la mañana, con los lejanos. "Leído" es que el lector haya hecho una lectura (en odds.jobs, que guarda 2 días); las que
+    // caducaron en cola sin cogerse no cuentan
+    const { rows: done } = await query(`SELECT DISTINCT match_key FROM odds.jobs WHERE done_at IS NOT NULL AND picked_at IS NOT NULL`);
+    const read = new Set(done.map(r => r.match_key)), fresh = m => !read.has(bridge.keyOf(m));
+    const near = matches.filter(m => isNear(m, hours)), later = matches.filter(m => !isNear(m, hours));
+    const order = [
+      ...byTurns([...near.filter(fresh), ...chClose]),
+      ...byTurns([...later.filter(fresh), ...chEarly.filter(fresh)]),
+      ...byTurns(near.filter(m => !fresh(m))),
+      ...byTurns([...later.filter(m => !fresh(m)), ...chEarly.filter(m => !fresh(m))])
+    ];
     for (const m of order) {
       if (queued >= MAX_QUEUE) break;
       if (!(await due(bridge.keyOf(m), m.turn === 'challenger' ? challengerEvery(m) : everyMinutes(m, minutes, hours)))) continue;
@@ -185,7 +202,6 @@ async function tick() {
       await bridge.newJob(m, 'auto');
       queued++;
     }
-    const near = matches.filter(m => isNear(m, hours));
     last = { at: Date.now(), matches: [...near, ...chClose], far: matches.length - near.length + chEarly.length, challenger: chall.length, error: null };
   } catch (e) {
     console.error('Programador de cuotas:', e.message);
