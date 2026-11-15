@@ -56,6 +56,23 @@ services:
     volumes:
       # Fotos de las páginas de las casas (captura-*.json) para ajustar los lectores
       - ./capturas:/capturas
+    depends_on:
+      db:
+        condition: service_healthy
+      capturas:
+        condition: service_completed_successfully
+
+  # La carpeta capturas/ es del equipo (o del servidor) y el servicio de cuotas corre como el usuario node: sin esto no podía
+  # escribir las fotos de las casas (EACCES) y no había con qué ajustar un lector que deja de encontrar partidos. Se ejecuta
+  # una vez como root, antes de arrancar odds, y se para. Sólo toca esa carpeta, que no lleva datos de nadie
+  capturas:
+    image: sharpex-server
+    pull_policy: never
+    user: root
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /capturas && (chown node:node /capturas 2>/dev/null; chmod 0777 /capturas)"]
+    volumes:
+      - ./capturas:/capturas
 
   # Lector de cuotas: Chromium sin cabeza que lee Winamax y Betway (antes lo hacía la extensión de Chrome)
   lector:

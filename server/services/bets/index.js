@@ -7,6 +7,7 @@ const store = require('./store');
 const auth = require('./auth');
 const settle = require('./settle');
 const predictions = require('./predictions');
+const friends = require('./friends');
 const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
@@ -66,7 +67,18 @@ const routes = [
   ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
   // Recomendaciones del modelo, para medir si acierta. No son de nadie: cualquiera con sesión las manda mientras las ve
   ['POST', '/api/bets/predictions', ({ req, body }) => { who(req); return predictions.record(body?.list); }],
-  ['GET', '/api/bets/predictions', ({ req }) => { who(req); return predictions.report(); }]
+  ['GET', '/api/bets/predictions', ({ req }) => { who(req); return predictions.report(); }],
+
+  // ---------- Amigos y apuestas compartidas (friends.js): siempre del usuario de la sesión ----------
+  ['GET', '/api/friends', ({ req }) => friends.list(who(req).id)],
+  ['POST', '/api/friends', ({ req, body }) => friends.request(who(req).id, body?.username)],
+  ['POST', '/api/friends/:id/accept', ({ req, params }) => friends.accept(who(req).id, params.id)],
+  ['DELETE', '/api/friends/:id', ({ req, params }) => friends.remove(who(req).id, params.id)],
+  ['POST', '/api/bets/:id/share', ({ req, params, body }) => friends.share(who(req).id, params.id, body?.to, body?.note)],
+  ['GET', '/api/shared', ({ req }) => friends.inbox(who(req).id)],
+  ['POST', '/api/shared/seen', ({ req }) => friends.seen(who(req).id)],
+  ['POST', '/api/shared/:id/copied', ({ req, params }) => friends.copied(who(req).id, params.id)],
+  ['DELETE', '/api/shared/:id', ({ req, params }) => friends.hide(who(req).id, params.id)]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))

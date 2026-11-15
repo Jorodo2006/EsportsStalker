@@ -51,7 +51,7 @@ Reglas:
 
 | Prefijo | Servicio |
 |---|---|
-| `/api/auth`, `/api/bets`, `/api/settings` | bets |
+| `/api/auth`, `/api/bets`, `/api/settings`, `/api/friends`, `/api/shared` | bets (amigos y apuestas compartidas en `friends.js`: `GET/POST /api/friends`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id`, `POST /api/bets/:id/share`, `GET /api/shared`, `POST /api/shared/seen`, `POST /api/shared/:id/copied`, `DELETE /api/shared/:id`) |
 | `/api/esports`, `/api/stats` | esports |
 | `/api/odds`, `/odds`, `/bet365`, `/snapshot`, `/auto`, `/jobs` | odds |
 | `/api/basket` | basket |

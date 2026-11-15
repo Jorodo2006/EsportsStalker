@@ -115,6 +115,12 @@ async function getBet(id) {
   return rows[0] ? fromRow(rows[0]) : null;
 }
 
+// Una apuesta del usuario (y sólo suya): para enviarla a un amigo. getBet, que no filtra, es sólo del resolvedor
+async function getOwnBet(userId, id) {
+  const { rows } = await query(`SELECT b.*, ${LEGS_SQL} FROM bets.bets b WHERE b.id = $1 AND b.user_id = $2`, [String(id), userId]);
+  return rows[0] ? fromRow(rows[0]) : null;
+}
+
 async function listBets(userId) {
   const { rows } = await query(`SELECT b.*, ${LEGS_SQL} FROM bets.bets b WHERE b.user_id = $1 ORDER BY b.seq`, [userId]);
   return rows.map(fromRow);
@@ -282,4 +288,4 @@ function normalizeCombo(b, legs, money, text) {
   };
 }
 
-module.exports = { USER_KEYS, cleanFavorites, getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };
+module.exports = { USER_KEYS, cleanFavorites, getOwnBet, getSettings, setSettings, claimExisting, getBet, listBets, saveBet, deleteBet, importBets, normalizeBet, DEFAULT_SETTINGS, OBSOLETE, SECRET_KEYS };

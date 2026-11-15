@@ -315,6 +315,20 @@ const SPORT_CFG = {
 };
 const cfgOf = job => SPORT_CFG[job.match.sport] || SPORT_CFG.basket;
 
+// Betway cambió su portada de tenis (noviembre de 2026): ya sólo enseña tres "Eventos populares", y el resto de partidos están en
+// la página de cada torneo ("Ligas principales": grp/tennis/wta/wta-finals, grp/tennis/challenger/sydney---australia…). Se
+// prueban los torneos de esa portada, primero los que más se parecen al del partido ("FAGE WTA Finals Indian Wells" → WTA Finals),
+// sin los de dobles y como mucho 4: si no, en 3 días encontró 1 de 35 partidos
+const tennisGroupLinks = () => [...document.querySelectorAll('a[href*="/sports/grp/tennis/"]')]
+  .map(a => ({ href: a.getAttribute('href'), text: a.innerText || '' }));
+function rankTennisGroups(links, league) {
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const words = new Set(norm(league).split(/[^a-z]+/).filter(w => w.length >= 4 && !['open', 'tour', 'tennis', 'presented'].includes(w)));
+  const score = l => norm(`${l.text} ${l.href}`).split(/[^a-z]+/).filter(w => words.has(w)).length;
+  const unique = [...new Map((links || []).filter(l => l.href && !/dobles|doubles/i.test(l.href + l.text)).map(l => [l.href, l])).values()];
+  return unique.map(l => ({ href: l.href, s: score(l) })).sort((a, b) => b.s - a.s).slice(0, 4).map(l => l.href);
+}
+
 const BASKET_BOOKS = {
   async winamax(job, ctx, say) {
     say('buscando', 'Buscando el partido…');
@@ -341,9 +355,17 @@ const BASKET_BOOKS = {
       page = await openTab(ctx, `https://betway.es/es/es/sports/${list || cfgOf(job).bwCat}`);
       ev = await look(12000);
       if (!ev && list) { await goTo(page, `https://betway.es/es/es/sports/${cfgOf(job).bwCat}`); ev = await look(10000); }
+      if (!ev && job.match.sport === 'tennis') {
+        for (const href of rankTennisGroups(await run(page, tennisGroupLinks), job.match.league)) {
+          say('buscando', 'Buscando en los torneos…');
+          await goTo(page, `https://betway.es${href}`);
+          ev = await look(8000);
+          if (ev) break;
+        }
+      }
       if (!ev) {
         const snap = await run(page, snapshotOf);
-        if (snap) await post('/snapshot', { ...snap, book: 'betway', nombre: 'lista-basket', motivo: 'lector: no encuentro el partido de baloncesto' });
+        if (snap) await post('/snapshot', { ...snap, book: 'betway', nombre: `lista-${job.match.sport || 'lol'}`, motivo: 'lector: no encuentro el partido' });
         throw new Error('No encuentro el partido en Betway (he guardado una foto de la lista)');
       }
     }

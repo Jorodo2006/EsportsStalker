@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, fmtTime, odd, pct } from '@/lib/format';
-import type { AutoJob, BasketGame, MarketLine, Sport, TeamRef } from '@/lib/types';
+import type { AutoJob, BasketGame, MarketLine, PriceHistoryRow, Sport, TeamRef } from '@/lib/types';
 import { BookHead, BookIcon, bookKey } from './BookIcon';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
@@ -76,6 +76,12 @@ export function SportOdds({ target }: { target: OddsTarget }) {
     return [...out.entries()];
   }, [data, section]);
   const counts = Object.fromEntries(SECTIONS.map(([n, f]) => [n, (data?.markets ?? []).filter(f).length]));
+  // Cómo se han movido las cuotas: se vuelve a pedir cuando llegan cuotas nuevas (dataUpdatedAt)
+  const hist = useQuery({
+    queryKey: ['odds', 'history', target.sport, target.id, dataUpdatedAt], enabled: !!data?.markets.length,
+    queryFn: () => window.api.odds.history(m), staleTime: 5 * 60e3, placeholderData: p => p
+  });
+  const moves = useMemo(() => movesOf(hist.data), [hist.data]);
 
   async function start() {
     try { setJob(await window.api.odds.auto(m)); } catch (e) { toast((e as Error).message); }
@@ -116,7 +122,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
           ))}
         </div>
         <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
-          {groups.map(([group, lines]) => <OddsCard key={group} group={group} lines={lines} books={books} onPick={pick} />)}
+          {groups.map(([group, lines]) => <OddsCard key={group} group={group} lines={lines} books={books} moves={moves} onPick={pick} />)}
         </div>
       </>}
     </div>
@@ -124,8 +130,8 @@ export function SportOdds({ target }: { target: OddsTarget }) {
 }
 
 // Una tarjeta de mercado: filas de selecciones y una columna por casa. Clic: al cupón
-function OddsCard({ group, lines, books, onPick }: {
-  group: string; lines: MarketLine[]; books: string[]; onPick: (market: string, sel: string, bk: string, price: number, key: string, out: string) => void;
+function OddsCard({ group, lines, books, moves, onPick }: {
+  group: string; lines: MarketLine[]; books: string[]; moves: Map<string, Move>; onPick: (market: string, sel: string, bk: string, price: number, key: string, out: string) => void;
 }) {
   const [all, setAll] = useState(false);
   // Líneas más igualadas primero (la principal de la casa suele ser la de menos diferencia entre lados)
@@ -153,11 +159,15 @@ function OddsCard({ group, lines, books, onPick }: {
               <span className="w-11 text-right font-mono text-[11px] tnum text-zinc-400">{sum && inv[i] ? pct(inv[i] / sum) : ''}</span>
               {books.map(bk => {
                 const p = o.prices[bk];
+                // La flecha sólo si la cuota que se ve es la última del histórico (si no, el movimiento es de otra)
+                const mv = moves.get(`${bookKey(bk)}|${l.key}|${o.id}`);
+                const move = p && mv && Math.abs(mv.now - p) < 0.005 ? mv : null;
                 return (
                   <button key={bk} disabled={!p} onClick={() => p && onPick(group, o.label, bk, p, l.key, o.id)}
-                    title={p ? `${bk}: ${o.label}. Clic para añadirla al cupón (otra vez para quitarla)` : undefined}
-                    className={cn(oddBtn(!!p && p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1)), 'h-8 w-[72px] text-[13px]', !p && 'bg-transparent text-zinc-700 hover:bg-transparent')}>
+                    title={p ? `${bk}: ${o.label}.${move ? ` Antes ${odd(move.before)}, cambió ${ago(move.at)}.` : ''} Clic para añadirla al cupón (otra vez para quitarla)` : undefined}
+                    className={cn(oddBtn(!!p && p === bests[i] && l.outcomes.some(x => Object.keys(x.prices).length > 1)), 'relative h-8 w-[72px] text-[13px]', !p && 'bg-transparent text-zinc-700 hover:bg-transparent')}>
                     {p ? odd(p) : '–'}
+                    {move && <span aria-label={move.now > move.before ? 'ha subido' : 'ha bajado'} className={cn('absolute right-1 top-0.5 text-[8px] leading-none', move.now > move.before ? 'text-emerald-400' : 'text-rose-400')}>{move.now > move.before ? '▲' : '▼'}</span>}
                   </button>
                 );
               })}
@@ -168,4 +178,25 @@ function OddsCard({ group, lines, books, onPick }: {
       {many && <button onClick={() => setAll(!all)} className="w-full cursor-pointer border-t border-zinc-800 py-2 font-mono text-[11px] text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100">{all ? 'Ver sólo las líneas más igualadas' : `Ver las ${lines.length} líneas`}</button>}
     </div>
   );
+}
+
+// ---------- movimiento de las cuotas ----------
+// La última cuota de cada casa, selección y línea, frente a la anterior distinta del histórico. Sólo los cambios de las
+// últimas 24 h: uno de hace tres días no dice nada de hacia dónde va el mercado ahora
+export type Move = { now: number; before: number; at: number };
+export function movesOf(rows: PriceHistoryRow[] | undefined) {
+  const out = new Map<string, Move>(), last = new Map<string, PriceHistoryRow>();
+  for (const r of rows ?? []) {
+    const k = `${r.book}|${r.market_key}|${r.outcome_id}`;
+    const prev = last.get(k);
+    if (prev && Math.abs(prev.price - r.price) >= 0.005) out.set(k, { now: r.price, before: prev.price, at: r.ts });
+    else if (prev && out.has(k)) out.set(k, { ...out.get(k)!, now: r.price });
+    last.set(k, r);
+  }
+  for (const [k, v] of out) if (Date.now() - v.at > 24 * 3600e3) out.delete(k);
+  return out;
+}
+function ago(t: number) {
+  const m = Math.round((Date.now() - t) / 60e3);
+  return m < 60 ? `hace ${Math.max(1, m)} min` : m < 24 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`;
 }

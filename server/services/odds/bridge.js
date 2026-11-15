@@ -16,7 +16,7 @@ const fresh = `i.ts > now() - CASE WHEN (SELECT start FROM odds.matches WHERE ke
 const HISTORY_DAYS = 365; // lo que se guarda del histórico de cuotas
 const SAME_MATCH = 12 * 3600; // misma pareja con el inicio a menos de 12 h: es el mismo partido, aunque se haya movido la hora
 const BOOKS = ['winamax', 'betway'];
-const MANUAL_WAIT = 30e3; // si ningún lector coge un trabajo manual en 30 s, se da por perdido
+const MANUAL_WAIT = 180e3; // si ningún lector coge un trabajo manual en 3 min, se da por perdido: van los primeros de la cola, pero una lectura en curso tarda casi un minuto y con 30 s se perdían
 const AUTO_WAIT_MIN = 15; // los programados esperan en cola hasta 15 min: son 10 y cada lectura tarda casi un minuto
 const CAPTURAS = process.env.CAPTURAS_DIR || null;
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Target, Upload, Wallet, X, Zap } from 'lucide-react';
+import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Send, Target, Upload, Wallet, X, Zap } from 'lucide-react';
+import { ShareDialog } from './FriendsView';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
@@ -18,6 +19,8 @@ const APP_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', ten
 export default function BetsView() {
   const { openBet, toast, app } = useApp();
   const cur = useCurrency();
+  // La apuesta que se está pasando a un amigo (diálogo de FriendsView)
+  const [sharing, setSharing] = useState<Bet | null>(null);
   const qc = useQueryClient();
   const { data: all = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
   // Cada app ve sus apuestas; las combinadas que mezclan LoL y baloncesto salen en las dos
@@ -79,7 +82,8 @@ export default function BetsView() {
         <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
       </div>
 
-      <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} />
+      <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onShare={setSharing} />
+      <ShareDialog bet={sharing} onClose={() => setSharing(null)} />
       </>}
     </>
   );
@@ -160,8 +164,8 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
   );
 }
 
-function History({ bets, onEdit, onSettle }: {
-  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void;
+function History({ bets, onEdit, onSettle, onShare }: {
+  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onShare: (b: Bet) => void;
 }) {
   const cur = useCurrency();
   const [q, setQ] = useState('');
@@ -186,7 +190,7 @@ function History({ bets, onEdit, onSettle }: {
     }>
       {!list.length ? <Empty>{bets.length ? 'Ninguna apuesta coincide con el filtro' : 'Aún no has registrado apuestas. Pulsa "Nueva apuesta".'}</Empty> : <>
         <div className="-m-5 divide-y divide-zinc-800/70 lg:hidden">
-          {list.map(b => <BetCard key={b.id} bet={b} onEdit={onEdit} onSettle={onSettle} />)}
+          {list.map(b => <BetCard key={b.id} bet={b} onEdit={onEdit} onSettle={onSettle} onShare={onShare} />)}
         </div>
         <div className="-m-5 hidden overflow-x-auto lg:block">
           <table className="w-full">
@@ -233,6 +237,7 @@ function History({ bets, onEdit, onSettle }: {
                           <Button size="icon" variant="success" className="h-7 w-7" title="Ganada" onClick={() => onSettle(b, 'won')}><Check size={14} /></Button>
                           <Button size="icon" variant="danger" className="h-7 w-7" title="Perdida" onClick={() => onSettle(b, 'lost')}><X size={14} /></Button>
                         </>}
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Pasar a un amigo" aria-label="Pasar a un amigo" onClick={() => onShare(b)}><Send size={14} /></Button>
                         <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => onEdit(b)}><Pencil size={14} /></Button>
                       </div>
                     </td>
@@ -269,7 +274,7 @@ function AutoMark({ bet: b }: { bet: Bet }) {
 }
 
 // El historial en el móvil: once columnas no caben, así que cada apuesta es una tarjeta
-function BetCard({ bet: b, onEdit, onSettle }: { bet: Bet; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void }) {
+function BetCard({ bet: b, onEdit, onSettle, onShare }: { bet: Bet; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onShare: (b: Bet) => void }) {
   const cur = useCurrency();
   const p = betProfit(b);
   const combo = !!b.legs?.length;
@@ -293,6 +298,7 @@ function BetCard({ bet: b, onEdit, onSettle }: { bet: Bet; onEdit: (b: Bet) => v
             <Button size="icon" variant="success" title="Ganada" aria-label="Ganada" onClick={() => onSettle(b, 'won')}><Check size={15} /></Button>
             <Button size="icon" variant="danger" title="Perdida" aria-label="Perdida" onClick={() => onSettle(b, 'lost')}><X size={15} /></Button>
           </>}
+          <Button size="icon" variant="ghost" title="Pasar a un amigo" aria-label="Pasar a un amigo" onClick={() => onShare(b)}><Send size={15} /></Button>
           <Button size="icon" variant="ghost" title="Editar" aria-label="Editar" onClick={() => onEdit(b)}><Pencil size={15} /></Button>
         </div>
       </div>

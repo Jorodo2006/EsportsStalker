@@ -43,6 +43,12 @@ export interface PredictionIn {
 }
 // Un favorito: se identifica por deporte y nombre; el escudo es para pintarlo
 export interface Favorite { sport: Sport; name: string; logo?: string }
+// Amigos (server/services/bets/friends.js): los aceptados, las solicitudes que te han hecho y las que has hecho tú
+export interface Friend { id: string; username: string; since: string }
+export interface FriendsList { friends: Friend[]; incoming: Friend[]; outgoing: Friend[] }
+// Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni su resultado)
+export type SharedBetData = Pick<Bet, 'sport' | 'date' | 'league' | 'event' | 'market' | 'selection' | 'bookmaker' | 'odds' | 'legs' | 'ref'>;
+export interface SharedBet { id: string; from: string; bet: SharedBetData; note: string; created: string; seen: boolean; copied: boolean }
 export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
@@ -142,6 +148,9 @@ export interface MarketLine {
   main: boolean;
   outcomes: MarketOutcome[];
 }
+
+// Una cuota de una casa desde ts hasta last_seen (book en minúsculas: "betway"; market_key y outcome_id, los del comparador)
+export interface PriceHistoryRow { book: string; market_key: string; outcome_id: string; line: number | null; price: number; ts: number; last_seen: number }
 
 export interface MatchOdds {
   books: string[];
@@ -431,6 +440,20 @@ export interface Api {
     // Recomendaciones del modelo, para medir si acierta (no son de ningún usuario)
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
     predictions(): Promise<PredictionReport>;
+    // Enviar una apuesta tuya a amigos (sin tu importe ni tu resultado)
+    share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
+  };
+  friends: {
+    list(): Promise<FriendsList>;
+    request(username: string): Promise<{ username: string; status: 'pending' | 'accepted' }>;
+    accept(id: string): Promise<FriendsList>;
+    remove(id: string): Promise<FriendsList>;
+  };
+  shared: {
+    inbox(): Promise<{ unseen: number; list: SharedBet[] }>;
+    seen(): Promise<{ ok: boolean }>;
+    copied(id: string): Promise<{ ok: boolean }>;
+    hide(id: string): Promise<{ ok: boolean }>;
   };
   esports: {
     leagues(): Promise<League[]>;
@@ -454,6 +477,8 @@ export interface Api {
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number; x?: number }>>; // x: empate (fútbol)
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }): Promise<AutoJob>;
     autoStatus(): Promise<AutoStatus>;
+    // Histórico de cuotas del partido (odds.price_history): una fila cada vez que cambia una cuota de una casa
+    history(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<PriceHistoryRow[]>;
   };
   football: {
     leagues(): Promise<FootballLeague[]>;

@@ -13,6 +13,7 @@ import { PickRow, ValueChip } from './TennisPicks';
 import { ReliabilityMeter } from './ValuePanel';
 import { Empty, ErrorBox, Loading } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
+import { PickWhy } from './PickWhy';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 const g1 = (v: number) => v.toFixed(1).replace('.', ',');
@@ -73,7 +74,7 @@ export function FootballPicksPanel({ m, onOdds }: { m: FootballMatch; onOdds: ()
             <div className="font-mono text-xs font-medium text-zinc-400">Probabilidad</div>
           </div>
           <div className="min-w-32">
-            <div className="mb-1 flex justify-between font-mono text-xs font-medium text-zinc-400"><span>Fiabilidad</span><span>{top.rel.label}</span></div>
+            <div className="mb-1 flex justify-between font-mono text-xs font-medium text-zinc-400"><span>Fiabilidad del cálculo</span><span>{top.rel.label}</span></div>
             <ReliabilityMeter rel={top.rel} />
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
@@ -81,6 +82,7 @@ export function FootballPicksPanel({ m, onOdds }: { m: FootballMatch; onOdds: ()
             <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
             <span className="text-[11px] font-medium">{top.book}</span>
           </button>
+          <PickWhy p={top.p} ev={top.ev} rel={top.rel.score} by="reliability" className="md:col-span-4" />
         </div>
       ) : (
         <p className="px-4 py-3 text-[13px] text-zinc-300">

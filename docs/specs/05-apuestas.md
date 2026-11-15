@@ -128,6 +128,19 @@ desglose por mercado, por EV y por casa.
 No son de ningún usuario (la recomendación es la misma para todos), pero las manda el navegador de cualquiera con sesión:
 el servidor valida cada campo (`clean`, `server/test/predicciones.test.js`).
 
+## Amigos (`src/views/FriendsView.tsx`, `server/services/bets/friends.js`)
+
+En **Amigos** (menú lateral y barra de abajo del móvil, con un número si hay solicitudes o apuestas sin ver) se añade a alguien
+por su **nombre de usuario**; tiene que aceptar. Desde **Mis apuestas**, el botón ✈ de cada apuesta («Pasar a un amigo») la envía
+a uno o varios amigos con un mensaje opcional. Al amigo le llega en *Apuestas que te han pasado* **lo apostado, sin el importe, el
+resultado ni las notas** de quien la envía; **Copiar a mis apuestas** abre *Nueva apuesta* rellena (también las combinadas, con su
+`ref` para que se resuelva sola) y con el importe vacío, y apunta en las notas quién se la pasó. Las cuotas son las que tenía el
+amigo al apostar: el aviso de la lista lo recuerda.
+
+Todo sale del usuario de la sesión (la cabecera del gateway): sólo se envían apuestas propias (`getOwnBet`) y sólo a amigos
+aceptados; cada uno ve sólo sus solicitudes y lo que le han enviado. Tablas en [10-base-de-datos.md](10-base-de-datos.md);
+pruebas de lo que se envía en `server/test/amigos.test.js`.
+
 ## Avisos (`src/lib/notify.ts`, `src/components/Notifier.tsx`)
 
 En Ajustes → Avisos se enciende cada uno (se guarda en el navegador):

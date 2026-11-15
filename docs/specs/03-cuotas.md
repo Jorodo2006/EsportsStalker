@@ -176,8 +176,26 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
   - Al pulsar una fila se despliega el panel de valor (`ValuePanel`): veredicto, probabilidad y cuota justa de cada
     lado, EV y ventaja de la mejor casa, margen, stake con ¼ de Kelly y desglose de la fiabilidad, con *Registrar* y
     *Combinada*.
+- **Flechas de subida y bajada** (`movesOf` en `BasketOdds.tsx`): con el histórico (`POST /api/odds/history`, `odds.price_history`),
+  cada cuota lleva ▲ verde si ha subido o ▼ roja si ha bajado respecto a la anterior distinta de esa casa, sólo si el cambio es
+  de las últimas 24 h y la cuota que se ve es la última del histórico. Al pasar el ratón: la de antes y hace cuánto. El histórico
+  se vuelve a pedir cuando llegan cuotas nuevas.
+- **Sin cuotas todavía**: la tarjeta del partido dice desde cuándo se leerán y la pestaña explica qué contestó cada casa en la
+  última lectura (`src/lib/odds-window.ts`, `bridge.lastJob`).
 - **Clic en una cuota**: abre la apuesta ya rellena.
 - **Clic derecho o Mayús+clic**: añade la cuota al boleto de combinada (ver [05-apuestas.md](05-apuestas.md)).
+
+## Betway en tenis
+
+Desde noviembre de 2026 la portada de tenis de Betway (`cat/tennis`) sólo enseña tres «Eventos populares»; el resto de partidos
+están en la página de cada torneo («Ligas principales»: `grp/tennis/wta/wta-finals`, `grp/tennis/challenger/sydney---australia`…).
+Si el partido no está en la portada, el lector prueba esos torneos (`rankTennisGroups` en `server/lector/runner.js`): primero los
+que comparten palabras con el torneo del partido, sin los de dobles y como mucho 4. Antes del cambio encontraba 1 de cada 35.
+Cuando lo encuentra, la casa guarda el enlace del partido y las lecturas siguientes van directas.
+
+Las peticiones manuales (*Actualizar cuotas*) esperan en cola hasta 3 minutos (`MANUAL_WAIT`): van las primeras, pero si el lector
+está a mitad de otra lectura (casi un minuto) con 30 s se perdían. Las capturas (`capturas/`) las puede escribir el servicio de
+cuotas gracias al paso `capturas` de `docker-compose.yml`, que abre la carpeta antes de arrancarlo.
 
 ## Pendiente conocido
 

@@ -118,6 +118,18 @@ export const api: Api = {
     changePassword: (current, next) => call('POST', '/api/auth/password', { current, next })
   },
   settings: { get: () => get('/api/settings'), set: p => call('PUT', '/api/settings', p) },
+  friends: {
+    list: () => get('/api/friends'),
+    request: username => call('POST', '/api/friends', { username }),
+    accept: id => call('POST', `/api/friends/${part(id)}/accept`, {}),
+    remove: id => call('DELETE', `/api/friends/${part(id)}`)
+  },
+  shared: {
+    inbox: () => get('/api/shared'),
+    seen: () => call('POST', '/api/shared/seen', {}),
+    copied: id => call('POST', `/api/shared/${part(id)}/copied`, {}),
+    hide: id => call('DELETE', `/api/shared/${part(id)}`)
+  },
   bets: {
     list: () => get('/api/bets'),
     save: b => call('POST', '/api/bets', b),
@@ -125,6 +137,7 @@ export const api: Api = {
     settle: () => call('POST', '/api/bets/settle', {}),
     recordPredictions: list => call('POST', '/api/bets/predictions', { list }),
     predictions: () => get('/api/bets/predictions'),
+    share: (id, to, note) => call('POST', `/api/bets/${part(id)}/share`, { to, note }),
     export: async () => {
       const name = `apuestas-${new Date().toISOString().slice(0, 10)}.csv`;
       download(name, toCsv(await get('/api/bets')));
@@ -156,6 +169,7 @@ export const api: Api = {
   odds: {
     match: (m, opts) => call('POST', '/api/odds/match', { match: matchOf(m), quiet: !!opts?.quiet }),
     board: events => call('POST', '/api/odds/board', { events }),
+    history: m => call('POST', '/api/odds/history', { match: matchOf(m) }),
     // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
     auto: m => call('POST', '/api/odds/jobs', { match: matchOf(m) }),
     autoStatus: () => get('/api/odds/auto/status')

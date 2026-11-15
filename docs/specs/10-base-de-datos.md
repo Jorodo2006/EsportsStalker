@@ -216,6 +216,21 @@ es la misma para todos. Una fila por `(match, key, out)`; `p`, `p_model`, `p_mar
 opinión antes del partido, `first_price` la cuota de la primera vez. `status`: `pending`, `won`, `lost`, `void` o
 `unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor.
 
+### `bets.friends`
+
+Amigos (migración `013_amigos.sql`). Una fila por pareja: `user_id` la pide y `friend_id` la recibe; `status` es `pending` hasta
+que `friend_id` la acepta (`accepted`, con `accepted_at`). Pedírsela a quien ya te la había pedido es aceptarla. Se borra al
+rechazar, cancelar o dejar de ser amigos, y con cualquiera de los dos usuarios (`ON DELETE CASCADE`). Como mucho 200 amigos y
+30 solicitudes enviadas sin contestar.
+
+### `bets.shared_bets`
+
+Apuestas que un usuario le ha pasado a un amigo (migración `013_amigos.sql`). `bet` es una copia en JSON de lo apostado
+(deporte, fecha, liga, partido, mercado, selección, casa, cuota, `ref` y, si es combinada, sus selecciones sin su estado), **sin
+el importe, el estado, el cobro ni las notas** de quien la envía (`shareable` en `friends.js`): si la cambia después, la copia no
+cambia. `note` es el mensaje (200 caracteres); `seen_at`, `copied_at` y `hidden_at`, cuándo la vio, la copió o la quitó quien la
+recibe. Sólo se enseñan las de los últimos 60 días.
+
 ## Esquema `odds` (servicio odds)
 
 Cuotas leídas de Winamax y Betway, su histórico y la cola de lecturas. Migraciones `001` y `002`.

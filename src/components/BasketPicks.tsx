@@ -19,6 +19,7 @@ import { Toggle } from './sport';
 import { Empty, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
+import { EASY_HINT, PickWhy } from './PickWhy';
 
 const PREFS = 'basket-picks';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -169,7 +170,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
         <div className="font-score text-[11px] font-semibold text-zinc-400">Probabilidad</div>
       </div>
       <div className="col-span-2 min-w-32 md:order-none md:col-span-1">
-        <div className="mb-1 flex justify-between font-score text-[11px] font-semibold text-zinc-400"><span>Fiabilidad</span><span>{pick.rel.label}</span></div>
+        <div className="mb-1 flex justify-between font-score text-[11px] font-semibold text-zinc-400"><span>Fiabilidad del cálculo</span><span>{pick.rel.label}</span></div>
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><span className={cn('font-semibold tnum', hasValue(pick) ? 'text-[var(--tv-mark)]' : 'text-zinc-200')}>{hasValue(pick) ? 'Con valor ' : 'Valor '}{signed(pick.ev)}</span></div>
       </div>
@@ -177,6 +178,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
         <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
         <span className="text-[11px] font-medium">{pick.book}</span>
       </button>
+      <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="value" className="col-span-2 md:col-span-4" />
     </div>
   );
 }
@@ -248,7 +250,7 @@ export function BasketPicksBoard({ games, injuries, onOpen, onOdds }: { games: B
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x lg:divide-white/10">
-          <PickList title="Más fáciles" hint="Probabilidad de 58 % o más, de más a menos valor" list={A.easy} {...props} />
+          <PickList title="Más fáciles" hint={`Probabilidad de 58 % o más, de más a menos valor: ${EASY_HINT}`} list={A.easy} {...props} />
           <PickList title="Equilibradas" hint="Probabilidad de 42 a 58 %, de más a menos valor" list={A.mid} {...props} />
           <PickList title="Más complicadas" hint="Probabilidad de menos de 42 %, cuota alta" list={A.hard} {...props} />
         </div>

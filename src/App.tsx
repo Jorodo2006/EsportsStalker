@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Swords, Users, Wallet } from 'lucide-react';
+import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Swords, UserPlus, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -32,6 +32,7 @@ import { useUser } from '@/components/AuthGate';
 import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
+import FriendsView, { FriendsBadge } from './views/FriendsView';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
 //   - desde lg: menú lateral a la izquierda (deportes, navegación, competiciones del día y cartera) y el contenido;
@@ -42,7 +43,8 @@ import { SearchDialog, useSearchShortcut } from '@/components/Search';
 const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'matches', label: 'Partidos', icon: CalendarDays },
   { view: 'players', label: 'Jugadores', icon: Users },
-  { view: 'bets', label: 'Apuestas', icon: Wallet }
+  { view: 'bets', label: 'Apuestas', icon: Wallet },
+  { view: 'friends', label: 'Amigos', icon: UserPlus }
 ];
 // En fútbol la segunda sección son las clasificaciones de las ligas; en MMA, los luchadores
 const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : v === 'players' && app === 'mma' ? 'Luchadores' : label);
@@ -159,6 +161,7 @@ export default function App() {
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && <BetsView key={app} />}
+              {view === 'friends' && <FriendsView />}
               {view === 'settings' && <SettingsView />}
               {view === 'account' && <AccountView />}
               </ScreenGuard>
@@ -175,12 +178,12 @@ export default function App() {
           <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} inner="max-w-[1680px] px-3 lg:px-5" />
         </main>
 
-        <nav className="grid shrink-0 grid-cols-3 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
           {NAV.map(({ view: v, label, icon: Icon }) => (
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
               <span className={cn('grid h-7 place-items-center transition', view === v ? 'text-amber-400' : '')}><Icon size={19} /></span>
-              {navLabel(app, v, label)}
+              <span className="flex items-center gap-1">{navLabel(app, v, label)}{v === 'friends' && <FriendsBadge />}</span>
             </button>
           ))}
         </nav>
@@ -239,7 +242,7 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
           <nav className="flex flex-col gap-1">
             {NAV.map(({ view: v, label: l, icon: Icon }) => (
               <button key={v} onClick={() => go(v)} aria-current={view === v} className={navRow(view === v)}>
-                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}
+                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}{v === 'friends' && <FriendsBadge />}
               </button>
             ))}
             <button onClick={() => go('account')} aria-current={view === 'account'} className={navRow(view === 'account')}>

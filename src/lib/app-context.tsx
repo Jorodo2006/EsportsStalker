@@ -6,7 +6,7 @@ import { wallet } from './format';
 import { listenOdds } from './odds-live';
 
 // settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos)
-export type View = 'matches' | 'players' | 'bets' | 'settings' | 'account';
+export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'account';
 // Cuatro apps en una: LoL, baloncesto, tenis y fútbol, cada una con sus partidos, sus jugadores y sus apuestas
 export type AppId = Sport;
 

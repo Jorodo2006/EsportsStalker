@@ -17,6 +17,7 @@ import { ReliabilityMeter } from './ValuePanel';
 import { Toggle, addDays, dayName, isoDay, today } from './sport';
 import { Empty, ErrorBox, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz';
+import { EASY_HINT, PickWhy } from './PickWhy';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
 const PREFS = 'tennis-picks';
@@ -214,7 +215,7 @@ function TopPick({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
         <div className="text-xs font-medium text-zinc-400">Probabilidad</div>
       </div>
       <div className="col-span-2 min-w-32 md:col-span-1">
-        <div className="mb-1 flex justify-between text-xs font-medium text-zinc-400"><span>Fiabilidad</span><span>{pick.rel.label}</span></div>
+        <div className="mb-1 flex justify-between text-xs font-medium text-zinc-400"><span>Fiabilidad del cálculo</span><span>{pick.rel.label}</span></div>
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><EvChip pick={pick} long /></div>
       </div>
@@ -222,6 +223,7 @@ function TopPick({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
         <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
         <span className="text-[11px] font-medium">{pick.book}</span>
       </button>
+      <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="reliability" className="col-span-2 md:col-span-4" />
     </div>
   );
 }
@@ -248,10 +250,11 @@ function TopCard({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
         </button>
       </div>
       <div>
-        <div className="mb-1 flex justify-between text-xs font-medium text-zinc-400"><span>Fiabilidad</span><span>{pick.rel.label}</span></div>
+        <div className="mb-1 flex justify-between text-xs font-medium text-zinc-400"><span>Fiabilidad del cálculo</span><span>{pick.rel.label}</span></div>
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><EvChip pick={pick} long /></div>
       </div>
+      <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="reliability" />
     </div>
   );
 }
@@ -367,7 +370,7 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
 
         <div className="@container border-t border-zinc-800">
           <div className="grid grid-cols-1 divide-y divide-zinc-800 @4xl:grid-cols-3 @4xl:divide-x @4xl:divide-y-0">
-            <PickList title="Más fáciles" hint="Probabilidad de 60 % o más" items={A.easy} {...props} />
+            <PickList title="Más fáciles" hint={`Probabilidad de 60 % o más: ${EASY_HINT}`} items={A.easy} {...props} />
             <PickList title="Equilibradas" hint="Probabilidad de 45 a 60 %" items={A.mid} {...props} />
             <PickList title="Más complicadas" hint="Probabilidad de menos de 45 %, cuota de 2,20 o más" items={A.hard} {...props} />
           </div>
