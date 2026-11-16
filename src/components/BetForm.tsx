@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, Clock, Layers, Plus, Trash2, X } from 'lucide-react';
-import { useApp, useCurrency } from '@/lib/app-context';
+import { useApp, useCurrency, useBets } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
 import type { BetDraft, BetLeg, BetRef, BetStatus, LegStatus, MatchOdds, Schedule } from '@/lib/types';
 import { Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
@@ -63,7 +63,7 @@ export function BetFormDialog() {
   const { betDraft, closeBet, toast, addToSlip, clearSlip } = useApp();
   const currency = useCurrency();
   const qc = useQueryClient();
-  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: bets = [] } = useBets();
   const [f, setF] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [legs, setLegs] = useState<BetLeg[] | null>(null); // null = apuesta simple

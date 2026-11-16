@@ -4,9 +4,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BetDraft, MatchEvent, Settings, SlipLeg, Sport } from './types';
 import { wallet } from './format';
 import { listenOdds } from './odds-live';
+import { askLogin, useMember } from '@/components/AuthGate';
 
-// settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos)
-export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'account';
+// settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos);
+// legal: aviso legal, privacidad y cookies (con su dirección propia, LEGAL_PATHS)
+export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'account' | 'legal';
+export type LegalPage = 'aviso-legal' | 'privacidad' | 'cookies';
+export const LEGAL_PATHS: LegalPage[] = ['aviso-legal', 'privacidad', 'cookies'];
+// La página legal de la dirección (/privacidad…), para que se pueda enlazar y la encuentre Google
+const legalOfPath = (): LegalPage | null => { try { const p = location.pathname.replace(/^\/|\/$/g, '') as LegalPage; return LEGAL_PATHS.includes(p) ? p : null; } catch { return null; } };
 // Cuatro apps en una: LoL, baloncesto, tenis y fútbol, cada una con sus partidos, sus jugadores y sus apuestas
 export type AppId = Sport;
 
@@ -49,10 +55,13 @@ const AppCtx = createContext<Ctx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => window.api.settings.get() });
+  // Sin cuenta, los comunes sin credenciales (al entrar o salir se vacía la caché y se vuelven a pedir: AuthGate)
+  const member = useMember();
+  const { data: settings } = useQuery({ queryKey: ['settings', member], queryFn: () => (member ? window.api.settings.get() : window.api.settings.public()) });
   const [app, setApp] = useState<AppId>(() => { try { const a = localStorage.getItem('app'); return a === 'basket' || a === 'tennis' || a === 'football' || a === 'mma' ? a : 'lol'; } catch { return 'lol'; } });
-  const [view, setView] = useState<View>('matches'); // se abre en los partidos del día
-  const [viewParam, setViewParam] = useState<string>();
+  // Se abre en los partidos del día, salvo que la dirección sea la de una página legal
+  const [view, setView] = useState<View>(() => (legalOfPath() ? 'legal' : 'matches'));
+  const [viewParam, setViewParam] = useState<string | undefined>(() => legalOfPath() ?? undefined);
   const [openMatch, setOpenMatch] = useState<MatchEvent | null>(null);
   const [betDraft, setBetDraft] = useState<BetDraft | null>(null);
   const [toastMsg, setToast] = useState<string | null>(null);
@@ -99,6 +108,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     qc.invalidateQueries({ queryKey: ['settings'] });
     qc.invalidateQueries({ queryKey: ['odds'] });
   }), [qc]);
+  // Atrás y adelante del navegador entre las páginas legales y la app
+  useEffect(() => {
+    const pop = () => { const l = legalOfPath(); setView(l ? 'legal' : 'matches'); setViewParam(l ?? undefined); };
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  }, []);
   // Cuotas nuevas: se recargan las consultas de ese partido que haya en pantalla (src/lib/odds-live.ts)
   useEffect(() => listenOdds(qc), [qc]);
 
@@ -106,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     settings,
     async saveSettings(p) {
       const s = await window.api.settings.set(p);
-      qc.setQueryData(['settings'], s);
+      qc.setQueryData(['settings', true], s);
       qc.invalidateQueries({ queryKey: ['odds'] });
       qc.invalidateQueries({ queryKey: ['board'] });
     },
@@ -122,12 +137,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Pulsar "Partidos" estando ya en un partido vuelve a la lista; el resto de secciones lo conservan
       if (v === 'matches' && view === 'matches') setOpenMatch(null);
       setView(v); setViewParam(param);
+      // Las páginas legales tienen su dirección; al salir de ellas se vuelve a la raíz
+      try {
+        const path = v === 'legal' && param ? `/${param}` : '/';
+        if (location.pathname !== path) history.pushState(null, '', path + location.hash);
+      } catch { /* sin historial */ }
     },
     viewParam,
     openMatch,
     setOpenMatch,
     betDraft,
-    openBet: d => setBetDraft({ sport: app, ...(app === 'basket' ? { league: 'NBA' } : {}), ...d }),
+    // Apuntar una apuesta es de cada usuario: sin cuenta, primero entrar
+    openBet: d => {
+      if (!qc.getQueryData(['me'])) { askLogin({ mode: 'register', why: 'Para apuntar tus apuestas y llevar tu cartera hace falta una cuenta.' }); return; }
+      setBetDraft({ sport: app, ...(app === 'basket' ? { league: 'NBA' } : {}), ...d });
+    },
     closeBet: () => setBetDraft(null),
     slip,
     // Cupón: pulsar una cuota la añade; pulsarla otra vez la quita (como en las casas)
@@ -188,7 +212,11 @@ export const useCurrency = () => useApp().settings?.currency || '€';
 // Saldo de la cartera común a las tres apps
 export function useWallet() {
   const { settings } = useApp();
-  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: bets = [] } = useBets();
   return wallet(bets, settings?.initialBankroll || 0);
+}
+// Las apuestas del usuario (sin cuenta, ninguna: ni se piden)
+export function useBets() {
+  return useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list(), enabled: useMember() });
 }
 export const useRefreshMs = () => Math.max(10, useApp().settings?.refreshSeconds || 30) * 1000;

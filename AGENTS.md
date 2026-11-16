@@ -38,7 +38,9 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
    su API. Los cambios de tablas van en una migración nueva (`migrations/NNN_*.sql`); nunca edites una ya aplicada.
 7. **Los datos de cada usuario son suyos.** Toda consulta de `bets.bets` y `bets.user_settings` filtra por `user_id`, que sale
    de la cabecera `x-user-id` que pone el gateway tras comprobar la sesión; nunca de lo que mande el cliente. Toda ruta `/api`
-   pide sesión salvo las de `PUBLIC` en el gateway.
+   pide sesión salvo las públicas de `server/services/gateway/public.js` (entrar, y leer partidos, estadísticas y cuotas). Una ruta
+   nueva de un deporte que sea de lectura queda abierta sin más: si es de un usuario o son recomendaciones, ciérrala ahí y en
+   `server/test/publico.test.js`.
 8. **Nada de `git commit` ni `git push` sin que Jordi lo pida explícitamente en ese momento.** Prepara los cambios y
    espera su confirmación.
 
@@ -133,8 +135,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - Estructura de pantalla (`src/App.tsx`), en tres columnas: desde `lg` un menú lateral (deportes, navegación,
   competiciones del día y cartera); desde 1400 px además una columna derecha de 300 px (el ancho de los anuncios) con el
   cupón fijo (`<Coupon docked />`), un anuncio de 300×250, los partidos en directo y otro de 300×600. Por debajo, cabecera
-  arriba, barra inferior y cupón flotante. Los huecos de anuncios son `AdSlot` (`src/components/AdSlot.tsx`), de momento
-  marcadores con su tamaño: cuando haya cuenta de AdSense, el anuncio va ahí. Las vistas de partidos publican
+  arriba, barra inferior y cupón flotante. Los huecos de anuncios son `AdSlot` (`src/components/AdSlot.tsx`): con
+  `ADSENSE_CLIENT` y los bloques en el `.env`, el anuncio de AdSense; sin ellos, el marcador en desarrollo y nada en producción. Las vistas de partidos publican
   sus competiciones para el menú con `useSections` y abren el partido pedido desde la columna derecha con `useFocus`.
   Como el centro es más estrecho que la pantalla, las rejillas de dos columnas del contenido van con `2xl:`, no con `xl:`.
 - La app se abre en **Partidos** del deporte elegido (vista `matches`), que ya empieza en el día de hoy y deja ir a otros días.
@@ -145,6 +147,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   ATP y WTA de 2025, en el color del texto; el del Challenger, `public/tennis/atp-challenger.png`), la superficie y la ciudad;
   dentro, sus rondas y una fila por partido. Los que están en juego se quedan en su torneo. Al lado, el partido elegido
   (`TennisSpotlight`) y las más fiables del día.
+- **Sin cuenta** se ve la app (`AuthGate` ya no para en la entrada): partidos, directo, fichas, estadísticas y cuotas, para
+  Google y AdSense. Lo que pide cuenta lo envuelve `MemberOnly`/`memberOnly` (`src/components/MemberOnly.tsx`; las recomendaciones
+  de los cuatro deportes) o lo comprueba con `useMember()` y abre la entrada con `askLogin({ why })` (apuntar una apuesta, el cupón,
+  favoritos, leer cuotas a mano). Consulta de algo del usuario: `enabled: useMember()` (o `useBets()`), para no pedirla sin sesión.
+  Aviso legal, privacidad y cookies en `src/views/LegalView.tsx` (vista `legal`, direcciones `/aviso-legal`, `/privacidad` y
+  `/cookies`): si cambia lo que se guarda o se añade una cookie, cámbialo también ahí. Detalle en `docs/specs/07-backend.md`.
 - **Ajustes y cuenta:** *Ajustes* (`SettingsView`) es sólo del administrador y vale para todos los usuarios; el servidor rechaza
   con 403 los ajustes comunes que mande otro y avisa por SSE (`settings:changed`) para que se recarguen. Lo de cada uno
   (contraseña, banca inicial, avisos) está en *Tu cuenta* (`AccountView`). Un ajuste nuevo es común salvo que sea del usuario
@@ -215,6 +223,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`). Detalle en `docs/specs/09-tenis.md`.
 - **Estadísticas de partido de tenis** (`server/services/tennis/matchstats.js`): WTA de su web oficial (al momento) y, si no, TennisMyLife (días después). ESPN no las tiene. No uses LiveScore para esto: su robots.txt prohíbe `/api/` y se decidió no ampliar su uso ahora que la web es pública (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
+- **CSP con nonce** (`web/cabeceras.conf`, `location = /index.html` de `web/nginx.conf`): nginx pone el nonce de cada petición
+  (`$request_id`) en los `<script>` de `index.html` y en la cabecera, con `'strict-dynamic'`, como admite AdSense. No vuelvas a
+  servir `index.html.gz` (sub_filter no toca lo comprimido) ni pongas scripts en línea sin nonce.
 - **Rendimiento** (`docs/specs/07-backend.md`, "Rendimiento de la web"): las consultas de cuotas no sondean cada minuto;
   llevan `meta: oddsMeta(partido)` y las recarga el aviso `odds:imported` (`src/lib/odds-live.ts`). Si añades una, haz lo
   mismo. Las imágenes de ESPN y de la Euroliga van con `sized(src, píxeles)` (`src/lib/img.ts`), no con el original de

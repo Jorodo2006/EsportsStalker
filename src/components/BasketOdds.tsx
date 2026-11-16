@@ -12,6 +12,7 @@ import { LEAGUE_NAME } from './BasketAnalyzer';
 import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { oddsExplanation } from '@/lib/odds-window';
+import { askLogin, useMember } from './AuthGate';
 
 // El partido tal y como lo guardan el lector y el comparador: visitante (a) contra local (b)
 export const matchOfGame = (g: BasketGame) => ({
@@ -53,6 +54,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   const { addToSlip, toast, settings } = useApp();
   const qc = useQueryClient();
   const { data, isLoading, error, dataUpdatedAt, isFetching } = useMatchOdds(target);
+  const member = useMember();
   const [job, setJob] = useState<AutoJob | null>(null);
   const [section, setSection] = useState('Partido');
   const m = target.match;
@@ -84,6 +86,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   const moves = useMemo(() => movesOf(hist.data), [hist.data]);
 
   async function start() {
+    if (!member) { askLogin({ why: 'Leer las cuotas al momento lo hace el lector de Sharpex, y es para usuarios registrados. Sin cuenta ves las de la última lectura automática.' }); return; }
     try { setJob(await window.api.odds.auto(m)); } catch (e) { toast((e as Error).message); }
   }
 

@@ -2,7 +2,7 @@
 // solas y las bajas de jugadores en apuestas pendientes. Las recomendaciones muy buenas las avisa predictions.ts al verlas.
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useApp, useCurrency } from '@/lib/app-context';
+import { useApp, useCurrency, useBets } from '@/lib/app-context';
 import { STATUS_LABEL, betProfit, money } from '@/lib/format';
 import { alert, alertPrefs, firstTime, setAlertFallback } from '@/lib/notify';
 import type { BetRef } from '@/lib/types';
@@ -22,7 +22,7 @@ export function Notifier() {
 
   // Resueltas solas: las que estaban pendientes y dejan de estarlo justo después de que el servidor avise de que ha
   // resuelto algo (si las cambias tú a mano no se avisa)
-  const { data: bets } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: bets } = useBets();
   const pending = useRef<Set<string> | null>(null);
   const settledAt = useRef(0);
   useEffect(() => window.api.onBetsSettled(() => { settledAt.current = Date.now(); }), []);

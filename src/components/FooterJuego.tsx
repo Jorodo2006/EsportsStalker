@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { AgeBadge, SAFE_PLAY_URL } from './ui';
+import { openCookieSettings, usePublicConfig } from '@/lib/ads';
 
 const RGIAJ_URL = 'https://www.ordenacionjuego.es/participantes-juego/juego-seguro/rgiaj';
 const FEJAR_URL = 'https://www.fejar.org';
@@ -41,8 +42,23 @@ export function FooterJuego({ className, inner = 'max-w-6xl px-5 sm:px-10' }: { 
           <p className="max-w-3xl">Sharpex es una herramienta de análisis estadístico. No es un operador de juego, no acepta apuestas y no gestiona dinero de usuarios.</p>
           <p className="shrink-0">© {new Date().getFullYear()} Sharpex</p>
         </div>
+        <LegalLinks />
       </div>
     </footer>
+  );
+}
+
+// Aviso legal, privacidad y cookies: enlaces de verdad (cada página tiene su dirección), para que los encuentre Google
+function LegalLinks() {
+  const ads = !!usePublicConfig().data?.ads;
+  const link = 'text-zinc-400 transition hover:text-zinc-100';
+  return (
+    <nav aria-label="Información legal" className="flex flex-wrap gap-x-5 gap-y-2 pb-5 text-xs">
+      <a href="/aviso-legal" className={link}>Aviso legal</a>
+      <a href="/privacidad" className={link}>Privacidad</a>
+      <a href="/cookies" className={link}>Cookies</a>
+      {ads && <button type="button" onClick={openCookieSettings} className={cn('cursor-pointer', link)}>Configurar cookies</button>}
+    </nav>
   );
 }
 

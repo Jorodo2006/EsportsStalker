@@ -14,6 +14,7 @@ import { ReliabilityMeter } from './ValuePanel';
 import { Empty, ErrorBox, Loading } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
+import { memberOnly } from './MemberOnly';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 const g1 = (v: number) => v.toFixed(1).replace('.', ',');
@@ -28,7 +29,7 @@ export function useFootballAdd() {
     addToSlip({ sport: 'football', league: m.leagueName, event: `${m.home.name} - ${m.away.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending' });
 }
 
-export function FootballPicksPanel({ m, onOdds }: { m: FootballMatch; onOdds: () => void }) {
+function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () => void }) {
   const addPick = useFootballAdd();
   const pre = m.state === 'pre' && !m.off;
   const q = useQuery({
@@ -126,7 +127,7 @@ function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick
   );
 }
 
-export function FootballPicksPage({ days, onOpen }: { days: { value: string; label: string }[]; onOpen: (id: string) => void }) {
+function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label: string }[]; onOpen: (id: string) => void }) {
   const [date, setDate] = useState(days[0].value);
   const addPick = useFootballAdd();
   const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
@@ -173,7 +174,7 @@ export function FootballPicksPage({ days, onOpen }: { days: { value: string; lab
 }
 
 // Las mejores del día, al lado de la lista de partidos: cinco, el resto al pulsar y el enlace a la pantalla Recomendaciones
-export function FootballDayPicks({ date, onOpen, onAll }: { date: string; onOpen: (id: string) => void; onAll?: () => void }) {
+function FootballDayPicksInner({ date, onOpen, onAll }: { date: string; onOpen: (id: string) => void; onAll?: () => void }) {
   const [all, setAll] = useState(false);
   const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const data = q.data ?? [];
@@ -203,3 +204,8 @@ export function FootballDayPicks({ date, onOpen, onAll }: { date: string; onOpen
     </TvFrame>
   );
 }
+
+// Sin cuenta, en su lugar sale cómo conseguirlas (las recomendaciones piden cuenta: gateway/public.js)
+export const FootballPicksPanel = memberOnly(FootballPicksPanelInner, 'las recomendaciones del modelo');
+export const FootballPicksPage = memberOnly(FootballPicksPageInner, 'las recomendaciones del modelo');
+export const FootballDayPicks = memberOnly(FootballDayPicksInner, 'las recomendaciones del modelo', true);

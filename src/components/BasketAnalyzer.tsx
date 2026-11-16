@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useApp } from '@/lib/app-context';
+import { useApp, useBets } from '@/lib/app-context';
 import { cn, odd, pct, summarize } from '@/lib/format';
 import { BASKET_MARKETS, analyze, fmtLine, playerLines, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket, type CasaLine } from '@/lib/basket-model';
 import { BookHead } from './BookIcon';
@@ -33,7 +33,7 @@ export type Picked = { id: string; name: string; league: BasketLeagueId; headsho
 export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { player: Picked; games?: BasketGame[]; injuries?: BasketInjury[]; odds?: MatchOdds }) {
   const { addToSlip, settings } = useApp();
   const log = useQuery({ queryKey: ['basket', 'gamelog', player.league, player.id, player.teamId], queryFn: () => window.api.basket.gamelog(player.league, player.id, player.teamId), staleTime: 10 * 60e3 });
-  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: bets = [] } = useBets();
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
 
   const [market, setMarket] = useState<BasketMarket>(player.market ?? 'pts');

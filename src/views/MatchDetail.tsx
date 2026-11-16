@@ -12,6 +12,7 @@ import { BookHead, BookIcon } from '@/components/BookIcon';
 import { Scoreboard, SheetTabs } from '@/components/sport';
 import { oddsMeta } from '@/lib/odds-live';
 import { useUser } from '@/components/AuthGate';
+import { askLogin, useMember } from '@/components/AuthGate';
 
 const DRAGONS: Record<string, string> = {
   ocean: 'Océano', infernal: 'Infernal', cloud: 'Nube', mountain: 'Montaña', hextech: 'Hextech', chemtech: 'Quimtec', elder: 'Ancestral'
@@ -109,7 +110,9 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
     return mine && j.source === 'auto' && !(cur && !cur.done) ? j : cur;
   })), [a.name, b.name]);
   const running = !!job && !job.done;
+  const member = useMember();
   async function start() {
+    if (!member) { askLogin({ why: 'Leer las cuotas al momento lo hace el lector de Sharpex, y es para usuarios registrados. Sin cuenta ves las de la última lectura automática.' }); return; }
     try { setJob(await window.api.odds.auto({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code } })); }
     catch (e) { toast((e as Error).message); }
   }

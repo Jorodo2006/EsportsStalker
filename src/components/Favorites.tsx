@@ -11,6 +11,7 @@ import { cn } from '@/lib/format';
 import type { Favorite, SearchMatch, Settings, Sport } from '@/lib/types';
 import { useOpenMatch } from './Search';
 import { Card, TeamLogo } from './ui';
+import { askLogin } from './AuthGate';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const same = (a: Favorite, sport: Sport, name: string) => a.sport === sport && norm(a.name) === norm(name);
@@ -21,11 +22,14 @@ export function useFavorites() {
   const list = settings?.favorites ?? [];
   // Se guarda aparte de saveSettings: ese recarga todas las cuotas, y marcar una estrella no lo necesita. Se pinta al
   // momento y, si el servidor falla, se vuelve a lo que había
+  // Los favoritos son de cada usuario: sin cuenta, primero entrar
   const save = async (next: Favorite[]) => {
-    const before = qc.getQueryData<Settings>(['settings']);
-    if (before) qc.setQueryData<Settings>(['settings'], { ...before, favorites: next });
-    try { qc.setQueryData(['settings'], await window.api.settings.set({ favorites: next })); }
-    catch { if (before) qc.setQueryData(['settings'], before); }
+    if (!qc.getQueryData(['me'])) { askLogin({ mode: 'register', why: 'Para guardar tus equipos y jugadores favoritos hace falta una cuenta.' }); return; }
+    const key = ['settings', true];
+    const before = qc.getQueryData<Settings>(key);
+    if (before) qc.setQueryData<Settings>(key, { ...before, favorites: next });
+    try { qc.setQueryData(key, await window.api.settings.set({ favorites: next })); }
+    catch { if (before) qc.setQueryData(key, before); }
   };
   return {
     list,

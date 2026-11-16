@@ -6,6 +6,7 @@ const { Client } = require('pg');
 const { URLS, call } = require('../../shared/client');
 
 const internal = require('../../shared/internal');
+const pub = require('./public');
 
 const PORT = Number(process.env.PORT) || 47365;
 
@@ -31,8 +32,17 @@ const ROUTES = [
   [/^\/(odds|bet365|snapshot|auto|jobs)(\/|$)/, 'odds']
 ];
 
-// Lo único de /api que se puede usar sin sesión: entrar y registrarse
-const PUBLIC = /^\/api\/auth\/(config|me|register|login|logout|google|google\/callback)$/;
+// Lo que se puede usar sin sesión (entrar, y leer partidos, estadísticas y cuotas) está en public.js
+const ipOf = req => String(req.headers['x-real-ip'] || req.socket.remoteAddress || '');
+// Avisos en vivo abiertos sin cuenta: unos pocos por IP, que cada uno es una conexión que no se cierra
+const MAX_SSE_PER_IP = 6;
+
+// Ajustes comunes sin credenciales, para quien no ha entrado (se piden al servicio de apuestas y se guardan un minuto)
+let safeSettings = { at: 0, data: null };
+async function publicSettings() {
+  if (!safeSettings.data || Date.now() - safeSettings.at > 60e3) safeSettings = { at: Date.now(), data: pub.publicSettings(await call('bets', 'GET', '/internal/settings')) };
+  return safeSettings.data;
+}
 
 const json = (res, code, v) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(v)); };
 
@@ -88,7 +98,7 @@ const clients = new Map();
 function broadcast(text) {
   let to = null;
   try { to = JSON.parse(text)?.data?.to ?? null; } catch (_) { /* sin destinatario: a todos */ }
-  for (const [res, uid] of clients) if (to == null || String(to) === String(uid)) res.write(`data: ${text}\n\n`);
+  for (const [res, c] of clients) if (to == null || (c.uid != null && String(to) === String(c.uid))) res.write(`data: ${text}\n\n`);
 }
 
 async function listen() {
@@ -137,18 +147,28 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/ping') return json(res, 200, { ok: true });
   if (LECTOR_TOKEN && !isApi && pathname !== '/events' && !lectorTokenOk(req)) return json(res, 401, { ok: false, error: 'Falta el token del lector' });
   if (pathname === '/api/health') return json(res, 200, { ok: true, data: await health() });
-  // Toda la API y los avisos piden sesión. Las rutas del lector (/jobs, /odds…) no: nginx no las publica,
-  // sólo se llega a ellas desde este equipo y no tienen datos de ningún usuario
+  // La API pide sesión salvo lo público (public.js); con sesión, también ahí se pasa el usuario. Las rutas del lector
+  // (/jobs, /odds…) no: nginx no las publica, sólo se llega a ellas desde este equipo y no tienen datos de ningún usuario
   let user = null;
-  if ((isApi && !PUBLIC.test(pathname)) || pathname === '/events') {
+  if (isApi || pathname === '/events') {
     try { user = await sessionUser(req); }
     catch (e) { return json(res, 502, { ok: false, error: `No se puede comprobar la sesión (${e.message})` }); }
-    if (!user) return json(res, 401, { ok: false, error: 'Inicia sesión' });
+    if (!user && isApi && !pub.isPublic(req.method, pathname)) return json(res, 401, { ok: false, error: 'Inicia sesión' });
+    if (!user && !pub.anonymousAllowed(ipOf(req))) return json(res, 429, { ok: false, error: 'Demasiadas peticiones: espera un minuto o inicia sesión' });
+  }
+  if (pathname === '/api/public/config') return json(res, 200, { ok: true, data: pub.publicConfig() });
+  if (pathname === '/api/public/ads.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }); return res.end(pub.adsTxt()); }
+  if (pathname === '/api/settings/public') {
+    try { return json(res, 200, { ok: true, data: await publicSettings() }); }
+    catch (e) { return json(res, 502, { ok: false, error: `No se pueden leer los ajustes (${e.message})` }); }
   }
   if (pathname === '/events') {
+    const ip = ipOf(req);
+    if (!user && [...clients.values()].filter(c => c.ip === ip && !c.uid).length >= MAX_SSE_PER_IP) return json(res, 429, { ok: false, error: 'Demasiadas conexiones' });
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
     res.write(': conectado\n\n');
-    clients.set(res, user.id);
+    // Sin cuenta, uid null: sólo le llegan los avisos de todos (cuotas nuevas…), nunca los de un usuario
+    clients.set(res, { uid: user?.id ?? null, ip });
     const ping = setInterval(() => res.write(': ping\n\n'), 25e3);
     req.on('close', () => { clearInterval(ping); clients.delete(res); });
     return;

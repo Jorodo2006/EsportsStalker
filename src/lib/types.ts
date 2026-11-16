@@ -41,6 +41,10 @@ export interface PredictionIn {
   sport: Sport; match: string; key: string; out: string; start: string; group: string; title: string; event: string; league: string;
   book?: string; price: number; p: number; pModel?: number | null; pMarket?: number | null; ev: number; rel?: number;
 }
+export interface PublicConfig {
+  ads: { client: string; slots: { rect: string | null; half: string | null } } | null;
+  legal: { owner: string | null; nif: string | null; address: string | null; email: string | null };
+}
 // Un favorito: se identifica por deporte y nombre; el escudo es para pintarlo
 export interface Favorite { sport: Sport; name: string; logo?: string }
 // Amigos (server/services/bets/friends.js): los aceptados, las solicitudes que te han hecho y las que has hecho tú
@@ -447,7 +451,10 @@ export interface Api {
     logout(): Promise<void>;
     changePassword(current: string, next: string): Promise<void>;
   };
-  settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings> };
+  // public: los comunes sin credenciales, para quien no ha entrado
+  settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings>; public(): Promise<Settings> };
+  // Anuncios (cuenta de AdSense) y responsable de la web (aviso legal), del .env del servidor
+  publicConfig(): Promise<PublicConfig>;
   bets: {
     list(): Promise<Bet[]>; save(b: BetDraft): Promise<Bet>; delete(id: string): Promise<void>;
     // Mira ya los resultados de las pendientes (el servidor también lo hace solo cada 5 minutos)

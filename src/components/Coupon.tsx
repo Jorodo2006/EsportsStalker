@@ -11,6 +11,7 @@ import { cn, money, odd } from '@/lib/format';
 import type { BetDraft, SlipLeg } from '@/lib/types';
 import { comboOdds } from './BetForm';
 import { Button, chip, PlayNotice, seg } from './ui';
+import { askLogin, useMember } from './AuthGate';
 
 const QUICK = [5, 10, 25, 50];
 const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
@@ -20,6 +21,7 @@ const keyOf = (l: SlipLeg) => `${l.event}|${l.market}|${l.selection}`;
 
 export function Coupon({ docked }: { docked?: boolean }) {
   const { slip, removeFromSlip, keepInSlip, clearSlip, openBet, betDraft, toast } = useApp();
+  const member = useMember();
   const qc = useQueryClient();
   const cur = useCurrency();
   const w = useWallet();
@@ -42,6 +44,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
   const books = [...new Set(slip.map(l => l.bookmaker).filter(Boolean))];
 
   async function place() {
+    if (!member) { askLogin({ mode: 'register', why: 'Para apuntar tus apuestas y llevar tu cartera hace falta una cuenta. El cupón se queda como está.' }); return; }
     setSaving(true);
     try {
       if (m === 'combo') {

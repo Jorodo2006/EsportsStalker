@@ -28,7 +28,10 @@ import { MmaIcon } from '@/components/mma';
 import BetsView from '@/views/BetsView';
 import SettingsView from '@/views/SettingsView';
 import AccountView from '@/views/AccountView';
-import { useUser } from '@/components/AuthGate';
+import LegalView from '@/views/LegalView';
+import { askLogin, useMember, useUser } from '@/components/AuthGate';
+import { JoinPrompt } from '@/components/MemberOnly';
+import { Button, PageHeader } from '@/components/ui';
 import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
@@ -72,6 +75,7 @@ interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactN
 
 export default function App() {
   const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId, slip } = useApp();
+  const member = useMember();
   const wide = useMedia('(min-width: 1400px)');
   // El cupón flotante (móvil y pantallas medianas) tapa el final de la pantalla: el pie deja hueco para que se lea entero
   const [searching, setSearching] = useState(false);
@@ -139,7 +143,9 @@ export default function App() {
         <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-3 lg:hidden">
           <div className="flex h-14 items-center gap-3">
             <Logo />
-            <WalletChip onClick={() => go('bets')} />
+            {member ? <WalletChip onClick={() => go('bets')} /> : (
+              <Button className="ml-auto" onClick={() => askLogin()}>Entrar</Button>
+            )}
             <button onClick={openSearch} title="Buscar" aria-label="Buscar"
               className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100">
               <Search size={16} />
@@ -160,10 +166,11 @@ export default function App() {
               <ScreenGuard key={`${app}:${view}`}>
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
-              {view === 'bets' && <BetsView key={app} />}
-              {view === 'friends' && <FriendsView />}
-              {view === 'settings' && <SettingsView />}
-              {view === 'account' && <AccountView />}
+              {view === 'bets' && (member ? <BetsView key={app} /> : <GuestScreen title="Mis apuestas" what="tu registro de apuestas y tu cartera" />)}
+              {view === 'friends' && (member ? <FriendsView /> : <GuestScreen title="Amigos" what="tus amigos y vuestro chat" />)}
+              {view === 'settings' && member && <SettingsView />}
+              {view === 'account' && (member ? <AccountView /> : <GuestScreen title="Tu cuenta" what="tu cuenta" />)}
+              {view === 'legal' && <LegalView />}
               </ScreenGuard>
             </div>
             {wide && (
@@ -183,7 +190,7 @@ export default function App() {
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
               <span className={cn('grid h-7 place-items-center transition', view === v ? 'text-amber-400' : '')}><Icon size={19} /></span>
-              <span className="flex items-center gap-1">{navLabel(app, v, label)}{v === 'friends' && <FriendsBadge />}</span>
+              <span className="flex items-center gap-1">{navLabel(app, v, label)}{v === 'friends' && member && <FriendsBadge />}</span>
             </button>
           ))}
         </nav>
@@ -207,7 +214,8 @@ function Logo({ big }: { big?: boolean }) {
 // Menú lateral de escritorio: deportes, navegación, competiciones de la lista de partidos y la cartera abajo
 function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: () => void }) {
   // Los ajustes de la app sólo los ve el administrador; «Tu cuenta», todos
-  const isAdmin = !!useUser().data?.isAdmin;
+  const me = useUser().data;
+  const isAdmin = !!me?.isAdmin;
   const { app, switchApp, view, go, sections } = useApp();
   const label = (t: string) => <div className="mb-1 px-3 text-xs font-medium text-zinc-500">{t}</div>;
   const navRow = (on: boolean) => cn('flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm transition',
@@ -242,7 +250,7 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
           <nav className="flex flex-col gap-1">
             {NAV.map(({ view: v, label: l, icon: Icon }) => (
               <button key={v} onClick={() => go(v)} aria-current={view === v} className={navRow(view === v)}>
-                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}{v === 'friends' && <FriendsBadge />}
+                <Icon size={16} className={view === v ? 'text-zinc-50' : ''} />{v === 'bets' ? 'Mis apuestas' : navLabel(app, v, l)}{v === 'friends' && me && <FriendsBadge />}
               </button>
             ))}
             <button onClick={() => go('account')} aria-current={view === 'account'} className={navRow(view === 'account')}>
@@ -272,9 +280,27 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
           </div>
         )}
       </div>
-      <SidebarWallet onClick={() => go('bets')} />
+      {me ? <SidebarWallet onClick={() => go('bets')} /> : <SidebarJoin />}
     </aside>
   );
+}
+
+// Sin cuenta, en lugar de la cartera: qué se gana entrando
+function SidebarJoin() {
+  return (
+    <div className="border-t border-zinc-800 px-4 py-4">
+      <p className="text-xs leading-relaxed text-zinc-400">Crea tu cuenta gratis para ver las recomendaciones, apuntar tus apuestas y llevar tu cartera.</p>
+      <div className="mt-3 flex flex-col gap-2">
+        <Button size="sm" onClick={() => askLogin({ mode: 'register' })}>Crear cuenta</Button>
+        <Button size="sm" variant="secondary" onClick={() => askLogin()}>Entrar</Button>
+      </div>
+    </div>
+  );
+}
+
+// Las pantallas de cada usuario, a quien navega sin cuenta
+function GuestScreen({ title, what }: { title: string; what: string }) {
+  return <><PageHeader title={title} /><JoinPrompt what={what} /></>;
 }
 
 // Cartera común a las tres apps en el menú lateral: saldo grande, beneficio y lo que hay en juego

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useApp } from '@/lib/app-context';
+import { useApp, useBets } from '@/lib/app-context';
 import { cn, odd, pct, summarize } from '@/lib/format';
 import {
   POINT_PERIODS, TABLE_WINDOWS, analyzePoints, leagueTable, mainLine, overRate, periodAverages, pointLines, pointSplits, pointValues, projectGame, teamRows,
@@ -261,7 +261,7 @@ function RowsTable({ rows, value, line }: { rows: TeamRow[]; value: (r: TeamRow)
 // initial: con qué abrir (lo mandan las recomendaciones)
 export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: MatchOdds; initial?: { period: PointPeriod; kind: PointKind; line: number } }) {
   const { addToSlip, settings } = useApp();
-  const { data: bets = [] } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
+  const { data: bets = [] } = useBets();
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
   const q = useLeagueGames(game.league);
   const [period, setPeriod] = useState<PointPeriod>(initial?.period ?? 'game');

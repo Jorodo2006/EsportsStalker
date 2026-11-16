@@ -20,6 +20,7 @@ import { Empty, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
+import { memberOnly } from './MemberOnly';
 
 const PREFS = 'basket-picks';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -186,7 +187,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
 const Note = ({ children }: { children: ReactNode }) => <div className="flex items-start gap-2 text-xs text-amber-300"><AlertTriangle size={12} className="mt-0.5 shrink-0" /><span>{children}</span></div>;
 
 // games: un partido (pestaña de su ficha) o varios (pantalla de recomendaciones). onOdds: ir a las cuotas de ese partido
-export function BasketPicksBoard({ games, injuries, onOpen, onOdds }: { games: BasketGame[]; injuries: BasketInjury[]; onOpen: (p: BasketPick) => void; onOdds?: () => void }) {
+function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: BasketGame[]; injuries: BasketInjury[]; onOpen: (p: BasketPick) => void; onOdds?: () => void }) {
   const oneGame = games.length === 1;
   const prefs = useMemo(loadPrefs, []);
   const [group, setGroup] = useState<PickGroup | 'all'>(PICK_GROUPS.some(g => g.value === prefs.group) ? prefs.group : 'all');
@@ -270,7 +271,7 @@ export function BasketPicksBoard({ games, injuries, onOpen, onOdds }: { games: B
 }
 
 // Las mejores de las próximas 24 horas, en la lista de partidos. Sin cuotas no sale y no se piden los partidos de los jugadores
-export function BasketDayPicks({ games, injuries, onOpen, onAll }: { games: BasketGame[]; injuries: BasketInjury[]; onOpen: (p: BasketPick) => void; onAll: () => void }) {
+function BasketDayPicksInner({ games, injuries, onOpen, onAll }: { games: BasketGame[]; injuries: BasketInjury[]; onOpen: (p: BasketPick) => void; onAll: () => void }) {
   const { picks } = useBasketPicks(games, injuries);
   const minOdds = useMemo(() => { const m = loadPrefs().minOdds; return MIN_ODDS.includes(m) ? m : DEFAULT_MIN_ODDS; }, []);
   const list = useMemo(() => bestPicks(picks, minOdds, 4), [picks, minOdds]);
@@ -293,3 +294,7 @@ export function BasketDayPicks({ games, injuries, onOpen, onAll }: { games: Bask
     </TvFrame>
   );
 }
+
+// Sin cuenta, en su lugar sale cómo conseguirlas (las recomendaciones piden cuenta: gateway/public.js)
+export const BasketPicksBoard = memberOnly(BasketPicksBoardInner, 'las recomendaciones del modelo');
+export const BasketDayPicks = memberOnly(BasketDayPicksInner, 'las recomendaciones del modelo', true);

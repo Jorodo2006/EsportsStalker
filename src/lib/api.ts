@@ -22,7 +22,7 @@ async function call(method: string, path: string, body?: unknown): Promise<any> 
     if ((e as Error).name === 'TimeoutError') throw new Error('El servidor tarda demasiado en responder');
     throw new Error(DOWN);
   }
-  // Sesión caducada o cerrada desde otro sitio: AuthGate vuelve a la pantalla de entrada
+  // Sesión caducada o cerrada desde otro sitio: AuthGate sigue sin cuenta (lo público se sigue viendo)
   if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('auth:lost'));
   const j = await res.json().catch(() => null);
   // nginx responde 502 sin JSON cuando el gateway está parado
@@ -119,7 +119,8 @@ export const api: Api = {
     logout: () => call('POST', '/api/auth/logout', {}),
     changePassword: (current, next) => call('POST', '/api/auth/password', { current, next })
   },
-  settings: { get: () => get('/api/settings'), set: p => call('PUT', '/api/settings', p) },
+  settings: { get: () => get('/api/settings'), set: p => call('PUT', '/api/settings', p), public: () => get('/api/settings/public') },
+  publicConfig: () => get('/api/public/config'),
   friends: {
     list: () => get('/api/friends'),
     request: username => call('POST', '/api/friends', { username }),

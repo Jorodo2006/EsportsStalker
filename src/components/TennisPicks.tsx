@@ -18,6 +18,7 @@ import { Toggle, addDays, dayName, isoDay, today } from './sport';
 import { Empty, ErrorBox, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz';
 import { EASY_HINT, PickWhy } from './PickWhy';
+import { memberOnly } from './MemberOnly';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
 const PREFS = 'tennis-picks';
@@ -398,7 +399,7 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
 
 // ---------- Pantallas ----------
 // Pestaña Recomendaciones de la ficha de un partido
-export function TennisPicksPanel({ m, date, onOdds }: { m: TennisMatch; date: string; onOdds: () => void }) {
+function TennisPicksPanelInner({ m, date, onOdds }: { m: TennisMatch; date: string; onOdds: () => void }) {
   const q = useQuery({ queryKey: ['tennis', 'picks', m.id], queryFn: () => window.api.tennis.picks(date, m.id), enabled: m.state === 'pre', refetchInterval: 60_000, retry: false });
   const r = q.data;
   const matches = useMemo(() => (r?.ready ? [{ ...r, m, day: date }] : []), [r, m, date]);
@@ -414,7 +415,7 @@ export function TennisPicksPanel({ m, date, onOdds }: { m: TennisMatch; date: st
 }
 
 // Pantalla Recomendaciones: todos los partidos con cuotas de las próximas 24 horas o del día que se elija
-export function TennisPicksPage({ onOpen }: { onOpen: (x: TennisBoardMatch) => void }) {
+function TennisPicksPageInner({ onOpen }: { onOpen: (x: TennisBoardMatch) => void }) {
   const u = useUpcomingTennis();
   const split = useMedia('(min-width: 1280px)');
   const wide = useMedia('(min-width: 1400px)'); // con la columna del cupón y los anuncios a la derecha (App.tsx)
@@ -431,7 +432,7 @@ export function TennisPicksPage({ onOpen }: { onOpen: (x: TennisBoardMatch) => v
 }
 
 // La más fiable de cada partido del día, en la lista de partidos
-export function TennisDayPicks({ date, onOpen, onAll }: { date: string; onOpen: (x: TennisBoardMatch) => void; onAll: () => void }) {
+function TennisDayPicksInner({ date, onOpen, onAll }: { date: string; onOpen: (x: TennisBoardMatch) => void; onAll: () => void }) {
   const q = useQuery({ ...boardQuery(date), enabled: date >= today() });
   const minOdds = useMemo(() => { const m = loadPrefs().minOdds; return MIN_ODDS.includes(m) ? m : DEFAULT_MIN_ODDS; }, []);
   const matches = useMemo(() => q.data?.matches ?? [], [q.data]);
@@ -446,3 +447,8 @@ export function TennisDayPicks({ date, onOpen, onAll }: { date: string; onOpen: 
     </TvFrame>
   );
 }
+
+// Sin cuenta, en su lugar sale cómo conseguirlas (las recomendaciones piden cuenta: gateway/public.js)
+export const TennisPicksPanel = memberOnly(TennisPicksPanelInner, 'las recomendaciones del modelo');
+export const TennisPicksPage = memberOnly(TennisPicksPageInner, 'las recomendaciones del modelo');
+export const TennisDayPicks = memberOnly(TennisDayPicksInner, 'las recomendaciones del modelo', true);

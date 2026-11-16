@@ -1,0 +1,4 @@
+# Todo se puede rastrear: la app pide sus datos a /api al pintarse, y sin ellos Google (y el revisor de AdSense) vería una
+# página vacía. Lo de cada usuario pide sesión, así que no sale a ningún rastreador
+User-agent: *
+Allow: /

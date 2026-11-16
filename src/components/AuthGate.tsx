@@ -1,7 +1,9 @@
-// Puerta de entrada: sin sesión sólo se ve la pantalla de entrar o crear cuenta. Cada usuario tiene su cartera.
+// Puerta de entrada. Sin cuenta se ven los partidos, las estadísticas y las cuotas (lo que abre el gateway, public.js); lo de
+// cada usuario y las recomendaciones piden entrar. La pantalla de entrar o crear cuenta sale cuando se pide (askLogin) y se
+// puede volver sin entrar. Cada usuario tiene su cartera.
 import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CalendarDays, Check, Eye, EyeOff, Loader2, Scale, Target, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, Eye, EyeOff, Loader2, Scale, Target, Wallet } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
 import { FooterJuego } from './FooterJuego';
@@ -11,14 +13,26 @@ export function useUser() {
   return useQuery({ queryKey: ['me'], queryFn: () => window.api.auth.me(), staleTime: Infinity, retry: 1 });
 }
 
+// Si hay alguien dentro (false: se navega sin cuenta)
+export const useMember = () => !!useUser().data;
+
+// Abre la pantalla de entrar (o de crear cuenta) desde cualquier sitio; why: qué quería hacer, se enseña arriba
+export type LoginAsk = { mode?: 'login' | 'register'; why?: string };
+export const askLogin = (ask: LoginAsk = {}) => window.dispatchEvent(new CustomEvent<LoginAsk>('auth:ask', { detail: ask }));
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: user, isLoading, error, refetch } = useUser();
+  const [ask, setAsk] = useState<LoginAsk | null>(null);
   useEffect(() => {
-    const lost = () => qc.setQueryData(['me'], null);
+    // Sesión caducada o cerrada en otro sitio: se sigue sin cuenta, sin lo de nadie en la caché
+    const lost = () => { if (qc.getQueryData(['me'])) { qc.setQueryData(['me'], null); resetAllBut(qc); } };
+    const asked = (e: Event) => setAsk((e as CustomEvent<LoginAsk>).detail || {});
     window.addEventListener('auth:lost', lost);
-    return () => window.removeEventListener('auth:lost', lost);
+    window.addEventListener('auth:ask', asked);
+    return () => { window.removeEventListener('auth:lost', lost); window.removeEventListener('auth:ask', asked); };
   }, [qc]);
+  useEffect(() => { if (user) setAsk(null); }, [user]);
   if (isLoading) return <div className="grid h-full place-items-center"><Loading /></div>;
   if (error) return (
     <div className="mx-auto max-w-md p-6">
@@ -26,7 +40,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <Button className="mt-3" variant="secondary" onClick={() => refetch()}>Reintentar</Button>
     </div>
   );
-  return user ? <>{children}</> : <LoginScreen />;
+  // Encima de la app, sin desmontarla: al volver sin entrar se sigue donde se estaba
+  return (
+    <>
+      <div className="contents" aria-hidden={!user && !!ask ? true : undefined}>{children}</div>
+      {!user && ask && <div className="fixed inset-0 z-[80] bg-zinc-950"><LoginScreen ask={ask} onBack={() => setAsk(null)} /></div>}
+    </>
+  );
+}
+
+// Al entrar o salir: todo lo cargado (ajustes públicos, consultas que dieron 401, lo del usuario anterior) se vuelve a pedir
+function resetAllBut(qc: ReturnType<typeof useQueryClient>) {
+  qc.resetQueries({ predicate: q => q.queryKey[0] !== 'me' && q.queryKey[0] !== 'authConfig' });
 }
 
 // Las mismas reglas que el servidor (server/services/bets/auth.js): se avisa antes de mandar el formulario
@@ -63,10 +88,10 @@ const FEATURES: { icon: typeof CalendarDays; title: string; text: string }[] = [
   { icon: Wallet, title: 'Tu cartera y tus apuestas', text: 'Beneficio, ROI y gráficas. Las apuestas de cada usuario sólo las ve él.' }
 ];
 
-function LoginScreen() {
+function LoginScreen({ ask, onBack }: { ask: LoginAsk; onBack: () => void }) {
   const qc = useQueryClient();
   const { data: cfg } = useQuery({ queryKey: ['authConfig'], queryFn: () => window.api.auth.config() });
-  const [choice, setMode] = useState<'login' | 'register'>('login');
+  const [choice, setMode] = useState<'login' | 'register'>(ask.mode ?? 'login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -97,7 +122,9 @@ function LoginScreen() {
     setBusy(true);
     try {
       const user = await (register ? window.api.auth.register(username.trim(), password) : window.api.auth.login(username.trim(), password));
+      // Lo que se cargó sin cuenta (ajustes públicos, consultas que dieron 401) se vuelve a pedir ya con ella
       qc.setQueryData(['me'], user);
+      resetAllBut(qc);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   }
@@ -111,8 +138,11 @@ function LoginScreen() {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
-        <section className="flex flex-col justify-center gap-8 px-5 pb-2 pt-10 sm:px-10 lg:py-16">
+        <section className="flex flex-col justify-center gap-8 px-5 pb-2 pt-6 sm:px-10 lg:py-16">
           <div>
+            <button type="button" onClick={onBack} className="mb-6 inline-flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100">
+              <ArrowLeft size={15} />Seguir sin cuenta
+            </button>
             <img src="/logo.png" alt="Sharpex" className="block h-9 w-auto" />
             <h1 className="mt-6 max-w-lg text-3xl font-semibold leading-tight tracking-tight text-zinc-50 sm:text-4xl">Apuesta con datos, no con corazonadas.</h1>
             <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-zinc-400">
@@ -132,7 +162,8 @@ function LoginScreen() {
         <section className="flex flex-col justify-center px-5 py-8 sm:px-10 lg:border-l lg:border-zinc-800 lg:py-16">
           <form onSubmit={submit} noValidate className="mx-auto w-full max-w-sm">
             <h2 className="text-xl font-semibold text-zinc-50">{register ? (cfg?.first ? 'Crea la cuenta de administrador' : 'Crea tu cuenta') : 'Entra en tu cuenta'}</h2>
-            <p className="mt-1 text-sm text-zinc-500">{register ? 'Tu cartera y tus apuestas serán sólo tuyas.' : 'Con tu usuario y tu contraseña.'}</p>
+            <p className="mt-1 text-sm text-zinc-500">{register ? 'Gratis. Tu cartera y tus apuestas serán sólo tuyas.' : 'Con tu usuario y tu contraseña.'}</p>
+            {ask.why && <p className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-sm text-zinc-300">{ask.why}</p>}
 
             {canSwitch && (
               <div className="mt-6 grid grid-cols-2 gap-0.5 rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800" role="tablist">

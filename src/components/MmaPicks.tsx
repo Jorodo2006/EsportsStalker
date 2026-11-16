@@ -14,6 +14,8 @@ import { ReliabilityMeter } from './ValuePanel';
 import { Empty, ErrorBox, Loading } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
+import { memberOnly } from './MemberOnly';
+import { useMember } from './AuthGate';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 
@@ -29,10 +31,13 @@ export function useMmaAdd() {
   };
 }
 
-export const usePicks = (m: MmaFight) => useQuery({
-  queryKey: ['mma', 'picks', m.id], queryFn: () => window.api.mma.picks(madridDay(m.date), m.id),
-  enabled: m.state === 'pre' && !m.cancelled, refetchInterval: 60_000, retry: false
-});
+export const usePicks = (m: MmaFight) => {
+  const member = useMember();
+  return useQuery({
+    queryKey: ['mma', 'picks', m.id], queryFn: () => window.api.mma.picks(madridDay(m.date), m.id),
+    enabled: member && m.state === 'pre' && !m.cancelled, refetchInterval: 60_000, retry: false
+  });
+};
 
 // Lo que dice el modelo sin mirar las cuotas: quién gana, cómo y cuánto dura
 export function PredBlock({ m, pred }: { m: MmaFight; pred: MmaPred }) {
@@ -47,7 +52,7 @@ export function PredBlock({ m, pred }: { m: MmaFight; pred: MmaPred }) {
   );
 }
 
-export function MmaPicksPanel({ m, onOdds }: { m: MmaFight; onOdds: () => void }) {
+function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) {
   const addPick = useMmaAdd();
   const pre = m.state === 'pre' && !m.cancelled;
   const q = usePicks(m);
@@ -122,7 +127,7 @@ export function MmaPicksPanel({ m, onOdds }: { m: MmaFight; onOdds: () => void }
 }
 
 // Las mejores del día en la lista de combates: cinco, y el resto al pulsar
-export function MmaDayPicks({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
+function MmaDayPicksInner({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
   const [all, setAll] = useState(false);
   const q = useQuery({ queryKey: ['mma', 'picks-day', date], queryFn: () => window.api.mma.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const data = q.data ?? [];
@@ -151,3 +156,7 @@ export function MmaDayPicks({ date, onOpen }: { date: string; onOpen: (id: strin
     </TvFrame>
   );
 }
+
+// Sin cuenta, en su lugar sale cómo conseguirlas (las recomendaciones piden cuenta: gateway/public.js)
+export const MmaPicksPanel = memberOnly(MmaPicksPanelInner, 'las recomendaciones del modelo');
+export const MmaDayPicks = memberOnly(MmaDayPicksInner, 'las recomendaciones del modelo', true);

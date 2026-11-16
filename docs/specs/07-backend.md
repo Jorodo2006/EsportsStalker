@@ -125,8 +125,8 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 - **Registro.** La primera cuenta es la de administrador y se queda con las apuestas y las preferencias que hubiera sin dueño
   (`claimExisting`). Después se puede registrar quien llegue a la web, salvo que el administrador cierre el registro.
 - **Sesión.** Cookie `lolet_session` (`HttpOnly`, `SameSite=Lax`). No lleva `Secure` porque la web va por HTTP en la red de casa.
-- **Gateway.** En cada ruta `/api` (menos `PUBLIC`) y en `/events` pregunta a `bets` de quién es la sesión (`/internal/auth/session`), tira
-  las cabeceras `x-user-*` que vengan de fuera y pone las suyas; sin sesión responde 401. La API exige JSON en `POST` y `PUT` y no
+- **Gateway.** En cada ruta `/api` y en `/events` pregunta a `bets` de quién es la sesión (`/internal/auth/session`), tira
+  las cabeceras `x-user-*` que vengan de fuera y pone las suyas; sin sesión responde 401, salvo en lo público (ver *Parte pública*). La API exige JSON en `POST` y `PUT` y no
   lleva CORS, para que otra web abierta en el navegador no pueda escribir en ella. `/jobs`, `/odds` y el resto del lector no piden
   sesión: nginx no las publica, sólo se llega a ellas desde este equipo y no tienen datos de ningún usuario.
 - **Fuerza bruta.** Tras 5 contraseñas mal, ese usuario queda bloqueado un minuto (en memoria).
@@ -155,8 +155,8 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 
 ## Entrar con Google
 
-`server/services/bets/google.js`, rutas abiertas `GET /api/auth/google` y `GET /api/auth/google/callback` (están en `PUBLIC` del
-gateway). OAuth 2.0 con OpenID Connect, flujo de código con PKCE, sin librerías:
+`server/services/bets/google.js`, rutas abiertas `GET /api/auth/google` y `GET /api/auth/google/callback` (abiertas en
+`gateway/public.js`). OAuth 2.0 con OpenID Connect, flujo de código con PKCE, sin librerías:
 
 1. `/api/auth/google` guarda en la cookie `lolet_google` (10 minutos, `HttpOnly`, `SameSite=Lax`, sólo para `/api/auth/google`) un
    `state` y un verificador PKCE al azar, y manda a Google con `prompt=select_account`. Con `?link=1` es para vincular Google a
@@ -182,6 +182,45 @@ Al vincular, si esa cuenta de Google ya tiene usuario: si es una cuenta **vacía
 sin contraseña, sin apuestas ni ajustes propios y sin ser administrador), el vínculo pasa a la cuenta actual y la vacía se
 borra, porque es la misma persona entrando dos veces. Si tiene algo suyo, no se toca y se dice de qué usuario es. El resultado
 sale en *Tu cuenta* hasta que se cierra (no en un aviso de unos segundos, que tras volver de Google no se ve).
+
+## Parte pública
+
+Sin cuenta se ve la web, no sólo la entrada: AdSense no aprueba una web que no puede ver su revisor, y así llegan visitas de
+los buscadores. `server/services/gateway/public.js` decide qué se abre:
+
+- **Abierto:** entrar y registrarse; los `GET` de `esports`, `stats`, `basket`, `tennis`, `football` y `mma` salvo `/picks`;
+  `POST /api/odds/match`, `/board` y `/history` (leen, aunque lleven el partido en el cuerpo), `POST /api/football/photos`,
+  `/api/search`, `/api/settings/public` (los ajustes comunes sin credenciales), `/api/public/config` y `/events` (sólo los avisos
+  sin destinatario).
+- **Con cuenta:** lo de cada usuario (`bets`, `settings`, `friends`, `shared`), las recomendaciones (`/picks` de tenis, fútbol y
+  MMA; las de baloncesto se calculan en el navegador y las tapa la interfaz), leer cuotas a mano (`/api/odds/jobs`) y los
+  Challenger. Con sesión, también en lo público se pasa el usuario.
+- **Límites sin cuenta:** 300 peticiones por minuto y IP (una pantalla de partidos hace unas 30) y 6 conexiones a `/events` por IP.
+  La IP es la de `X-Real-IP`, que nginx saca de `CF-Connecting-IP`.
+
+En la interfaz, `AuthGate` deja pasar sin cuenta y saca la entrada encima de la app cuando se pide (`askLogin`), con «Seguir sin
+cuenta» para volver donde se estaba. Al entrar o salir se vuelven a pedir todas las consultas (`resetAllBut`).
+
+`public/robots.txt` deja rastrear todo, también `/api`: la app pide ahí sus datos al pintarse y sin ellos Google vería una página
+vacía.
+
+### Anuncios (AdSense) y cookies
+
+- **Cuenta:** `ADSENSE_CLIENT` (ca-pub-…) y los bloques `ADSENSE_SLOT_RECT` (300×250) y `ADSENSE_SLOT_HALF` (300×600) en el `.env`
+  (pasos en `.env.example`). Llegan a la interfaz por `/api/public/config`; sin `ADSENSE_CLIENT` no se carga nada de Google.
+  `/ads.txt` lo genera el gateway (nginx lo pasa a `/api/public/ads.txt`).
+- **Huecos:** `AdSlot` pone el `<ins class="adsbygoogle">` y `src/lib/ads.ts` carga el script de Google una vez.
+- **Consentimiento:** el mensaje de «Reglamentos europeos» de Privacidad y mensajes de AdSense, certificado para el TCF (lo exige
+  Google en el EEE desde 2024). No hay otro banner: las cookies propias (`lolet_session`, `lolet_google`) son necesarias, y las
+  preferencias van en `localStorage`. «Configurar cookies» del pie vuelve a abrir el mensaje de Google (`openCookieSettings`).
+- **Anuncios de juego:** en la cuenta de AdSense hay que bloquear la categoría sensible «Juegos de azar y apuestas». Es una
+  decisión, no una exigencia de Google (su restricción del contenido de juego no se aplica a las visitas desde España), por el
+  Real Decreto 958/2020: los anuncios de casas de apuestas tienen horario y condiciones, y Sharpex no controla cuáles sirve Google.
+- **CSP:** scripts con el nonce de cada petición y `'strict-dynamic'` (la forma que admite AdSense); `frame-src` y `connect-src`
+  abiertos a `https:` para los marcos y las peticiones de los anuncios. Ver `web/cabeceras.conf` y `location = /index.html`.
+- **Páginas legales:** `src/views/LegalView.tsx`, en `/aviso-legal`, `/privacidad` y `/cookies` (nginx sirve `index.html` y la app
+  abre la vista por la dirección). El responsable sale de `LEGAL_OWNER`, `LEGAL_NIF`, `LEGAL_ADDRESS` y `LEGAL_EMAIL` del `.env`;
+  lo que falte sale como «pendiente de publicar». Lo que dicen tiene que coincidir con lo que guarda la app.
 
 ## Rendimiento de la web
 

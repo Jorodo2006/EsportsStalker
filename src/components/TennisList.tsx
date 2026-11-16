@@ -13,6 +13,7 @@ import { AtpLogo, ChallengerLogo, WtaLogo } from './tennis-logos';
 import { panelCls } from './ui';
 import { useApp } from '@/lib/app-context';
 import { cardNote } from '@/lib/odds-window';
+import { useMember } from './AuthGate';
 
 type Odds = { a: number; b: number } | null | undefined;
 type St = 'pre' | 'live' | 'post';
@@ -149,9 +150,10 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
   const st = stOf(m);
   const surface = useSurface(m);
   const { settings } = useApp();
+  const member = useMember();
   const board = useQuery({
     queryKey: ['tennis', 'board', date], queryFn: () => window.api.tennis.picksBoard(date), staleTime: 60_000, retry: false,
-    enabled: st === 'pre' && !m.level
+    enabled: member && st === 'pre' && !m.level
   });
   const top = board.data?.matches.find(x => x.m.id === m.id)?.top ?? null;
   const n = Math.max(m.a.sets.length, m.b.sets.length);
