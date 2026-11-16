@@ -96,6 +96,19 @@ body { @apply bg-zinc-950 text-zinc-100 antialiased; font-feature-settings: "cv1
 /* Tiras que se desplazan de lado (pestañas, filtros) sin barra visible */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+/* Filas que se deslizan de lado: se difuminan en el borde para que se note que siguen (sólo en el móvil) */
+.fade-x { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent); }
+.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+@media (min-width: 640px) { .fade-x, .fade-r { -webkit-mask-image: none; mask-image: none; } }
+/* Aspecto de app en pantallas táctiles: sin barras de scroll de escritorio, sin el resaltado azul del toque, sin zoom por doble toque
+   ni al enfocar un campo (iOS amplía los de menos de 16 px) y sin que el arrastre rebote la página entera */
+@media (pointer: coarse) {
+  * { scrollbar-width: none; -webkit-tap-highlight-color: transparent; }
+  *::-webkit-scrollbar { display: none; }
+  button, a, [role=tab], [role=switch], summary, label { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  input, select, textarea { font-size: 16px !important; }
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior: none; }
 ::-webkit-scrollbar-thumb:hover { background: #3d3d44; }
 ::-webkit-scrollbar-track { background: transparent; }
 select option { background: #1d1d22; }

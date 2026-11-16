@@ -31,7 +31,7 @@ export default function TennisPlayers() {
       {r.isLoading ? <Loading /> : r.error ? <ErrorBox error={r.error} /> : (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-surface">
           <table className="w-full">
-            <thead className="bg-zinc-900/60"><tr><th className={th + ' w-16 text-right'}>Puesto</th><th className={th + ' w-14'} /><th className={th}>Jugador</th><th className={th}>País</th><th className={th + ' text-right'}>Puntos</th></tr></thead>
+            <thead className="bg-zinc-900/60"><tr><th className={th + ' w-16 text-right'}>Puesto</th><th className={th + ' w-14'} /><th className={th}>Jugador</th><th className={th + ' hidden sm:table-cell'}>País</th><th className={th + ' text-right'}>Puntos</th></tr></thead>
             <tbody className="divide-y divide-zinc-800/60">
               {list.map(p => {
                 const diff = p.previous && p.rank ? p.previous - p.rank : 0;
@@ -40,7 +40,7 @@ export default function TennisPlayers() {
                     <td className={td + ' text-right font-score text-lg font-semibold tnum'}>{p.rank}</td>
                     <td className={cn(td, 'text-xs tnum', diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-rose-400' : 'text-zinc-600')} title={`Antes: ${p.previous}`}>{diff > 0 ? `▲${diff}` : diff < 0 ? `▼${-diff}` : '='}</td>
                     <td className={td}><span className="flex items-center gap-2">{p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-4 w-6 rounded-sm object-cover" />}{p.name}</span></td>
-                    <td className={td + ' text-zinc-400'}>{p.country}</td>
+                    <td className={td + ' hidden text-zinc-400 sm:table-cell'}>{p.country}</td>
                     <td className={td + ' text-right tnum'}>{p.points.toLocaleString('es-ES')}</td>
                   </tr>
                 );

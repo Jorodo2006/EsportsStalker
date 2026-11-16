@@ -15,7 +15,7 @@ import { useMedia } from '@/lib/use-media';
 import { AdSlot } from './AdSlot';
 import { ReliabilityMeter } from './ValuePanel';
 import { Toggle, addDays, dayName, isoDay, today } from './sport';
-import { Empty, ErrorBox, Loading, Select } from './ui';
+import { Empty, ErrorBox, FoldOnPhone, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
@@ -284,7 +284,7 @@ function MatchStats({ x }: { x: TennisBoardMatch }) {
   const s = x.summary, m = x.m, aFav = s.pFinal >= 0.5;
   const fav = aFav ? m.a : m.b, side = (v: number) => (aFav ? v : 1 - v);
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
       <TvStat label={`Gana ${surname(fav.name)}`} value={p0(side(s.pFinal))} sub="estimación final" />
       <TvStat label="Modelo" value={p0(side(s.pModel))} sub="sin mirar cuotas" title={`Elo y estadísticas: ${p0(s.pElo)} y ${p0(s.pStats)} para ${m.a.name}`} />
       {s.pMarket != null && <TvStat label="Casas" value={p0(side(s.pMarket))} sub="sin su margen" />}
@@ -338,6 +338,7 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
   );
 
   const filtersPanel = (
+    <FoldOnPhone summary={[TENNIS_GROUPS.find(g => g.value === group)?.label, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <TvTabs value={group} onChange={setGroup} items={TENNIS_GROUPS.map(g => ({ ...g, disabled: g.value !== 'all' && g.value !== group && !all.some(x => x.group === g.value), title: g.value !== 'all' && !all.some(x => x.group === g.value) ? 'Las casas no dan este mercado en estos partidos' : g.title }))} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
@@ -353,13 +354,14 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
           <span title="Valor esperado de 2 % o más y fiabilidad de 55 o más"><Toggle on={onlyValue} onChange={setOnlyValue} label="Sólo con valor" /></span>
         </div>
       </div>
+    </FoldOnPhone>
   );
 
   const main = (
       <TvFrame>
         <TvHeader title="Recomendaciones" sub={sub}>
           {one ? <MatchStats x={one} /> : (
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
               <TvStat label="Opciones" value={A.count} sub={`de ${matches.reduce((t, x) => t + x.considered, 0)} líneas`} title="Las que pasan los filtros, de todas las líneas de las casas que el modelo sabe calcular" />
               <TvStat label="Con valor" value={A.withValue} sub="valor 2 % o más" title="Valor esperado de 2 % o más y fiabilidad de 55 o más" />
               {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}

@@ -124,7 +124,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   barritas de color delante de los títulos, cajas con borde discontinuo e icono en un círculo, ni todo en píldoras. Cada tipo
   de control tiene su forma, con los estilos de `ui.tsx`: acción principal rellena del acento (`Button`), secundaria gris,
   pestañas en selector segmentado con la elegida en gris claro (`segWrap` + `seg`, `Tabs`), las de la ficha del partido
-  subrayadas y partiéndose en dos líneas si no caben (`SheetTabs`), filtros con contorno (`chip`, `TvTabs`) y cuotas en ficha
+  subrayadas, en una línea que se desliza de lado en el móvil y partiéndose en dos desde `sm` (`SheetTabs`), filtros con contorno (`chip`, `TvTabs`) y cuotas en ficha
   rellena (`oddBtn`). La escala `zinc` está redefinida en `src/index.css` (grises neutros) y el acento por app va con las clases
   `amber` (verde azulado en LoL, naranja en baloncesto, verde en tenis, azul en fútbol, apagados, según `data-app`); verde `emerald` para lo
   positivo, `rose` para lo negativo y lo que está en juego. Una sola letra, Inter: `font-score` y `font-mono` apuntan a ella
@@ -180,6 +180,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - Nada de comentarios dentro de expresiones JSX (`{/* */}` entre props rompe el build en algunos sitios).
 - Preferencias de UI (secciones plegadas, boleto) en `localStorage`, siempre dentro de `try/catch`; el boleto se borra al salir.
 - **Logo e iconos** en `public/` (Vite los sirve tal cual y `web/Dockerfile` los copia): `logo.png` (icono y nombre, fondo transparente, es el de la cabecera, el menú y la entrada), `logo-mark.png` (sólo el icono), `favicon.ico`/`favicon-32.png`, `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png` y `manifest.webmanifest` (la app se puede instalar). Salen del logo original; si se cambia, hay que regenerarlos. Sin `og:image`: necesita la URL absoluta de la web desplegada.
+- **Aspecto de app en el móvil** (`src/index.css`, `App.tsx`): la cabecera es `sticky` dentro del scroll y se esconde al bajar con `transform` (no cambies su alto al esconderla: haría tiritar el scroll) y deja el margen de la muesca con `env(safe-area-inset-top)`. Las filas que se deslizan de lado llevan `fade-x`/`fade-r`. Con `pointer: coarse` se quitan barras de scroll y resaltado del toque, y los campos van a 16 px (si no, iOS amplía la pantalla al enfocarlos). Todo esto es sólo del móvil (por debajo de `lg`): el escritorio no cambia. En las listas, `StateFilterBar` deja fijas la tira de días y los filtros bajo la cabecera (`--head` la publica `App.tsx`); en `MatchCard` y las filas de tenis, tocar una cuota la añade al cupón (`src/lib/card-odds.ts`: mejor casa del ganador, `moneyline|0||`), y desde `lg` la tarjeta entera abre el partido; los filtros de recomendaciones se pliegan con `FoldOnPhone`. Las fichas abren con `<SheetScroll />` (arriba, y al volver recuperan la posición de la lista); ponlo en las nuevas.
 - **Móvil:** todo tiene que caber en 375 px sin que la página se desplace de lado. Se diseña de móvil hacia arriba con `sm:` y `lg:`; desde `lg` se ve la navegación de escritorio, y por debajo la barra inferior. Las tablas anchas van dentro de `overflow-x-auto` o tienen versión en tarjetas (`BetCard`).
 
 ## Cosas que se rompen con facilidad

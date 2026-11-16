@@ -55,7 +55,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
   return (
     <TvFrame>
       <TvHeader title="Recomendaciones" sub={sub}>
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
           <TvStat label={m.home.short || m.home.name} value={p0(f.home)} sub="modelo" />
           <TvStat label="Empate" value={p0(f.draw)} sub="modelo" />
           <TvStat label={m.away.short || m.away.name} value={p0(f.away)} sub="modelo" />
@@ -150,7 +150,7 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
         : (
           <TvFrame>
             <TvHeader title="Recomendaciones" sub={`${data.length} ${data.length === 1 ? 'partido' : 'partidos'} con cuotas`}>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
                 <TvStat label="Con valor" value={[...tops.map(d => d.top), ...hard.map(d => d.hard!)].filter(p => verdictOf(p.ev, p.rel.score) === 'BET').length} sub="valor 2 % o más" />
               </div>
             </TvHeader>

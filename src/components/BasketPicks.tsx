@@ -16,7 +16,7 @@ import { targetOfGame } from './BasketOdds';
 import { restart } from './BasketPoints';
 import { ReliabilityMeter } from './ValuePanel';
 import { Toggle } from './sport';
-import { Empty, Input, Loading, Select } from './ui';
+import { Empty, FoldOnPhone, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
@@ -219,6 +219,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
   const props = { oneGame, onOpen, onAdd: add };
   return (
     <div className="flex flex-col gap-2.5">
+      <FoldOnPhone summary={[PICK_GROUPS.find(g => g.value === group)?.label, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <TvTabs value={group} onChange={setGroup} items={PICK_GROUPS} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
@@ -228,6 +229,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
           <span title="Valor esperado de 2 % o más y fiabilidad de 55 o más"><Toggle on={onlyValue} onChange={setOnlyValue} label="Sólo con valor" /></span>
         </div>
       </div>
+      </FoldOnPhone>
 
       {q.loaded < q.total && (
         <div className={cn(panel, 'px-3.5 py-2')} role="status">
@@ -238,7 +240,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
 
       <TvFrame>
         <TvHeader title="Recomendaciones" sub={sub}>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
             <TvStat label="Opciones" value={A.count} sub={`de ${q.considered} líneas`} title="Las que pasan los filtros, de todas las líneas de las casas que el modelo sabe calcular" />
             <TvStat label="Con valor" value={A.withValue} sub="para apostar" title="Las que el análisis del jugador llama «Apostar»: valor esperado de 2 % o más y fiabilidad de 55 o más" />
             {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}

@@ -1,6 +1,7 @@
 // LoL · Partidos: misma estructura que el baloncesto y el tenis. Título, tira de días, filtro por estado, cuotas de
 // ganador opcionales, los partidos en juego destacados arriba y el resto en tarjetas agrupadas por liga.
 // Al abrir uno se ve su ficha completa (marcador, cuotas y partida en vivo).
+import { useCardOdd } from '@/lib/card-odds';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarX, RefreshCw } from 'lucide-react';
@@ -21,6 +22,7 @@ function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSO
 
 export default function MatchesView() {
   const { settings, saveSettings, openMatch, setOpenMatch } = useApp();
+  const addOdd = useCardOdd();
   const refreshMs = useRefreshMs();
   const [page, setPage] = useState<string | null>(null);
   const [date, setDate] = useState(today);
@@ -77,7 +79,7 @@ export default function MatchesView() {
   const card = (m: MatchEvent, featured?: boolean) => {
     const [a, b] = m.teams, st = stateOf(m);
     return (
-      <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} odds={showOdds ? board.data?.[m.id] : null} noOdds={showOdds && board.data ? cardNote(m.startTime, { sport: 'lol' }, settings) : null} featured={featured}
+      <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} onOdd={s => addOdd({ id: m.id, done: false, sport: 'lol', league: m.league, event: `${m.teams[0].code || m.teams[0].name} vs ${m.teams[1].code || m.teams[1].name}`, match: { a: m.teams[0], b: m.teams[1], start: m.startTime, sport: 'lol' } }, s)} odds={showOdds ? board.data?.[m.id] : null} noOdds={showOdds && board.data ? cardNote(m.startTime, { sport: 'lol' }, settings) : null} featured={featured}
         competition={featured ? m.league : undefined} status={featured ? m.blockName : undefined}
         time={st === 'pre' ? fmtTime(m.startTime) : st === 'live' ? 'En juego' : 'Final'} tag={m.bestOf ? `Bo${m.bestOf}` : undefined}
         a={{ name: a.name, short: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}
@@ -89,10 +91,9 @@ export default function MatchesView() {
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
       <FavoritesStrip />
-      <DayStrip value={date} onChange={setDate} counts={counts} />
-      <StateFilterBar value={filter} onChange={setFilter} counts={stateCounts}>
+      <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={counts} />} value={filter} onChange={setFilter} counts={stateCounts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('lol-odds', v); }} label="Cuotas" />
-        <Select className="h-9 w-52" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
+        <Select className="h-9 min-w-0 flex-1 sm:w-52 sm:flex-none" value={league} onChange={e => { setPage(null); saveSettings({ favoriteLeagues: e.target.value ? [e.target.value] : [] }); }}>
           <option value="">Todas las ligas</option>
           {leagues.data?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </Select>

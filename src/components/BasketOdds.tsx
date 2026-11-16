@@ -148,7 +148,7 @@ function OddsCard({ group, lines, books, moves, onPick }: {
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
       <div className="flex items-center gap-2 border-b border-zinc-800/70 px-4 py-2.5">
-        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{group}</h4>
+        <h4 className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-zinc-50 lg:truncate" title={group}>{group}</h4>
         <span className="label-data w-11 text-right text-zinc-500" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
         {books.map(bk => <BookHead key={bk} name={bk} className="w-[72px]" />)}
       </div>
@@ -158,7 +158,7 @@ function OddsCard({ group, lines, books, moves, onPick }: {
           const inv = bests.map(p => (p ? 1 / p : 0)), sum = inv.reduce((s, x) => s + x, 0);
           return l.outcomes.map((o, i) => (
             <div key={l.key + o.id} className="flex items-center gap-2 px-3 py-1 hover:bg-zinc-900/70">
-              <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200" title={o.label}>{o.label}</span>
+              <span className="min-w-0 flex-1 text-[13px] leading-snug text-zinc-200 lg:truncate" title={o.label}>{o.label}</span>
               <span className="w-11 text-right font-mono text-[11px] tnum text-zinc-400">{sum && inv[i] ? pct(inv[i] / sum) : ''}</span>
               {books.map(bk => {
                 const p = o.prices[bk];

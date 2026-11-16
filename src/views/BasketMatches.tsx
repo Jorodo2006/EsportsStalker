@@ -1,5 +1,6 @@
 // Baloncesto · Partidos: igual que en LoL. Tira de días (hora de España), filtro por estado, partidos agrupados por
 // competición (en pantallas anchas, las más fiables del día al lado) y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
+import { useCardOdd } from '@/lib/card-odds';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, Plus } from 'lucide-react';
@@ -7,8 +8,8 @@ import { cn } from '@/lib/format';
 import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam, MatchOdds } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
-import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
-import { BasketOdds, matchOfGame, useBasketOdds } from '@/components/BasketOdds';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { BasketOdds, matchOfGame, targetOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
 import { BasketFlow } from '@/components/BasketFlow';
@@ -42,6 +43,7 @@ function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, 
 export default function BasketMatches() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
   const { settings } = useApp();
+  const addOdd = useCardOdd();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
@@ -99,7 +101,7 @@ export default function BasketMatches() {
     const st = stateOf(g), done = st === 'post';
     const sa = Number(g.away.score), sh = Number(g.home.score);
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data ? cardNote(g.date, { sport: 'basket' }, settings) : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfGame(g), s)} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data ? cardNote(g.date, { sport: 'basket' }, settings) : null} featured={featured}
         competition={featured ? LEAGUE_NAME[g.league] : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'live' ? g.status : undefined}
@@ -113,8 +115,7 @@ export default function BasketMatches() {
       <MatchesTitle date={date} />
       <FavoritesStrip />
       {modes}
-      <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
-      <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
+      <StateFilterBar above={<DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
       </StateFilterBar>
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
@@ -186,6 +187,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
     onPlayer={(p, teamId) => { setSheet(null); pick(p, teamId); }} />;
   return (
     <div className="flex flex-col gap-5">
+      <SheetScroll />
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100">
         <ArrowLeft size={16} />Volver a partidos
       </button>
@@ -201,7 +203,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
           ['points', 'Puntos'],
           ...(st === 'pre' ? [['lines', 'Líneas']] as [Tab, string][] : []),
           ['h2h', 'H2H'], ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
-        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} />Apuesta</Button>} />
+        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {st === 'pre' && <RestStrip game={game} />}
       {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
