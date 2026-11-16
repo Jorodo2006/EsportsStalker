@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, odd, pct, tone } from '@/lib/format';
 import { verdictOf } from '@/lib/value';
 import type { PredictionRow, Sport } from '@/lib/types';
-import { Card, Empty, ErrorBox, Loading, Stat, Tabs, td, th } from './ui';
+import { Button, Card, chip, Empty, ErrorBox, Loading, Stat, Tabs, td, th } from './ui';
 
 type SportF = 'all' | Sport;
 type RangeF = '30' | '90' | 'all';
@@ -44,6 +44,7 @@ const brier = (rows: PredictionRow[], p: (r: PredictionRow) => number | null) =>
   const xs = rows.filter(r => decided(r) && p(r) != null);
   return xs.length ? xs.reduce((s, r) => s + (p(r)! - (won(r) ? 1 : 0)) ** 2, 0) / xs.length : null;
 };
+const PRICE_BANDS: [number, number, string][] = [[1, 1.5, 'Hasta 1,50'], [1.5, 2, '1,50-2'], [2, 3, '2-3'], [3, 5, '3-5'], [5, 8, '5-8'], [8, 1e9, 'Más de 8']];
 const units = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2).replace('.', ',')} u`;
 
 export function ModelAccuracy() {
@@ -96,6 +97,8 @@ export function ModelAccuracy() {
   const clvBeat = clvs.length ? clvs.filter(v => v > 0).length / clvs.length : null;
   const byBook = groupRows(rows, r => r.book || 'Sin casa');
   const byEv = [[-99, 0, 'EV negativo (las más fiables de tenis)'], [0, 0.05, 'EV hasta 5 %'], [0.05, 0.1, '5-10 %'], [0.1, 0.2, '10-20 %'], [0.2, 99, 'Más de 20 %']].map(([lo, hi, label]) => ({ key: label as string, ...sum(rows.filter(r => r.ev >= (lo as number) && r.ev < (hi as number))) })).filter(x => x.n);
+  // Por tramo de cuota: en las altas el modelo y la casa suelen pasarse (sesgo de las cuotas altas), y aquí se ve si eso cambia
+  const byPrice = PRICE_BANDS.map(([lo, hi, label]) => ({ key: label, ...sum(rows.filter(r => r.price >= lo && r.price < hi)) })).filter(x => x.n);
   // Quién acierta más, con las mismas recomendaciones: el modelo solo, la casa sin margen o la mezcla que enseña la app
   const both = rows.filter(r => r.pModel != null && r.pMarket != null);
   const bModel = brier(both, r => r.pModel), bMarket = brier(both, r => r.pMarket), bMix = brier(both, r => r.p);
@@ -165,17 +168,52 @@ export function ModelAccuracy() {
       <div className="mb-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <GroupTable title="Por mercado" rows={byGroup} />
         <div className="flex flex-col gap-5">
+          <GroupTable title="Por cuota" rows={byPrice} />
           <GroupTable title="Por valor que veía (EV)" rows={byEv} />
           <GroupTable title="Por casa" rows={byBook} />
         </div>
       </div>
 
-      <Card title="Últimas resueltas">
+      <RecentResolved rows={rows} />
+    </>
+  );
+}
+
+type ResultF = 'all' | 'won' | 'lost';
+type OrderF = 'recent' | 'high' | 'low';
+const PAGE = 15;
+
+// Últimas resueltas, con filtro por resultado y orden por cuota (las de cuota alta ganadas son las que más pesan en el beneficio)
+function RecentResolved({ rows }: { rows: PredictionRow[] }) {
+  const [result, setResult] = useState<ResultF>('all');
+  const [order, setOrder] = useState<OrderF>('recent');
+  const [shown, setShown] = useState(PAGE);
+  const list = useMemo(() => {
+    const xs = rows.filter(r => result === 'all' || r.status === result);
+    // Las filas llegan de la más reciente a la más antigua; a igual cuota, se queda ese orden
+    if (order === 'recent') return xs;
+    return [...xs].sort((a, b) => (order === 'high' ? b.price - a.price : a.price - b.price));
+  }, [rows, result, order]);
+  const pick = <T,>(set: (v: T) => void) => (v: T) => { set(v); setShown(PAGE); };
+  const filters = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {([['all', 'Todas'], ['won', 'Ganadas'], ['lost', 'Perdidas']] as const).map(([v, l]) => (
+        <button key={v} type="button" onClick={() => pick(setResult)(v)} aria-pressed={result === v} className={chip(result === v)}>{l}</button>
+      ))}
+      <span className="mx-1 h-5 w-px bg-zinc-800" />
+      {([['recent', 'Más recientes'], ['high', 'Más cuota'], ['low', 'Menos cuota']] as const).map(([v, l]) => (
+        <button key={v} type="button" onClick={() => pick(setOrder)(v)} aria-pressed={order === v} className={chip(order === v)}>{l}</button>
+      ))}
+    </div>
+  );
+  return (
+    <Card title="Últimas resueltas" action={filters}>
+      {!list.length ? <p className="py-3 text-[13px] text-zinc-400">No hay {result === 'won' ? 'ganadas' : 'perdidas'} con estos filtros.</p> : (
         <div className="-mx-5 -mb-2 overflow-x-auto">
           <table className="w-full min-w-[560px]">
             <thead className="bg-zinc-900/60"><tr><th className={th}>Recomendación</th><th className={th + ' text-right'}>Decía</th><th className={th + ' text-right'}>Cuota</th><th className={th}>Resultado</th></tr></thead>
             <tbody className="divide-y divide-zinc-800/60">
-              {rows.slice(0, 15).map((r, i) => (
+              {list.slice(0, shown).map((r, i) => (
                 <tr key={i}>
                   <td className={td}><div className="font-medium text-zinc-100">{r.title}</div><div className="text-xs text-zinc-500">{new Date(r.start).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · {r.event}</div></td>
                   <td className={td + ' text-right tnum'}>{pct(r.p)}</td>
@@ -186,8 +224,14 @@ export function ModelAccuracy() {
             </tbody>
           </table>
         </div>
-      </Card>
-    </>
+      )}
+      {list.length > shown && (
+        <div className="flex items-center justify-between gap-3 border-t border-zinc-800/60 pt-3 mt-2">
+          <span className="text-xs text-zinc-500">{shown} de {list.length}</span>
+          <Button variant="secondary" size="sm" onClick={() => setShown(s => s + PAGE)}>Ver {Math.min(PAGE, list.length - shown)} más</Button>
+        </div>
+      )}
+    </Card>
   );
 }
 
