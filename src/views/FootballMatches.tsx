@@ -3,6 +3,7 @@
 // lado. El selector de arriba cambia a la pantalla Recomendaciones. Al pulsar un partido, su ficha: marcador grande con los
 // goleadores, resumen (goles, tarjetas y cambios), cuotas de Winamax y Betway, estadísticas, alineaciones, forma, cara a cara
 // y clasificación.
+import { useCardOdd } from '@/lib/card-odds';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
@@ -13,7 +14,7 @@ import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
 import { FootballDayPicks, FootballPicksPage, FootballPicksPanel } from '@/components/FootballPicks';
 import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
-import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, addDays, dayName, today, type StateFilter } from '@/components/sport';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, addDays, dayName, today, type StateFilter } from '@/components/sport';
 import { esTime } from '@/components/football';
 import { Button, Empty, ErrorBox, Loading } from '@/components/ui';
 import { TvTabs } from '@/components/viz';
@@ -50,6 +51,7 @@ export const targetOfFootball = (m: FootballMatch): OddsTarget => ({
 export default function FootballMatches() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
   const { settings } = useApp();
+  const addOdd = useCardOdd();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export default function FootballMatches() {
     const st = stateOf(g), done = st === 'post' && !g.off;
     const hs = g.home.score ?? 0, as = g.away.score ?? 0;
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} featured={featured} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.off ? cardNote(g.date, { sport: 'football' }, settings) : null}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfFootball(g), s)} featured={featured} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.off ? cardNote(g.date, { sport: 'football' }, settings) : null}
         competition={featured ? g.leagueName : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : g.off ? g.status : 'Final'}
         status={st === 'live' ? g.status : g.stage || undefined}
@@ -125,8 +127,7 @@ export default function FootballMatches() {
       <MatchesTitle date={date} />
       <FavoritesStrip />
       {modes}
-      <DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />
-      <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
+      <StateFilterBar above={<DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); saveFlag('football-odds', v); }} label="Cuotas" />
       </StateFilterBar>
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
@@ -179,6 +180,7 @@ function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview
   const d = q.data;
   return (
     <div className="flex flex-col gap-3">
+      <SheetScroll />
       {back}
       <MatchHeader m={m} events={d?.timeline ?? m.incidents} attendance={d?.attendance ?? null}>
         <SheetTabs value={current} onChange={setTab} items={[
@@ -186,7 +188,7 @@ function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview
           ...(st === 'post' || m.off ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
           ['stats', 'Estadísticas'], ['lineups', 'Alineaciones'], ['form', 'Forma'], ['h2h', 'H2H'],
           ...(m.league !== 'copa' ? [['table', 'Clasificación']] as [Tab, string][] : [])
-        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'football', league: m.leagueName, event: targetOfFootball(m).event })}><Plus size={14} />Apuesta</Button>} />
+        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'football', league: m.leagueName, event: targetOfFootball(m).event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </MatchHeader>
       {current === 'odds' ? <SportOdds target={targetOfFootball(m)} />
         : current === 'picks' ? <FootballPicksPanel m={m} onOdds={() => setTab('odds')} />

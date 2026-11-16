@@ -2,6 +2,7 @@
 // (cada torneo en su panel, con sus rondas) y, en pantallas anchas, al lado el partido elegido. Al abrir uno, su ficha:
 // marcador por sets, recomendaciones, cuotas de Winamax y Betway y la forma de los dos jugadores. Como en el baloncesto,
 // el selector de arriba cambia a las recomendaciones de todos los partidos.
+import { useCardOdd } from '@/lib/card-odds';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, CalendarX, Plus } from 'lucide-react';
@@ -15,7 +16,7 @@ import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { TennisDayPicks, TennisPicksPage, TennisPicksPanel } from '@/components/TennisPicks';
 import { TennisSpotlight, TournamentGroup } from '@/components/TennisList';
 import { TennisCompare } from '@/components/TennisStats';
-import { DayStrip, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { SheetScroll, DayStrip, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { sized, fallbackTo } from '@/lib/img';
 import { Panel, TvTabs, panel } from '@/components/viz';
@@ -45,6 +46,7 @@ function loadPref<T>(key: string, def: T): T { try { const v = localStorage.getI
 function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
 
 export default function TennisMatches() {
+  const addOdd = useCardOdd();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
@@ -112,8 +114,7 @@ export default function TennisMatches() {
       <MatchesTitle date={date} />
       <FavoritesStrip />
       {modes}
-      <DayStrip value={date} onChange={setDate} counts={days.data} />
-      <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
+      <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={quali} onChange={v => { setQuali(v); savePref('tennis-quali', v); }} label="Previa" />
         <Toggle on={challengers} onChange={v => { setChallengers(v); savePref('tennis-challengers', v); }} label="Challenger" />
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('tennis-odds', v); }} label="Cuotas" />
@@ -126,7 +127,7 @@ export default function TennisMatches() {
                 {byTour.map(([k, list], i) => (
                   <Fragment key={k}>
                     <TournamentGroup id={sectionId(k)} matches={list} open={!closed.includes(k)} onToggle={() => toggle(k)}
-                      odds={showOdds ? board.data : undefined} selected={sel?.id} onPick={pick} />
+                      odds={showOdds ? board.data : undefined} selected={sel?.id} onPick={pick} onOdd={(m, side) => addOdd(targetOfMatch(m), side)} />
                     {!twoCols && i === 2 && <AdSlot size={md ? 'banner' : 'mobile'} />}
                   </Fragment>
                 ))}
@@ -159,6 +160,7 @@ function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: s
   if (sheet) return <TennisPlayerSheet key={sheet} tour={m.tour} id={sheet} backLabel="Partido" onBack={() => setSheet(null)} onPlayer={setSheet} />;
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
+      <SheetScroll />
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={16} />Volver a partidos</button>
       <Scoreboard competition={m.tournament} detail={[m.round, m.court].filter(Boolean).join(', ')} state={st}
         a={{ name: label(m.a), short: m.a.country, logo: m.a.flag, score: setsWon(m.a) }}
@@ -167,7 +169,7 @@ function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: s
         centerSub={st === 'pre' ? new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? (m.points ? `${m.status} · ${m.points.a}-${m.points.b}` : m.status) : 'Final'}>
         <SheetTabs value={tab} onChange={setTab} items={[
           ['score', 'Marcador'], ...(st === 'pre' && full ? [['picks', 'Recomendaciones']] as [Tab, string][] : []), ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]), ...(full ? [['form', 'Forma de los jugadores']] as [Tab, string][] : [])
-        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'tennis', league: m.tournament, event: t.event })}><Plus size={14} />Apuesta</Button>} />
+        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'tennis', league: m.tournament, event: t.event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {m.fixed && <p className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={13} className="shrink-0" />{m.fixed}</p>}
       {tab === 'score' ? <><Sets m={m} /><TennisMatchStats m={m} onForm={full ? () => setTab('form') : undefined} /></> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <Form m={m} onPlayer={setSheet} />}

@@ -117,7 +117,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       </label>
     }>
       {q.length < 2 ? (
-        <p className="text-sm text-zinc-400">Busca en los cuatro deportes: "Barcelona", "Sabalenka", "Lakers", "T1", "Liga F"… Salen los partidos de ayer a dentro de una semana.</p>
+        <p className="text-sm text-zinc-400">Busca en los cinco deportes: "Barcelona", "Sabalenka", "Lakers", "T1", "Liga F"… Salen los partidos de ayer a dentro de una semana.</p>
       ) : res.error ? <ErrorBox error={res.error} />
         : res.isLoading ? <p className="text-sm text-zinc-400">Buscando…</p>
         : !rows.length ? <p className="text-sm text-zinc-400">Nada con "{q}" entre ayer y la semana que viene.</p>

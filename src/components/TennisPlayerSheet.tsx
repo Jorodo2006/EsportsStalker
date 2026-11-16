@@ -50,7 +50,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
         <TvHeader
           media={<><img loading="lazy" decoding="async" src={p.photo || undefined} alt="" className="h-12 w-12 shrink-0 rounded-full bg-black/30 object-cover object-top md:hidden" onError={e => { e.currentTarget.style.display = 'none'; }} />{p.flag && <img loading="lazy" decoding="async" src={p.flag} alt="" className="h-5 w-8 shrink-0 object-cover" />}</>}
           title={p.name} sub={<span title={meta.join(' · ')}>{meta.join(' · ')}</span>}>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
             <TvStat label="Ranking" value={p.rank ? `#${p.rank}` : '–'} sub={<>{p.points ? `${p.points.toLocaleString('es-ES')} pts` : ''}{!!diff && <span className="ml-1">{diff > 0 ? `▲${diff}` : `▼${-diff}`}</span>}</>} />
             {season && <TvStat label={`Temporada ${seasonYear}`} value={`${season.won}-${season.lost}`} sub={rate(season)} title="Balance según ESPN" />}
             {season && <TvStat label={`Títulos ${seasonYear}`} value={season.titles} sub={season.prize ? prize(season.prize) : ''} />}

@@ -1,11 +1,12 @@
 // Piezas comunes de las tres apps (LoL, baloncesto y tenis) para ver partidos: título, tira de días, filtro por estado,
 // bloque de competición con sus tarjetas, la sección En directo y el marcador grande del partido abierto.
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { TeamLogo, chip, oddBtn, panelCls } from './ui';
 import { sized, fallbackTo } from '@/lib/img';
 import { FavStar } from './Favorites';
+import { useMedia } from '@/lib/use-media';
 
 export type MatchState = 'pre' | 'live' | 'post';
 
@@ -37,6 +38,24 @@ export function MatchesTitle({ date }: { date: string }) {
   );
 }
 
+// Al abrir una ficha se empieza arriba (si no, hereda el desplazamiento de la lista) y al volver se recupera donde se estaba.
+// El contador evita restaurar cuando React desmonta y vuelve a montar la ficha (modo estricto, cambios de pestaña internos)
+let sheetsOpen = 0;
+let listY = 0;
+export function SheetScroll() {
+  useLayoutEffect(() => {
+    const main = document.querySelector('main');
+    sheetsOpen++;
+    if (main && main.scrollTop > 0) listY = main.scrollTop;
+    main?.scrollTo({ top: 0 });
+    return () => {
+      sheetsOpen--;
+      requestAnimationFrame(() => { if (!sheetsOpen) { main?.scrollTo({ top: listY }); listY = 0; } });
+    };
+  }, []);
+  return null;
+}
+
 // Tira de días: la semana alrededor del día elegido, con cuántos partidos hay y si alguno está en juego.
 // El día elegido va sobre gris. En el móvil se desliza de lado
 export function DayStrip({ value, onChange, counts, span = 7 }: {
@@ -50,7 +69,7 @@ export function DayStrip({ value, onChange, counts, span = 7 }: {
   return (
     <div className="flex items-center gap-2">
       <button className={arrow} onClick={() => onChange(addDays(value, -span))} aria-label="Semana anterior"><ChevronLeft size={16} /></button>
-      <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto no-scrollbar">
+      <div className="fade-x flex min-w-0 flex-1 gap-1 overflow-x-auto no-scrollbar">
         {days.map(d => {
           const c = counts?.[d];
           const sel = d === value;
@@ -73,24 +92,33 @@ export function DayStrip({ value, onChange, counts, span = 7 }: {
 // ---------- filtros ----------
 export type StateFilter = 'all' | MatchState;
 
-export function StateFilterBar({ value, onChange, counts, children }: {
-  value: StateFilter; onChange: (v: StateFilter) => void; counts: Record<StateFilter, number>; children?: ReactNode;
+// above: lo que va encima de los filtros (la tira de días). En el móvil se quedan fijos arriba al desplazarse (la barra de
+// la cabecera, que se esconde, publica su alto en --head) y los controles de debajo (cuotas, liga…) van en su fila, sin fijar;
+// desde `lg` todo queda como siempre, en el flujo y con los controles a la derecha de los filtros
+export function StateFilterBar({ value, onChange, counts, above, children }: {
+  value: StateFilter; onChange: (v: StateFilter) => void; counts: Record<StateFilter, number>; above?: ReactNode; children?: ReactNode;
 }) {
   const items: [StateFilter, string][] = [['all', 'Todos'], ['live', 'En juego'], ['pre', 'Próximos'], ['post', 'Terminados']];
   // En el móvil los filtros se deslizan de lado en vez de partirse en dos líneas
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="-mx-3 flex min-w-0 max-w-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 no-scrollbar sm:mx-0 sm:max-w-none sm:px-0">
-        {items.map(([v, label]) => (
-          <button key={v} onClick={() => onChange(v)} disabled={v !== 'all' && !counts[v]} aria-pressed={value === v} className={chip(value === v)}>
-            {v === 'live' && (counts.live ? <LiveDot /> : <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />)}
-            {label}
-            <span className={cn('tnum', v === 'live' && counts.live ? 'text-rose-300' : value === v ? 'text-amber-300' : 'text-zinc-500')}>{counts[v]}</span>
-          </button>
-        ))}
+    <>
+      <div className="sticky top-[var(--head,0px)] z-20 -mx-3 flex flex-col gap-3 bg-zinc-950 px-3 pb-2 pt-2 transition-[top] duration-200 lg:static lg:mx-0 lg:gap-5 lg:bg-transparent lg:p-0">
+        {above}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="fade-r -mx-3 flex min-w-0 max-w-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 no-scrollbar sm:mx-0 sm:max-w-none sm:px-0">
+            {items.map(([v, label]) => (
+              <button key={v} onClick={() => onChange(v)} disabled={v !== 'all' && !counts[v]} aria-pressed={value === v} className={chip(value === v)}>
+                {v === 'live' && (counts.live ? <LiveDot /> : <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />)}
+                {label}
+                <span className={cn('tnum', v === 'live' && counts.live ? 'text-rose-300' : value === v ? 'text-amber-300' : 'text-zinc-500')}>{counts[v]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto hidden flex-wrap items-center gap-2 lg:flex">{children}</div>
+        </div>
       </div>
-      <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
-    </div>
+      {!!children && <div className="flex w-full items-center gap-2 lg:hidden">{children}</div>}
+    </>
   );
 }
 
@@ -158,10 +186,14 @@ const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.na
 // items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
 // noOdds: lo que se dice en lugar de las cuotas cuando todavía no hay ("Cuotas desde el dom 15, 18:00"), de cardNote en
 // lib/odds-window.ts; así el usuario sabe que no es un fallo
-export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onClick, tag, competition, featured }: {
+// onOdd: en el móvil cada cuota es un botón que la añade al cupón (desde `lg`, donde hay cupón a la vista y se ve el
+// partido en la columna, la tarjeta entera abre el partido como siempre)
+export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onClick, onOdd, tag, competition, featured }: {
   state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number; x?: number } | null; noOdds?: string | null;
-  active?: boolean; onClick: () => void; tag?: string; competition?: string; featured?: boolean;
+  active?: boolean; onClick: () => void; onOdd?: (side: 'a' | 'x' | 'b') => void; tag?: string; competition?: string; featured?: boolean;
 }) {
+  const phone = useMedia('(max-width: 1023px)');
+  const pick = phone ? onOdd : undefined;
   const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
   const team = (t: RowTeam) => (
     <div className="flex min-w-0 items-center gap-2.5">
@@ -177,32 +209,36 @@ export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onC
   const best = odds ? Math.min(odds.a || 99, odds.b || 99, odds.x || 99) : 0;
   // Con empate son tres por fila: menos relleno para que quepan la abreviatura ("CZE") y la cuota sin cortarse
   const three = !!odds && odds.x != null;
-  const oddChip = (o: number, tag: string) => (
-    <span className={cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between text-sm', three ? 'gap-1 px-2' : 'gap-2 px-3', !o && 'bg-zinc-900 text-zinc-600')}>
-      <span className={cn('min-w-0 truncate font-medium opacity-70', three ? 'text-[10.5px]' : 'text-xs')}>{tag}</span>
-      <span>{o ? odd(o) : '–'}</span>
-    </span>
-  );
+  const oddChip = (o: number, tag: string, side: 'a' | 'x' | 'b') => {
+    const cls = cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between text-sm', three ? 'gap-1 px-2' : 'gap-2 px-3', !o && 'bg-zinc-900 text-zinc-600');
+    const inner = <><span className={cn('min-w-0 truncate font-medium opacity-70', three ? 'text-[10.5px]' : 'text-xs')}>{tag}</span><span>{o ? odd(o) : '–'}</span></>;
+    return pick && o
+      ? <button type="button" onClick={() => pick(side)} aria-label={`Añadir al cupón: ${tag} a ${odd(o)}`} className={cn(cls, 'active:scale-[.97]')}>{inner}</button>
+      : <span className={cls}>{inner}</span>;
+  };
   const info = [competition, status].filter(Boolean).join(' · ');
+  // Las cuotas van fuera del botón que abre el partido (un botón dentro de otro no vale); donde no son botones, abren el partido
+  const open = pick ? undefined : onClick;
   return (
-    <button onClick={onClick} aria-current={active}
-      className={cn('flex h-full w-full cursor-pointer flex-col items-stretch gap-3 rounded-2xl border bg-surface text-left transition hover:bg-zinc-900',
-        featured ? 'p-4' : 'p-3.5', active ? 'border-amber-500/60' : 'border-zinc-800 hover:border-zinc-700')}>
-      <div className="flex min-w-0 items-center gap-2">
-        {state === 'live'
-          ? <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-rose-300"><LiveDot />{time}</span>
-          : state === 'pre'
-            ? <span className="shrink-0 text-[13px] font-semibold text-zinc-100 tnum">{time}</span>
-            : <span className="shrink-0 text-xs text-zinc-500">{time}</span>}
-        {info && <span className="min-w-0 truncate text-xs text-zinc-500">{info}</span>}
-        {tag && <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">{tag}</span>}
-      </div>
-      <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
+    <div className={cn('flex h-full w-full flex-col gap-3 rounded-2xl border bg-surface text-left transition hover:bg-zinc-900',
+      featured ? 'p-4' : 'p-3.5', active ? 'border-amber-500/60' : 'border-zinc-800 hover:border-zinc-700')}>
+      <button onClick={onClick} aria-current={active} className="flex cursor-pointer flex-col items-stretch gap-3 text-left">
+        <div className="flex min-w-0 items-center gap-2">
+          {state === 'live'
+            ? <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-rose-300"><LiveDot />{time}</span>
+            : state === 'pre'
+              ? <span className="shrink-0 text-[13px] font-semibold text-zinc-100 tnum">{time}</span>
+              : <span className="shrink-0 text-xs text-zinc-500">{time}</span>}
+          {info && <span className="min-w-0 truncate text-xs text-zinc-500">{info}</span>}
+          {tag && <span className="ml-auto shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-400">{tag}</span>}
+        </div>
+        <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
+      </button>
       {odds && (odds.x
-        ? <div className="mt-auto grid grid-cols-3 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.x, 'X')}{oddChip(odds.b, oddsTag(b))}</div>
-        : <div className="mt-auto grid grid-cols-2 gap-2 pt-1">{oddChip(odds.a, oddsTag(a))}{oddChip(odds.b, oddsTag(b))}</div>)}
-      {!odds && noOdds && state === 'pre' && <div className="mt-auto flex h-10 items-center justify-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-500">{noOdds}</div>}
-    </button>
+        ? <div onClick={open} className={cn('mt-auto grid grid-cols-3 gap-2 pt-1', open && 'cursor-pointer')}>{oddChip(odds.a, oddsTag(a), 'a')}{oddChip(odds.x, 'X', 'x')}{oddChip(odds.b, oddsTag(b), 'b')}</div>
+        : <div onClick={open} className={cn('mt-auto grid grid-cols-2 gap-2 pt-1', open && 'cursor-pointer')}>{oddChip(odds.a, oddsTag(a), 'a')}{oddChip(odds.b, oddsTag(b), 'b')}</div>)}
+      {!odds && noOdds && state === 'pre' && <div onClick={onClick} className="mt-auto flex h-10 cursor-pointer items-center justify-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-500">{noOdds}</div>}
+    </div>
   );
 }
 
@@ -220,19 +256,19 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   const sa = Number(a.score), sb = Number(b.score);
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
-    <div className={cn('flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
+    <div className={cn('relative flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
       <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
       <div className="min-w-0 max-w-full">
         <div className={cn('flex min-w-0 items-center justify-center gap-0.5', which === 'a' ? 'sm:justify-start' : 'sm:flex-row-reverse sm:justify-start')}>
-          <span className="truncate text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</span>
-          <FavStar name={t.name} logo={t.logo} />
+          <span className="line-clamp-2 text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</span>
+          <FavStar name={t.name} logo={t.logo} className="absolute -right-1 -top-1.5 sm:static" />
         </div>
         {t.short && t.short !== t.name && <div className="hidden text-xs text-zinc-500 sm:block">{t.short}</div>}
       </div>
     </div>
   );
   const num = (t: RowTeam, which: 'a' | 'b') => (
-    <span className={cn('text-4xl font-bold leading-none tracking-tight tnum sm:text-5xl', lead === which ? 'text-amber-400' : lead ? 'text-zinc-500' : 'text-zinc-50')}>{t.score ?? 0}</span>
+    <span className={cn('text-3xl font-bold leading-none tracking-tight tnum sm:text-5xl', lead === which ? 'text-amber-400' : lead ? 'text-zinc-500' : 'text-zinc-50')}>{t.score ?? 0}</span>
   );
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
@@ -246,7 +282,7 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
           </span>
         )}
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 py-5 sm:gap-6 sm:px-5" style={tint(a.color, b.color)}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-5 sm:gap-6 sm:px-5" style={tint(a.color, b.color)}>
         {side(a, 'a')}
         <div className="flex flex-col items-center gap-1.5">
           {state === 'pre'
@@ -260,19 +296,22 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   );
 }
 
+// En el móvil la fila de pestañas se desliza: la elegida se trae a la vista (función fija para no repetirlo en cada pintado)
+const onPick = (el: HTMLButtonElement | null) => el?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+
 // Pestañas bajo el marcador: subrayadas, y si no caben se parten en dos líneas en vez de esconderse de lado.
 // A la derecha, las acciones
 export function SheetTabs<T extends string>({ value, onChange, items, right }: { value: T; onChange: (v: T) => void; items: [T, string][]; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-x-2 gap-y-2 border-t border-zinc-800 px-3 pt-1 sm:px-4">
-      <div className="flex min-w-0 flex-wrap gap-x-4">
+    <div className="flex items-center gap-x-2 border-t border-zinc-800 px-3 pt-1 sm:flex-wrap sm:items-end sm:gap-y-2 sm:px-4">
+      <div className="fade-r flex min-w-0 max-w-full flex-1 gap-x-4 sm:flex-none overflow-x-auto no-scrollbar sm:flex-wrap sm:overflow-visible">
         {items.map(([v, label]) => (
-          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v}
-            className={cn('-mb-px cursor-pointer whitespace-nowrap border-b-2 py-2.5 text-[13px] font-medium transition',
+          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v} ref={value === v ? onPick : undefined}
+            className={cn('cursor-pointer sm:-mb-px whitespace-nowrap border-b-2 py-2.5 text-[13px] font-medium transition',
               value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-100')}>{label}</button>
         ))}
       </div>
-      {right && <div className="ml-auto flex flex-wrap gap-2 pb-2">{right}</div>}
+      {right && <div className="ml-auto flex shrink-0 gap-2 pb-1 sm:flex-wrap sm:pb-2">{right}</div>}
     </div>
   );
 }

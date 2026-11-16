@@ -10,7 +10,8 @@ import type { TennisMatch, TennisPlayer, TennisSurface } from '@/lib/types';
 import { sized, fallbackTo } from '@/lib/img';
 import { LiveDot } from './sport';
 import { AtpLogo, ChallengerLogo, WtaLogo } from './tennis-logos';
-import { panelCls } from './ui';
+import { oddBtn, panelCls } from './ui';
+import { useMedia } from '@/lib/use-media';
 import { useApp } from '@/lib/app-context';
 import { cardNote } from '@/lib/odds-window';
 import { useMember } from './AuthGate';
@@ -65,8 +66,9 @@ function roundsOf(list: TennisMatch[]) {
     .sort((x, y) => first(x[1]) - first(y[1]));
 }
 
-export function TournamentGroup({ id, matches, open, onToggle, odds, selected, onPick }: {
+export function TournamentGroup({ id, matches, open, onToggle, odds, selected, onPick, onOdd }: {
   id: string; matches: TennisMatch[]; open: boolean; onToggle: () => void; odds?: Record<string, Odds>; selected?: string | null; onPick: (m: TennisMatch) => void;
+  onOdd?: (m: TennisMatch, side: 'a' | 'b') => void;
 }) {
   const m0 = matches[0];
   const surface = useSurface(m0);
@@ -93,7 +95,7 @@ export function TournamentGroup({ id, matches, open, onToggle, odds, selected, o
         <div key={round}>
           {round && <div className="border-t border-zinc-800 bg-zinc-900/50 px-3.5 py-1 text-[11px] font-medium text-zinc-400">{round}</div>}
           <div className="divide-y divide-zinc-800/70 border-t border-zinc-800">
-            {list.map(m => <MatchRow key={m.id} m={m} odds={odds?.[m.id]} active={selected === m.id} onClick={() => onPick(m)} />)}
+            {list.map(m => <MatchRow key={m.id} m={m} odds={odds?.[m.id]} active={selected === m.id} onClick={() => onPick(m)} onOdd={onOdd && (s => onOdd(m, s))} />)}
           </div>
         </div>
       ))}
@@ -102,7 +104,9 @@ export function TournamentGroup({ id, matches, open, onToggle, odds, selected, o
 }
 
 // ---------- Partido en la lista ----------
-function MatchRow({ m, odds, active, onClick }: { m: TennisMatch; odds: Odds; active: boolean; onClick: () => void }) {
+// onOdd: en el móvil la cuota de cada jugador es un botón que la añade al cupón; en pantallas anchas la fila entera abre el partido
+function MatchRow({ m, odds, active, onClick, onOdd }: { m: TennisMatch; odds: Odds; active: boolean; onClick: () => void; onOdd?: (side: 'a' | 'b') => void }) {
+  const phone = useMedia('(max-width: 1023px)');
   const st = stOf(m);
   const n = Math.max(m.a.sets.length, m.b.sets.length);
   const pts = st === 'live' ? m.points ?? null : null;
@@ -110,7 +114,7 @@ function MatchRow({ m, odds, active, onClick }: { m: TennisMatch; odds: Odds; ac
   const line = (p: TennisPlayer, o: TennisPlayer, side: 'a' | 'b') => {
     const lost = st === 'post' && !p.winner;
     return (
-      <div className="flex h-[22px] min-w-0 items-center gap-2">
+      <div className="flex h-7 min-w-0 items-center gap-2 lg:h-[22px]">
         <Flag p={p} />
         <span className={cn('min-w-0 flex-1 truncate text-[13px]', p.winner ? 'font-semibold text-zinc-50' : lost ? 'text-zinc-500' : 'text-zinc-100')} title={p.name}>
           {p.name}{p.seed ? <span className="ml-1 text-[11px] text-zinc-500">({p.seed})</span> : null}
@@ -124,22 +128,39 @@ function MatchRow({ m, odds, active, onClick }: { m: TennisMatch; odds: Odds; ac
         ))}
         {pts && <span title="Puntos del juego" className="w-7 shrink-0 rounded bg-amber-500/10 text-center font-score text-[12px] font-semibold leading-[18px] text-amber-300 tnum">{pts[side]}</span>}
         {st !== 'pre' && <span title="Sets" className={cn('w-6 shrink-0 border-l border-zinc-800 text-right font-score text-[14px] font-bold tnum', lost ? 'text-zinc-500' : 'text-zinc-50')}>{setsWon(p)}</span>}
-        {odds && <span className={cn('w-10 shrink-0 text-right font-score text-[12px] tnum', fav === side ? 'font-semibold text-amber-300' : 'text-zinc-400')}>{odd(odds[side])}</span>}
       </div>
     );
   };
+  // Cuotas en su propia columna a la derecha, alineadas con cada jugador
+  const oddCell = (side: 'a' | 'b') => {
+    const o = odds?.[side];
+    if (phone && onOdd && o) {
+      return <button type="button" onClick={() => onOdd(side)} aria-label={`Añadir al cupón: ${side === 'a' ? m.a.name : m.b.name} a ${odd(o)}`}
+        className={cn(oddBtn(fav === side), 'h-6 w-12 shrink-0 text-[12px] active:scale-[.96]')}>{odd(o)}</button>;
+    }
+    return <span className={cn('w-10 shrink-0 text-right font-score text-[12px] tnum', fav === side ? 'font-semibold text-amber-300' : 'text-zinc-400')}>{o ? odd(o) : ''}</span>;
+  };
+  const tap = phone && !!onOdd;
+  // Las cuotas van fuera del botón que abre el partido (un botón dentro de otro no vale); donde no son botones, abren el partido
   return (
-    <button onClick={onClick} aria-current={active}
-      className={cn('relative flex w-full cursor-pointer items-center gap-3 px-3.5 py-2 text-left transition', active ? 'bg-zinc-800/60' : 'hover:bg-zinc-900/70')}>
+    <div className={cn('relative flex w-full items-center transition', active ? 'bg-zinc-800/60' : 'hover:bg-zinc-900/70')}>
       {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-r bg-amber-500" />}
-      <span className="flex w-12 shrink-0 flex-col text-[12px] leading-[18px]">
-        <span className={cn('tnum', st === 'pre' ? 'font-semibold text-zinc-100' : 'text-zinc-500')}>{hhmm(m.date)}</span>
-        {st === 'live'
-          ? <span className="flex min-w-0 items-center gap-1 font-medium text-rose-300"><LiveDot /><span className="truncate">{m.status || 'En juego'}</span></span>
-          : st === 'post' ? <span className="text-zinc-500">Final</span> : null}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">{line(m.a, m.b, 'a')}{line(m.b, m.a, 'b')}</span>
-    </button>
+      <button onClick={onClick} aria-current={active} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3.5 py-2 text-left">
+        <span className="flex w-12 shrink-0 flex-col text-[12px] leading-[18px]">
+          <span className={cn('tnum', st === 'pre' ? 'font-semibold text-zinc-100' : 'text-zinc-500')}>{hhmm(m.date)}</span>
+          {st === 'live'
+            ? <span className="flex min-w-0 items-center gap-1 font-medium text-rose-300"><LiveDot /><span className="truncate">{m.status || 'En juego'}</span></span>
+            : st === 'post' ? <span className="text-zinc-500">Final</span> : null}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">{line(m.a, m.b, 'a')}{line(m.b, m.a, 'b')}</span>
+      </button>
+      {odds && (
+        <div onClick={tap ? undefined : onClick} className={cn('flex shrink-0 flex-col py-2 pr-3.5', !tap && 'cursor-pointer')}>
+          <span className="flex h-7 items-center justify-end lg:h-[22px]">{oddCell('a')}</span>
+          <span className="flex h-7 items-center justify-end lg:h-[22px]">{oddCell('b')}</span>
+        </div>
+      )}
+    </div>
   );
 }
 

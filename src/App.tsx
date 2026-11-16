@@ -64,7 +64,7 @@ function TennisBall({ size = 16 }: { size?: number }) {
 // color: el acento de cada app (el mismo que --acc-500 en index.css), para el punto del selector aunque no esté elegida
 const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: { size?: number }) => ReactNode }[] = [
   { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords },
-  { id: 'basket', label: 'Baloncesto', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
+  { id: 'basket', label: 'Basket', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
   { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall },
   { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon },
   { id: 'mma', label: 'MMA', long: 'MMA', color: '#bf5a5a', icon: MmaIcon }
@@ -91,6 +91,29 @@ export default function App() {
   // Cada sección empieza arriba (si no, se hereda el desplazamiento de la anterior)
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
+  // Cabecera del móvil: se esconde al bajar y vuelve al subir, para que la lista use toda la pantalla.
+  // Es sticky dentro del scroll y se mueve con transform: así no cambia el alto de nada y el scroll no tiembla
+  const [hideHead, setHideHead] = useState(false);
+  // Alto de la cabecera: los filtros fijos de cada lista (StateFilterBar) se colocan bajo ella, o arriba del todo si está escondida
+  const headRef = useRef<HTMLElement>(null);
+  const [headH, setHeadH] = useState(0);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const lastY = useRef(0);
+  const onMainScroll = useCallback((e: React.UIEvent<HTMLElement>) => {
+    const y = e.currentTarget.scrollTop;
+    const dy = y - lastY.current;
+    if (y < 60) setHideHead(false);
+    else if (dy > 10) setHideHead(true);
+    else if (dy < -10) setHideHead(false);
+    if (Math.abs(dy) > 10 || y < 60) lastY.current = y;
+  }, []);
+  useEffect(() => { setHideHead(false); lastY.current = 0; }, [app, view]);
 
   // Los de baloncesto, tenis y fútbol los abre su vista al recibir el id; los de LoL van directos al partido abierto
   const focus = (id: string) => { setFocusId(id); go('matches'); };
@@ -140,8 +163,9 @@ export default function App() {
       <SearchDialog open={searching} onClose={() => setSearching(false)} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="shrink-0 border-b border-zinc-800 bg-zinc-950 px-3 lg:hidden">
-          <div className="flex h-14 items-center gap-3">
+        <main ref={mainRef} onScroll={onMainScroll} style={{ '--head': hideHead ? '0px' : `${headH}px` } as React.CSSProperties} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <header ref={headRef} className={cn('sticky top-0 z-30 shrink-0 border-b border-zinc-800 bg-zinc-950 px-3 pt-[env(safe-area-inset-top)] transition-transform duration-200 lg:hidden', hideHead && '-translate-y-full')}>
+          <div className="flex h-12 items-center gap-3">
             <Logo />
             {member ? <WalletChip onClick={() => go('bets')} /> : (
               <Button className="ml-auto" onClick={() => askLogin()}>Entrar</Button>
@@ -156,10 +180,9 @@ export default function App() {
               <CircleUser size={16} />
             </button>
           </div>
-          <div className="pb-2.5">{appTabs}</div>
+          <div className="pb-2">{appTabs}</div>
         </header>
 
-        <main ref={mainRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div className="mx-auto flex w-full max-w-[1680px] flex-1 items-start gap-5 px-3 py-4 lg:px-5 lg:py-5">
             <div className="min-w-0 flex-1">
               <BackendBanner />

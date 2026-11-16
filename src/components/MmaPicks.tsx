@@ -42,7 +42,7 @@ export const usePicks = (m: MmaFight) => {
 // Lo que dice el modelo sin mirar las cuotas: quién gana, cómo y cuánto dura
 export function PredBlock({ m, pred }: { m: MmaFight; pred: MmaPred }) {
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
       <TvStat label={surname(m.a.name)} value={p0(pred.pA)} sub="gana · modelo" />
       <TvStat label={surname(m.b.name)} value={p0(pred.pB)} sub="gana · modelo" />
       <TvStat label="KO/TKO" value={p0(pred.method.ko)} sub="del combate" />

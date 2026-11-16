@@ -47,7 +47,7 @@ export function TvHeader({ title, sub, media, children }: { title: ReactNode; su
 
 export function TvStat({ label, value, sub, title }: { label: string; value: ReactNode; sub?: ReactNode; title?: string }) {
   return (
-    <div title={title} className="min-w-0 border-l border-zinc-700 pl-3 first:border-0 first:pl-0">
+    <div title={title} className="min-w-0 border-l border-zinc-700 pl-3 first:border-0 first:pl-0 max-sm:odd:border-0 max-sm:odd:pl-0">
       <div className="label-data text-zinc-500">{label}</div>
       <div className="mt-0.5 font-score text-xl font-semibold leading-6 text-zinc-50 tnum">{value}</div>
       {sub != null && sub !== '' && <div className="font-mono text-[11px] text-zinc-500 tnum">{sub}</div>}

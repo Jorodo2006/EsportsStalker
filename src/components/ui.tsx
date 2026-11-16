@@ -6,17 +6,17 @@
 //   - cuotas: ficha rellena con la cifra tabular, la mejor teñida del acento (oddBtn)
 // Esquinas: paneles a 10 px, cajas internas a 8 px y controles a 6 px (radios en index.css).
 // Las etiquetas van en minúsculas normales y gris; nada de letra de máquina ni mayúsculas espaciadas.
-import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
-import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { AlertTriangle, ChevronDown, Loader2, SlidersHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { sized, fallbackTo } from '@/lib/img';
 
 // ---------- estilos compartidos ----------
 export const panelCls = 'rounded-2xl border border-zinc-800 bg-surface';
-export const chip = (on: boolean) => cn('inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-xs font-medium transition disabled:cursor-default disabled:opacity-35',
+export const chip = (on: boolean) => cn('inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-xs font-medium transition disabled:cursor-default disabled:opacity-35 sm:h-8',
   on ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-100');
 export const segWrap = 'inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-zinc-900 p-0.5 ring-1 ring-inset ring-zinc-800 no-scrollbar';
-export const seg = (on: boolean) => cn('shrink-0 cursor-pointer whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition disabled:cursor-default disabled:opacity-35',
+export const seg = (on: boolean) => cn('shrink-0 cursor-pointer whitespace-nowrap rounded-md px-3 py-2 text-[13px] sm:py-1.5 font-medium transition disabled:cursor-default disabled:opacity-35',
   on ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100');
 export const oddBtn = (best?: boolean) => cn('cursor-pointer rounded-md font-mono font-semibold tnum transition disabled:cursor-default',
   best ? 'bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/35 hover:bg-amber-500/20' : 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700');
@@ -124,7 +124,7 @@ export function Dialog({ open, onClose, title, children, wide }: { open: boolean
 
 export function Empty({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center text-sm text-zinc-400">
+    <div className="flex flex-col items-center justify-center gap-2 px-6 py-6 sm:py-10 text-center text-sm text-zinc-400">
       {icon && <div className="text-zinc-600">{icon}</div>}
       <div className="flex flex-col items-center">{children}</div>
     </div>
@@ -165,8 +165,26 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{children}</div>
     </div>
+  );
+}
+
+// Filtros plegables en el móvil: una barra con lo elegido que se despliega al pulsarla, para que el contenido no quede
+// enterrado bajo cinco filas de filtros. Desde `lg` se ven siempre, como antes
+export function FoldOnPhone({ summary, children }: { summary: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className="flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-zinc-800 bg-surface px-3.5 text-left text-[13px] lg:hidden">
+        <SlidersHorizontal size={15} className="shrink-0 text-zinc-400" />
+        <span className="shrink-0 font-medium text-zinc-100">Filtros</span>
+        <span className="min-w-0 flex-1 truncate text-zinc-500">{summary}</span>
+        <ChevronDown size={16} className={cn('shrink-0 text-zinc-500 transition', open && 'rotate-180')} />
+      </button>
+      <div className={cn(open ? 'block' : 'hidden', 'lg:block')}>{children}</div>
+    </>
   );
 }
 
@@ -175,7 +193,7 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
   return (
     <div className={segWrap}>
       {items.map(it => (
-        <button key={it.value} onClick={() => onChange(it.value)} aria-pressed={value === it.value} className={cn(seg(value === it.value), 'px-3 py-1 text-xs')}>
+        <button key={it.value} onClick={() => onChange(it.value)} aria-pressed={value === it.value} className={cn(seg(value === it.value), 'px-3 text-xs')}>
           {it.label}
         </button>
       ))}
