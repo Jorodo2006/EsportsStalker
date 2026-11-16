@@ -50,7 +50,7 @@ export interface Favorite { sport: Sport; name: string; logo?: string }
 // Amigos (server/services/bets/friends.js): los aceptados, las solicitudes que te han hecho y las que has hecho tú
 export interface Friend { id: string; username: string; since: string }
 // De los aceptados, también los mensajes sin leer y cuándo fue lo último de la conversación
-export interface FriendRow extends Friend { unread: number; last: string | null }
+export interface FriendRow extends Friend { unread: number; last: string | null; preview: string | null }
 export interface FriendsList { friends: FriendRow[]; incoming: Friend[]; outgoing: Friend[] }
 // Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni su resultado)
 export type SharedBetData = Pick<Bet, 'sport' | 'date' | 'league' | 'event' | 'market' | 'selection' | 'bookmaker' | 'odds' | 'legs' | 'ref'>;

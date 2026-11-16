@@ -1,10 +1,11 @@
 // Amigos: añadir a alguien por su nombre de usuario (tiene que aceptar), el chat con cada uno y las apuestas que te han
 // enviado, que se pueden copiar a tus apuestas con tu propio importe. Lo que se envía no lleva el importe ni el resultado de
 // quien la envía (server/services/bets/friends.js). Las apuestas se pasan desde el chat o desde Mis apuestas (ShareDialog).
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Copy, MessageCircle, Send, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, MessageCircle, Send, UserMinus, UserPlus, X } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
+import { useMedia } from '@/lib/use-media';
 import { cn, odd } from '@/lib/format';
 import type { Bet, ChatItem, FriendRow, SharedBet, SharedBetData } from '@/lib/types';
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, Loading, PageHeader, panelCls } from '@/components/ui';
@@ -50,12 +51,19 @@ export default function FriendsView() {
   const f = useFriends(), s = useInbox();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [chatId, setChatId] = useState<string | null>(null);
-  const chatWith = f.data?.friends.find(u => u.id === chatId) ?? null;
-  // Al entrar, lo recibido deja de contar como nuevo
+  // Lo abierto a la derecha: el chat con un amigo o las apuestas recibidas. En pantallas anchas siempre hay algo abierto (la
+  // conversación más reciente); en el móvil, primero la lista y al tocar una, la conversación a pantalla completa
+  const wide = useMedia('(min-width: 768px)');
+  const [sel, setSel] = useState<string | null>(null);
+  const friends = f.data?.friends ?? [];
+  // Un amigo que ya no está (lo has quitado) no deja la parte de la derecha vacía
+  const valid = sel === RECEIVED || friends.some(u => u.id === sel) || !f.data;
+  const open = sel && valid ? sel : wide && f.data ? (friends[0]?.id ?? RECEIVED) : null;
+  const chatWith = friends.find(u => u.id === open) ?? null;
+  // Al ver las recibidas, dejan de contar como nuevas
   useEffect(() => {
-    if (s.data?.unseen) window.api.shared.seen().then(() => qc.invalidateQueries({ queryKey: ['shared'] })).catch(() => {});
-  }, [s.data?.unseen, qc]);
+    if (open === RECEIVED && s.data?.unseen) window.api.shared.seen().then(() => qc.invalidateQueries({ queryKey: ['shared'] })).catch(() => {});
+  }, [open, s.data?.unseen, qc]);
 
   const run = async (p: Promise<unknown>, ok?: string) => {
     setBusy(true);
@@ -72,72 +80,116 @@ export default function FriendsView() {
   return (
     <>
       <PageHeader title="Amigos" subtitle="Habla con tus amigos y pasaos las apuestas que registráis" />
-      <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex min-w-0 flex-col gap-5">
-          {chatWith ? <Chat key={chatWith.id} friend={chatWith} onClose={() => setChatId(null)} /> : <Received q={s} />}
-        </div>
-        <div className="flex min-w-0 flex-col gap-5">
-          <Card title="Añadir un amigo">
-            <form onSubmit={add} className="flex flex-col gap-3">
-              <Field label="Su nombre de usuario" hint="El que usa para entrar en Sharpex. Tendrá que aceptar la solicitud.">
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="nombre de usuario" autoComplete="off" maxLength={40} />
-              </Field>
-              <Button type="submit" disabled={busy || !name.trim()}><UserPlus size={15} />Enviar solicitud</Button>
-            </form>
-          </Card>
-          {f.isLoading ? <Loading label="Cargando tus amigos…" /> : f.error ? <ErrorBox error={f.error} /> : <>
-            {!!f.data!.incoming.length && (
-              <Card title="Solicitudes" action={<Badge tone="warning">{f.data!.incoming.length}</Badge>}>
-                <ul className="-mx-5 -my-3 divide-y divide-zinc-800/60">
-                  {f.data!.incoming.map(u => (
-                    <li key={u.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">{u.username}</span>
-                      <Button size="sm" disabled={busy} onClick={() => run(window.api.friends.accept(u.id).then(() => setChatId(u.id)), `${u.username} y tú ya sois amigos`)}><Check size={14} />Aceptar</Button>
-                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(window.api.friends.remove(u.id))}>Rechazar</Button>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-            <Card title="Tus amigos" action={<span className="text-[11px] text-zinc-500">{f.data!.friends.length || 'ninguno'}</span>}>
-              {!f.data!.friends.length && !f.data!.outgoing.length ? (
-                <p className="text-sm text-zinc-400">Todavía no tienes amigos en Sharpex. Añade a alguien por su nombre de usuario y, cuando acepte, podréis escribiros y pasaros apuestas.</p>
-              ) : (
-                <ul className="-mx-5 -my-3 divide-y divide-zinc-800/60">
-                  {f.data!.friends.map(u => (
-                    <li key={u.id} className={cn('flex items-center gap-2 px-5 py-2', chatId === u.id && 'bg-zinc-800/50')}>
-                      <button type="button" onClick={() => setChatId(u.id)} title={`Abrir el chat con ${u.username}`}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left">
-                        <span className={cn('min-w-0 truncate text-sm', u.unread ? 'font-semibold text-zinc-50' : 'text-zinc-100')}>{u.username}</span>
-                        {u.unread > 0 && <span className="rounded bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-300 tnum">{u.unread}</span>}
-                      </button>
-                      <Button size="sm" variant="secondary" onClick={() => setChatId(u.id)}><MessageCircle size={14} />Escribir</Button>
-                      <button type="button" disabled={busy} onClick={() => confirm(`¿Dejar de ser amigo de ${u.username}?`) && run(window.api.friends.remove(u.id))}
-                        title={`Dejar de ser amigo de ${u.username}`} aria-label={`Dejar de ser amigo de ${u.username}`}
-                        className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"><X size={14} /></button>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
+        {(wide || !open) && (
+          <div className="flex min-w-0 flex-col gap-5">
+            {f.isLoading ? <Loading label="Cargando tus amigos…" /> : f.error ? <ErrorBox error={f.error} /> : <>
+              <div className={cn(panelCls, 'overflow-hidden')}>
+                <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-3.5">
+                  <h3 className="text-[15px] font-semibold text-zinc-50">Conversaciones</h3>
+                  <span className="text-[11px] text-zinc-500">{friends.length || ''}</span>
+                </div>
+                <ul className="divide-y divide-zinc-800/60 border-t border-zinc-800/60">
+                  <li>
+                    <ConvRow active={open === RECEIVED} onClick={() => setSel(RECEIVED)} title="Apuestas que te han pasado"
+                      sub={s.data?.list.length ? `${s.data.list.length} en los últimos 60 días` : 'Ninguna todavía'} unread={s.data?.unseen ?? 0} icon={<Send size={14} />} />
+                  </li>
+                  {friends.map(u => (
+                    <li key={u.id}>
+                      <ConvRow active={open === u.id} onClick={() => setSel(u.id)} title={u.username} sub={u.preview ?? 'Todavía no os habéis escrito'}
+                        when={u.last} unread={u.unread} />
                     </li>
                   ))}
                   {f.data!.outgoing.map(u => (
-                    <li key={u.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <span className="min-w-0 flex-1 truncate text-sm text-zinc-400">{u.username}</span>
-                      <span className="text-xs text-zinc-500">pendiente de aceptar</span>
+                    <li key={u.id} className="flex items-center gap-2 px-4 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm text-zinc-400">{u.username}</div>
+                        <div className="text-xs text-zinc-500">pendiente de aceptar</div>
+                      </div>
                       <button type="button" disabled={busy} onClick={() => run(window.api.friends.remove(u.id))} title="Cancelar la solicitud" aria-label={`Cancelar la solicitud a ${u.username}`}
                         className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"><X size={14} /></button>
                     </li>
                   ))}
                 </ul>
+                {!friends.length && !f.data!.outgoing.length && (
+                  <p className="border-t border-zinc-800/60 px-4 py-3 text-[13px] text-zinc-400">Todavía no tienes amigos en Sharpex. Añade a alguien por su nombre de usuario y, cuando acepte, podréis escribiros y pasaros apuestas.</p>
+                )}
+              </div>
+              {!!f.data!.incoming.length && (
+                <Card title="Solicitudes" action={<Badge tone="warning">{f.data!.incoming.length}</Badge>}>
+                  <ul className="-mx-5 -my-3 divide-y divide-zinc-800/60">
+                    {f.data!.incoming.map(u => (
+                      <li key={u.id} className="flex flex-wrap items-center gap-2 px-5 py-2.5">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">{u.username}</span>
+                        <Button size="sm" disabled={busy} onClick={() => run(window.api.friends.accept(u.id).then(() => setSel(u.id)), `${u.username} y tú ya sois amigos`)}><Check size={14} />Aceptar</Button>
+                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(window.api.friends.remove(u.id))}>Rechazar</Button>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
               )}
-              {!!f.data!.friends.length && <p className="mt-3 text-[11px] text-zinc-500">Pulsa en un amigo para abrir el chat.</p>}
+            </>}
+            <Card title="Añadir un amigo">
+              <form onSubmit={add} className="flex flex-col gap-3">
+                <Field label="Su nombre de usuario" hint="El que usa para entrar en Sharpex. Tendrá que aceptar la solicitud.">
+                  <Input value={name} onChange={e => setName(e.target.value)} placeholder="nombre de usuario" autoComplete="off" maxLength={40} />
+                </Field>
+                <Button type="submit" disabled={busy || !name.trim()}><UserPlus size={15} />Enviar solicitud</Button>
+              </form>
             </Card>
-          </>}
-        </div>
+          </div>
+        )}
+        {open && (
+          <div className="min-w-0">
+            {open === RECEIVED ? <Received q={s} back={wide ? undefined : () => setSel(null)} />
+              : chatWith ? <Chat key={chatWith.id} friend={chatWith} back={wide ? undefined : () => setSel(null)}
+                onRemove={() => confirm(`¿Dejar de ser amigo de ${chatWith.username}?`) && run(window.api.friends.remove(chatWith.id)).then(() => setSel(null))} />
+              : null}
+          </div>
+        )}
       </div>
     </>
   );
 }
 
+const RECEIVED = 'recibidas';
+// Hora de lo último: hoy, la hora; esta semana, el día; si no, la fecha
+function ago(iso: string) {
+  const d = new Date(iso), days = (Date.now() - +d) / 864e5;
+  const tz = { timeZone: 'Europe/Madrid' } as const;
+  if (d.toLocaleDateString('es-ES', tz) === new Date().toLocaleDateString('es-ES', tz)) return d.toLocaleTimeString('es-ES', { ...tz, hour: '2-digit', minute: '2-digit' });
+  if (days < 6) return d.toLocaleDateString('es-ES', { ...tz, weekday: 'short' });
+  return d.toLocaleDateString('es-ES', { ...tz, day: 'numeric', month: 'short' });
+}
+
+// Una fila de la lista de conversaciones: quién, la última línea, cuándo y lo que no has leído
+function ConvRow({ active, onClick, title, sub, when, unread, icon }: { active: boolean; onClick: () => void; title: string; sub: string; when?: string | null; unread: number; icon?: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} aria-current={active || undefined}
+      className={cn('flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left transition', active ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/40')}>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className={cn('flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm', unread ? 'font-semibold text-zinc-50' : 'font-medium text-zinc-100')}>
+            {icon && <span className="shrink-0 text-zinc-500">{icon}</span>}<span className="truncate">{title}</span>
+          </span>
+          {when && <span className={cn('shrink-0 text-[11px] tnum', unread ? 'text-amber-300' : 'text-zinc-500')}>{ago(when)}</span>}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2">
+          <span className={cn('min-w-0 flex-1 truncate text-xs', unread ? 'text-zinc-300' : 'text-zinc-500')}>{sub}</span>
+          {unread > 0 && <span className="shrink-0 rounded bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-300 tnum">{unread}</span>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Botón de volver a la lista (sólo en el móvil, donde la conversación ocupa toda la pantalla)
+const Back = ({ onClick }: { onClick: () => void }) => (
+  <Button variant="ghost" size="icon" onClick={onClick} aria-label="Volver a las conversaciones" title="Volver"><ArrowLeft size={17} /></Button>
+);
+
 // Las apuestas que te han enviado
-function Received({ q }: { q: ReturnType<typeof useInbox> }) {
+function Received({ q, back }: { q: ReturnType<typeof useInbox>; back?: () => void }) {
   const qc = useQueryClient();
   const { toast } = useApp();
   const copyBet = useCopyBet();
@@ -145,7 +197,7 @@ function Received({ q }: { q: ReturnType<typeof useInbox> }) {
   const hide = (x: SharedBet) => window.api.shared.hide(x.id).then(() => qc.invalidateQueries({ queryKey: ['shared'] })).catch(e => toast(errMsg(e)));
 
   return (
-    <Card title="Apuestas que te han pasado" action={<span className="text-[11px] text-zinc-500">de los últimos 60 días</span>}>
+    <Card title={<>{back && <span className="-my-1 -ml-2"><Back onClick={back} /></span>}Apuestas que te han pasado</>} action={<span className="text-[11px] text-zinc-500">de los últimos 60 días</span>}>
       {q.isLoading ? <Loading label="Cargando…" /> : q.error ? <ErrorBox error={q.error} /> : !q.data!.list.length ? (
         <Empty icon={<Send size={20} />}>Cuando un amigo te pase una apuesta, saldrá aquí. Podrás copiarla a tus apuestas con tu propio importe.</Empty>
       ) : (
@@ -192,7 +244,7 @@ const dayOf = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { weekd
 const hourOf = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
 
 // El chat con un amigo: mensajes y apuestas pasadas por fecha. Los nuevos llegan por el aviso chat:new (FriendsBadge)
-function Chat({ friend, onClose }: { friend: FriendRow; onClose: () => void }) {
+function Chat({ friend, back, onRemove }: { friend: FriendRow; back?: () => void; onRemove: () => void }) {
   const qc = useQueryClient();
   const { toast } = useApp();
   const copyBet = useCopyBet();
@@ -223,9 +275,11 @@ function Chat({ friend, onClose }: { friend: FriendRow; onClose: () => void }) {
   return (
     <div className={cn(panelCls, 'flex flex-col overflow-hidden')}>
       <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2.5">
-        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Volver a las apuestas recibidas" title="Volver"><ArrowLeft size={17} /></Button>
+        {back ? <Back onClick={back} /> : <span className="w-1" />}
         <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-50">{friend.username}</span>
-        <Button size="sm" variant="secondary" onClick={() => setPick(true)} title="Elige una de tus apuestas para pasársela"><Send size={14} />Pasar una apuesta</Button>
+        <Button size="sm" variant="secondary" onClick={() => setPick(true)} title="Elige una de tus apuestas para pasársela"><Send size={14} /><span className="hidden sm:inline">Pasar una apuesta</span><span className="sm:hidden">Apuesta</span></Button>
+        <button type="button" onClick={onRemove} title={`Dejar de ser amigo de ${friend.username}`} aria-label={`Dejar de ser amigo de ${friend.username}`}
+          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"><UserMinus size={15} /></button>
       </div>
       <div ref={box} className="flex h-[55vh] min-h-72 flex-col gap-1.5 overflow-y-auto px-3 py-3 sm:px-4">
         {q.isLoading ? <Loading label="Cargando la conversación…" /> : q.error ? <ErrorBox error={q.error} /> : !items.length ? (

@@ -18,21 +18,30 @@ const THREAD = 150; // lo que se enseña de una conversación
 const txt = (v, max) => String(v ?? '').trim().slice(0, max);
 const idOf = v => { const s = String(v ?? ''); if (!/^\d{1,18}$/.test(s)) throw fail('Usuario no válido'); return s; };
 
-// unread: mensajes suyos sin leer; last: lo último de la conversación (mensaje o apuesta), para ordenar como un chat
+// unread: mensajes suyos sin leer; last: lo último de la conversación (mensaje o apuesta), para ordenar como un chat;
+// preview: esa última línea, para la lista de conversaciones (sólo de las de los dos, como el resto)
 async function list(me) {
   const { rows } = await query(`
     SELECT f.status, f.user_id = $1 AS mine, u.id, u.username, coalesce(f.accepted_at, f.created_at) AS since,
       (SELECT count(*)::int FROM bets.messages m WHERE m.to_user = $1 AND m.from_user = u.id AND m.read_at IS NULL) AS unread,
-      greatest(
-        (SELECT max(created_at) FROM bets.messages m WHERE (m.from_user = $1 AND m.to_user = u.id) OR (m.from_user = u.id AND m.to_user = $1)),
-        (SELECT max(created_at) FROM bets.shared_bets s WHERE (s.from_user = $1 AND s.to_user = u.id) OR (s.from_user = u.id AND s.to_user = $1))
-      ) AS last
+      l.created_at AS last, l.kind AS last_kind, l.body AS last_body, l.from_user = $1 AS last_mine
     FROM bets.friends f JOIN bets.users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
+    LEFT JOIN LATERAL (
+      SELECT * FROM (
+        (SELECT 'msg' AS kind, body, from_user, created_at FROM bets.messages m
+          WHERE (m.from_user = $1 AND m.to_user = u.id) OR (m.from_user = u.id AND m.to_user = $1) ORDER BY created_at DESC LIMIT 1)
+        UNION ALL
+        (SELECT 'bet', '', from_user, created_at FROM bets.shared_bets s
+          WHERE (s.from_user = $1 AND s.to_user = u.id) OR (s.from_user = u.id AND s.to_user = $1) ORDER BY created_at DESC LIMIT 1)
+      ) x ORDER BY created_at DESC LIMIT 1
+    ) l ON true
     WHERE f.user_id = $1 OR f.friend_id = $1 ORDER BY lower(u.username)`, [me]);
   const one = r => ({ id: String(r.id), username: r.username, since: r.since });
   const byLast = (a, b) => (+new Date(b.last || 0) - +new Date(a.last || 0)) || a.username.localeCompare(b.username);
+  const preview = r => (!r.last_kind ? null : r.last_kind === 'bet' ? (r.last_mine ? 'Le pasaste una apuesta' : 'Te ha pasado una apuesta')
+    : `${r.last_mine ? 'Tú: ' : ''}${String(r.last_body).replace(/\s+/g, ' ').slice(0, 90)}`);
   return {
-    friends: rows.filter(r => r.status === 'accepted').sort(byLast).map(r => ({ ...one(r), unread: r.unread, last: r.last })),
+    friends: rows.filter(r => r.status === 'accepted').sort(byLast).map(r => ({ ...one(r), unread: r.unread, last: r.last, preview: preview(r) })),
     incoming: rows.filter(r => r.status === 'pending' && !r.mine).map(one),
     outgoing: rows.filter(r => r.status === 'pending' && r.mine).map(one)
   };
