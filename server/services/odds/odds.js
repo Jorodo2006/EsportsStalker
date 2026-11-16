@@ -356,9 +356,11 @@ function winamaxFootballInto(book, match, st, found) {
     }
     if (ou && /^n[uú]mero total de goles$/.test(lo)) { ouAdd('total'); continue; }
     if (ou && goalsSide) { ouAdd('team_total', goalsSide); continue; }
-    if (ou && /^n[uú]mero total de c[oó]rners$/.test(lo)) { ouAdd('corners'); continue; }
+    if (ou && /^n[uú]mero total (de )?c[oó]rner(e)?s$/.test(lo)) { ouAdd('corners'); continue; } // Winamax: "Número total córneres"
     if (ou && /^n[uú]mero total de tarjetas$/.test(lo)) { ouAdd('cards'); continue; }
-    if (bet.template === 'asian_handicap' && outs.length === 2 && /^h[aá]ndicap asi[aá]tico/.test(lo)) {
+    // Sólo el de goles: "Hándicap asiático córner" metía sus cuotas en la fila del hándicap de goles. El de córners va como
+    // mercado propio
+    if (bet.template === 'asian_handicap' && outs.length === 2 && /^h[aá]ndicap asi[aá]tico( \(handicap\))?$/.test(lo)) {
       // "Italia -1.5" / "Francia +1.5": el lado sale del nombre y la línea, del número del final
       const sides = outs.map(x => fbSide(match, String(x.label).replace(/\s*[-+]?\d+(?:[.,]\d+)?\s*$/, '')));
       const ia = sides.indexOf('a'), ib = sides.indexOf('b');

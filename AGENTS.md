@@ -187,7 +187,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Lectores de las casas** (`marcador.js`, `server/lector/runner.js` y `background.js`): dependen del HTML y del
   socket de Winamax y Betway, que cambian sin aviso. Cuando no encuentran algo guardan
   `capturas/captura-<casa>-<nombre>.json`; úsalas para ajustar selectores. `marcador.js` se monta en el contenedor
-  `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio.
+  `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio. El socket de Winamax manda el
+  partido a trozos (unos 5 mercados y luego el resto): el lector espera a tener `moreBets + 1`; no lo cambies por una espera fija.
 - **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
   salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
   clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`. Si el partido no

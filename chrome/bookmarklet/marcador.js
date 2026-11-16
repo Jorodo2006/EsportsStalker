@@ -76,14 +76,20 @@
         Object.keys(bets).length + ' mercados de ' + m.title);
     };
     var send = function () { if (sent) return; sent = true; ws.send('42' + JSON.stringify(['m', { route: 'match:' + id }])); };
-    setTimeout(finish, 10000);
+    // El partido llega a trozos: primero los mercados principales (unos 5) y luego el resto, a veces más de un segundo después.
+    // moreBets dice cuántos más tiene, así que sólo se da por leído cuando están todos; si no llegan, a los 20 s con lo que haya
+    setTimeout(finish, 20000);
     ws.onmessage = function (ev) {
       var d = String(ev.data);
       if (d.charAt(0) === '0') setTimeout(send, 800);
       else if (d === '40') send();
       else if (d.slice(0, 2) === '42') {
         try { var x = JSON.parse(d.slice(2)); if (x[0] === 'm' && x[1]) merge(state, x[1]); } catch (e) {}
-        if (sent && state.matches && state.matches[id] && state.matches[id].bets) { clearTimeout(quiet); quiet = setTimeout(finish, 1200); }
+        var m = sent && state.matches && state.matches[id];
+        if (m && m.bets) {
+          var whole = m.bets.length >= (Number(m.moreBets) || 0) + 1;
+          clearTimeout(quiet); quiet = setTimeout(finish, whole ? 800 : 6000);
+        }
       }
     };
     ws.onerror = function () { say('No he podido conectar con Winamax.'); fin(false, 'no conecta con Winamax'); };
