@@ -24,6 +24,10 @@ export const STATUS_LABEL: Record<BetStatus, string> = {
   pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula',
   cashout: 'Cash out', halfwon: 'Medio ganada', halflost: 'Medio perdida'
 };
+// El color de la etiqueta (Badge) de cada estado: en Mis apuestas y en las que se pasan los amigos
+export const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
+  pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'neutral', cashout: 'warning'
+};
 
 // Beneficio de una apuesta resuelta (las pendientes y nulas cuentan 0)
 export function betProfit(b: Bet) {

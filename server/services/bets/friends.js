@@ -1,6 +1,8 @@
 // Amigos, apuestas compartidas (migración 013) y chat (014). Cada usuario añade a otro por su nombre; cuando el otro acepta,
-// cada uno puede escribirle y enviarle apuestas suyas. Lo que se envía es una copia de lo que se apuesta (sin el importe, el resultado ni las notas
-// de quien la envía) y el amigo la puede copiar a sus apuestas con su propio importe.
+// cada uno puede escribirle y enviarle apuestas suyas. Lo que se envía es una copia de lo que se apuesta (sin el importe, el cobro
+// ni las notas de quien la envía) y el amigo la puede copiar a sus apuestas con su propio importe mientras esté pendiente.
+// El estado (ganada, perdida, pendiente…) es el de ahora: se lee de la apuesta original (bet_id, migración 015) al pedir la lista
+// o el chat, y sólo el estado, de una apuesta que quien la tiene le pasó a quien la pide (stateSql).
 // El usuario sale siempre del gateway (who(req) en index.js), nunca de lo que mande el navegador: sólo se ven las solicitudes
 // y las recibidas propias, sólo se envían apuestas propias y sólo a amigos aceptados.
 const { query, tx, notify } = require('../../shared/db');
@@ -95,7 +97,8 @@ async function remove(me, otherId) {
   return list(me);
 }
 
-// Lo que se envía de una apuesta: lo apostado, sin el importe, el estado, el cobro ni las notas
+// Lo que se guarda de una apuesta al enviarla: lo apostado, sin el importe, el estado, el cobro ni las notas. El estado no va en la
+// copia porque cambia: sale de la apuesta original cada vez (stateOf)
 function shareable(b) {
   const legs = Array.isArray(b.legs) && b.legs.length > 1
     ? b.legs.map(l => ({ event: l.event, league: l.league, market: l.market, selection: l.selection, odds: l.odds, sport: l.sport, ...(l.ref ? { ref: l.ref } : {}) }))
@@ -119,22 +122,39 @@ async function share(me, betId, to, note) {
   if (!ok.length) throw fail('Sólo puedes enviar apuestas a tus amigos');
   const payload = JSON.stringify(shareable(bet)), msg = txt(note, 200);
   for (const id of ok) {
-    await query('INSERT INTO bets.shared_bets (from_user, to_user, bet, note) VALUES ($1, $2, $3::jsonb, $4)', [me, id, payload, msg]);
+    await query('INSERT INTO bets.shared_bets (from_user, to_user, bet, note, bet_id) VALUES ($1, $2, $3::jsonb, $4, $5)', [me, id, payload, msg, bet.id]);
     notify('chat:new', { to: id });
   }
   return { sent: ok.length };
 }
 
+// El estado de ahora de la apuesta original de cada fila s de bets.shared_bets: sólo si es de quien la pasó (ob.user_id =
+// s.from_user), y sólo el estado y el de cada selección; nada del importe, el cobro ni las notas
+const stateJoin = 'LEFT JOIN bets.bets ob ON ob.id = s.bet_id AND ob.user_id = s.from_user';
+const stateSql = `ob.status AS orig_status,
+  (SELECT json_agg(l.status ORDER BY l.pos) FROM bets.bet_legs l WHERE l.bet_id = ob.id) AS orig_legs`;
+
+// status null: no se sabe (la original se borró o se pasó antes de guardar de cuál salía). Sólo se puede copiar mientras no
+// está resuelta: una ganada o perdida ya no se puede apostar, se enseña cómo acabó
+function stateOf(r) {
+  const status = r.orig_status || null;
+  return {
+    status,
+    legStatus: Array.isArray(r.orig_legs) && r.orig_legs.length > 1 ? r.orig_legs : null,
+    open: !status || status === 'pending'
+  };
+}
+
 // Las recibidas (de los últimos 60 días, sin las quitadas) y cuántas no se han visto
 async function inbox(me) {
   const { rows } = await query(`
-    SELECT s.id, s.bet, s.note, s.created_at, s.seen_at, s.copied_at, u.username AS from_name
-    FROM bets.shared_bets s JOIN bets.users u ON u.id = s.from_user
+    SELECT s.id, s.bet, s.note, s.created_at, s.seen_at, s.copied_at, u.username AS from_name, ${stateSql}
+    FROM bets.shared_bets s JOIN bets.users u ON u.id = s.from_user ${stateJoin}
     WHERE s.to_user = $1 AND s.hidden_at IS NULL AND s.created_at > now() - make_interval(days => $2)
     ORDER BY s.created_at DESC LIMIT 100`, [me, KEEP_DAYS]);
   return {
     unseen: rows.filter(r => !r.seen_at).length,
-    list: rows.map(r => ({ id: String(r.id), from: r.from_name, bet: r.bet, note: r.note, created: r.created_at, seen: !!r.seen_at, copied: !!r.copied_at }))
+    list: rows.map(r => ({ id: String(r.id), from: r.from_name, bet: r.bet, note: r.note, created: r.created_at, seen: !!r.seen_at, copied: !!r.copied_at, ...stateOf(r) }))
   };
 }
 
@@ -154,13 +174,14 @@ async function thread(me, otherId) {
   const [m, b] = await Promise.all([
     query(`SELECT id, from_user, body, created_at, read_at FROM bets.messages WHERE ${pair} ORDER BY created_at DESC LIMIT ${THREAD}`, [me, other]),
     // Las que has quitado de tu lista de recibidas siguen en el chat: quitarlas es sólo de esa lista
-    query(`SELECT id, from_user, bet, note, created_at, copied_at FROM bets.shared_bets WHERE ${pair} ORDER BY created_at DESC LIMIT ${THREAD}`, [me, other])
+    query(`SELECT s.id, s.from_user, s.bet, s.note, s.created_at, s.copied_at, ${stateSql} FROM bets.shared_bets s ${stateJoin}
+      WHERE (s.from_user = $1 AND s.to_user = $2) OR (s.from_user = $2 AND s.to_user = $1) ORDER BY s.created_at DESC LIMIT ${THREAD}`, [me, other])
   ]);
   const items = [
     ...m.rows.map(r => ({ kind: 'msg', id: `m${r.id}`, mine: String(r.from_user) === String(me), body: r.body, created: r.created_at, read: !!r.read_at })),
     ...b.rows.map(r => {
       const mine = String(r.from_user) === String(me);
-      return { kind: 'bet', id: `b${r.id}`, shareId: String(r.id), mine, bet: r.bet, note: r.note, created: r.created_at, copied: !mine && !!r.copied_at };
+      return { kind: 'bet', id: `b${r.id}`, shareId: String(r.id), mine, bet: r.bet, note: r.note, created: r.created_at, copied: !mine && !!r.copied_at, ...stateOf(r) };
     })
   ].sort((x, y) => +new Date(x.created) - +new Date(y.created)).slice(-THREAD);
   const [read] = await Promise.all([
@@ -186,4 +207,4 @@ async function send(me, otherId, text) {
   return { kind: 'msg', id: `m${r.id}`, mine: true, body, created: r.created_at, read: false };
 }
 
-module.exports = { list, request, accept, remove, share, inbox, seen, copied: mark('copied_at'), hide: mark('hidden_at'), shareable, thread, send };
+module.exports = { list, request, accept, remove, share, inbox, seen, copied: mark('copied_at'), hide: mark('hidden_at'), shareable, stateOf, thread, send };

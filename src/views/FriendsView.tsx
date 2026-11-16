@@ -1,13 +1,14 @@
 // Amigos: añadir a alguien por su nombre de usuario (tiene que aceptar), el chat con cada uno y las apuestas que te han
-// enviado, que se pueden copiar a tus apuestas con tu propio importe. Lo que se envía no lleva el importe ni el resultado de
-// quien la envía (server/services/bets/friends.js). Las apuestas se pasan desde el chat o desde Mis apuestas (ShareDialog).
+// enviado, con cómo van ahora (ganada, perdida, pendiente…). Mientras están pendientes se pueden copiar a tus apuestas con tu
+// propio importe; una ya resuelta, no. Lo que se envía no lleva el importe ni las notas de quien la envía
+// (server/services/bets/friends.js). Las apuestas se pasan desde el chat o desde Mis apuestas (ShareDialog).
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Copy, MessageCircle, Send, UserMinus, UserPlus, X } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { useMedia } from '@/lib/use-media';
-import { cn, odd } from '@/lib/format';
-import type { Bet, ChatItem, FriendRow, SharedBet, SharedBetData } from '@/lib/types';
+import { STATUS_LABEL, STATUS_TONE, cn, odd } from '@/lib/format';
+import type { Bet, ChatItem, FriendRow, LegStatus, SharedBet, SharedBetData, SharedState } from '@/lib/types';
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, Loading, PageHeader, panelCls } from '@/components/ui';
 
 const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', lol: 'LoL', mix: 'Varios' };
@@ -199,7 +200,7 @@ function Received({ q, back }: { q: ReturnType<typeof useInbox>; back?: () => vo
   return (
     <Card title={<>{back && <span className="-my-1 -ml-2"><Back onClick={back} /></span>}Apuestas que te han pasado</>} action={<span className="text-[11px] text-zinc-500">de los últimos 60 días</span>}>
       {q.isLoading ? <Loading label="Cargando…" /> : q.error ? <ErrorBox error={q.error} /> : !q.data!.list.length ? (
-        <Empty icon={<Send size={20} />}>Cuando un amigo te pase una apuesta, saldrá aquí. Podrás copiarla a tus apuestas con tu propio importe.</Empty>
+        <Empty icon={<Send size={20} />}>Cuando un amigo te pase una apuesta, saldrá aquí con cómo va. Mientras esté pendiente, podrás copiarla a tus apuestas con tu propio importe.</Empty>
       ) : (
         <ul className="-mx-5 -my-3 divide-y divide-zinc-800/60">
           {q.data!.list.map(x => {
@@ -213,17 +214,18 @@ function Received({ q, back }: { q: ReturnType<typeof useInbox>; back?: () => vo
                     {!x.seen && <Badge tone="warning">nueva</Badge>}
                   </div>
                   <div className="mt-0.5 truncate text-sm font-medium text-zinc-50">{combo ? `Combinada de ${b.legs!.length}` : b.selection}</div>
-                  <div className="truncate text-xs text-zinc-400">
-                    {combo ? b.legs!.map(l => `${l.selection} (${l.event})`).join(' · ') : [b.market, b.event].filter(Boolean).join(' · ')}
-                  </div>
+                  <BetSub b={b} s={x} />
                   {x.note && <div className="mt-1 text-xs italic text-zinc-400">«{x.note}»</div>}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <BetState s={x} />
                   <span className="font-score text-lg font-semibold text-zinc-50 tnum">{odd(b.odds)}</span>
                   {b.bookmaker && <span className="text-xs text-zinc-500">{b.bookmaker}</span>}
-                  <Button size="sm" variant={x.copied ? 'secondary' : 'primary'} onClick={() => copy(x)} title="Abre el formulario con esta apuesta: pon tu importe y guárdala">
-                    <Copy size={14} />{x.copied ? 'Copiar otra vez' : 'Copiar a mis apuestas'}
-                  </Button>
+                  {x.open && (
+                    <Button size="sm" className="whitespace-nowrap" variant={x.copied ? 'secondary' : 'primary'} onClick={() => copy(x)} title="Abre el formulario con esta apuesta: pon tu importe y guárdala">
+                      <Copy size={14} />{x.copied ? 'Copiar otra vez' : 'Copiar a mis apuestas'}
+                    </Button>
+                  )}
                   <button type="button" onClick={() => hide(x)} title="Quitar de la lista" aria-label="Quitar de la lista"
                     className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"><X size={14} /></button>
                 </div>
@@ -240,6 +242,25 @@ function Received({ q, back }: { q: ReturnType<typeof useInbox>; back?: () => vo
 // Lo apostado, en una línea (para el chat)
 const betLine = (b: SharedBetData) => ((b.legs?.length ?? 0) > 1 ? `Combinada de ${b.legs!.length}` : b.selection);
 const betSub = (b: SharedBetData) => ((b.legs?.length ?? 0) > 1 ? b.legs!.map(l => `${l.selection} (${l.event})`).join(' · ') : [b.market, b.event].filter(Boolean).join(' · '));
+
+// Cómo va ahora la apuesta que se pasó; nada si no se sabe (la original se borró o se pasó antes de guardarlo)
+function BetState({ s }: { s: SharedState }) {
+  return s.status ? <Badge tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Badge> : null;
+}
+
+// Debajo de lo apostado: en una combinada, cada selección con el color de cómo ha ido; en una simple, el mercado y el partido
+const LEG_TONE: Record<LegStatus, string> = { pending: '', won: 'text-emerald-400', lost: 'text-rose-400', void: 'text-zinc-500 line-through' };
+function BetSub({ b, s, extra = '' }: { b: SharedBetData; s: SharedState; extra?: string }) {
+  if ((b.legs?.length ?? 0) < 2) return <div className="truncate text-xs text-zinc-400">{betSub(b)}{extra}</div>;
+  return (
+    <div className="truncate text-xs text-zinc-400">
+      {b.legs!.map((l, i) => (
+        <span key={i}>{i > 0 && ' · '}<span className={LEG_TONE[s.legStatus?.[i] ?? 'pending']}>{l.selection} ({l.event})</span></span>
+      ))}
+      {extra}
+    </div>
+  );
+}
 const dayOf = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Madrid' });
 const hourOf = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
 
@@ -298,13 +319,14 @@ function Chat({ friend, back, onRemove }: { friend: FriendRow; back?: () => void
                 ) : (
                   <div className={cn('w-full max-w-[85%] rounded-[10px] border px-3 py-2 sm:max-w-[70%]', x.mine ? 'border-zinc-700 bg-zinc-800/60' : 'border-zinc-700 bg-zinc-900')}>
                     <div className="text-[11px] text-zinc-500">{x.mine ? 'Le pasaste una apuesta' : `${friend.username} te ha pasado una apuesta`} · {hourOf(x.created)}</div>
-                    <div className="mt-0.5 flex items-baseline gap-2">
+                    <div className="mt-0.5 flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-50">{betLine(x.bet)}</span>
+                      <BetState s={x} />
                       <span className="font-score text-base font-semibold text-zinc-50 tnum">{odd(x.bet.odds)}</span>
                     </div>
-                    <div className="truncate text-xs text-zinc-400">{betSub(x.bet)}{x.bet.bookmaker ? ` · ${x.bet.bookmaker}` : ''}</div>
+                    <BetSub b={x.bet} s={x} extra={x.bet.bookmaker ? ` · ${x.bet.bookmaker}` : ''} />
                     {x.note && <div className="mt-1 text-xs italic text-zinc-400">«{x.note}»</div>}
-                    {!x.mine && (
+                    {!x.mine && x.open && (
                       <Button size="sm" className="mt-2" variant={x.copied ? 'secondary' : 'primary'} onClick={() => copyBet(x.shareId, friend.username, x.bet, x.note)}
                         title="Abre el formulario con esta apuesta: pon tu importe y guárdala"><Copy size={14} />{x.copied ? 'Copiar otra vez' : 'Copiar a mis apuestas'}</Button>
                     )}
@@ -346,7 +368,7 @@ function PickBet({ open, friend, onClose }: { open: boolean; friend: FriendRow; 
     <Dialog open={open} onClose={onClose} title={`Pasar una apuesta a ${friend.username}`}>
       <div className="flex flex-col gap-3">
         <Field label="Mensaje (opcional)"><Input value={note} onChange={e => setNote(e.target.value)} maxLength={200} placeholder="Por qué te gusta" /></Field>
-        <p className="text-[11px] text-zinc-500">Le llega lo apostado, sin tu importe ni tu resultado.</p>
+        <p className="text-[11px] text-zinc-500">Le llega lo apostado y cómo va, sin tu importe ni tus notas. Si ya está resuelta, la verá pero no podrá copiarla.</p>
         {q.isLoading ? <Loading label="Cargando tus apuestas…" /> : !list.length ? <p className="text-sm text-zinc-400">Todavía no has registrado ninguna apuesta.</p> : (
           <ul className="-mx-1 flex max-h-[50vh] flex-col overflow-y-auto">
             {list.map(b => (
@@ -357,7 +379,7 @@ function PickBet({ open, friend, onClose }: { open: boolean; friend: FriendRow; 
                     <div className="truncate text-sm font-medium text-zinc-100">{betLine(b)}</div>
                     <div className="truncate text-xs text-zinc-500">{betSub(b)}</div>
                   </div>
-                  {b.status === 'pending' && <Badge tone="warning">pendiente</Badge>}
+                  <Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge>
                   <span className="font-score text-sm font-semibold text-zinc-50 tnum">{odd(b.odds)}</span>
                 </button>
               </li>
@@ -391,7 +413,7 @@ export function ShareDialog({ bet, onClose }: { bet: Bet | null; onClose: () => 
         <div className="rounded-md border border-zinc-800 px-3 py-2 text-sm">
           <div className="truncate font-medium text-zinc-50">{(bet.legs?.length ?? 0) > 1 ? `Combinada de ${bet.legs!.length}` : bet.selection} <span className="tnum text-zinc-400">· {odd(bet.odds)}</span></div>
           <div className="truncate text-xs text-zinc-500">{[bet.market, bet.event].filter(Boolean).join(' · ')}</div>
-          <div className="mt-1 text-[11px] text-zinc-500">Le llega lo apostado, sin tu importe ni tu resultado.</div>
+          <div className="mt-1 text-[11px] text-zinc-500">Le llega lo apostado y cómo va, sin tu importe ni tus notas. Si ya está resuelta, la verá pero no podrá copiarla.</div>
         </div>
         {f.isLoading ? <Loading label="Cargando tus amigos…" /> : !friends.length ? (
           <p className="text-sm text-zinc-400">Todavía no tienes amigos. <button type="button" className="cursor-pointer text-amber-400 underline" onClick={() => { onClose(); go('friends'); }}>Añade alguno</button> y, cuando acepte, podrás pasarle apuestas.</p>

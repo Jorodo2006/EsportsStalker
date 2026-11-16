@@ -4,14 +4,11 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Send, Target, Upload, Wallet, X, Zap } from 'lucide-react';
 import { ShareDialog } from './FriendsView';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
-import { STATUS_LABEL, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
+import { STATUS_LABEL, STATUS_TONE, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
 import { ModelAccuracy } from '@/components/ModelAccuracy';
 import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
 
-const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
-  pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'neutral', cashout: 'warning'
-};
 
 
 const APP_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };

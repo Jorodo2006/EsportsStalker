@@ -52,13 +52,16 @@ export interface Friend { id: string; username: string; since: string }
 // De los aceptados, también los mensajes sin leer y cuándo fue lo último de la conversación
 export interface FriendRow extends Friend { unread: number; last: string | null; preview: string | null }
 export interface FriendsList { friends: FriendRow[]; incoming: Friend[]; outgoing: Friend[] }
-// Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni su resultado)
+// Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni sus notas)
 export type SharedBetData = Pick<Bet, 'sport' | 'date' | 'league' | 'event' | 'market' | 'selection' | 'bookmaker' | 'odds' | 'legs' | 'ref'>;
-export interface SharedBet { id: string; from: string; bet: SharedBetData; note: string; created: string; seen: boolean; copied: boolean }
+// Cómo va ahora la apuesta original (status null: no se sabe) y, en una combinada, cada selección. open: se puede copiar,
+// porque no está resuelta (server/services/bets/friends.js, stateOf)
+export interface SharedState { status: BetStatus | null; legStatus: LegStatus[] | null; open: boolean }
+export interface SharedBet extends SharedState { id: string; from: string; bet: SharedBetData; note: string; created: string; seen: boolean; copied: boolean }
 // La conversación con un amigo: mensajes y apuestas pasadas, por fecha (mine: lo has enviado tú)
 export type ChatItem =
   | { kind: 'msg'; id: string; mine: boolean; body: string; created: string; read: boolean }
-  | { kind: 'bet'; id: string; shareId: string; mine: boolean; bet: SharedBetData; note: string; created: string; copied: boolean };
+  | ({ kind: 'bet'; id: string; shareId: string; mine: boolean; bet: SharedBetData; note: string; created: string; copied: boolean } & SharedState);
 export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
@@ -463,7 +466,7 @@ export interface Api {
     // Recomendaciones del modelo, para medir si acierta (no son de ningún usuario)
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
     predictions(): Promise<PredictionReport>;
-    // Enviar una apuesta tuya a amigos (sin tu importe ni tu resultado)
+    // Enviar una apuesta tuya a amigos (sin tu importe ni tus notas; ven cómo va)
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
   };
   friends: {

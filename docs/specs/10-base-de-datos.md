@@ -228,8 +228,12 @@ rechazar, cancelar o dejar de ser amigos, y con cualquiera de los dos usuarios (
 Apuestas que un usuario le ha pasado a un amigo (migración `013_amigos.sql`). `bet` es una copia en JSON de lo apostado
 (deporte, fecha, liga, partido, mercado, selección, casa, cuota, `ref` y, si es combinada, sus selecciones sin su estado), **sin
 el importe, el estado, el cobro ni las notas** de quien la envía (`shareable` en `friends.js`): si la cambia después, la copia no
-cambia. `note` es el mensaje (200 caracteres); `seen_at`, `copied_at` y `hidden_at`, cuándo la vio, la copió o la quitó quien la
-recibe. Sólo se enseñan las de los últimos 60 días en la lista de recibidas; en el chat salen todas (quitarla es sólo de la lista).
+cambia. `bet_id` (migración `015_compartidas_estado.sql`) es la apuesta original, de la que se lee su estado de ahora y el de sus
+selecciones al pedir la lista o el chat, sólo si es de `from_user` (`stateJoin` en `friends.js`); con una ya resuelta no sale
+*Copiar*. Pasa a `NULL` si se borra la original (`ON DELETE SET NULL`); la migración la rellenó en las pasadas antes buscando la
+apuesta de quien la envió con el mismo partido, mercado, selección y fecha, sólo si había una. `note` es el mensaje (200
+caracteres); `seen_at`, `copied_at` y `hidden_at`, cuándo la vio, la copió o la quitó quien la recibe. Sólo se enseñan las de los
+últimos 60 días en la lista de recibidas; en el chat salen todas (quitarla es sólo de la lista).
 
 ### `bets.messages`
 

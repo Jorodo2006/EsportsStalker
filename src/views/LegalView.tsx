@@ -79,7 +79,7 @@ function Privacy() {
       <li><b className="text-zinc-100">Sin cuenta</b> no se te pide ningún dato. La dirección IP de cada visita se usa en el momento para limitar el número de peticiones y proteger la web, y no se guarda.</li>
       <li><b className="text-zinc-100">Tu cuenta:</b> el nombre de usuario y la contraseña, que se guarda cifrada (nunca en claro). Si entras con Google, también el identificador de tu cuenta de Google y su correo. Sirven para que puedas entrar.</li>
       <li><b className="text-zinc-100">Lo que apuntas:</b> tus apuestas, tu banca inicial, tus favoritos y tus avisos. Sólo los ves tú.</li>
-      <li><b className="text-zinc-100">Amigos:</b> a quién añades, los mensajes que os escribís y las apuestas que os pasáis (sin el importe ni el resultado). Sólo los veis los dos.</li>
+      <li><b className="text-zinc-100">Amigos:</b> a quién añades, los mensajes que os escribís y las apuestas que os pasáis (lo apostado y si va ganada, perdida o pendiente, sin el importe ni las notas). Sólo los veis los dos.</li>
       <li><b className="text-zinc-100">Publicidad:</b> si aceptas las cookies de publicidad, Google puede usarlas para enseñarte anuncios personalizados (lo explica la página de cookies).</li>
     </UL>
     <H>Base legal</H>

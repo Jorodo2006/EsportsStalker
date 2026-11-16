@@ -132,10 +132,13 @@ el servidor valida cada campo (`clean`, `server/test/predicciones.test.js`).
 
 En **Amigos** (menú lateral y barra de abajo del móvil, con un número si hay solicitudes, mensajes o apuestas sin ver) se añade a alguien
 por su **nombre de usuario**; tiene que aceptar. Desde **Mis apuestas**, el botón ✈ de cada apuesta («Pasar a un amigo») la envía
-a uno o varios amigos con un mensaje opcional. Al amigo le llega en *Apuestas que te han pasado* **lo apostado, sin el importe, el
-resultado ni las notas** de quien la envía; **Copiar a mis apuestas** abre *Nueva apuesta* rellena (también las combinadas, con su
-`ref` para que se resuelva sola) y con el importe vacío, y apunta en las notas quién se la pasó. Las cuotas son las que tenía el
-amigo al apostar: el aviso de la lista lo recuerda.
+a uno o varios amigos con un mensaje opcional. Al amigo le llega en *Apuestas que te han pasado* **lo apostado y cómo va ahora,
+sin el importe, el cobro ni las notas** de quien la envía. El estado (ganada, perdida, pendiente, nula, cash out…) es el de la
+apuesta original en ese momento: si se pasó pendiente y luego se resuelve, el amigo la ve resuelta; en una combinada, cada
+selección sale en verde o rojo. **Copiar a mis apuestas** sólo sale mientras está pendiente (una ya jugada no tiene sentido
+apostarla): abre *Nueva apuesta* rellena (también las combinadas, con su `ref` para que se resuelva sola) y con el importe vacío,
+y apunta en las notas quién se la pasó. Si quien la pasó la borra, o se pasó antes de guardar de cuál salía, se enseña sin estado
+y se puede copiar, como antes. Las cuotas son las que tenía el amigo al apostar: el aviso de la lista lo recuerda.
 
 **Chat.** Pulsando en un amigo (o en *Escribir*) se abre su conversación en lugar de *Apuestas que te han pasado* (en el móvil,
 arriba): los mensajes y las apuestas que os habéis pasado, por fecha, con *Copiar a mis apuestas* en las suyas. *Pasar una apuesta*
