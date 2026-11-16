@@ -33,6 +33,19 @@ partido y en su ficha. Los terminados no se tocan.
 El historial de la ficha sale de `eventlog` (API core de ESPN), que sólo da referencias: se pide el cuadro de cada torneo
 (12 como mucho, con caché) y se buscan ahí sus partidos.
 
+**La previa (qualy) de la ATP y la WTA** (`roundEs` y `withQualifying` en `index.js`, `qualifying` en `livescore.js`). Las rondas
+de la previa empiezan por «Previa», que es lo que miran el interruptor *Previa*, las lecturas programadas y las recomendaciones para
+dejarla fuera. ESPN llama a la última «Qualifying Final»: hasta noviembre de 2026 se quedaba sin traducir y pasaba por un partido
+del cuadro final (salía con la previa oculta y se leían sus cuotas); ahora es «Previa, ronda final». ESPN no trae la previa de
+todos los torneos, así que se completa con LiveScore, que la da como una fase aparte ("Paris Masters: Qualification"):
+- Sólo se añade lo que ESPN no tiene. Mismo partido = los dos jugadores, con un apellido en común (ESPN «Inaki Montes-De La Torre»,
+  LiveScore «Inaki Montes»).
+- Va al panel del torneo de ESPN que comparte una palabra del nombre que no sea genérica («Paris Masters» y «Rolex Paris Masters»);
+  si ESPN aún no lo tiene, con el nombre de LiveScore e id `lsq:<Sid>`. Los partidos llevan id `lsq:<Eid>` y `source: 'LiveScore'`
+  (sus puntos en directo salen de ahí mismo, como los de los Challenger).
+- La ronda se cuenta con la fase entera (`/stage/tennis/<categoría>/<fase>/0`, una petición cada 30 min por torneo con previa), que
+  también da el país de cada jugador: «Previa, 1.ª ronda», «Previa, 2.ª ronda»… y «Previa, ronda final».
+
 ## ATP Challenger (`server/services/tennis/livescore.js`)
 
 ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la app de LiveScore (`prod-public-api.livescore.com/v1/api/app/date/tennis/<AAAAMMDD>/0`) y entran en
@@ -43,7 +56,44 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 - **Sólo marcador y cuotas:** sin *Recomendaciones* ni *Forma de los jugadores*, porque ni el modelo (TennisMyLife) ni las fichas (ESPN) tienen sus datos. No hay banderas, ranking ni cabezas de serie.
 - **Motor propio (servicio `challenger`, `server/sharpex-tenis`):** Elo de los Challenger con el histórico de Sackmann y TennisMyLife, en `/api/challenger`. Todavía no sale en la interfaz. `GET /api/challenger/comparar?fecha=AAAA-MM-DD` da, para cada Challenger del día, la probabilidad del modelo, la superficie (por la ciudad del torneo) y las cuotas de apertura y de cierre de cada casa con la probabilidad del mercado sin margen: con los resultados, dirá si el modelo gana a la casa antes de enseñar picks.
 - **Cuotas:** son decenas al día, así que no se leen como el resto del tenis. Sólo los del cuadro final, dos veces (`scheduler.js`, ajuste `challengerOddsEnabled`, *Ajustes → Cuotas automáticas → Leer los Challenger*): una hasta 12 h antes y la de cierre, a 20 min de la hora prevista; si sigue sin empezar, otra cada 40 min hasta 5 h después (las horas de LiveScore son aproximadas). Unas 50-75 lecturas al día. También se pueden pedir con *Actualizar cuotas*, si las casas los tienen.
-- **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. La previa va en el nombre (`: Qualification`).
+- **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. En la ATP y la WTA la previa va en el nombre de la fase (`: Qualification`).
+- **La previa de los Challenger no la tiene LiveScore** (comprobado el 16-11-2026): no sale en los días de previa (sólo las finales de
+  la semana anterior), no existe como fase (`/stage/.../<torneo>-qualification` da 410, como un nombre inventado) y la web del
+  torneo sólo tiene *Overview*, *Fixtures* y *Results*. Otras fuentes miradas:
+  - **ProTennisLive** (la oficial de la ATP, sin `robots.txt`): es de donde sale (abajo).
+  - Flashscore: su web carga los datos con una clave de su propia aplicación; usarla sería hacerse pasar por ella (regla 1).
+  - TennisLive: su `robots.txt` prohíbe expresamente a los robots de IA. Tennis Temple: 403 de Cloudflare. Tennis Explorer: la red
+    del instituto lo bloquea por DNS. Tennis TV: sólo el circuito ATP. atptour.com y Sofascore: 403 (ya descartadas).
+
+## Previa de los Challenger (`server/services/tennis/protennislive.js` y `ptlpdf.js`)
+
+De ProTennisLive, la web oficial de resultados de la ATP (sin `robots.txt`): cada torneo publica en
+`www.protennislive.com/posting/<año>/<id ATP>/` el cuadro de la previa (`qs.pdf`) y el orden de juego del día (`op.pdf`).
+
+- **Qué torneos:** el id ATP de un Challenger se repite de un año a otro. Se prueban los de la misma semana (con una de margen) de
+  los dos años anteriores, sacados del histórico de Sackmann por el servicio `challenger` (`GET /internal/challenger/torneos`, sólo
+  por la red de Docker), y los de las ciudades que LiveScore ya tiene esa semana. Vale el que trae las fechas de esta semana o de
+  la siguiente (la previa de la siguiente es este fin de semana). Un torneo nuevo, que no se jugaba hace un año como Challenger
+  (Metz en 2026), no sale. Antes de publicarse el cuadro hay una hoja de aviso de 2-3 KB: se trata como si no estuviera.
+- **Cada cuánto:** los PDF los sirve la caché de Cloudflare 5 min (`max-age=300`), así que preguntar más a menudo no da nada
+  nuevo. De viernes a martes de la semana del torneo, cada uno cada 5 min de 7 a 23 h del torneo y cada 30 min de noche; antes,
+  cada 3 h hasta que sale el cuadro; con la previa acabada, cada 6 h. Peticiones condicionales (`ETag`): si no ha cambiado
+  responde 304 sin el PDF. De una en una, como poco a 8 s; con un 429 se para 5 min y se espacia el doble (vuelve a bajar tras 20
+  buenas). Lo leído se guarda en `tennis.cache` (`ptl:<año>-<id>`). Estado: `GET /internal/tennis/previa` del servicio tennis.
+- **Los PDF** son páginas impresas con Chrome: fuentes CID con `ToUnicode` y los anchos de cada glifo (`/W`), con lo que se juntan
+  los trozos que Chrome parte al ajustar el espacio entre letras ("MORIY" + "A, Hiroki"). El cuadro: posición, siembra, entrada
+  (WC, Alt…), "APELLIDO, Nombre" (cortado con "…" si no cabe) y país; los ganadores van en la columna de la ronda siguiente a media
+  altura entre los dos de los que salen, y se asignan por la altura y el apellido; el resultado va desde el que gana ("62 67", "6",
+  "62" = 6-2 6-7(6) 6-2; "Walkover"). El orden de juego: la pista es la columna, la hora la etiqueta del turno ("Starts At 10:00",
+  "Not Before 13:00"; "Followed By" = el anterior + 1 h 30, aproximada), y la hora local se pasa a UTC con la zona de la ciudad
+  (`zoneOf`; en países con varias zonas, si la ciudad no está, la más habitual y la hora sale aproximada).
+- **Los partidos** van en `GET /api/tennis/games` y `/days` con `level: 'challenger'`, `source: 'ProTennisLive'`, id
+  `ptl:<año>-<id>-<ronda>-<n>` y ronda «Previa, 1.ª ronda» … «Previa, ronda final», en el panel del torneo de LiveScore de la misma
+  ciudad. Sin orden de juego, el día se cuenta hacia atrás desde el de la ronda final (domingo si no se sabe) y la hora sale "por
+  confirmar". Sin directo ni puntos: el resultado llega con el cuadro, a los 5 min como mucho. Como el resto de la previa, no entran
+  en las lecturas de cuotas ni en el motor de los Challenger.
+- Las pruebas (`server/test/ptl.test.js`) usan trozos con la forma de los PDF de Sídney, Champaign y Montevideo de noviembre de 2026.
+  Si cambian el diseño de los PDF, la lectura deja de entenderlos y lo dice en el registro (`no se entiende el cuadro de <id>`).
 
 ## Puntos del juego (`server/services/tennis/points.js`)
 

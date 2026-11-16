@@ -10,6 +10,7 @@ const { picksFor } = require('./picks');
 const { withPoints } = require('./points');
 const { matchStats } = require('./matchstats');
 const ls = require('./livescore');
+const ptl = require('./protennislive');
 const { hits, queryOf } = require('../../shared/search');
 
 const TOURS = { atp: 'ATP', wta: 'WTA' };
@@ -35,11 +36,14 @@ const addDays = (ymd, n) => new Date(Date.UTC(...ymd.split('-').map((v, i) => +v
 const ymd = s => s.replace(/-/g, '');
 const valid = d => { if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) throw fail('Fecha no válida (AAAA-MM-DD)'); return d; };
 
-// "Round 1" → "1.ª ronda", "Quarterfinals" → "Cuartos de final"…
+// "Round 1" → "1.ª ronda", "Quarterfinals" → "Cuartos de final"… La última ronda de la previa ESPN la llama "Qualifying Final": sin
+// traducirla pasaba por un partido del cuadro (el interruptor Previa no la ocultaba y se leían sus cuotas como si lo fuera)
 function roundEs(r) {
   const s = String(r || '');
   const m = s.match(/^(Qualifying )?(\d)(?:st|nd|rd|th)? Round$|^(Qualifying )?Round (\d)$/i);
   if (m) return `${m[1] || m[3] ? 'Previa, ' : ''}${m[2] || m[4]}.ª ronda`;
+  if (/^Qualifying Final$/i.test(s)) return 'Previa, ronda final';
+  if (/^Qualifying\b/i.test(s)) return 'Previa';
   return ({ 'round of 16': 'Octavos de final', quarterfinals: 'Cuartos de final', quarterfinal: 'Cuartos de final', semifinals: 'Semifinales', semifinal: 'Semifinales', final: 'Final' })[s.toLowerCase()] || s;
 }
 
@@ -144,11 +148,52 @@ async function checkRivals(list, all, days) {
 
 // Los Challenger sólo entran en las pantallas de partidos: el modelo, las recomendaciones y las fichas de jugador no tienen sus datos
 // (su motor va aparte, servicio challenger)
+// La previa de los Challenger sale de ProTennisLive (protennislive.js), que se lee por su cuenta cada pocos minutos: aquí sólo se
+// junta lo que ya tiene. Va al panel del torneo de LiveScore si es el mismo ("Sydney, Australia" en los dos)
 async function withChallengers(list, from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
   const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
-  const extra = await ls.challengers(days).catch(e => { console.error('[tennis] Challenger:', e.message); return []; });
-  return [...list, ...extra.filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; })].sort((x, y) => new Date(x.date) - new Date(y.date));
+  const extra = (await ls.challengers(days).catch(e => { console.error('[tennis] Challenger:', e.message); return []; }))
+    .filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; });
+  // Por la ciudad: ProTennisLive pone "Champaign, IL, U.S.A." y LiveScore "Champaign, USA"
+  const city = n => String(n || '').split(',')[0].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const panel = new Map(extra.map(m => [city(m.tournament), m]));
+  ptl.hint(extra.map(m => ({ tournament: m.tournament, tournamentId: m.tournamentId })));
+  const quali = ptl.games(a, b).filter(q => !extra.some(m => sameMatch(m, q))).map(q => {
+    const ls = panel.get(city(q.tournament));
+    return ls ? { ...q, tournament: ls.tournament, tournamentId: ls.tournamentId } : q;
+  });
+  return [...list, ...extra, ...quali].sort((x, y) => new Date(x.date) - new Date(y.date));
+}
+
+// La previa de la ATP y la WTA que ESPN no trae, de LiveScore (ls.qualifying). Si ESPN ya tiene el partido (los dos apellidos),
+// se queda el de ESPN, que tiene ranking y ficha. Va al panel del torneo de ESPN con una palabra del nombre en común que no sea
+// genérica ("Paris Masters" y "Rolex Paris Masters"); si ESPN aún no lo tiene (la previa es antes del cuadro), con el de LiveScore
+const GENERIC = new Set(['open', 'masters', 'master', 'tennis', 'championships', 'championship', 'international', 'internationals', 'cup',
+  'atp', 'wta', 'tour', 'classic', 'trophy', 'grand', 'prix', 'de', 'di', 'the', 'of', 'by', 'and', 'ladies', 'mens', 'womens', 'qualification']);
+const wordsOf = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 2 && !GENERIC.has(w));
+// El mismo jugador escrito de otra forma: ESPN "Inaki Montes-De La Torre" y LiveScore "Inaki Montes". Basta un apellido en común
+// (sin el nombre de pila, que comparten muchos)
+const surnames = n => wordsOf(n).slice(1);
+const samePlayer = (x, y) => { const s = new Set(surnames(x)); return keyOf(x) === keyOf(y) || surnames(y).some(w => s.has(w)); };
+const sameMatch = (m, q) => (samePlayer(m.a.name, q.a.name) && samePlayer(m.b.name, q.b.name)) || (samePlayer(m.a.name, q.b.name) && samePlayer(m.b.name, q.a.name));
+async function withQualifying(list, from, to) {
+  const a = dayStart(from), b = dayStart(addDays(to, 1));
+  const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(ymd(d));
+  const extra = (await ls.qualifying(days).catch(e => { console.error('[tennis] Previa (LiveScore):', e.message); return []; }))
+    .filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; });
+  if (!extra.length) return list;
+  // Todo lo de ESPN de esos días (sale de la caché de matches), también los torneos que no tienen partidos este día
+  const espn = (await Promise.all(Object.keys(TOURS).map(t => matches(t, days).catch(() => [])))).flat();
+  const have = [...espn, ...list].filter(m => !m.level && !m.source);
+  const add = [];
+  for (const q of extra) {
+    if (have.some(m => m.tour === q.tour && sameMatch(m, q))) continue;
+    const w = wordsOf(q.tournament);
+    const t = espn.find(m => m.tour === q.tour && wordsOf(m.tournament).some(x => w.includes(x)));
+    add.push(t ? { ...q, tournament: t.tournament, tournamentId: t.tournamentId, major: t.major } : q);
+  }
+  return add.length ? [...list, ...add].sort((x, y) => new Date(x.date) - new Date(y.date)) : list;
 }
 
 // ---------- Ficha de un jugador ----------
@@ -259,6 +304,8 @@ async function search(raw) {
 }
 
 const routes = [
+  // Cómo va la lectura de la previa de los Challenger (ProTennisLive): sólo por la red de Docker, para comprobarla
+  ['GET', '/internal/tennis/previa', () => ({ torneos: ptl.status(), peticiones: ptl.requests() })],
   ['GET', '/api/tennis/search', ({ query: q }) => search(q.q)],
   // Estadísticas de un partido (matchstats.js): de la web de la WTA o, ya acabado, de TennisMyLife. null si aún no hay
   ['GET', '/api/tennis/match-stats', ({ query: q }) => {
@@ -292,16 +339,17 @@ const routes = [
   ['GET', '/api/tennis/picks/day', async ({ query: q }) => (await boardOf(valid(q.date))).matches.filter(x => x.top)
     .map(({ m, top, hard }) => ({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top, hard: hard[0] ?? null }))
     .sort((x, y) => y.top.p - x.top.p)],
-  ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await between(valid(q.date), valid(q.date)), q.date, q.date))],
+  ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await withQualifying(await between(valid(q.date), valid(q.date)), q.date, q.date), q.date, q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));
-    const list = await withChallengers(await between(from, addDays(from, n - 1)), from, addDays(from, n - 1));
+    const to = addDays(from, n - 1);
+    const list = await withChallengers(await withQualifying(await between(from, to), from, to), from, to);
     const out = {};
     for (let i = 0; i < n; i++) out[addDays(from, i)] = { total: 0, live: 0 };
     for (const m of list) { const d = out[madridDay(new Date(m.date).getTime())]; if (d) { d.total++; if (m.state === 'in') d.live++; } }
     return out;
   }],
-  ['GET', '/api/tennis/live', async () => { const t = madridDay(Date.now()); return withPoints((await withChallengers(await between(addDays(t, -1), t), addDays(t, -1), t)).filter(m => m.state === 'in')); }],
+  ['GET', '/api/tennis/live', async () => { const t = madridDay(Date.now()), y = addDays(t, -1); return withPoints((await withChallengers(await withQualifying(await between(y, t), y, t), y, t)).filter(m => m.state === 'in')); }],
   ['GET', '/api/tennis/rankings/:tour', ({ params }) => { if (!TOURS[params.tour]) throw fail('Circuito desconocido'); return ranks(params.tour); }],
   // Partidos de un jugador en los torneos en juego (su camino en el torneo y lo último que ha jugado)
   ['GET', '/api/tennis/player/:tour/:id', async ({ params }) => {
@@ -322,4 +370,5 @@ warmEvery('tennis', 4 * 60e3, async () => {
 migrate('tennis', path.join(__dirname, 'migrations'))
   .then(() => query(`DELETE FROM tennis.cache WHERE t < now() - interval '7 days'`))
   .then(() => start({ name: 'tennis', port: Number(process.env.PORT) || 4005, routes, health: async () => (await query('SELECT 1'), true) }))
+  .then(() => ptl.start())
   .catch(e => { console.error(e); process.exit(1); });

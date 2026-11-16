@@ -221,6 +221,11 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   identificadores distintos y se juntan en `mergeSources` (`src/data.js`): si cambias algo ahí, mira cuántos jugadores se emparejan y
   cuántos partidos se cuentan dos veces. `challenger.historial` sólo admite añadir (un disparador lo impide): nunca metas picks de
   prueba en la base de datos de verdad, no se pueden borrar.
+- **Previa del tenis** (`roundEs` y `withQualifying` en `server/services/tennis/index.js`): toda ronda de previa tiene que empezar por
+  «Previa», que es lo que miran el interruptor *Previa*, las lecturas programadas y las recomendaciones. ESPN pone nombres nuevos sin
+  aviso: «Qualifying Final» se quedó sin traducir y pasaba por cuadro final. La que ESPN no trae sale de LiveScore; la de los
+  Challenger, de los PDF de ProTennisLive (`protennislive.js`, `ptlpdf.js`): no bajes de 5 min por torneo (es lo que dura su caché)
+  ni de 8 s entre peticiones, que responde 429; y si cambian sus PDF, ajusta la lectura con `server/test/ptl.test.js`.
 - **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`). Detalle en `docs/specs/09-tenis.md`.
 - **Estadísticas de partido de tenis** (`server/services/tennis/matchstats.js`): WTA de su web oficial (al momento) y, si no, TennisMyLife (días después). ESPN no las tiene. No uses LiveScore para esto: su robots.txt prohíbe `/api/` y se decidió no ampliar su uso ahora que la web es pública (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.

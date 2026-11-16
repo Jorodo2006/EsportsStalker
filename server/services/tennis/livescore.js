@@ -89,7 +89,7 @@ function stateOf(e) {
 function playerOf(t, side, e, sets, done) {
   const me = side === 0 ? 0 : 1, words = String(t.Nm).split(/\s+/), last = words.slice(1).join(' ') || t.Nm, short = `${words[0][0]}. ${last}`;
   return {
-    id: `ls${t.ID}`, name: t.Nm, short, flag: '', country: '', seed: null, rank: null,
+    id: `ls${t.ID}`, name: t.Nm, short, flag: '', country: t.CoNm || '', seed: null, rank: null,
     sets: sets.map(s => s[me]),
     setWins: sets.map((s, i) => (i < sets.length - 1 || done) && s[me] > s[1 - me]),
     tiebreaks: sets.map((_, i) => num(e[`Tr${me + 1}S${i + 1}T`])),
@@ -99,14 +99,16 @@ function playerOf(t, side, e, sets, done) {
   };
 }
 
-function matchOf(st, e) {
+// extra: lo que cambia en la previa de la ATP y la WTA (qualifying), que no son Challenger
+function matchOf(st, e, extra = {}) {
   const { state, status } = stateOf(e), sets = setsOf(e);
   const a = playerOf(e.T1[0], 0, e, sets, e.Eps === 'FT'), b = playerOf(e.T2[0], 1, e, sets, e.Eps === 'FT');
   return {
     id: `ch:${e.Eid}`, tour: 'atp', level: 'challenger', tournament: st.Snm.replace(QUALI, ''), tournamentId: String(st.Sid), major: false, date: dateOf(e.Esd),
     state, status, round: roundOf(st, e), court: '', city: '', bestOf: 3, note: '', a, b,
     // withPoints lo convierte en points y lo quita: no sale del servicio
-    ...(isLive(e) ? { record: record(e) } : {})
+    ...(isLive(e) ? { record: record(e) } : {}),
+    ...extra
   };
 }
 
@@ -115,15 +117,70 @@ async function challengers(days) {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10).replace(/-/g, '');
   const feeds = await Promise.all(days.map(d => feed(`/date/tennis/${d}/0?MD=1`, d === today || d === yesterday ? LIVE_TTL : DAY_TTL).catch(err => { console.error(`[tennis] LiveScore ${d}:`, err.message); return null; })));
-  const seen = new Set(), out = [];
+  const seen = new Set(), out = [], stages = new Map();
   for (const j of feeds) {
     for (const st of j?.Stages || []) {
       if (st.Cnm !== 'ATP Challenger') continue;
+      stages.set(`${st.Ccd}/${st.Scd}`, st);
       for (const e of singles(st)) {
         // Los cancelados no se llegaron a jugar y sólo ensucian la lista
         if (seen.has(e.Eid) || e.Eps === 'Canc.') continue;
         seen.add(e.Eid);
-        out.push(matchOf(st, e));
+        out.push({ m: matchOf(st, e), ids: [String(e.T1[0].ID), String(e.T2[0].ID)] });
+      }
+    }
+  }
+  // El país de cada jugador: los días no lo traen y la fase entera sí (una petición por torneo cada 30 min)
+  const country = new Map();
+  await Promise.all([...stages.values()].map(st => feed(`/stage/tennis/${st.Ccd}/${st.Scd}/0?MD=1`, 30 * 60e3)
+    .then(j => { for (const e of j?.Stages?.[0]?.Events || []) for (const t of [...(e.T1 || []), ...(e.T2 || [])]) if (t.CoNm) country.set(String(t.ID), t.CoNm); })
+    .catch(() => {})));
+  return out.map(({ m, ids }) => {
+    m.a.country ||= country.get(ids[0]) || '';
+    m.b.country ||= country.get(ids[1]) || '';
+    return m;
+  });
+}
+
+// ---------- La previa de los torneos ATP y WTA ----------
+// ESPN trae la de unos torneos y la de otros no (el 1-11-2026 faltaban la de París, Chennai y Hong Kong; el 8, la segunda jornada
+// de Estocolmo). LiveScore la da como una fase aparte ("Paris Masters: Qualification"). La de los Challenger no la tiene en ningún
+// sitio (ni en los días, ni como fase, ni en su web; comprobado en noviembre de 2026): ver docs/specs/09-tenis.md.
+const isTour = st => /^(ATP|WTA)/.test(st.Cnm) && !/challenger|125|ITF/i.test(st.Cnm) && !/doubles/i.test(st.Snm);
+
+// La fase entera (se pide una vez cada 30 min): el primer dígito de ErnInf es la ronda (4xxx, 5xxx, 6xxx: menos jugadores cuanto más
+// alto), y con todas se sabe cuál es la 1.ª, la 2.ª… y la final; un día suelto sólo trae una. También trae el país de cada jugador,
+// que los días no traen. null si no se ha podido pedir: entonces sólo se dice "Previa"
+async function qualiStage(st) {
+  const j = await feed(`/stage/tennis/${st.Ccd}/${st.Scd}/0?MD=1`, 30 * 60e3);
+  const events = j?.Stages?.[0]?.Events || [];
+  const digits = [...new Set(events.map(e => String(e.ErnInf)[0]).filter(d => /\d/.test(d)))].sort();
+  const country = new Map(events.flatMap(e => [...(e.T1 || []), ...(e.T2 || [])]).filter(t => t.CoNm).map(t => [String(t.ID), t.CoNm]));
+  return digits.length ? { digits, country } : null;
+}
+const qualiRound = (stage, e) => {
+  const n = stage ? stage.digits.indexOf(String(e.ErnInf)[0]) + 1 : 0;
+  if (n < 1) return 'Previa';
+  return n === stage.digits.length && n > 1 ? 'Previa, ronda final' : `Previa, ${n}.ª ronda`;
+};
+
+async function qualifying(days) {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const feeds = await Promise.all(days.map(d => feed(`/date/tennis/${d}/0?MD=1`, d >= today ? LIVE_TTL : DAY_TTL).catch(() => null)));
+  const seen = new Set(), out = [];
+  for (const j of feeds) {
+    for (const st of j?.Stages || []) {
+      if (!isTour(st) || !QUALI.test(st.Snm)) continue;
+      const stage = await qualiStage(st).catch(() => null);
+      for (const e of singles(st)) {
+        if (seen.has(e.Eid) || e.Eps === 'Canc.') continue;
+        seen.add(e.Eid);
+        const m = matchOf(st, e, {
+          id: `lsq:${e.Eid}`, tour: /^WTA/.test(st.Cnm) ? 'wta' : 'atp', level: undefined, tournamentId: `lsq:${st.Sid}`,
+          round: qualiRound(stage, e), source: 'LiveScore'
+        });
+        for (const [p, t] of [[m.a, e.T1[0]], [m.b, e.T2[0]]]) p.country ||= stage?.country.get(String(t.ID)) || '';
+        out.push(m);
       }
     }
   }
@@ -149,4 +206,4 @@ async function mainTour(days) {
   return out;
 }
 
-module.exports = { liveAtp, challengers, mainTour };
+module.exports = { liveAtp, challengers, mainTour, qualifying };

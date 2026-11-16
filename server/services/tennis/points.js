@@ -81,15 +81,16 @@ function pointsOf(m, live, now = Date.now()) {
 
 const quiet = (name, p) => p.catch(e => { console.error(`[tennis] puntos (${name}):`, e.message); return []; });
 
-// Los Challenger ya traen sus juegos y sus puntos de LiveScore: salen de la misma fuente y siempre cuadran
+// Los Challenger y la previa que sale de LiveScore ya traen sus juegos y sus puntos de allí: misma fuente, siempre cuadran
 async function withPoints(matches) {
-  const wanted = t => matches.filter(m => m.tour === t && m.state === 'in' && !m.level);
+  const own = m => m.level || m.source === 'LiveScore';
+  const wanted = t => matches.filter(m => m.tour === t && m.state === 'in' && !own(m));
   const wta = wanted('wta'), atp = wanted('atp');
   const [liveW, liveA] = await Promise.all([wta.length ? quiet('WTA', liveWta()) : [], atp.length ? quiet('LiveScore', ls.liveAtp()) : []]);
   for (const m of wta) m.points = pointsOf(m, liveW);
   for (const m of atp) m.points = pointsOf(m, liveA);
   for (const m of matches) {
-    if (m.level && m.record) m.points = shown(m.record, false, Date.now());
+    if (own(m) && m.record) m.points = shown(m.record, false, Date.now());
     delete m.record;
   }
   return matches;

@@ -257,7 +257,33 @@ async function comparar({ req, query: q }) {
 
 const RESULT = { won: 'won', lost: 'lost', void: 'void', ganada: 'won', perdida: 'lost', nula: 'void' };
 
+// ---------- Torneos Challenger del histórico (para el servicio tennis) ----------
+// El id ATP de cada Challenger con su nombre y el lunes de su semana, de los tres últimos ficheros de Sackmann (tourney_id
+// "2025-2817" → 2817). El servicio tennis lo usa para encontrar en ProTennisLive la previa de los torneos de la semana: el id de un
+// torneo se repite de un año a otro. Sólo lee los CSV que ya baja este servicio; se guarda 6 h
+let torneosHechos = null;
+async function torneos() {
+  if (torneosHechos && Date.now() - torneosHechos.t < 6 * 3600e3) return torneosHechos.v;
+  const { parseCsv } = await import('../../sharpex-tenis/src/csv.js');
+  const files = fs.readdirSync(DATOS).filter(f => /^atp_matches_qual_chall_\d{4}\.csv$/.test(f)).sort().slice(-3);
+  const seen = new Map();
+  for (const f of files) {
+    // Una fila por partido, como objeto con las columnas de la cabecera
+    for (const r of parseCsv(fs.readFileSync(path.join(DATOS, f), 'utf8'))) {
+      if (r.tourney_level !== 'C') continue;
+      const tid = r.tourney_id || '', id = Number(tid.split('-')[1]), date = r.tourney_date || '';
+      if (!id || seen.has(tid) || !/^\d{8}$/.test(date)) continue;
+      seen.set(tid, { id, name: r.tourney_name || '', surface: r.surface || '', date: `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}` });
+    }
+  }
+  const v = [...seen.values()];
+  torneosHechos = { t: Date.now(), v };
+  return v;
+}
+
 const routes = [
+  // Sólo para el servicio tennis, por la red de Docker (el gateway no reparte /internal)
+  ['GET', '/internal/challenger/torneos', () => torneos()],
   ['POST', '/api/challenger/escanear', escanear],
   ['GET', '/api/challenger/comparar', comparar],
 
