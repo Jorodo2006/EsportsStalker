@@ -20,7 +20,7 @@ export function FooterJuego({ className, inner = 'max-w-6xl px-5 sm:px-10' }: { 
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 py-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-12">
           <div className="col-span-2 lg:col-span-1">
             <div className="text-[15px] font-semibold tracking-tight text-zinc-50">Sharpex</div>
-            <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-zinc-500">Análisis estadístico de LoL, baloncesto, tenis y fútbol: partidos, cuotas comparadas y recomendaciones del modelo.</p>
+            <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-zinc-500">Análisis estadístico de LoL, baloncesto, tenis, fútbol y MMA: partidos, cuotas comparadas y recomendaciones del modelo.</p>
             <div className="mt-5 flex items-center gap-3">
               <AgeBadge className="h-9 w-9 text-[11px]" />
               <div>

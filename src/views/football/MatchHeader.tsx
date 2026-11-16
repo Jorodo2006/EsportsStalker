@@ -61,13 +61,13 @@ export function MatchHeader({ m, events, attendance, children }: { m: FootballMa
     for (const e of mine) byPlayer.set(`${e.kind === 'red' ? 'r' : 'g'}|${e.player}`, [...(byPlayer.get(`${e.kind === 'red' ? 'r' : 'g'}|${e.player}`) ?? []), e]);
     const plate = themeOf(t)?.plate;
     return (
-      <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+      <div className="relative flex min-w-0 flex-col items-center gap-2 text-center">
         <span className={cn('grid shrink-0 place-items-center', plate && 'rounded-xl bg-white/90 p-1.5')}>
           <TeamLogo src={t.logo} name={t.abbr} size={56} />
         </span>
         <div className="flex max-w-full items-center gap-0.5">
-          <span className={cn('truncate text-sm font-semibold sm:text-lg', lead && lead !== which ? 'text-zinc-300' : 'text-zinc-50')} title={t.name}>{t.name}</span>
-          <FavStar name={t.name} logo={t.logo} sport="football" />
+          <span className={cn('line-clamp-2 text-sm font-semibold sm:text-lg', lead && lead !== which ? 'text-zinc-300' : 'text-zinc-50')} title={t.name}>{t.name}</span>
+          <FavStar name={t.name} logo={t.logo} sport="football" className="absolute -right-1 -top-1.5 sm:static" />
         </div>
         {!!byPlayer.size && (
           <ul className="flex max-w-full flex-col gap-0.5 text-xs text-zinc-400">
@@ -106,7 +106,7 @@ export function MatchHeader({ m, events, attendance, children }: { m: FootballMa
             ? <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-semibold text-rose-300 tnum"><LiveDot />{m.status}</span>
             : st === 'post'
               ? <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-300">{m.off ? m.status : 'Final'}</span>
-              : <span className="text-xs text-zinc-400 first-letter:uppercase">{new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</span>}
+              : <span className="max-w-[5.5rem] text-center text-xs text-zinc-400 first-letter:uppercase sm:max-w-none">{new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</span>}
           {st !== 'pre' && !m.off && pastHalf && <span className="text-[11px] text-zinc-500 tnum">Descanso {half[0]}-{half[1]}</span>}
         </div>
         {side(m.away, 'away')}

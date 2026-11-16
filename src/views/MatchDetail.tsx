@@ -9,7 +9,7 @@ import { BET_EV, SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } fro
 import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePanel';
 import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th } from '@/components/ui';
 import { BookHead, BookIcon } from '@/components/BookIcon';
-import { Scoreboard, SheetTabs } from '@/components/sport';
+import { SheetScroll, Scoreboard, SheetTabs } from '@/components/sport';
 import { oddsMeta } from '@/lib/odds-live';
 import { useUser } from '@/components/AuthGate';
 import { askLogin, useMember } from '@/components/AuthGate';
@@ -38,6 +38,7 @@ export default function MatchDetail({ match, onClose }: { match: MatchEvent; onC
 
   return (
     <div>
+      <SheetScroll />
       <button onClick={onClose} className="mb-4 flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100">
         <ArrowLeft size={16} />Volver a partidos
       </button>
@@ -54,7 +55,7 @@ export default function MatchDetail({ match, onClose }: { match: MatchEvent; onC
                 <BarChart3 size={14} />Stats {t.code}
               </Button>
             ))}
-            <Button size="sm" onClick={() => openBet({ league: match.league, event: eventName })}><Plus size={14} />Apuesta</Button>
+            <Button size="sm" onClick={() => openBet({ league: match.league, event: eventName })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>
           </>} />
         </Scoreboard>
       </div>
@@ -315,7 +316,7 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
   return (
     <div className={cn(panelCls, 'overflow-hidden')}>
       <button onClick={onToggle} className={cn('flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left transition hover:bg-zinc-900/60', open && 'border-b border-zinc-800/70')}>
-        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-zinc-50" title={group}>{title}</h4>
+        <h4 className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-zinc-50 lg:truncate" title={group}>{title}</h4>
         {open ? <>
           <span className="label-data hidden w-11 text-right text-zinc-500 sm:inline" title="Probabilidad sin margen, con las mejores cuotas">Prob.</span>
           {books.map(bk => <BookHead key={bk} name={bk} className="w-16 sm:w-[72px]" />)}
@@ -332,7 +333,7 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
               <div key={l.key} className="py-1">
                 {l.outcomes.map((o, oi) => (
                   <div key={o.id} className="flex items-center gap-2 px-3 py-0.5 hover:bg-zinc-900/70">
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-200 sm:pl-3" title={o.label}>{o.label}</span>
+                    <span className="min-w-0 flex-1 text-[13px] leading-snug text-zinc-200 sm:pl-3 lg:truncate" title={o.label}>{o.label}</span>
                     <span className="hidden w-11 text-right font-mono text-[11px] tabular-nums text-zinc-400 sm:inline">{sum ? pct(inv[oi] / sum) : '–'}</span>
                     {books.map(bk => (
                       <OddButton key={bk} className="w-16 sm:w-[72px]" price={o.prices[bk]} best={bests[oi].n > 1 && o.prices[bk] === bests[oi].p}

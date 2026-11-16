@@ -1,6 +1,7 @@
 // MMA · Combates: como las demás apps. Tira de días (hora de España), filtro por estado y organización (UFC, PFL, WOW), combates
 // agrupados por evento con el principal arriba y, al pulsar uno, su ficha: comparativa de los luchadores con lo que dice el
 // modelo, recomendaciones y las cuotas de Winamax y Betway.
+import { useCardOdd } from '@/lib/card-odds';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
@@ -12,7 +13,7 @@ import { MmaDayPicks, MmaPicksPanel, PredBlock, usePicks } from '@/components/Mm
 import { MmaFighterSheet } from '@/components/MmaFighterSheet';
 import { MmaSpotlight } from '@/components/MmaSpotlight';
 import { fightTime, METHOD_ES, resultShort, surname, targetOfFight, winnerText } from '@/components/mma';
-import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading } from '@/components/ui';
 import { Panel, TvFrame, TvHeader, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
@@ -28,6 +29,7 @@ function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSO
 export default function MmaFights() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
   const { settings } = useApp();
+  const addOdd = useCardOdd();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<StateFilter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export default function MmaFights() {
     const st = stateOf(g), r = g.result;
     const side = (f: MmaFighter, w: 'a' | 'b') => ({ name: f.name, logo: f.flag, win: !!r && r.winner === w, lose: st === 'post' && !!r && r.winner != null && r.winner !== w });
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.cancelled ? cardNote(g.date, { sport: 'mma' }, settings) : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfFight(g), s)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.cancelled ? cardNote(g.date, { sport: 'mma' }, settings) : null} featured={featured}
         competition={featured ? g.event : undefined} tag={g.cardPos === 1 ? 'Principal' : g.cardPos === 2 ? 'Co-principal' : undefined}
         time={g.cancelled ? 'Cancelado' : st === 'pre' ? fightTime(g) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'post' ? [resultShort(g), g.weightClass].filter(Boolean).join(' · ') : st === 'live' ? g.status : [g.weightClass, g.rounds >= 5 ? '5 asaltos' : ''].filter(Boolean).join(' · ')}
@@ -87,8 +89,7 @@ export default function MmaFights() {
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
       <FavoritesStrip />
-      <DayStrip value={date} onChange={setDate} counts={days.data} />
-      <StateFilterBar value={filter} onChange={setFilter} counts={counts}>
+      <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         {ORGS.map(o => <Toggle key={o.id} on={orgs[o.id]} onChange={v => setOrg(o.id, v)} label={o.label} />)}
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('mma-odds', v); }} label="Cuotas" />
       </StateFilterBar>
@@ -121,6 +122,7 @@ function FightDetail({ f, onClose }: { f: MmaFight; onClose: () => void }) {
   const side = (x: MmaFighter) => ({ name: x.name, short: x.record, logo: x.photo || x.flag });
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
+      <SheetScroll />
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={16} />Volver a combates</button>
       <Scoreboard competition={f.event} detail={[f.orgName, f.weightClass, `${f.rounds} asaltos`, f.city].filter(Boolean).join(' · ')} state="pre"
         a={side(f.a)} b={side(f.b)}
@@ -128,7 +130,7 @@ function FightDetail({ f, onClose }: { f: MmaFight; onClose: () => void }) {
         centerSub={st === 'pre' && !f.cancelled ? new Date(f.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? f.status : [winnerText(f), resultShort(f)].filter(Boolean).join(' · ')}>
         <SheetTabs value={tab} onChange={setTab} items={[
           ['tape', 'Comparativa'], ...(st === 'pre' && !f.cancelled ? [['picks', 'Recomendaciones']] as [Tab, string][] : []), ...(done ? [] : [['odds', 'Cuotas']] as [Tab, string][])
-        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'mma', league: f.orgName, event: t.event })}><Plus size={14} />Apuesta</Button>} />
+        ]} right={<Button size="sm" onClick={() => openBet({ sport: 'mma', league: f.orgName, event: t.event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {tab === 'tape' ? <Tape f={f} onFighter={setSheet} /> : tab === 'odds' ? <SportOdds target={t} /> : <MmaPicksPanel m={f} onOdds={() => setTab('odds')} />}
     </div>

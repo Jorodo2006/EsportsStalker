@@ -58,14 +58,14 @@ export default function BetsView() {
               qc.invalidateQueries({ queryKey: ['bets'] });
               toast(changed ? `${changed} apuesta${changed === 1 ? '' : 's'} resuelta${changed === 1 ? '' : 's'} con el resultado` : 'Nada nuevo: los partidos aún no han acabado o hay que resolverlas a mano');
             } catch (e) { toast((e as Error).message); } finally { setChecking(false); }
-          }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} />Comprobar resultados</Button>
-        <Button onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
+          }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} />Comprobar<span className="hidden sm:inline"> resultados</span></Button>
+        <Button className="order-first w-full sm:order-none sm:w-auto" onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
       <div className="mb-5"><Tabs value={tab} onChange={setTab} items={[{ value: 'mine', label: 'Mis apuestas' }, { value: 'model', label: 'Acierto del modelo' }]} /></div>
       {tab === 'model' ? <ModelAccuracy /> : <>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 max-md:[&>:last-child:nth-child(odd)]:col-span-2 md:grid-cols-3 2xl:grid-cols-5">
         <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
           sub={`${money(w.inPlay, cur)} en juego · beneficio total ${money(w.profit, cur, true)}`} />
         <Stat label={`Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
