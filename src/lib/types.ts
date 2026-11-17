@@ -286,7 +286,7 @@ export type FootballPick = TennisPick & { who?: 'a' | 'b' | null };
 export interface FootballPicks {
   ready: boolean; reason?: 'started' | 'finished' | 'noodds' | 'nomodel'; oddsAge?: number;
   match?: { home: number; draw: number; away: number; pMarketHome: number | null; goalsHome: number; goalsAway: number; weight: number; fav: 'a' | 'b'; pFav: number };
-  top?: FootballPick | null; easy?: FootballPick[]; hard?: FootballPick[]; considered?: number; warnings?: string[];
+  all?: FootballPick[]; top?: FootballPick | null; easy?: FootballPick[]; hard?: FootballPick[]; considered?: number; warnings?: string[];
 }
 
 // ---------- MMA (servicio mma: UFC y PFL de ESPN, WOW de wowmma.com) ----------
@@ -324,8 +324,10 @@ export interface MmaPred { pA: number; pB: number; method: { ko: number; sub: nu
 export interface MmaPicks {
   ready: boolean; reason?: 'started' | 'finished' | 'noodds'; pred?: MmaPred;
   match?: { pModel: number; pMarket: number | null; pFinal: number; weight: number };
-  top?: MmaPick | null; easy?: MmaPick[]; hard?: MmaPick[]; considered?: number; warnings?: string[];
+  all?: MmaPick[]; top?: MmaPick | null; easy?: MmaPick[]; hard?: MmaPick[]; considered?: number; warnings?: string[];
 }
+// Una línea del escáner: el combate y lo que el modelo calcula de ella
+export interface MmaLineRow { id: string; org: MmaOrg; orgName: string; date: string; a: MmaFighter; b: MmaFighter; pick: MmaPick }
 export interface MmaDayPick { id: string; org: MmaOrg; orgName: string; date: string; a: MmaFighter; b: MmaFighter; top: MmaPick; hard: MmaPick | null }
 // Buscador (GET /api/search): partidos de ayer a dentro de una semana y competiciones de los cuatro deportes. team: encaja por
 // equipo o jugador (no sólo por la competición). event: en LoL, el partido entero para abrirlo
@@ -336,6 +338,8 @@ export interface SearchMatch {
 export interface SearchCompetition { sport: Sport; id: string; name: string; sub: string; next: string | null }
 export interface SearchResults { matches: SearchMatch[]; competitions: SearchCompetition[] }
 export interface FootballDayPick { id: string; league: FootballLeagueId; leagueName: string; date: string; home: FootballTeam; away: FootballTeam; top: FootballPick; hard: FootballPick | null }
+// Una línea del escáner: el partido y lo que el modelo calcula de ella
+export interface FootballLineRow { id: string; league: FootballLeagueId; leagueName: string; date: string; home: FootballTeam; away: FootballTeam; pick: FootballPick }
 export interface TennisDayPick { id: string; tour: Tour; tournament: string; round: string; date: string; a: TennisPlayer; b: TennisPlayer; top: TennisPick; hard: TennisPick | null }
 export type TennisPicks = ({ ready: true } & TennisMatchPicks) | { ready: false; reason: 'started' | 'finished' | 'noodds' };
 // Las recomendaciones de los partidos de un día (day, en hora de España) y los que todavía no tienen cuotas
@@ -525,6 +529,7 @@ export interface Api {
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
     picks(date: string, id: string): Promise<FootballPicks>;
     picksDay(date: string): Promise<FootballDayPick[]>;
+    picksLines(date: string): Promise<FootballLineRow[]>;
   };
   mma: {
     leagues(): Promise<MmaLeague[]>;
@@ -537,6 +542,7 @@ export interface Api {
     profile(id: string): Promise<MmaProfile>;
     picks(date: string, id: string): Promise<MmaPicks>;
     picksDay(date: string): Promise<MmaDayPick[]>;
+    picksLines(date: string): Promise<MmaLineRow[]>;
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;

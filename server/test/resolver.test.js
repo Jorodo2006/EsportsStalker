@@ -165,3 +165,63 @@ test('MMA: una apuesta con deporte mma y su ref se guarda', () => {
   const wow = normalizeBet({ odds: 2, stake: 1, selection: 'x', sport: 'mma', ref: { sport: 'mma', match: 'wow:wow-35-madrid:1', key: 'method|0|ko|', out: 'b' } });
   assert.equal(wow.ref.match, 'wow:wow-35-madrid:1');
 });
+
+// LoL: sólo el ganador y el hándicap de mapas del partido entero (a 2-1 b)
+const lol = { sport: 'lol', label: 'T1 2-1 GEN', unit: 'mapas', score: p => (p === 0 ? [2, 1] : null) };
+test('LoL: ganador y hándicap de mapas; lo de cada mapa se deja a mano', () => {
+  assert.equal(ev('moneyline|0||', 'a', lol), 'won');
+  assert.equal(ev('moneyline|0||', 'b', lol), 'lost');
+  assert.equal(ev('spread|0||-1.5', 'a', lol), 'lost'); // 2-1 no cubre -1,5
+  assert.equal(ev('spread|0||-1.5', 'b', lol), 'won'); // la línea es la de A
+  assert.equal(ev('moneyline|1||', 'a', lol), null); // ganador del mapa 1
+  assert.equal(ev('total|1||28.5', 'over', lol), null); // kills del mapa 1
+});
+
+// Fútbol, jugadores de Winamax: la selección es el nombre; sólo si jugó y coincide el nombre
+const norm2 = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+const fut = {
+  sport: 'football', label: 'SUI 2-0 SCO', unit: 'goles', score: p => (p === 0 ? [2, 0] : null),
+  played: new Set(['Breel Embolo', 'Zeki Amdouni', 'Scott McTominay'].map(norm2)),
+  scored: new Map([[norm2('Breel Embolo'), 2]]), carded: new Set([norm2('Scott McTominay')])
+};
+const evp = (title, who) => evaluate({ key: `wmx|${title}|`, out: '123', selection: who }, fut)?.status ?? null;
+test('fútbol, jugadores: goleador, N goles y tarjeta; sin jugar o sin encontrar, a mano', () => {
+  assert.equal(evp('Goleador', 'Breel Embolo'), 'won');
+  assert.equal(evp('Goleador', 'Zeki Amdouni'), 'lost');
+  assert.equal(evp('Marca 2 goles o más', 'Breel Embolo'), 'won');
+  assert.equal(evp('Marca 3 goles o más', 'Breel Embolo'), 'lost');
+  assert.equal(evp('El jugador recibe una o más tarjetas', 'Scott McTominay'), 'won');
+  assert.equal(evp('El jugador recibe una o más tarjetas', 'Zeki Amdouni'), 'lost');
+  assert.equal(evp('Goleador', 'Cedric Itten'), null); // no jugó
+  assert.equal(evp('1ª mitad - Goleador', 'Breel Embolo'), null); // otros mercados, a mano
+  assert.equal(evp('Realiza 3 o más remates', 'Breel Embolo'), null);
+});
+
+// Tenis, mercados propios de Winamax: A. Nagel gana 6-0 3-6 7-6 a D. Lajovic
+const ten = { sport: 'tennis', label: 'Nagel 2-1 Lajovic', unit: 'juegos', winner: 'a', names: ['Alexander Nagel', 'Dusan Lajovic'], sets: [[6, 3, 7], [0, 6, 6]], score: () => null };
+const evt = (title, sel) => evaluate({ key: `wmx|${title}|`, out: '1', selection: sel }, ten)?.status ?? null;
+test('tenis: sets ganados, set a cero, doble resultado y par/impar', () => {
+  assert.equal(evt('Gana al menos un set D. Lajovic', 'Sí'), 'won');
+  assert.equal(evt('Gana al menos un set D. Lajovic', 'No'), 'lost');
+  assert.equal(evt('Cualquier set a cero', 'Sí'), 'won'); // 6-0
+  assert.equal(evt('Doble resultado (1º set y partido)', 'A. Nagel y A. Nagel'), 'won');
+  assert.equal(evt('Doble resultado (1º set y partido)', 'D. Lajovic y A. Nagel'), 'lost');
+  assert.equal(evt('2º set - Total de juegos - Par/Impar', 'Impar'), 'won'); // 3-6 = 9
+  assert.equal(evt('3er set - Total de juegos - Par/Impar', 'Par'), 'lost'); // 7-6 = 13
+  assert.equal(evt('Gana al menos un set X. Desconocido', 'Sí'), null);
+  assert.equal(evt('1er set - Marcador exacto', 'A. Nagel 6-0'), null);
+});
+
+// Fútbol, remates / paradas / faltas: salen de las estadísticas del jugador (ref.stats)
+const evs = (title, who, stats) => evaluate({ key: `wmx|${title}|`, out: '1', selection: who, stats }, fut)?.status ?? null;
+test('fútbol, jugadores: remates, paradas y faltas con sus estadísticas', () => {
+  const st = { totalShots: 5, shotsOnTarget: 1, saves: 0, foulsCommitted: 1, foulsSuffered: 0 };
+  assert.equal(evs('Realiza 5 o más remates', 'Breel Embolo', st), 'won');
+  assert.equal(evs('Realiza 6 o más remates', 'Breel Embolo', st), 'lost');
+  assert.equal(evs('Realiza 2 o más remates a puerta', 'Breel Embolo', st), 'lost');
+  assert.equal(evs('Realiza 1 o más paradas', 'Breel Embolo', st), 'lost');
+  assert.equal(evs('Comete 1 o más faltas', 'Breel Embolo', st), 'won');
+  assert.equal(evs('Recibe 1 o más faltas', 'Breel Embolo', st), 'lost');
+  assert.equal(evs('Realiza 1 o más remates', 'Breel Embolo', null), null); // sin estadísticas, a mano
+  assert.equal(evs('Realiza 1 o más remates', 'Cedric Itten', st), null); // no jugó
+});

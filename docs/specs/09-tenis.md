@@ -251,3 +251,16 @@ En la WTA se pasa algo de confiado en lo más alto. Set a cero (ATP): dice 13 % 
 Los pesos y `formSd` se ajustaron sólo con 2024, pero el sesgo bajo techo y en hierba se vio mirando 2025-26, así que esta comprobación no es del todo ciega. Queda algo de sesgo en hierba (ATP: 24,97 juegos reales, 24,34 del modelo).
 
 Dice si las probabilidades son correctas, **no si se gana dinero**: para eso harían falta cuotas de cierre históricas. El margen medido de las casas es de un 3-4 % en el ganador y de un 8-10 % en los mercados secundarios, así que casi nada sale con valor positivo. Sin modelar todavía: dobles faltas, lesiones y cansancio. El primer juego al saque, los primeros juegos y el primer break no se pueden comprobar con el marcador final de los CSV: en la fiabilidad cuentan menos (`trustOf`). Sólo hay partidos del circuito principal: los jugadores de WTA 125 e ITF salen sin histórico y mandan las casas.
+
+### Cansancio y actividad reciente: medido, no añadido (noviembre de 2026)
+
+`server/services/tennis/backtest-contexto.js` (`docker compose exec tennis node services/tennis/backtest-contexto.js atp|wta 20240601`) mira, para cada partido
+desde junio de 2024 (unos 7.000 por circuito, en dos mitades), cuántos minutos había jugado cada uno y compara lo que pasó con lo que daba el modelo.
+- **Minutos ya jugados en el mismo torneo** (rondas anteriores): no hay efecto. Los residuos van de −2,6 a +3,8 puntos sin patrón, dentro del error (±2-3).
+- **Minutos del torneo anterior (menos de 14 días antes):** el efecto sale al revés que el cansancio. El que más ha jugado rinde unos 3 puntos **por encima**
+  del modelo (con 3 h o más de diferencia: ATP +3,8 y +2,3, WTA +4,4 y +0,7 en las dos mitades; el que ha jugado menos, −2 a −5). Es de esperar:
+  haber jugado mucho es haber llegado lejos, y el Elo va con retraso. No es cansancio, es forma.
+- **Si se añadiera** (β·diferencia de horas/3 al logit, β ≈ 0,12-0,15, estable entre mitades y circuitos), ajustado con una mitad y comprobado en la otra baja el log-loss
+  sólo 0,0007-0,0016 (de 0,614 a 0,613 en la ATP). Es una mejora real pero casi nula, y exigiría sacar los minutos de cada jugador al predecir.
+**No se añade al modelo.** Si algún día se retoma, hay que verlo como forma reciente, no como cansancio.
+

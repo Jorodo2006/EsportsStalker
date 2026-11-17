@@ -17,7 +17,7 @@ test('lo de cada usuario, las recomendaciones y leer cuotas a mano piden cuenta'
     ['GET', '/api/bets'], ['POST', '/api/bets'], ['GET', '/api/settings'], ['PUT', '/api/settings'], ['GET', '/api/friends'],
     ['GET', '/api/shared'], ['GET', '/api/friends/3/chat'], ['POST', '/api/odds/jobs'], ['POST', '/api/odds/paste'],
     ['GET', '/api/tennis/picks'], ['GET', '/api/tennis/picks/board'], ['GET', '/api/tennis/picks/day'], ['GET', '/api/football/picks'],
-    ['GET', '/api/football/picks/day'], ['GET', '/api/mma/picks'], ['GET', '/api/challenger/estado'], ['POST', '/api/challenger/escanear'],
+    ['GET', '/api/football/picks/day'], ['GET', '/api/football/picks/lines'], ['GET', '/api/mma/picks'], ['GET', '/api/mma/picks/lines'], ['GET', '/api/challenger/estado'], ['POST', '/api/challenger/escanear'],
     ['GET', '/api/odds/auto/status'], ['GET', '/api/bets/predictions'], ['POST', '/api/auth/password'],
     // Escribir en un deporte con otro método no se abre aunque la ruta sea de lectura
     ['POST', '/api/basket/games'], ['DELETE', '/api/tennis/games']

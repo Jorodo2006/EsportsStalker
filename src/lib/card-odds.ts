@@ -24,8 +24,8 @@ export function useCardOdd() {
       const [bookmaker, odds] = best;
       addToSlip({
         sport: t.sport, league: t.league, event: t.event, market: line.group, selection: out.label, bookmaker, odds, status: 'pending',
-        // LoL no lleva ref (como en su pestaña de cuotas); el resto, para que el servidor la resuelva sola
-        ...(t.sport === 'lol' ? {} : { ref: { sport: t.sport, match: t.id, key: line.key, out: out.id, ...(t.match.start ? { start: t.match.start } : {}) } })
+        // Con su ref, para que el servidor la resuelva sola
+        ref: { sport: t.sport, match: t.id, key: line.key, out: out.id, ...(t.match.start ? { start: t.match.start } : {}) }
       });
     } catch (e) { toast((e as Error).message || 'No se han podido leer las cuotas'); }
   };

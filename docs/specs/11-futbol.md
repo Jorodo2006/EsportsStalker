@@ -157,6 +157,46 @@ Como en tenis: el modelo está en el servicio y la interfaz sólo enseña lo que
   la más fiable de cada partido y las más complicadas; al pulsar una se abre su partido en esa pestaña) y, en pantallas
   anchas, "Recomendaciones del día" al lado de la lista. Encima de la lista no: primero los partidos.
 
+### Descanso entre partidos: medido y descartado (noviembre de 2026)
+
+`server/services/football/backtest-contexto.js` compara, con el modelo ajustado semana a semana, lo que marca y encaja cada equipo con lo que
+esperaba el modelo según los días que llevaba sin jugar (6.702 partidos de los grupos de hombres, de agosto de 2024 a noviembre de 2026, en dos mitades).
+Los cocientes reales/esperados quedan entre 0,95 y 1,06 en todos los tramos (≤3 días, 4-5, 6-7, 8 o más) y no se repiten de una mitad a otra
+(con 3 días o menos: 1,02 y 0,99 marcados). Con 3 o más días de diferencia entre los dos equipos (unos 250 partidos por mitad), el que
+descansa más no rinde mejor sino algo peor (−0,22 y −0,10 goles de diferencia sobre lo esperado, dentro del ruido: el error ronda 0,11).
+**No se añade al modelo.** Si se retoma, hay que medirlo con las lesiones y las rotaciones, que es lo que de verdad cambia en un descanso corto.
+
+### Goleador (`server/services/football/scorers.js`, `backtest-goleador.js`)
+
+Mercado «Goleador» de Winamax (marca en algún momento; «Primer goleador» y «Último goleador» son otros). Sólo en los partidos de hombres y sólo
+en la ficha del partido y en el escáner de líneas (`opts.players` de `picksFor`), porque pide hasta 20 fichas de ESPN por equipo la primera vez
+(se guardan en `football.cache`).
+- **Modelo:** de los últimos 10 partidos del equipo se sacan los goles y los minutos de cada jugador (ficha de ESPN: alineaciones, cambios y goles; sin los
+  goles en propia). Ritmo por 90 = (goles + ritmo de su posición × 8) / (minutos/90 + 8): el peso 8 es el que dio mejor log-loss en las dos mitades. Los goles que
+  se esperan del equipo (el modelo de goles) se reparten según ritmo × minutos esperados (con la probabilidad de no jugar), y P(marca) = 1 − exp(−goles del jugador).
+- **Comprobación** (LaLiga, 328 partidos de enero a noviembre de 2026, 8.672 jugadores-partido en la segunda mitad; los que no juegan cuentan como que no marcan):
+  log-loss 0,1623 frente a 0,1641 sin ajustar a los goles esperados del partido; probabilidad media 4,6 % frente a un 4,5 % que marcó. Por encima del 30 % se pasa
+  (37 % → 20 %, con pocos casos), así que se limita a 60 % y las cifras altas no hay que tomarlas al pie de la letra.
+- **Con las casas:** las cuotas de «Goleador» suman 5-9 al invertirlas (los goleadores que se esperan son 2-3), así que no dan una probabilidad limpia. La de la casa se reparte
+  según sus cuotas pero con el total del modelo (sólo cuenta cómo reparte entre jugadores) y el modelo pesa 0,3 (decisión, no medida: no hay cuotas históricas). Casi
+  todas salen con EV muy negativo (−50 % o peor en el partido de prueba): el mercado paga poco. No se registran en `bets.predictions` (la resolución de recomendaciones
+  no conoce el nombre del jugador).
+- **Límites:** validado sólo en LaLiga; los nombres tienen que coincidir con los de ESPN (si no, el jugador no sale); sin alineaciones previas, un jugador que no juega
+  pesa como probabilidad; lesionados y sanciones no se conocen.
+
+#### Remates, remates a puerta, paradas y faltas (`backtest-jugador.js`)
+
+Los «Realiza N o más remates (a puerta | paradas)», «Comete N o más faltas» y «Recibe N o más faltas» de Winamax salen de la misma ficha de ESPN, que trae las
+estadísticas de cada jugador (`rosters[].stats`): sin peticiones nuevas. El jugador hace algo N veces o más con probabilidad (juega) × cola de una Poisson con su ritmo
+por 90 y los minutos que juega cuando juega. El ritmo se tira hacia el de su posición (`COUNT_PRIOR`, medido en LaLiga 2025-26) con un peso `COUNT_K`.
+Comprobación en LaLiga (614 equipos-partido, de enero a noviembre de 2026, log-loss de la segunda mitad; entre paréntesis, sólo con el ritmo de la posición):
+remates 0,2263 (0,2524), remates a puerta 0,1640 (0,1806), faltas cometidas 0,3473 (0,3508) y recibidas 0,3271 (con K=3). Las paradas no mejoran al ritmo de la posición
+(0,5289 con K=8 frente a 0,5332), por eso su peso es 30. Los goles esperados del partido no mejoraron el ritmo de remates (gamma 0 y 0,5 empatan), así que no se usan.
+Las probabilidades medias salen cerca de lo real (remates 9,1 % frente a 9,4 %; paradas 45 % frente a 42 %, algo alto).
+Como el goleador, sólo en los partidos de hombres, en la ficha y en el escáner, y la casa se reparte con el total del modelo. En la prueba (selecciones, sólo para ver el
+circuito) los EV salen en torno a −36 %: es una cota conservadora, porque sin cuotas históricas no hay con qué fijar el margen real de esas listas. No se registran
+en `bets.predictions`.
+
 ## Femenino
 
 Champions Femenina, Liga F y WSL, con `women: true` en `LEAGUES`. En Winamax llevan "(F)" ("Champions League (F)"); la Liga F

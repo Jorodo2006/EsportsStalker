@@ -7,6 +7,7 @@
 const client = require('../../shared/client');
 const H = require('./history');
 const M = require('./model');
+const Sc = require('./scorers');
 
 const { clamp } = M;
 const logit = p => Math.log(p / (1 - p));
@@ -97,7 +98,7 @@ function marketProb(line, outcome) {
 const blend = (model, market, w) => sigmoid(w * logit(clamp(model, 0.002, 0.998)) + (1 - w) * logit(clamp(market, 0.002, 0.998)));
 
 // Lo bien que salió cada mercado en la comprobación con partidos pasados (el 1X2 calibrado; los goles, algo peor)
-const trustOf = f => (/^1\.ª parte/.test(f) ? 0.5 : /Resultado|Doble oportunidad|Empate no válido|Hándicap/.test(f) ? 1 : /Total de goles/.test(f) ? 0.7 : 0.6);
+const trustOf = f => (/Goleador|^Jugador ·/.test(f) ? 0.4 : /^1\.ª parte/.test(f) ? 0.5 : /Resultado|Doble oportunidad|Empate no válido|Hándicap/.test(f) ? 1 : /Total de goles/.test(f) ? 0.7 : 0.6);
 
 function reliabilityOf({ family, pModel, pMarket, gap, minGames, books, age }) {
   const factors = [
@@ -112,6 +113,7 @@ function reliabilityOf({ family, pModel, pMarket, gap, minGames, books, age }) {
 }
 
 function reason(p, c) {
+  if (p.note) return p.note;
   const es = v => v.toFixed(1).replace('.', ',');
   const k = /^1\.ª parte/.test(p.family) ? M.HALF : 1;
   const [eh, ea] = [c.lh * k, c.la * k];
@@ -127,6 +129,59 @@ function pickDistinct(list, n, used = new Set()) {
     if (out.length >= n) break;
     if (used.has(x.family)) continue;
     used.add(x.family); out.push(x);
+  }
+  return out;
+}
+
+// Mercados de jugador de Winamax con modelo: "Goleador" y los "N o más" de remates, remates a puerta, paradas y faltas (scorers.js; cifras y
+// pesos en docs/specs/11-futbol.md). La casa no da una probabilidad limpia (las cuotas de cada lista suman mucho más que los jugadores que
+// se esperan), así que la de la casa se reparte según sus cuotas pero con el total del modelo: sólo cuenta cómo reparte entre jugadores, no
+// cuánto. El modelo pesa 0,3 (decisión, no medida: no hay cuotas históricas)
+const W_PLAYER = 0.3;
+const COUNT_MARKETS = [
+  [/^realiza (\d+) o más remates a puerta$/i, 'sot', 'remates a puerta'], [/^realiza (\d+) o más remates$/i, 'shots', 'remates'],
+  [/^realiza (\d+) o más paradas$/i, 'saves', 'paradas'], [/^comete (\d+) o más faltas$/i, 'fouls', 'faltas cometidas'],
+  [/^recibe (\d+) o más faltas$/i, 'suffered', 'faltas recibidas']
+];
+async function playerPicks({ odds, m, pool, e, gap, age }) {
+  const lines = odds.markets.filter(l => /^wmx\|/.test(l.key));
+  const kindOf = l => {
+    const title = l.key.split('|')[1];
+    if (/^goleador$/i.test(title)) return { stat: 'goals', family: 'Goleador' };
+    for (const [re, stat, what] of COUNT_MARKETS) { const x = re.exec(title); if (x) return { stat, n: Number(x[1]), family: `Jugador · ${what}`, what }; }
+    return null;
+  };
+  const wanted = lines.map(l => ({ l, k: kindOf(l) })).filter(x => x.k);
+  if (!wanted.length) return [];
+  const rows = await H.results(pool, 14);
+  const lastOf = id => rows.filter(x => x.h === String(id) || x.a === String(id)).reverse();
+  const recent = await Promise.all([m.home.id, m.away.id].map(id => Sc.teamRecentCached(String(id), lastOf(id))));
+  const scorers = [Sc.scorerProbs(recent[0], e.lh), Sc.scorerProbs(recent[1], e.la)];
+  const out = [];
+  for (const { l: line, k } of wanted) {
+    const models = k.stat === 'goals' ? scorers : recent.map(r => Sc.countModel(r, k.stat, Sc.COUNT_PRIOR[k.stat], { prior90s: Sc.COUNT_K[k.stat] }));
+    const probOf = pl => (k.stat === 'goals' ? pl.p : pl.atLeast(k.n));
+    const found = line.outcomes.flatMap(o => {
+      const key = Sc.norm(o.label), side = models[0]?.has(key) ? 0 : models[1]?.has(key) ? 1 : -1;
+      const books = Object.entries(o.prices).filter(([, v]) => v > 1);
+      return side >= 0 && books.length ? [{ o, side, pl: models[side].get(key), books }] : [];
+    });
+    if (found.length < (k.stat === 'goals' ? 6 : 4)) continue;
+    const sumModel = found.reduce((t, x) => t + probOf(x.pl), 0), sumRaw = found.reduce((t, x) => t + 1 / Math.max(...x.books.map(b => b[1])), 0);
+    if (!(sumModel > 0)) continue;
+    for (const { o, side, pl, books } of found) {
+      const [book, price] = books.sort((a, b) => b[1] - a[1])[0];
+      const pModel = Math.min(k.stat === 'goals' ? 0.6 : 0.9, probOf(pl)), pMarket = Math.min(0.9, (1 / price) * sumModel / sumRaw);
+      if (pModel <= 0.003) continue;
+      const p = blend(pModel, pMarket, W_PLAYER);
+      out.push({
+        id: `${line.key}#${o.id}`, title: k.stat === 'goals' ? `Marca ${o.label}` : `${o.label}: ${k.n} o más ${k.what}`, market: line.group, selection: o.label,
+        family: k.family, side: null, who: side === 0 ? 'a' : 'b', book, price, prices: o.prices, p, pModel, pMarket, fair: 1 / p, ev: p * price - 1,
+        rel: reliabilityOf({ family: k.family, pModel, pMarket, gap, minGames: 2 * pl.n, books: books.length, age }),
+        note: k.stat === 'goals' ? `${pl.rate90.toFixed(2).replace('.', ',')} goles por 90 minutos en los últimos partidos de su equipo y ${Math.round(pl.minutes)} minutos esperados`
+          : `${pl.rate90.toFixed(2).replace('.', ',')} ${k.what} por 90 minutos en los últimos partidos de su equipo; juega ${Math.round(pl.q * 100)} % de los partidos`
+      });
+    }
   }
   return out;
 }
@@ -178,6 +233,9 @@ async function picksFor(match, espn, opts = {}) {
     }
   }
 
+  // Mercados de jugador (Goleador, remates, paradas, faltas): el modelo de scorers.js, sólo en los partidos de hombres que lo piden (la ficha y el escáner)
+  if (opts.players && pool === 'men') picks.push(...await playerPicks({ odds, m, pool, e, gap, age }));
+
   const pFav = Math.max(x.h, x.a), fav = x.h >= x.a ? 'a' : 'b';
   const sane = q => Math.abs(q.pModel - q.pMarket) <= MAX_DISAGREE;
   const decent = q => sane(q) && q.ev >= -0.1 && q.rel.score >= 40;
@@ -206,4 +264,8 @@ async function picksFor(match, espn, opts = {}) {
   };
 }
 
-module.exports = { picksFor, stateOf };
+// Para el escáner de líneas: todas las que el modelo calcula y no son un disparate (no se alejan de la casa más que MAX_DISAGREE,
+// fiabilidad de 40 o más, cuota de 1,15 o más y un EV de −12 % o más); la interfaz las filtra y las ordena
+const scannable = q => Math.abs(q.pModel - q.pMarket) <= MAX_DISAGREE && q.rel.score >= 40 && q.price >= MIN_PRICE && q.ev >= -0.12;
+
+module.exports = { picksFor, stateOf, scannable };

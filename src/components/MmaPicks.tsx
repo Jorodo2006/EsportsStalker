@@ -5,13 +5,14 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
-import { odd } from '@/lib/format';
+import { cn, odd } from '@/lib/format';
+import { verdictOf } from '@/lib/value';
 import { logPredictions, mmaPredictions } from '@/lib/predictions';
-import type { MmaDayPick, MmaFight, MmaPick, MmaPred } from '@/lib/types';
+import type { MmaDayPick, MmaFight, MmaLineRow, MmaPick, MmaPred } from '@/lib/types';
 import { esTime, madridDay, surname } from './mma';
 import { PickRow, ValueChip } from './TennisPicks';
 import { ReliabilityMeter } from './ValuePanel';
-import { Empty, ErrorBox, Loading } from './ui';
+import { Empty, ErrorBox, Loading, Select, chip } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
@@ -59,7 +60,7 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
   // Se registran para medir después si el modelo acierta
   useEffect(() => {
     const r = q.data;
-    if (r?.ready) logPredictions(mmaPredictions(m, [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
+    if (r?.ready) logPredictions(mmaPredictions(m, r.all ?? [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const add = (p: MmaPick) => addPick(m, p);
   if (!pre) return <Empty>Las recomendaciones son para antes de empezar: el modelo no sigue el combate en directo.</Empty>;
@@ -126,9 +127,54 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
   );
 }
 
+// Escáner de líneas: todas las que calcula el modelo de los combates del día con cuotas, de más a menos valor, con filtro por tipo de
+// mercado (la familia: Ganador, Método, Duración…), cuota mínima y "sólo con valor"
+function MmaLineScanner({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
+  const add = useMmaAdd();
+  const [kind, setKind] = useState('');
+  const [minPrice, setMinPrice] = useState(1.5);
+  const [onlyValue, setOnlyValue] = useState(true);
+  const q = useQuery({ queryKey: ['mma', 'picks-lines', date], queryFn: () => window.api.mma.picksLines(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const rows = q.data ?? [];
+  const kinds = [...new Set(rows.map(r => r.pick.family))].sort();
+  const shown = rows.filter((r: MmaLineRow) => (!kind || r.pick.family === kind) && r.pick.price >= minPrice && (!onlyValue || verdictOf(r.pick.ev, r.pick.rel.score) === 'BET'));
+  return (
+    <div className="border-t border-zinc-800">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <Select value={kind} onChange={e => setKind(e.target.value)} aria-label="Tipo de mercado" className="h-8 w-auto">
+          <option value="">Todos los mercados</option>
+          {kinds.map(k => <option key={k} value={k}>{k}</option>)}
+        </Select>
+        <label className="flex items-center gap-1.5 text-xs text-zinc-400">Cuota mínima
+          <input type="number" step="0.05" min="1" value={minPrice} onChange={e => setMinPrice(Number(e.target.value) || 1)} className="h-8 w-16 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" />
+        </label>
+        <button role="switch" aria-checked={onlyValue} onClick={() => setOnlyValue(v => !v)} className={chip(onlyValue)}>Sólo con valor</button>
+      </div>
+      {q.isLoading ? <Loading label="Calculando las líneas…" /> : q.error ? <ErrorBox error={q.error} /> : !rows.length
+        ? <p className="px-3 pb-3 text-[13px] text-zinc-400">Ese día no hay combates con cuotas leídas todavía.</p>
+        : !shown.length ? <p className="px-3 pb-3 text-[13px] text-zinc-400">Ninguna con esos filtros.</p>
+        : shown.map(r => (
+          <div key={`${r.id}|${r.pick.id}`} className="flex items-center gap-3 border-t border-zinc-800 px-3 py-2 transition hover:bg-zinc-800/30">
+            <button onClick={() => onOpen(r.id)} title={`${r.pick.market}: ${r.pick.selection}. ${r.pick.why}. Pulsa para abrir el combate`} className="min-w-0 flex-1 cursor-pointer text-left">
+              <span className="block truncate text-[13px] font-semibold text-zinc-50">{r.pick.title}</span>
+              <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(r.date)}</span> · {surname(r.a.name)} - {surname(r.b.name)} · {r.orgName}</span>
+            </button>
+            <span className="w-14 shrink-0 text-right"><span className="block font-score text-[16px] font-bold leading-5 text-zinc-50 tnum">{p0(r.pick.p)}</span><ValueChip pick={r.pick} /></span>
+            <button onClick={() => add(r, r.pick)} title={`Añadir al cupón: ${r.pick.book}. Justa: ${odd(r.pick.fair)}`}
+              className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
+              <span className="font-score text-[16px] font-bold leading-none tnum">{odd(r.pick.price)}</span>
+              <span className="text-[9px] leading-tight opacity-75">{r.pick.book}</span>
+            </button>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 // Las mejores del día en la lista de combates: cinco, y el resto al pulsar
 function MmaDayPicksInner({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
   const [all, setAll] = useState(false);
+  const [lines, setLines] = useState(false);
   const q = useQuery({ queryKey: ['mma', 'picks-day', date], queryFn: () => window.api.mma.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const data = q.data ?? [];
   if (!data.length) return null;
@@ -153,6 +199,10 @@ function MmaDayPicksInner({ date, onOpen }: { date: string; onOpen: (id: string)
           {all ? 'Ver menos' : `Ver las ${data.length}`}
         </button>
       )}
+      <button onClick={() => setLines(v => !v)} aria-expanded={lines} className={cn('w-full cursor-pointer border-t border-zinc-800 px-4 py-2 text-left text-xs transition hover:text-zinc-100', lines ? 'text-zinc-100' : 'text-zinc-400')}>
+        {lines ? 'Ocultar las líneas' : 'Ver todas las líneas'}
+      </button>
+      {lines && <MmaLineScanner date={date} onOpen={onOpen} />}
     </TvFrame>
   );
 }

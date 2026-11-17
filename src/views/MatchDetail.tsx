@@ -8,7 +8,8 @@ import { MIN_GAMES, analyzeLine, estimate, findPlayer, mapWinA, parseStat } from
 import { BET_EV, SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
 import { ReliabilityMeter, ValuePanel, VerdictBadge } from '@/components/ValuePanel';
 import { Badge, Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls, td, th } from '@/components/ui';
-import { BookHead, BookIcon } from '@/components/BookIcon';
+import { BookHead, BookIcon, bookKey } from '@/components/BookIcon';
+import { ago, movesOf, type Move } from '@/components/BasketOdds';
 import { SheetScroll, Scoreboard, SheetTabs } from '@/components/sport';
 import { oddsMeta } from '@/lib/odds-live';
 import { useUser } from '@/components/AuthGate';
@@ -94,7 +95,7 @@ const DEFAULT_FEATURED = 'Winamax,Betway';
 const normBook = (b: string) => b.toLowerCase().replace(/[^a-z0-9]/g, '');
 const SECTION_ORDER: Section[] = ['match', 'map1', 'map2', 'map3', 'map4', 'map5', 'players', 'other', 'special'];
 // add = true: va directa al boleto de combinada (clic derecho o Mayús+clic)
-type Pick = (market: string, sel: string, bk: string, price: number, add?: boolean) => void;
+type Pick = (market: string, sel: string, bk: string, price: number, add?: boolean, ref?: { key: string; out: string }) => void;
 
 // Barra de las casas: estado de cada una y el botón que trae las cuotas con la extensión de Chrome
 function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
@@ -174,6 +175,12 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
     // Las lecturas nuevas (lector, marcador o extensión) la recargan con su aviso (src/lib/odds-live.ts)
     meta: oddsMeta({ a, b }), refetchInterval: match.state === 'inProgress' ? 15_000 : refreshMs
   });
+  // Cómo se han movido las cuotas (flechas): se vuelve a pedir cuando llegan cuotas nuevas
+  const hist = useQuery({
+    queryKey: ['odds', 'history', 'lol', match.id, dataUpdatedAt], enabled: !!data?.markets.length,
+    queryFn: () => window.api.odds.history({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code }, start: match.startTime }), staleTime: 5 * 60e3, placeholderData: p => p
+  });
+  const moves = useMemo(() => movesOf(hist.data), [hist.data]);
   // Forma de los jugadores (Leaguepedia) para estimar el valor de las líneas de jugador; sólo si hay líneas
   const hasLines = !!data?.markets.some(isPlayerLine);
   const formOf = (t: TeamRef) => ({
@@ -215,8 +222,12 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
     [visible, mainOnly, groupsWithMain]);
   const hasAlt = visible.some(m => !m.main && groupsWithMain.has(m.group) && !isPlayerLine(m));
   // Cualquier cuota va al cupón (allí se pone el stake y se registra como simple o combinada)
-  const pick: Pick = (market, sel, bk, price) =>
-    addToSlip({ sport: 'lol', league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price, status: 'pending' });
+  // El ganador y el hándicap del partido entero llevan su ref para que el servidor los resuelva solo; lo de cada mapa, a mano
+  const pick: Pick = (market, sel, bk, price, _add, r) =>
+    addToSlip({
+      sport: 'lol', league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price, status: 'pending',
+      ...(r && /^(moneyline|spread)\|0\|/.test(r.key) ? { ref: { sport: 'lol' as const, match: match.id, key: r.key, out: r.out, start: match.startTime } } : {})
+    });
 
   if (match.state === 'completed') return <Empty>El partido ha terminado: ya no hay cuotas</Empty>;
 
@@ -269,7 +280,7 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
                 {s === 'players' && <PlayerLines markets={ms.filter(isPlayerLine)} books={books} value={value} onPick={pick} open={!closed.has('__jugadores')} onToggle={() => toggle('__jugadores')} />}
                 <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-2">
                   {[...groupBy(ms.filter(m => !isPlayerLine(m)), m => m.group)].map(([group, lines]) => (
-                    <MarketCard key={group} title={shortGroup(group)} group={group} lines={lines} books={books} onPick={pick}
+                    <MarketCard key={group} title={shortGroup(group)} group={group} lines={lines} books={books} moves={moves} onPick={pick}
                       open={!closed.has(shortGroup(group))} onToggle={() => toggle(shortGroup(group))} />
                   ))}
                 </div>
@@ -293,21 +304,22 @@ function bestOf(prices: Record<string, number>, books: string[]) {
   return { bk, p, n };
 }
 
-function OddButton({ price, best, onClick, title, className }: { price?: number; best?: boolean; onClick?: (add: boolean) => void; title?: string; className?: string }) {
+function OddButton({ price, best, onClick, title, className, move }: { price?: number; best?: boolean; onClick?: (add: boolean) => void; title?: string; className?: string; move?: Move | null }) {
   if (!price) return <span className={cn('grid h-8 place-items-center font-mono text-xs text-zinc-700', className)}>–</span>;
   return (
     <button onClick={e => onClick?.(e.shiftKey)} onContextMenu={e => { e.preventDefault(); onClick?.(true); }}
-      title={title && title + ' · clic derecho: añadir a combinada'}
-      className={cn(oddBtn(best), 'h-9 text-[13px] lg:h-8', className)}>
+      title={title && title + (move ? ` · antes ${odd(move.before)}, cambió ${ago(move.at)}` : '') + ' · clic derecho: añadir a combinada'}
+      className={cn(oddBtn(best), 'relative h-9 text-[13px] lg:h-8', className)}>
       {odd(price)}
+      {move && <span aria-label={move.now > move.before ? 'ha subido' : 'ha bajado'} className={cn('absolute right-1 top-0.5 text-[8px] leading-none', move.now > move.before ? 'text-emerald-400' : 'text-rose-400')}>{move.now > move.before ? '▲' : '▼'}</span>}
     </button>
   );
 }
 
 // Un mercado: selecciones en filas y una columna fija por casa (con su icono); la mejor cuota con el acento.
 // Se pliega pulsando la cabecera y los mercados largos se recortan.
-function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
-  title: string; group: string; lines: MarketLine[]; books: string[]; onPick: Pick; open: boolean; onToggle: () => void;
+function MarketCard({ title, group, lines, books, moves, onPick, open, onToggle }: {
+  title: string; group: string; lines: MarketLine[]; books: string[]; moves: Map<string, Move>; onPick: Pick; open: boolean; onToggle: () => void;
 }) {
   const [all, setAll] = useState(false);
   const limit = 4;
@@ -337,7 +349,8 @@ function MarketCard({ title, group, lines, books, onPick, open, onToggle }: {
                     <span className="hidden w-11 text-right font-mono text-[11px] tabular-nums text-zinc-400 sm:inline">{sum ? pct(inv[oi] / sum) : '–'}</span>
                     {books.map(bk => (
                       <OddButton key={bk} className="w-16 sm:w-[72px]" price={o.prices[bk]} best={bests[oi].n > 1 && o.prices[bk] === bests[oi].p}
-                        title={`${bk}: registrar apuesta`} onClick={add => onPick(group, o.label, bk, o.prices[bk], add)} />
+                        move={(() => { const mv = moves.get(`${bookKey(bk)}|${l.key}|${o.id}`); return mv && Math.abs(mv.now - o.prices[bk]) < 0.005 ? mv : null; })()}
+                        title={`${bk}: registrar apuesta`} onClick={add => onPick(group, o.label, bk, o.prices[bk], add, { key: l.key, out: o.id })} />
                     ))}
                   </div>
                 ))}

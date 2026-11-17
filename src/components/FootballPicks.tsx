@@ -8,10 +8,10 @@ import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { footballPredictions, logPredictions } from '@/lib/predictions';
 import { verdictOf } from '@/lib/value';
-import type { FootballDayPick, FootballMatch, FootballPick } from '@/lib/types';
+import type { FootballDayPick, FootballLineRow, FootballMatch, FootballPick } from '@/lib/types';
 import { PickRow, ValueChip } from './TennisPicks';
 import { ReliabilityMeter } from './ValuePanel';
-import { Empty, ErrorBox, Loading } from './ui';
+import { Empty, ErrorBox, Loading, Select, chip, seg, segWrap } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
@@ -38,7 +38,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
   // Se registran para medir después si el modelo acierta
   useEffect(() => {
     const r = q.data;
-    if (r?.ready) logPredictions(footballPredictions(m, [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
+    if (r?.ready) logPredictions(footballPredictions(m, r.all ?? [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const add = (p: FootballPick) => addPick(m, p);
   if (!pre) return <Empty>Las recomendaciones son para antes de empezar: el modelo no sigue el marcador en directo.</Empty>;
@@ -127,8 +127,57 @@ function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick
   );
 }
 
+// ---------- Escáner de líneas ----------
+// Todas las líneas que calcula el modelo de los partidos del día con cuotas, de más a menos valor, con filtro por tipo de mercado,
+// cuota mínima y "sólo con valor". El tipo sale de la familia ("1.ª parte · Total de goles" → "Total de goles"; "Goles de X" → "Goles de equipo")
+const kindOf = (family: string) => {
+  const f = family.replace(/^1\.ª parte · /, '');
+  return /^Goles de /.test(f) ? 'Goles de equipo' : f;
+};
+function LineScanner({ date, onOpen }: { date: string; onOpen: (id: string) => void }) {
+  const addPick = useFootballAdd();
+  const [kind, setKind] = useState('');
+  const [minPrice, setMinPrice] = useState(1.5);
+  const [onlyValue, setOnlyValue] = useState(true);
+  const [limit, setLimit] = useState(40);
+  const q = useQuery({ queryKey: ['football', 'picks-lines', date], queryFn: () => window.api.football.picksLines(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const rows = q.data ?? [];
+  const kinds = [...new Set(rows.map(r => kindOf(r.pick.family)))].sort();
+  const shown = rows.filter(r => (!kind || kindOf(r.pick.family) === kind) && r.pick.price >= minPrice && (!onlyValue || verdictOf(r.pick.ev, r.pick.rel.score) === 'BET'));
+  const asDay = (r: FootballLineRow): FootballDayPick => ({ id: r.id, league: r.league, leagueName: r.leagueName, date: r.date, home: r.home, away: r.away, top: r.pick, hard: null });
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={kind} onChange={e => { setKind(e.target.value); setLimit(40); }} aria-label="Tipo de mercado" className="h-8 w-auto">
+          <option value="">Todos los mercados</option>
+          {kinds.map(k => <option key={k} value={k}>{k}</option>)}
+        </Select>
+        <label className="flex items-center gap-1.5 text-xs text-zinc-400">Cuota mínima
+          <input type="number" step="0.05" min="1" value={minPrice} onChange={e => { setMinPrice(Number(e.target.value) || 1); setLimit(40); }}
+            className="h-8 w-16 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" />
+        </label>
+        <button role="switch" aria-checked={onlyValue} onClick={() => { setOnlyValue(v => !v); setLimit(40); }} className={chip(onlyValue)}>Sólo con valor</button>
+      </div>
+      {q.isLoading ? <Loading label="Calculando las líneas…" /> : q.error ? <ErrorBox error={q.error} /> : !rows.length
+        ? <Empty>Ese día no hay partidos con cuotas leídas todavía.</Empty>
+        : (
+          <TvFrame>
+            <TvHeader title="Líneas" sub={`${shown.length} de ${rows.length} líneas calculadas`} />
+            {shown.length ? shown.slice(0, limit).map(r => <BoardRow key={`${r.id}|${r.pick.id}`} d={asDay(r)} p={r.pick} onOpen={onOpen} onAdd={(d, p) => addPick(d, p)} />)
+              : <p className="px-3 py-3 text-[13px] text-zinc-400">Ninguna con esos filtros.</p>}
+            {shown.length > limit && <button onClick={() => setLimit(l => l + 40)} className="w-full cursor-pointer border-t border-zinc-800 py-2 text-xs text-zinc-400 transition hover:text-zinc-100">Ver más ({shown.length - limit})</button>}
+            <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
+              Son estimaciones: mezclan el modelo de goles con las casas, y las casas pesan más. Se descartan las que se alejan mucho de la casa o tienen poca fiabilidad.
+            </p>
+          </TvFrame>
+        )}
+    </div>
+  );
+}
+
 function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label: string }[]; onOpen: (id: string) => void }) {
   const [date, setDate] = useState(days[0].value);
+  const [view, setView] = useState<'best' | 'lines'>('best');
   const addPick = useFootballAdd();
   const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
   const data = q.data ?? [];
@@ -144,8 +193,12 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
             {d.label}
           </button>
         ))}
+        <span className={cn(segWrap, 'ml-auto')}>
+          <button onClick={() => setView('best')} aria-pressed={view === 'best'} className={seg(view === 'best')}>Mejores</button>
+          <button onClick={() => setView('lines')} aria-pressed={view === 'lines'} className={seg(view === 'lines')}>Todas las líneas</button>
+        </span>
       </div>
-      {q.isLoading ? <Loading label="Calculando las recomendaciones…" /> : q.error ? <ErrorBox error={q.error} /> : !data.length
+      {view === 'lines' ? <LineScanner date={date} onOpen={onOpen} /> : q.isLoading ? <Loading label="Calculando las recomendaciones…" /> : q.error ? <ErrorBox error={q.error} /> : !data.length
         ? <Empty>Ese día no hay partidos con cuotas leídas todavía, y sin ellas no se puede recomendar nada. El lector las trae unas horas antes de cada partido.</Empty>
         : (
           <TvFrame>

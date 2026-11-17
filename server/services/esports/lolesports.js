@@ -63,6 +63,7 @@ async function getEventDetails(key, matchId) {
     id: ev.id,
     league: ev.league?.name || '',
     teams: (ev.match?.teams || []).map(t => ({ id: t.id, name: t.name, code: t.code, image: img(t.image), wins: t.result?.gameWins ?? 0 })),
+    bestOf: ev.match?.strategy?.count || null,
     games: (ev.match?.games || []).map(g => ({ id: g.id, number: g.number, state: g.state, vods: g.vods?.length || 0 }))
   };
 }

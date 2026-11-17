@@ -61,10 +61,10 @@ const CIRCUITS: { value: Circuit; label: string }[] = [{ value: 'atp', label: 'A
 const circuitOf = (m: TennisMatch): Circuit => m.tour;
 const circuitOfId = (id: string): Circuit => (id.startsWith('wta:') ? 'wta' : 'atp');
 
-// La más fiable, las fáciles y las complicadas de cada partido según el servicio se registran para medir después si el modelo acierta
+// Todas las líneas que el servicio no descarta (incluidas la más fiable, las fáciles y las complicadas) se registran para medir después si el modelo acierta
 function useLogPicks(matches: TennisBoardMatch[]) {
   useEffect(() => {
-    if (matches.length) logPredictions(matches.flatMap(x => tennisPredictions(x.m, [x.top, ...x.easy, ...x.hard])));
+    if (matches.length) logPredictions(matches.flatMap(x => tennisPredictions(x.m, x.picks ?? [x.top, ...x.easy, ...x.hard])));
   }, [matches]);
 }
 

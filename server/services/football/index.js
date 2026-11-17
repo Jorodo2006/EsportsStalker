@@ -8,7 +8,7 @@ const { start, fail } = require('../../shared/service');
 const { migrate, query } = require('../../shared/db');
 const { cachedJSON, warmEvery } = require('../../shared/cached');
 const { photoOf, photosOf } = require('./photos');
-const { picksFor } = require('./picks');
+const { picksFor, scannable } = require('./picks');
 const { hits, queryOf } = require('../../shared/search');
 
 // En este orden salen en la lista de partidos
@@ -407,7 +407,7 @@ const routes = [
   ['GET', '/api/football/picks', async ({ query: q }) => {
     const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
     if (!m) throw fail('Partido no encontrado');
-    return picksFor(m, BY_ID[m.league].espn);
+    return picksFor(m, BY_ID[m.league].espn, { all: q.all === '1', players: true });
   }],
   ['GET', '/api/football/picks/day', async ({ query: q }) => {
     const date = valid(q.date);
@@ -422,9 +422,24 @@ const routes = [
     out.sort((x, y) => y.top.p - x.top.p);
     dayPicks.set(date, { t: Date.now(), v: out });
     return out;
+  }],
+  // Escáner de líneas: todas las líneas calculadas de los partidos del día con cuotas, de más a menos valor
+  ['GET', '/api/football/picks/lines', async ({ query: q }) => {
+    const date = valid(q.date);
+    const hit = dayLines.get(date);
+    if (hit && Date.now() - hit.t < 60e3) return hit.v;
+    const list = (await between(date, date)).filter(m => m.state === 'pre' && !m.off);
+    const out = [];
+    for (const m of list) {
+      const r = await picksFor(m, BY_ID[m.league].espn, { all: true, players: true }).catch(e => { console.error('[football] líneas:', m.id, e.message); return null; });
+      for (const pick of r?.ready ? r.all.filter(scannable) : []) out.push({ id: m.id, league: m.league, leagueName: m.leagueName, date: m.date, home: m.home, away: m.away, pick });
+    }
+    out.sort((x, y) => y.pick.ev - x.pick.ev);
+    dayLines.set(date, { t: Date.now(), v: out });
+    return out;
   }]
 ];
-const dayPicks = new Map();
+const dayPicks = new Map(), dayLines = new Map();
 
 // Partidos de ayer a mañana y directos siempre preparados: el primero que entra no espera a ESPN (shared/cached.js)
 warmEvery('football', 4 * 60e3, () => { const t = madridDay(Date.now()); return Promise.all([between(addDays(t, -1), addDays(t, 1)), live()]); });

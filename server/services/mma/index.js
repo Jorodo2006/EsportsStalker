@@ -9,7 +9,7 @@ const { dayStart, madridDay, addDays, compact } = require('./dates');
 const espn = require('./espn');
 const wow = require('./wow');
 const hist = require('./history');
-const { picksFor } = require('./picks');
+const { picksFor, scannable } = require('./picks');
 
 const getJSON = cachedJSON({ table: 'mma.cache', saveEvery: 60e3 });
 
@@ -90,7 +90,7 @@ const fightOf = async (date, id) => {
   if (!f) throw fail('Combate no encontrado', 404);
   return f;
 };
-const dayPicks = new Map();
+const dayPicks = new Map(), dayLines = new Map();
 
 const routes = [
   ['GET', '/api/mma/search', ({ query: q }) => search(q.q)],
@@ -119,7 +119,7 @@ const routes = [
     return card;
   }],
   // Recomendaciones de un combate (modelo + cuotas), o las mejores de un día entre los combates con cuotas leídas
-  ['GET', '/api/mma/picks', async ({ query: q }) => { const f = await fightOf(q.date, q.id); return picksFor(f, await ctxFor(f)); }],
+  ['GET', '/api/mma/picks', async ({ query: q }) => { const f = await fightOf(q.date, q.id); return picksFor(f, await ctxFor(f), { all: q.all === '1' }); }],
   ['GET', '/api/mma/picks/day', async ({ query: q }) => {
     const date = valid(q.date);
     const hit = dayPicks.get(date);
@@ -133,6 +133,22 @@ const routes = [
     out.sort((x, y) => y.top.p - x.top.p);
     if (dayPicks.size > 30) dayPicks.clear();
     dayPicks.set(date, { t: Date.now(), v: out });
+    return out;
+  }],
+  // Escáner de líneas: todas las líneas calculadas de los combates del día con cuotas, de más a menos valor
+  ['GET', '/api/mma/picks/lines', async ({ query: q }) => {
+    const date = valid(q.date);
+    const hit = dayLines.get(date);
+    if (hit && Date.now() - hit.t < 60e3) return hit.v;
+    const list = (await between(date, date)).filter(f => f.state === 'pre' && !f.cancelled);
+    const out = [];
+    for (const f of list) {
+      const r = await picksFor(f, await ctxFor(f), { all: true }).catch(e => { console.error('[mma] líneas:', f.id, e.message); return null; });
+      for (const pick of r?.ready ? r.all.filter(scannable) : []) out.push({ id: f.id, org: f.org, orgName: f.orgName, date: f.date, a: f.a, b: f.b, pick });
+    }
+    out.sort((x, y) => y.pick.ev - x.pick.ev);
+    if (dayLines.size > 30) dayLines.clear();
+    dayLines.set(date, { t: Date.now(), v: out });
     return out;
   }]
 ];

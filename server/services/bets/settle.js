@@ -66,8 +66,27 @@ async function footballResult(ref) {
   const score = period => (period === 0 ? [fa, fb] : period === 1 ? half : period === 2 ? [fa - half[0], fb - half[1]] : null);
   const corners = [st(m.home.id).wonCorners, st(m.away.id).wonCorners];
   const cards = [sum([st(m.home.id).yellowCards, st(m.home.id).redCards]), sum([st(m.away.id).yellowCards, st(m.away.id).redCards])];
+  // Quién jugó, marcó o vio tarjeta, por nombre (para los mercados de jugador de Winamax)
+  const played = new Set((d.lineups || []).flatMap(r => r.players.filter(p => p.starter || p.subIn).map(p => norm(p.name))));
+  const scored = new Map(), carded = new Set();
+  for (const e of d.timeline || []) {
+    if (e.kind === 'goal' || e.kind === 'penalty') scored.set(norm(e.player), (scored.get(norm(e.player)) || 0) + 1);
+    else if (e.kind === 'yellow' || e.kind === 'red') carded.add(norm(e.player));
+  }
+  // Estadísticas de un jugador (remates, paradas, faltas…) de la API core de ESPN: una petición por jugador y sólo si hace falta
+  const cache = new Map();
+  const statsOf = name => {
+    const n = norm(name);
+    if (!cache.has(n)) {
+      const hit = (d.lineups || []).flatMap(r => r.players.map(p => ({ team: r.team, ...p }))).filter(p => norm(p.name) === n && (p.starter || p.subIn));
+      cache.set(n, hit.length === 1
+        ? client.call('football', 'GET', `/api/football/player-stats?match=${encodeURIComponent(ref.match)}&team=${hit[0].team}&player=${hit[0].id}`).catch(() => null)
+        : Promise.resolve(null));
+    }
+    return cache.get(n);
+  };
   return {
-    sport: 'football', label: `${m.home.name} ${fa}-${fb} ${m.away.name}`, score, unit: 'goles',
+    sport: 'football', label: `${m.home.name} ${fa}-${fb} ${m.away.name}`, score, unit: 'goles', played, scored, carded, statsOf,
     corners: corners.every(v => v != null) ? corners : null, cards: Object.keys(st(m.home.id)).length ? cards : null
   };
 }
@@ -85,8 +104,19 @@ async function tennisResult(ref) {
   };
   return {
     sport: 'tennis', label: `${m.a.name} ${sa.map((x, i) => `${x}-${sb[i]}`).join(' ')} ${m.b.name}`, score, unit: 'juegos',
-    winner: m.a.winner ? 'a' : m.b.winner ? 'b' : null
+    winner: m.a.winner ? 'a' : m.b.winner ? 'b' : null,
+    names: [m.a.name, m.b.name], sets: [sa, sb]
   };
+}
+
+// LoL: sólo el ganador del partido y el hándicap de mapas, con los mapas ganados de cada equipo (a y b, como en la ficha). El
+// partido está acabado cuando uno llega a la mitad más uno de los mapas; sin saber el formato (bestOf), no se resuelve
+async function lolResult(ref) {
+  const ev = await client.call('esports', 'GET', `/api/esports/events/${encodeURIComponent(ref.match)}`);
+  const [a, b] = ev?.teams || [];
+  const need = Math.floor(Number(ev?.bestOf) / 2) + 1;
+  if (!a || !b || !(need >= 1) || Math.max(a.wins, b.wins) < need || a.wins === b.wins) return null;
+  return { sport: 'lol', label: `${a.name} ${a.wins}-${b.wins} ${b.name}`, score: p => (p === 0 ? [a.wins, b.wins] : null), unit: 'mapas' };
 }
 
 // MMA: el combate tiene que estar terminado y no anulado. Un empate o un "sin resultado" no se resuelven solos: cada casa los paga a
@@ -107,7 +137,7 @@ function fightMatches(event, f) {
   return (mentions(f.a.name, x) && mentions(f.b.name, y)) || (mentions(f.a.name, y) && mentions(f.b.name, x));
 }
 
-const FETCH = { basket: basketResult, football: footballResult, tennis: tennisResult, mma: mmaResult };
+const FETCH = { lol: lolResult, basket: basketResult, football: footballResult, tennis: tennisResult, mma: mmaResult };
 
 // ---------- evaluar un mercado ----------
 // Líneas de jugador de baloncesto: los mismos nombres de estadística que el analizador y las casas
@@ -140,10 +170,78 @@ function evaluateMma(type, kind, line, out, R) {
   return null;
 }
 
+// Fútbol, mercados de jugador de Winamax (clave wmx|título|…; la selección es el nombre del jugador): "Goleador" (marca en algún
+// momento), "Marca N goles o más" y "El jugador recibe una o más tarjetas". Sólo se resuelve si el jugador jugó y su nombre
+// coincide exactamente con el de ESPN; si no jugó (cada casa lo paga distinto) o no se encuentra, a mano. Un gol en propia puerta no cuenta
+// "Realiza N o más remates (a puerta | paradas)", "Comete N o más faltas" y "Recibe N o más faltas" salen de las estadísticas del
+// jugador (stats, que pide run); sin ellas, a mano
+const FOOTBALL_COUNT = [
+  [/^realiza (\d+) o más remates a puerta$/i, 'shotsOnTarget', 'remates a puerta'], [/^realiza (\d+) o más remates$/i, 'totalShots', 'remates'],
+  [/^realiza (\d+) o más paradas$/i, 'saves', 'paradas'], [/^comete (\d+) o más faltas$/i, 'foulsCommitted', 'faltas cometidas'],
+  [/^recibe (\d+) o más faltas$/i, 'foulsSuffered', 'faltas recibidas']
+];
+const footballCountOf = title => { for (const [re, key, label] of FOOTBALL_COUNT) { const m = re.exec(String(title).trim()); if (m) return { n: Number(m[1]), key, label }; } return null; };
+
+function evaluateFootballPlayer(title, who, R, stats) {
+  if (R.sport !== 'football' || !R.played) return null;
+  const n = norm(who);
+  if (!n || !R.played.has(n)) return null;
+  const c = footballCountOf(title);
+  if (c) return stats && typeof stats[c.key] === 'number' ? { status: stats[c.key] >= c.n ? 'won' : 'lost', text: `${who}: ${stats[c.key]} ${c.label}` } : null;
+  const goals = R.scored.get(n) || 0;
+  const t = String(title).trim();
+  let m;
+  if (/^goleador$/i.test(t)) return { status: goals >= 1 ? 'won' : 'lost', text: `${who}: ${goals} gol${goals === 1 ? '' : 'es'}` };
+  if ((m = /^marca (\d+) goles o más$/i.exec(t))) return { status: goals >= Number(m[1]) ? 'won' : 'lost', text: `${who}: ${goals} gol${goals === 1 ? '' : 'es'}` };
+  if (/^el jugador recibe una o más tarjetas$/i.test(t)) return { status: R.carded.has(n) ? 'won' : 'lost', text: `${who}: ${R.carded.has(n) ? 'vio tarjeta' : 'sin tarjeta'}` };
+  return null;
+}
+
+// Tenis, mercados propios de Winamax (clave wmx|título|…; la selección es "Sí", "A. Nagel y D. Lajovic", "Par"…): ganar algún set,
+// "Cualquier set a cero", el doble resultado (1.er set y partido) y par/impar de los juegos de un set o del partido. Los nombres
+// llegan abreviados ("A. Nagel"): tienen que encajar con un solo jugador del partido, si no se queda a mano
+function evaluateTennis(title, sel, R) {
+  if (!R.names || !R.sets || R.winner == null) return null;
+  const [sa, sb] = R.sets;
+  if (!sa.length || sa.length !== sb.length) return null;
+  const sideOf = t => { const h = [0, 1].filter(i => mentions(R.names[i], t)); return h.length === 1 ? ['a', 'b'][h[0]] : null; };
+  const yes = /^s[ií]$/i.test(sel) ? true : /^no$/i.test(sel) ? false : null;
+  const t = String(title).trim();
+  let m;
+  const setWon = (i, side) => (side === 'a' ? sa[i] > sb[i] : sb[i] > sa[i]);
+  if ((m = /^gana al menos un set (.+)$/i.exec(t))) {
+    const side = sideOf(m[1]);
+    if (!side || yes == null) return null;
+    const won = sa.some((_, i) => setWon(i, side));
+    return { status: won === yes ? 'won' : 'lost', text: `${R.label}` };
+  }
+  if (/^cualquier set a cero$/i.test(t)) {
+    if (yes == null) return null;
+    const any = sa.some((x, i) => (x === 0 || sb[i] === 0) && x !== sb[i]);
+    return { status: any === yes ? 'won' : 'lost', text: `${R.label}` };
+  }
+  if (/^doble resultado \(1º set y partido\)$/i.test(t)) {
+    const two = String(sel).split(/\s+y\s+/);
+    const first = two.length === 2 ? sideOf(two[0]) : null, match = two.length === 2 ? sideOf(two[1]) : null;
+    if (!first || !match || sa[0] === sb[0]) return null;
+    const ok = (sa[0] > sb[0] ? 'a' : 'b') === first && R.winner === match;
+    return { status: ok ? 'won' : 'lost', text: `${R.label}` };
+  }
+  if ((m = /^(?:(\d)(?:º|\.º|er|\.er)? set - )?total de juegos - par\/impar$/i.exec(t))) {
+    const i = m[1] ? Number(m[1]) - 1 : null;
+    if (i != null && i >= sa.length) return { status: 'void', text: 'Ese set no se jugó' };
+    const v = i == null ? sum(sa) + sum(sb) : sa[i] + sb[i];
+    const odd = /^impar$/i.test(sel) ? true : /^par$/i.test(sel) ? false : null;
+    return odd == null ? null : { status: (v % 2 === 1) === odd ? 'won' : 'lost', text: `${R.label}: ${v} juegos` };
+  }
+  return null;
+}
+
 // → { status: 'won' | 'lost' | 'void', text } o null si no se sabe resolver
 function evaluate(ref, R) {
   const parts = ref.key.split('|');
   const type = parts[0], out = ref.out;
+  if (type === 'wmx') return R.sport === 'tennis' ? evaluateTennis(parts[1], ref.selection, R) : evaluateFootballPlayer(parts[1], ref.selection, R, ref.stats);
   if (type === 'player') {
     if (R.sport !== 'basket') return null;
     const [, stat, who, l] = parts, line = Number(l), f = PLAYER_STAT[stat];
@@ -160,6 +258,8 @@ function evaluate(ref, R) {
   }
   const period = Number(parts[1]) || 0, side = parts[2], line = Number(parts[3]);
   if (quarterLine(line)) return null;
+  // LoL: de los mercados por mapa (kills, primera sangre…) no se tiene el resultado: sólo ganador y hándicap del partido entero
+  if (R.sport === 'lol' && (period !== 0 || !['moneyline', 'spread'].includes(type))) return null;
   if (type === 'corners' || type === 'cards') {
     const pair = R[type];
     if (!pair || period !== 0) return null;
@@ -278,7 +378,9 @@ async function run() {
         if (!it.ref || it.ref.settled) continue;
         const R = await resultOf({ ...it.ref, date: bet.date });
         if (!R) continue;
-        const v = evaluate({ ...it.ref, event: it.event }, R);
+        // Remates, paradas y faltas de un jugador: sus estadísticas se piden aparte
+        const stats = R.statsOf && it.ref.key.startsWith('wmx|') && footballCountOf(it.ref.key.split('|')[1]) ? await R.statsOf(it.selection) : null;
+        const v = evaluate({ ...it.ref, event: it.event, selection: it.selection, stats }, R);
         if (!v) continue;
         it.status = v.status;
         it.ref = { ...it.ref, settled: { at: new Date().toISOString(), text: v.text } };

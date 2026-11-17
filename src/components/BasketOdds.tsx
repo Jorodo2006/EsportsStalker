@@ -199,7 +199,7 @@ export function movesOf(rows: PriceHistoryRow[] | undefined) {
   for (const [k, v] of out) if (Date.now() - v.at > 24 * 3600e3) out.delete(k);
   return out;
 }
-function ago(t: number) {
+export function ago(t: number) {
   const m = Math.round((Date.now() - t) / 60e3);
   return m < 60 ? `hace ${Math.max(1, m)} min` : m < 24 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`;
 }

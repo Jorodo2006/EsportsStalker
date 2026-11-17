@@ -148,4 +148,8 @@ async function picksFor(f, ctx, opts = {}) {
   return { ready: true, pred: { pA: pred.pA, pB: pred.pB, method: pred.method, goesDistance: pred.goesDistance, reliability: pred.reliability }, ...rest, ...(opts.all ? { all } : {}) };
 }
 
-module.exports = { buildPicks, picksFor };
+// Para el escáner de líneas: todas las calculadas que no son un disparate (no se alejan de la casa más que MAX_DISAGREE, fiabilidad de
+// 40 o más, cuota de MIN_PRICE o más y un EV de −12 % o más); la interfaz las filtra y las ordena
+const scannable = x => Math.abs(x.pModel - x.pMarket) <= MAX_DISAGREE && x.rel.score >= 40 && x.price >= MIN_PRICE && x.ev >= -0.12;
+
+module.exports = { buildPicks, picksFor, scannable };

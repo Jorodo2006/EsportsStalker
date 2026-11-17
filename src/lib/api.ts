@@ -190,8 +190,9 @@ export const api: Api = {
     photos: players => call('POST', '/api/football/photos', { players }),
     teamGames: teamId => get(`/api/football/team-games/${part(teamId)}`),
     standings: league => get(`/api/football/standings/${part(league)}`),
-    picks: (date, id) => get('/api/football/picks', { date, id }),
+    picks: (date, id) => get('/api/football/picks', { date, id, all: '1' }), // all: todas las líneas, para registrarlas
     // Las del día se registran para medir si el modelo acierta (las ve la lista de fútbol y la portada Hoy)
+    picksLines: date => get('/api/football/picks/lines', { date }),
     picksDay: date => get('/api/football/picks/day', { date }).then((list: FootballDayPick[]) => {
       logPredictions(list.flatMap(d => footballPredictions(d, [d.top, d.hard])));
       return list;
@@ -206,8 +207,9 @@ export const api: Api = {
     fighter: id => get('/api/mma/fighter', { id }),
     ranking: () => get('/api/mma/ranking'),
     profile: id => get('/api/mma/profile', { id }),
-    picks: (date, id) => get('/api/mma/picks', { date, id }),
+    picks: (date, id) => get('/api/mma/picks', { date, id, all: '1' }),
     // Las del día se registran para medir si el modelo acierta (las ven la lista de MMA y la portada Hoy)
+    picksLines: date => get('/api/mma/picks/lines', { date }),
     picksDay: date => get('/api/mma/picks/day', { date }).then((list: MmaDayPick[]) => {
       logPredictions(list.flatMap(d => mmaPredictions(d, [d.top, d.hard])));
       return list;
