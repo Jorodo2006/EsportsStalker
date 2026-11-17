@@ -1,6 +1,7 @@
 // Puente de las cuotas: recibe lo que leen de las páginas de Winamax y Betway el lector de Docker (server/lector),
 // la extensión o el marcador de Chrome, y lleva los trabajos de lectura. Bet365 se quitó (no se deja leer desde Docker).
 // Todo se guarda en PostgreSQL (esquema odds); el gateway publica estas rutas en 127.0.0.1:47365.
+const { movesOf } = require('./moves');
 const fs = require('fs');
 const path = require('path');
 const { query, tx, notify } = require('../../shared/db');
@@ -109,8 +110,9 @@ async function moneylines(events) {
 const sameMatch = `(match_start IS NOT DISTINCT FROM $1::timestamptz OR abs(extract(epoch FROM match_start - $1::timestamptz)) < ${SAME_MATCH})`;
 
 // Histórico: si la cuota no ha cambiado se alarga su tramo (last_seen); si ha cambiado, se abre uno nuevo
+// Devuelve los movimientos fuertes respecto a la lectura anterior de esta casa (moves.js), para los avisos
 async function recordPrices(matchKey, book, rows) {
-  if (!matchKey || !rows.length) return;
+  if (!matchKey || !rows.length) return [];
   const start = (await query('SELECT start FROM odds.matches WHERE key = $1', [matchKey])).rows[0]?.start || null;
   const { rows: last } = await query(`SELECT DISTINCT ON (market_key, outcome_id) id, market_key, outcome_id, price FROM odds.price_history
     WHERE ${sameMatch} AND match_key = $2 AND book = $3 ORDER BY market_key, outcome_id, ts DESC`, [start, matchKey, book]);
@@ -121,11 +123,12 @@ async function recordPrices(matchKey, book, rows) {
     if (p?.price === r.price) same.push(p.id); else changed.push(r);
   }
   if (same.length) await query('UPDATE odds.price_history SET last_seen = now() WHERE id = ANY($1::bigint[])', [same]);
-  if (!changed.length) return;
+  if (!changed.length) return [];
   const cols = ['market_key', 'market', 'outcome_id', 'outcome', 'line', 'price'];
   await query(`INSERT INTO odds.price_history (match_key, book, match_start, ${cols.join(', ')})
     SELECT $1, $2, $3, * FROM jsonb_to_recordset($4::jsonb) AS x(market_key text, market text, outcome_id text, outcome text, line float, price float)`,
   [matchKey, book, start, JSON.stringify(changed.map(r => Object.fromEntries(cols.map(c => [c, r[c] ?? null]))))]);
+  return movesOf(prev, changed);
 }
 
 // Histórico de un partido, del más antiguo al más nuevo: un tramo por cuota y casa

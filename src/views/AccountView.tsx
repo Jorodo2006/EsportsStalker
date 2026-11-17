@@ -11,6 +11,9 @@ import { Button, Card, Field, Input, PageHeader, TeamLogo } from '@/components/u
 import { Toggle } from '@/components/sport';
 import { useFavorites } from '@/components/Favorites';
 import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
+import { disablePush, enablePush, isIosBrowser, pushState, type PushState } from '@/lib/push';
+import { useAlerts } from '@/components/Alerts';
+import type { OddsAlertKind, OddsAlertPrefs } from '@/lib/types';
 
 export default function AccountView() {
   const isAdmin = !!useUser().data?.isAdmin;
@@ -22,6 +25,7 @@ export default function AccountView() {
         <Notice />
         <AccountCard isAdmin={isAdmin} />
         <WalletCard />
+        <OddsAlertsCard />
         <AlertsCard />
         <FavoritesCard />
         {isAdmin && (
@@ -131,6 +135,65 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
           {!user?.google && <a href="/api/auth/google?link=1" className="inline-flex h-8 items-center rounded-md bg-zinc-800 px-3 text-xs font-medium text-zinc-100 transition hover:bg-zinc-700">Vincular con Google</a>}
         </div>
       )}
+    </Card>
+  );
+}
+
+// Avisos de cuotas: los detecta el servidor (server/services/bets/alerts.js) y salen en la campana. Qué tipos, en el servidor (valen en
+// todos tus dispositivos); recibirlos con la app cerrada, en cada navegador o móvil (src/lib/push.ts)
+function OddsAlertsCard() {
+  const qc = useQueryClient();
+  const { toast } = useApp();
+  const prefs = useQuery({ queryKey: ['alerts', 'prefs'], queryFn: () => window.api.alerts.prefs() });
+  const alerts = useAlerts();
+  const [push, setPush] = useState<PushState>('off');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { pushState().then(setPush); }, []);
+  const ITEMS: [OddsAlertKind, string, string][] = [
+    ['drop', 'Caídas de cuota', 'Cuando una cuota de tus apuestas pendientes, de tu cupón o del partido de un favorito baja un 10 % o más de una lectura a otra: suele ser dinero entrando o una noticia.'],
+    ['rise', 'Subidas de cuota', 'Lo mismo cuando sube: si tienes apostado, el mercado se va en contra.'],
+    ['value', 'Nuevas con valor', 'Cuando sale una recomendación con valor en tenis, fútbol o MMA, y las más fuertes de baloncesto. Como mucho cinco de golpe.']
+  ];
+  async function flip(k: OddsAlertKind, on: boolean) {
+    const n: OddsAlertPrefs = { ...(prefs.data ?? { drop: true, rise: true, value: true }), [k]: on };
+    qc.setQueryData(['alerts', 'prefs'], n);
+    try { qc.setQueryData(['alerts', 'prefs'], await window.api.alerts.setPrefs(n)); } catch (e) { toast((e as Error).message); prefs.refetch(); }
+  }
+  async function togglePush(on: boolean) {
+    setBusy(true);
+    try {
+      if (on) {
+        const key = alerts.data?.push.key;
+        if (!key) throw new Error('El servidor no tiene preparadas las notificaciones');
+        await enablePush(key);
+        toast('Listo: te llegarán aunque tengas Sharpex cerrada');
+      } else await disablePush();
+    } catch (e) { toast((e as Error).message); }
+    finally { setPush(await pushState()); setBusy(false); qc.invalidateQueries({ queryKey: ['alerts'] }); }
+  }
+  const pushNote = push === 'unsupported'
+    ? (typeof window !== 'undefined' && !window.isSecureContext ? 'Aquí no se puede: hace falta entrar por https (pasa en el móvil entrando por la IP de casa).' : 'Este navegador no deja recibir avisos con la app cerrada.')
+    : push === 'denied' ? 'Has bloqueado los avisos de esta web: actívalos en el candado de la barra de direcciones.'
+      : isIosBrowser() ? 'En el iPhone sólo funciona con Sharpex en la pantalla de inicio: Compartir → Añadir a pantalla de inicio, y actívalo desde ahí.'
+        : push === 'on' ? 'Este dispositivo los recibe aunque Sharpex esté cerrada. Actívalo también en el móvil para llevarlos encima.'
+          : 'Sin esto, los ves en la campana al abrir la app.';
+  return (
+    <Card title="Avisos de cuotas" action={<span className="text-[11px] text-zinc-500">en la campana</span>}>
+      <div className="flex flex-col divide-y divide-zinc-800/60">
+        {ITEMS.map(([k, label, hint]) => (
+          <div key={k} className="flex items-start justify-between gap-4 py-2.5 first:pt-0">
+            <div className="min-w-0"><div className="text-sm font-medium">{label}</div><div className="text-xs text-zinc-500">{hint}</div></div>
+            <Toggle on={prefs.data?.[k] ?? true} onChange={v => flip(k, v)} label="" />
+          </div>
+        ))}
+        <div className="flex items-start justify-between gap-4 pt-2.5">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Con la app cerrada</div>
+            <div className="text-xs text-zinc-500">{pushNote}</div>
+          </div>
+          {push === 'on' || push === 'off' ? <Toggle on={push === 'on'} onChange={v => !busy && togglePush(v)} label="" /> : null}
+        </div>
+      </div>
     </Card>
   );
 }

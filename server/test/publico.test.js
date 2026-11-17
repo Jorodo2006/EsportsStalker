@@ -19,6 +19,9 @@ test('lo de cada usuario, las recomendaciones y leer cuotas a mano piden cuenta'
     ['GET', '/api/tennis/picks'], ['GET', '/api/tennis/picks/board'], ['GET', '/api/tennis/picks/day'], ['GET', '/api/football/picks'],
     ['GET', '/api/football/picks/day'], ['GET', '/api/football/picks/lines'], ['GET', '/api/mma/picks'], ['GET', '/api/mma/picks/lines'], ['GET', '/api/challenger/estado'], ['POST', '/api/challenger/escanear'],
     ['GET', '/api/odds/auto/status'], ['GET', '/api/bets/predictions'], ['POST', '/api/auth/password'],
+    // Avisos de cuotas: los de cada usuario y su suscripción a las notificaciones
+    ['GET', '/api/alerts'], ['POST', '/api/alerts/read'], ['GET', '/api/alerts/prefs'], ['PUT', '/api/alerts/prefs'], ['PUT', '/api/alerts/watch'],
+    ['POST', '/api/alerts/push'], ['POST', '/api/alerts/push/remove'],
     // Escribir en un deporte con otro método no se abre aunque la ruta sea de lectura
     ['POST', '/api/basket/games'], ['DELETE', '/api/tennis/games']
   ];

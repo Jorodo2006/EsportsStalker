@@ -8,6 +8,8 @@ const auth = require('./auth');
 const settle = require('./settle');
 const predictions = require('./predictions');
 const friends = require('./friends');
+const alerts = require('./alerts');
+const push = require('./push');
 const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
@@ -80,11 +82,23 @@ const routes = [
   ['POST', '/api/shared/:id/copied', ({ req, params }) => friends.copied(who(req).id, params.id)],
   ['DELETE', '/api/shared/:id', ({ req, params }) => friends.hide(who(req).id, params.id)],
   ['GET', '/api/friends/:id/chat', ({ req, params }) => friends.thread(who(req).id, params.id)],
-  ['POST', '/api/friends/:id/chat', ({ req, params, body }) => friends.send(who(req).id, params.id, body?.text)]
+  ['POST', '/api/friends/:id/chat', ({ req, params, body }) => friends.send(who(req).id, params.id, body?.text)],
+
+  // ---------- Avisos de cuotas (alerts.js) y notificaciones con la app cerrada (push.js): siempre del usuario de la sesión ----------
+  ['GET', '/api/alerts', ({ req }) => alerts.list(who(req).id)],
+  ['POST', '/api/alerts/read', ({ req, body }) => alerts.markRead(who(req).id, body?.ids)],
+  ['GET', '/api/alerts/prefs', ({ req }) => alerts.getPrefs(who(req).id)],
+  ['PUT', '/api/alerts/prefs', ({ req, body }) => alerts.setPrefs(who(req).id, body)],
+  ['PUT', '/api/alerts/watch', ({ req, body }) => alerts.setWatch(who(req).id, body?.list)],
+  ['POST', '/api/alerts/push', ({ req, body }) => push.subscribe(who(req).id, body?.subscription)],
+  ['POST', '/api/alerts/push/remove', ({ req, body }) => push.unsubscribe(who(req).id, body?.endpoint)],
+  // Los manda odds tras cada lectura (sólo por la red interna: el gateway no reparte /internal)
+  ['POST', '/internal/alerts/odds', ({ body }) => alerts.fromOdds(body)]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))
   .then(() => auth.bootstrapAdmin())
   .then(() => start({ name: 'bets', port: Number(process.env.PORT) || 4003, routes, health: async () => (await query('SELECT 1'), true) }))
   .then(() => settle.startSettler())
+  .then(() => alerts.startAlerts())
   .catch(e => { console.error(e); process.exit(1); });

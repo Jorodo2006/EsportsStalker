@@ -36,6 +36,7 @@ import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
 import FriendsView, { FriendsBadge } from './views/FriendsView';
+import { AlertsBell, WatchSync } from './components/Alerts';
 
 // Estructura de la app (diseño de Stitch, tres columnas):
 //   - desde lg: menú lateral a la izquierda (deportes, navegación, competiciones del día y cartera) y el contenido;
@@ -161,6 +162,7 @@ export default function App() {
     <div data-app={app} className="flex h-full">
       <Sidebar live={live} onSearch={openSearch} />
       <SearchDialog open={searching} onClose={() => setSearching(false)} />
+      <WatchSync />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main ref={mainRef} onScroll={onMainScroll} style={{ '--head': hideHead ? '0px' : `${headH}px` } as React.CSSProperties} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
@@ -174,6 +176,7 @@ export default function App() {
               className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md text-zinc-400 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900 hover:text-zinc-100">
               <Search size={16} />
             </button>
+            <AlertsBell />
             <button onClick={() => go('account')} title="Tu cuenta" aria-label="Tu cuenta" aria-current={view === 'account' || view === 'settings'}
               className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md transition',
                 view === 'account' || view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
@@ -246,7 +249,7 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
   const jump = (id: string) => { go('matches'); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); };
   return (
     <aside className="hidden w-[232px] shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-surface lg:flex">
-      <div className="px-5 pb-3 pt-5"><Logo big /></div>
+      <div className="flex items-center justify-between gap-2 pb-3 pl-5 pr-2.5 pt-5"><Logo big /><AlertsBell /></div>
       <div className="px-2.5 pb-4">
         <button onClick={onSearch} title="Buscar equipos, jugadores y competiciones (Ctrl+K)"
           className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300">

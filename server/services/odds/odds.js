@@ -2,6 +2,7 @@
 // (Winamax y Betway): no se usa ninguna API de cuotas.
 // Se normalizan a cuotas decimales y se orientan según los equipos A/B del partido.
 const bridge = require('./bridge');
+const client = require('../../shared/client');
 
 const round2 = x => Math.round(x * 100) / 100;
 
@@ -755,7 +756,13 @@ async function afterImport(match, imp) {
       if (p) rows.push({ market_key: m.key, market: m.group, outcome_id: o.id, outcome: o.label, line: m.line, price: p });
     }
   }
-  await bridge.recordPrices(imp.matchKey, imp.book, rows);
+  const moves = await bridge.recordPrices(imp.matchKey, imp.book, rows);
+  // Caídas y subidas fuertes: bets decide a quién le importan (alerts.js). Si no contesta, la lectura no se pierde por eso
+  if (moves.length) {
+    const m = { a: match.a, b: match.b, start: match.start, sport: imp.sport || match.sport || 'lol', league: match.league };
+    client.call('bets', 'POST', '/internal/alerts/odds', { match: m, book: BOOK_LABEL[imp.book], moves })
+      .catch(e => console.warn('avisos de cuotas:', e.message));
+  }
 }
 
 // Cuota de ganador para las tarjetas del calendario: la mejor de las casas ya enviadas

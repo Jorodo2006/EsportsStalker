@@ -70,6 +70,7 @@ const onImported = new Set<(d?: { matchKey?: string; book?: string }) => void>()
 const onSettled = new Set<() => void>();
 const onSettingsChanged = new Set<() => void>();
 const onChat = new Set<(type: 'new' | 'read') => void>();
+const onAlert = new Set<() => void>();
 const onStatus = new Set<(up: boolean) => void>();
 let source: EventSource | null = null;
 let connected = false;
@@ -97,6 +98,7 @@ function connect() {
       else if (ev.type === 'bets:settled') onSettled.forEach(cb => cb());
       else if (ev.type === 'settings:changed') onSettingsChanged.forEach(cb => cb());
       else if (ev.type === 'chat:new' || ev.type === 'chat:read') onChat.forEach(cb => cb(ev.type === 'chat:new' ? 'new' : 'read'));
+      else if (ev.type === 'alerts:new') onAlert.forEach(cb => cb());
     } catch { /* un aviso mal formado no debe romper la conexión */ }
   };
   // Con un 502 del proxy el navegador no reintenta por sí mismo: hay que volver a conectar a mano
@@ -128,6 +130,15 @@ export const api: Api = {
     remove: id => call('DELETE', `/api/friends/${part(id)}`),
     chat: id => get(`/api/friends/${part(id)}/chat`),
     send: (id, text) => call('POST', `/api/friends/${part(id)}/chat`, { text })
+  },
+  alerts: {
+    list: () => get('/api/alerts'),
+    read: ids => call('POST', '/api/alerts/read', { ids }),
+    prefs: () => get('/api/alerts/prefs'),
+    setPrefs: p => call('PUT', '/api/alerts/prefs', p),
+    watch: list => call('PUT', '/api/alerts/watch', { list }),
+    subscribe: subscription => call('POST', '/api/alerts/push', { subscription }),
+    unsubscribe: endpoint => call('POST', '/api/alerts/push/remove', { endpoint })
   },
   shared: {
     inbox: () => get('/api/shared'),
@@ -267,6 +278,7 @@ export const api: Api = {
   onBetsSettled: cb => listen(onSettled, cb),
   onSettingsChanged: cb => listen(onSettingsChanged, cb),
   onChat: cb => listen(onChat, cb),
+  onAlert: cb => listen(onAlert, cb),
   backend: { status: () => get('/api/health') },
   onBackendStatus: cb => listen(onStatus, cb),
   openExternal: async url => { if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener'); }

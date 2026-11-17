@@ -4,7 +4,9 @@
   "description": "Backend de Sharpex: gateway, esports, cuotas y apuestas sobre PostgreSQL",
   "private": true,
   "license": "UNLICENSED",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "gateway": "node services/gateway/index.js",
     "bets": "node services/bets/index.js",
@@ -12,6 +14,7 @@
     "odds": "node services/odds/index.js"
   },
   "dependencies": {
-    "pg": "^8.16.0"
+    "pg": "^8.16.0",
+    "web-push": "^3.6.7"
   }
 }

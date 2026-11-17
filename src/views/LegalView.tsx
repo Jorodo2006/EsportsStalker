@@ -79,6 +79,7 @@ function Privacy() {
       <li><b className="text-zinc-100">Sin cuenta</b> no se te pide ningún dato. La dirección IP de cada visita se usa en el momento para limitar el número de peticiones y proteger la web, y no se guarda.</li>
       <li><b className="text-zinc-100">Tu cuenta:</b> el nombre de usuario y la contraseña, que se guarda cifrada (nunca en claro). Si entras con Google, también el identificador de tu cuenta de Google y su correo. Sirven para que puedas entrar.</li>
       <li><b className="text-zinc-100">Lo que apuntas:</b> tus apuestas, tu banca inicial, tus favoritos y tus avisos. Sólo los ves tú.</li>
+      <li><b className="text-zinc-100">Avisos de cuotas:</b> para avisarte cuando cambia una cuota, se guardan los avisos que te llegan (14 días) y, con cuenta, las selecciones de tu cupón (el partido, el mercado y la selección, sin importes). Si activas los avisos con la app cerrada, se guarda la dirección de avisos de tu navegador o móvil; el aviso viaja cifrado por el servicio de notificaciones de tu navegador (Google, Mozilla, Apple o Microsoft), que no puede leerlo. Lo desactivas en Tu cuenta.</li>
       <li><b className="text-zinc-100">Amigos:</b> a quién añades, los mensajes que os escribís y las apuestas que os pasáis (lo apostado y si va ganada, perdida o pendiente, sin el importe ni las notas). Sólo los veis los dos.</li>
       <li><b className="text-zinc-100">Publicidad:</b> si aceptas las cookies de publicidad, Google puede usarlas para enseñarte anuncios personalizados (lo explica la página de cookies).</li>
     </UL>
@@ -96,7 +97,7 @@ function Privacy() {
     </UL>
     <P>Estos proveedores pueden tratar datos fuera del Espacio Económico Europeo con las garantías que exige el RGPD (como el Marco de Privacidad de Datos UE-EE. UU.).</P>
     <H>Cuánto tiempo</H>
-    <P>Mientras tengas la cuenta. Si pides que se borre, se borran tu cuenta, tus apuestas, tus ajustes, tus amigos y tus mensajes. La sesión caduca a los 30 días.</P>
+    <P>Mientras tengas la cuenta. Si pides que se borre, se borran tu cuenta, tus apuestas, tus ajustes, tus amigos, tus mensajes y tus avisos. La sesión caduca a los 30 días y los avisos se borran a los 14.</P>
     <H>Tus derechos</H>
     <P>Puedes pedir acceder a tus datos, corregirlos, borrarlos, llevártelos (Mis apuestas permite exportarlas en CSV), oponerte o limitar su uso escribiendo a <Contact />. Si crees que no se han respetado, puedes reclamar ante la Agencia Española de Protección de Datos (<a className="text-amber-400 underline" href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">aepd.es</a>).</P>
     <H>Menores</H>
@@ -113,7 +114,7 @@ function Cookies() {
       <li><code className="text-zinc-100">lolet_session</code>: mantiene la sesión abierta cuando entras con tu cuenta. Dura 30 días o hasta que sales.</li>
       <li><code className="text-zinc-100">lolet_google</code>: sólo mientras entras con Google, unos minutos, para comprobar que la vuelta de Google es tuya.</li>
       <li>Cookies de <b className="text-zinc-100">Cloudflare</b> que protegen la web frente a tráfico automatizado.</li>
-      <li>Además, la web guarda en tu navegador (almacenamiento local, no cookies) tus preferencias: el deporte elegido, el cupón, las secciones plegadas y los avisos vistos. No salen de tu navegador.</li>
+      <li>Además, la web guarda en tu navegador (almacenamiento local, no cookies) tus preferencias: el deporte elegido, el cupón, las secciones plegadas y los avisos vistos. No salen de tu navegador, salvo las selecciones del cupón cuando tienes cuenta, para avisarte si cambian sus cuotas (lo explica la página de privacidad).</li>
     </UL>
     <H>Publicidad (sólo si las aceptas)</H>
     <P>Los anuncios los sirve <b className="text-zinc-100">Google AdSense</b>. Con tu consentimiento, Google y sus socios usan cookies para personalizar los anuncios y medir cómo funcionan; si no lo das, los anuncios no son personalizados. El aviso para aceptarlas o rechazarlas es el de Google, que cumple el marco de consentimiento de la UE (TCF de IAB Europe). Más información: <a className="text-amber-400 underline" href="https://policies.google.com/technologies/ads?hl=es" target="_blank" rel="noopener noreferrer">cómo usa Google las cookies de publicidad</a>.</P>

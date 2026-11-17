@@ -250,7 +250,16 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Resolución automática** (`server/services/bets/settle.js`): depende de que las claves de mercado del comparador
   (`odds.js`) y los nombres de estadística de jugador no cambien; si cambias una, ajusta `evaluate` y repite `npm test`
   (`resolver.test.js`). Ante la duda, que devuelva `null` (se resuelve a mano): una apuesta mal resuelta mueve dinero.
-  Es lo único que lee las apuestas de todos los usuarios (`getBet`): nunca lo expongas en una ruta.
+  Es lo único que lee las apuestas de todos los usuarios (`getBet`), junto con los avisos de cuotas: nunca lo expongas en una ruta.
+- **Avisos de cuotas** (`server/services/bets/alerts.js`, `push.js`, `server/services/odds/moves.js`; campana en
+  `src/components/Alerts.tsx`; pruebas en `server/test/avisos.test.js`): `odds` detecta en cada lectura las caídas y subidas de
+  10 % o más (`movesOf`, en `recordPrices`) y se las manda a `bets` (`/internal/alerts/odds`), que las cruza con las apuestas
+  pendientes de todos, los cupones (`oddsWatch`, lo manda `WatchSync`) y los favoritos, y avisa sólo al dueño. Esa lectura de
+  apuestas ajenas sólo sirve para eso: no la expongas ni le añadas columnas. Las nuevas con valor salen cada 10 min de las
+  líneas de tenis, fútbol y MMA y de las de baloncesto que ha calculado algún navegador (`bets.predictions`). El aviso en vivo
+  (`alerts:new`) lleva `data.to`, sin el texto. Las suscripciones a notificaciones sólo admiten servicios de push de navegadores
+  (`PUSH_HOSTS` en `push.js`): no lo abras a cualquier https, el servidor hace peticiones a esa dirección. `public/sw.js` no
+  guarda nada en caché a propósito.
 
 ## Especificaciones
 

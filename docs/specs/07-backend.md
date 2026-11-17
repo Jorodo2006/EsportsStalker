@@ -222,6 +222,31 @@ vacía.
   abre la vista por la dirección). El responsable sale de `LEGAL_OWNER`, `LEGAL_NIF`, `LEGAL_ADDRESS` y `LEGAL_EMAIL` del `.env`;
   lo que falte sale como «pendiente de publicar». Lo que dicen tiene que coincidir con lo que guarda la app.
 
+## Avisos de cuotas
+
+La app vigila las cuotas sola y avisa en una campana (cabecera del móvil y menú lateral), en vivo y, si se activa en *Tu cuenta*,
+como notificación del sistema aunque la app esté cerrada (Web Push).
+
+- **Caídas y subidas** (`server/services/odds/moves.js`): en cada lectura, `recordPrices` compara cada cuota con la anterior de la
+  misma casa. Cuenta un cambio del 10 % o más, con cuotas entre 1,15 y 10, en los mercados que se siguen (ganador, hándicap,
+  totales, los de fútbol y MMA del partido y las líneas de jugador). `odds` se los manda a `bets` por `/internal/alerts/odds`.
+- **A quién** (`server/services/bets/alerts.js`, `targetsOf`): a quien tiene una apuesta pendiente en ese mercado y selección (se
+  reconoce por la clave, la hora y los equipos del texto del partido), a quien lo tiene en el cupón (el navegador manda las
+  selecciones con `PUT /api/alerts/watch` y se guardan en `bets.user_settings`, clave `oddsWatch`) y a quien sigue a uno de los
+  equipos (sólo el ganador). Lo mismo no se repite antes de 3 h.
+- **Nuevas con valor**: cada 10 minutos, las líneas del día y del siguiente de tenis (tablero), fútbol y MMA (escáneres) con
+  EV de 2 % o más y fiabilidad de 55 o más (la regla de «apostar»), y las de baloncesto que algún navegador ha calculado en las
+  últimas 2 h con EV de 8 % y fiabilidad de 65 (las fuertes). Como mucho cinco por usuario en cada pasada; cada una, una vez.
+- **Preferencias** (`GET/PUT /api/alerts/prefs`, clave `alertPrefs`): caídas, subidas y nuevas con valor, encendidas al empezar.
+- **Entrega**: `bets.alerts` (se borran a los 14 días), el aviso `alerts:new` con `data.to` (sólo a su usuario, sin el texto) y
+  `push.send` a cada suscripción del usuario (20 al día como mucho; el resto, sólo en la campana).
+- **Notificaciones** (`push.js`, `src/lib/push.ts`, `public/sw.js`): claves VAPID del `.env` o generadas la primera vez y
+  guardadas en `bets.vapid`. El navegador se suscribe con la pública y manda la suscripción a `POST /api/alerts/push`; sólo se
+  admiten servicios de push de navegadores (`PUSH_HOSTS`), porque el servidor hace peticiones a esa dirección. Las caducadas
+  (404/410) se borran. Necesita https (o localhost) y, en el iPhone, la app en la pantalla de inicio. El Chromium de código
+  abierto (el del lector) no puede suscribirse: no lleva las claves de Google; Chrome, Edge, Firefox y Safari sí.
+- **CSP**: `worker-src 'self'` para `sw.js`, que nginx sirve sin caché.
+
 ## Rendimiento de la web
 
 - **Compresión y caché** (`web/nginx.conf`, `web/Dockerfile`): la compilación deja una copia `.gz` (nivel 9) de cada fichero

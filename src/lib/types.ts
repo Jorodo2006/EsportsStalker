@@ -59,6 +59,14 @@ export interface Favorite { sport: Sport; name: string; logo?: string }
 export interface Friend { id: string; username: string; since: string }
 // De los aceptados, también los mensajes sin leer y cuándo fue lo último de la conversación
 export interface FriendRow extends Friend { unread: number; last: string | null; preview: string | null }
+// Avisos de cuotas (server/services/bets/alerts.js): caída o subida fuerte en lo tuyo, o recomendación nueva con valor.
+// open: el partido que abre el aviso (sin id, sólo el deporte y el día)
+export type OddsAlertKind = 'drop' | 'rise' | 'value';
+export interface OddsAlert { id: string; kind: OddsAlertKind; sport: Sport | ''; title: string; body: string; open: { sport: Sport; id?: string; date?: string } | null; created: string; read: boolean }
+export interface AlertsList { list: OddsAlert[]; unread: number; push: { key: string | null; devices: number } }
+export type OddsAlertPrefs = Record<OddsAlertKind, boolean>;
+// Lo del cupón que vigila el servidor: el partido con los nombres del comparador, la clave del mercado y la selección
+export interface OddsWatch { sport: Sport; a: string; b: string; key: string; out: string; id?: string; date?: string }
 export interface FriendsList { friends: FriendRow[]; incoming: Friend[]; outgoing: Friend[] }
 // Una apuesta que te ha enviado un amigo: lo apostado (sin su importe ni sus notas)
 export type SharedBetData = Pick<Bet, 'sport' | 'date' | 'league' | 'event' | 'market' | 'selection' | 'bookmaker' | 'odds' | 'legs' | 'ref'>;
@@ -489,6 +497,15 @@ export interface Api {
     chat(id: string): Promise<{ items: ChatItem[] }>;
     send(id: string, text: string): Promise<ChatItem>;
   };
+  alerts: {
+    list(): Promise<AlertsList>;
+    read(ids?: string[]): Promise<{ ok: boolean }>;
+    prefs(): Promise<OddsAlertPrefs>;
+    setPrefs(p: OddsAlertPrefs): Promise<OddsAlertPrefs>;
+    watch(list: OddsWatch[]): Promise<{ n: number }>;
+    subscribe(subscription: PushSubscriptionJSON): Promise<{ ok: boolean }>;
+    unsubscribe(endpoint: string): Promise<{ ok: boolean }>;
+  };
   shared: {
     inbox(): Promise<{ unseen: number; list: SharedBet[] }>;
     seen(): Promise<{ ok: boolean }>;
@@ -599,6 +616,7 @@ export interface Api {
   onSettingsChanged(cb: () => void): () => void;
   // Un amigo te ha escrito o pasado una apuesta (new), o ha leído lo tuyo (read). Sólo le llega al destinatario
   onChat(cb: (type: 'new' | 'read') => void): () => void;
+  onAlert(cb: () => void): () => void; // hay un aviso de cuotas nuevo (sólo le llega a su usuario)
   backend: { status(): Promise<BackendStatus> };
   onBackendStatus(cb: (up: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;

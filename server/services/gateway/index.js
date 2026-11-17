@@ -21,7 +21,7 @@ function lectorTokenOk(req) {
 
 // Prefijo de la ruta → servicio. /internal/* no se publica: es sólo entre servicios.
 const ROUTES = [
-  [/^\/api\/(auth|bets|settings|friends|shared)(\/|$)/, 'bets'],
+  [/^\/api\/(auth|bets|settings|friends|shared|alerts)(\/|$)/, 'bets'],
   [/^\/api\/(esports|stats)(\/|$)/, 'esports'],
   [/^\/api\/odds(\/|$)/, 'odds'],
   [/^\/api\/basket(\/|$)/, 'basket'],
