@@ -8,8 +8,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, ChevronDown, Pencil, RefreshCw, Ticket, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money, odd } from '@/lib/format';
-import type { BetDraft, MatchOdds, SlipLeg, SlipLive } from '@/lib/types';
+import type { AutoJob, BetDraft, MatchOdds, SlipLeg, SlipLive } from '@/lib/types';
 import { ageOf, applyOdds, isStale, matchKeyOf } from '@/lib/slip-live';
+import { jobStage, waitJob } from '@/lib/odds-read';
 import { comboOdds } from './BetForm';
 import { Button, chip, PlayNotice, seg } from './ui';
 import { askLogin, useMember } from './AuthGate';
@@ -68,8 +69,8 @@ export function Coupon({ docked }: { docked?: boolean }) {
     if (!matches.length) return;
     try {
       if (member) {
-        setReading(`Leyendo ${matches.length === 1 ? 'el partido' : `${matches.length} partidos`} en las casas…`);
-        await readNow(matches.map(([, m]) => m));
+        setReading(`Leyendo ${matches.length === 1 ? 'el partido' : `${matches.length} partidos`}: alrededor de un minuto cada uno…`);
+        await readNow(matches.map(([, m]) => m), setReading);
       }
       setReading('Comparando…');
       const got = new Map<string, MatchOdds>();
@@ -221,21 +222,22 @@ function LiveNote({ live, odds }: { live: SlipLive; odds: number }) {
   );
 }
 
-// Lanza la lectura de cada partido y espera a que acaben todas (o a los 3 minutos, con lo que haya): el lector las hace de una
-// en una, así que con varios partidos tarda más
-function readNow(matches: SlipLive['match'][]) {
-  const nameKey = (m: { a: { name: string }; b: { name: string } }) => `${m.a.name}|${m.b.name}`;
-  return new Promise<void>(resolve => {
-    const left = new Set(matches.map(nameKey));
-    let off = () => {};
-    const end = () => { off(); clearTimeout(t); resolve(); };
-    const t = setTimeout(end, 180e3);
-    off = window.api.onOddsAuto(j => { if (j.done) { left.delete(nameKey(j.match)); if (!left.size) end(); } });
-    for (const m of matches) {
-      window.api.odds.auto(m).then(j => { if (j.done) { left.delete(nameKey(j.match)); if (!left.size) end(); } })
-        .catch(() => { left.delete(nameKey(m)); if (!left.size) end(); });
-    }
-  });
+// Lanza la lectura de cada partido y espera a que acaben todas, reconociéndolas por su número (waitJob: aviso en vivo, consulta cada
+// pocos segundos y 4 minutos como mucho). El lector las hace de una en una, así que con varios partidos tarda más
+async function readNow(matches: SlipLive['match'][], say: (s: string) => void) {
+  const jobs = await Promise.all(matches.map(m => window.api.odds.auto(m).catch(() => null)));
+  const state = new Map<string, AutoJob>();
+  const tell = () => {
+    const list = [...state.values()], left = list.filter(j => !j.done);
+    if (!left.length) return;
+    const n = list.length;
+    say(n === 1 ? jobStage(left[0]) : `${n - left.length} de ${n} partidos leídos · ${jobStage(left.find(j => j.picked) ?? left[0])}`);
+  };
+  await Promise.all(jobs.map(j => {
+    if (!j) return null;
+    state.set(j.id, j); tell();
+    return waitJob(j, x => { state.set(x.id, x); tell(); });
+  }));
 }
 
 // Cupón fijo sin selecciones: explica cómo se llena

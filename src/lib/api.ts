@@ -188,6 +188,7 @@ export const api: Api = {
     history: m => call('POST', '/api/odds/history', { match: matchOf(m) }),
     // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
     auto: m => call('POST', '/api/odds/jobs', { match: matchOf(m) }),
+    job: id => get(`/api/odds/jobs/${part(id)}`),
     autoStatus: () => get('/api/odds/auto/status')
   },
   football: {

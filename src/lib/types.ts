@@ -533,6 +533,7 @@ export interface Api {
     match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number; x?: number }>>; // x: empate (fútbol)
     auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }): Promise<AutoJob>;
+    job(id: string): Promise<AutoJob>; // cómo va una lectura
     autoStatus(): Promise<AutoStatus>;
     // Histórico de cuotas del partido (odds.price_history): una fila cada vez que cambia una cuota de una casa
     history(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<PriceHistoryRow[]>;
