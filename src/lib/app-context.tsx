@@ -34,6 +34,7 @@ interface Ctx {
   addToSlip(l: SlipLeg): void;
   removeFromSlip(i: number): void;
   keepInSlip(keep: (l: SlipLeg) => boolean): void; // deja en el cupón sólo las que cumplan
+  updateSlip(f: (l: SlipLeg) => SlipLeg): void; // cambia las selecciones (cuotas actualizadas)
   clearSlip(): void;
   toast(msg: string): void;
   toastMsg: string | null;
@@ -158,11 +159,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addToSlip(l) {
       const same = (x: SlipLeg) => x.event === l.event && x.market === l.market && x.selection === l.selection;
       if (slip.some(same)) { setSlip(s => s.filter(x => !same(x))); toast('Quitada del cupón'); return; }
-      setSlip(s => [...s, { sport: app, ...l }]);
+      // La hora a la que se vio la cuota, para decir en el cupón de cuándo es
+      setSlip(s => [...s, { sport: app, ...l, ...(l.live ? { live: { ...l.live, at: l.live.at ?? Date.now() } } : {}) }]);
       toast(`Añadida al cupón (${slip.length + 1})`);
     },
     removeFromSlip: i => setSlip(s => s.filter((_, j) => j !== i)),
     keepInSlip: keep => setSlip(s => s.filter(keep)),
+    updateSlip: f => setSlip(s => s.map(f)),
     clearSlip: () => setSlip(() => []),
     toast,
     toastMsg,

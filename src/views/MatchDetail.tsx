@@ -226,7 +226,9 @@ function OddsPanel({ match, eventName }: { match: MatchEvent; eventName: string 
   const pick: Pick = (market, sel, bk, price, _add, r) =>
     addToSlip({
       sport: 'lol', league: match.league, event: eventName, market, selection: sel, bookmaker: bk, odds: price, status: 'pending',
-      ...(r && /^(moneyline|spread)\|0\|/.test(r.key) ? { ref: { sport: 'lol' as const, match: match.id, key: r.key, out: r.out, start: match.startTime } } : {})
+      ...(r && /^(moneyline|spread)\|0\|/.test(r.key) ? { ref: { sport: 'lol' as const, match: match.id, key: r.key, out: r.out, start: match.startTime } } : {}),
+      // Con la clave del comparador, el cupón puede volver a leer la cuota (la misma consulta que esta pestaña)
+      ...(r ? { live: { match: { a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code }, start: match.startTime }, key: r.key, out: r.out } } : {})
     });
 
   if (match.state === 'completed') return <Empty>El partido ha terminado: ya no hay cuotas</Empty>;

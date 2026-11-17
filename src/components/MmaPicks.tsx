@@ -10,6 +10,7 @@ import { verdictOf } from '@/lib/value';
 import { logPredictions, mmaPredictions } from '@/lib/predictions';
 import type { MmaDayPick, MmaFight, MmaLineRow, MmaPick, MmaPred } from '@/lib/types';
 import { esTime, madridDay, surname } from './mma';
+import { RefreshOdds } from './RefreshOdds';
 import { PickRow, ValueChip } from './TennisPicks';
 import { ReliabilityMeter } from './ValuePanel';
 import { Empty, ErrorBox, Loading, Select, chip } from './ui';
@@ -20,14 +21,19 @@ import { useMember } from './AuthGate';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 
+// El combate como lo pide el comparador (targetOfFight), para que el cupón y las recomendaciones puedan volver a leer la cuota
+type FightLike = { date: string; org?: string; event?: string; a: { name: string; alt?: string[] }; b: { name: string; alt?: string[] } };
+const mmaMatchOf = (m: FightLike) => ({ a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'mma' as const, league: m.org, ...(m.event ? { event: m.event } : {}) });
+
 // Al cupón con su ref (combate, clave del mercado y selección): el servidor la resolverá sola cuando acabe el combate
 export function useMmaAdd() {
   const { addToSlip } = useApp();
-  return (m: { id: string; date: string; orgName: string; a: { name: string }; b: { name: string } }, p: MmaPick) => {
+  return (m: { id: string; date: string; org?: string; orgName: string; event?: string; a: { name: string; alt?: string[] }; b: { name: string; alt?: string[] } }, p: MmaPick) => {
     const [key, out] = p.id.split('#');
+    const match = mmaMatchOf(m);
     addToSlip({
       sport: 'mma', league: m.orgName, event: `${m.a.name} vs ${m.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending',
-      ref: { sport: 'mma', match: m.id, key, out, start: m.date }
+      ref: { sport: 'mma', match: m.id, key, out, start: m.date }, live: { match, key, out }
     });
   };
 }
@@ -101,10 +107,13 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
             <ReliabilityMeter rel={top.rel} />
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
-          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
-            <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
-            <span className="text-[11px] font-medium">{top.book}</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <RefreshOdds match={mmaMatchOf(m)} />
+            <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
+              <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
+              <span className="text-[11px] font-medium">{top.book}</span>
+            </button>
+          </div>
           <PickWhy p={top.p} ev={top.ev} rel={top.rel.score} by="reliability" className="md:col-span-4" />
         </div>
       ) : (
@@ -114,8 +123,8 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-white/10">
-        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(p => <PickRow key={p.id} pick={p} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
-        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(p => <PickRow key={p.id} pick={p} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={mmaMatchOf(m)} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={mmaMatchOf(m)} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
       </div>
 
       {!!r.warnings?.length && <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">{r.warnings.map(w => <div key={w} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} />{w}</div>)}</div>}
@@ -160,6 +169,7 @@ function MmaLineScanner({ date, onOpen }: { date: string; onOpen: (id: string) =
               <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(r.date)}</span> · {surname(r.a.name)} - {surname(r.b.name)} · {r.orgName}</span>
             </button>
             <span className="w-14 shrink-0 text-right"><span className="block font-score text-[16px] font-bold leading-5 text-zinc-50 tnum">{p0(r.pick.p)}</span><ValueChip pick={r.pick} /></span>
+            <RefreshOdds match={mmaMatchOf(r)} />
             <button onClick={() => add(r, r.pick)} title={`Añadir al cupón: ${r.pick.book}. Justa: ${odd(r.pick.fair)}`}
               className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
               <span className="font-score text-[16px] font-bold leading-none tnum">{odd(r.pick.price)}</span>

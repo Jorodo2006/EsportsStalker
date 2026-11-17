@@ -9,8 +9,9 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
 import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
 import { cn } from '@/lib/format';
-import type { FootballLeagueId, FootballMatch, FootballTeam } from '@/lib/types';
-import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
+import type { FootballLeagueId, FootballMatch } from '@/lib/types';
+import { SportOdds } from '@/components/BasketOdds';
+import { targetOfFootball } from '@/lib/odds-targets';
 import { FootballDayPicks, FootballPicksPage, FootballPicksPanel } from '@/components/FootballPicks';
 import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
@@ -36,17 +37,6 @@ function saveList(key: string, v: string[]) { try { localStorage.setItem(key, JS
 function loadFlag(key: string, def: boolean): boolean { try { const v = localStorage.getItem(key); return v == null ? def : v === '1'; } catch { return def; } }
 function saveFlag(key: string, v: boolean) { try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* sin almacenamiento */ } }
 
-// El partido para el lector, el comparador y el cupón: local (a) contra visitante (b), con los mismos nombres que usa el
-// programador de lecturas (server/services/odds/scheduler.js), que son la clave del partido. Sin la abreviatura entre los
-// otros nombres ("VAL" está dentro de "Valladolid"); los filiales ("Real Sociedad II") en las casas son "Real Sociedad B"
-const teamRef = (t: FootballTeam) => ({
-  name: t.name, code: '',
-  alt: [...new Set([...(/\sII$/.test(t.name) ? [t.name.replace(/\sII$/, ' B')] : []), ...(t.alts ?? []).filter(x => x && x !== t.name && x !== t.abbr)])]
-});
-export const targetOfFootball = (m: FootballMatch): OddsTarget => ({
-  id: m.id, done: m.state === 'post', sport: 'football', event: `${m.home.name} - ${m.away.name}`, league: m.leagueName,
-  match: { a: teamRef(m.home), b: teamRef(m.away), start: m.date, sport: 'football', league: m.league }
-});
 
 export default function FootballMatches() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen

@@ -8,7 +8,7 @@ import { TrendsTable, footballMarkets, footballTrendData } from '@/components/Tr
 import { StandingsTable } from '@/components/football';
 import { Empty, ErrorBox, Loading, TeamLogo } from '@/components/ui';
 import { Panel } from '@/components/viz';
-import { targetOfFootball } from '../FootballMatches';
+import { targetOfFootball } from '@/lib/odds-targets';
 
 
 

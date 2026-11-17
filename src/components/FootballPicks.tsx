@@ -15,6 +15,8 @@ import { Empty, ErrorBox, Loading, Select, chip, seg, segWrap } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
+import { targetOfFootball } from '@/lib/odds-targets';
+import { RefreshOdds } from './RefreshOdds';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 const g1 = (v: number) => v.toFixed(1).replace('.', ',');
@@ -25,8 +27,14 @@ export const madridDay = (iso: string) => new Date(iso).toLocaleDateString('sv-S
 
 export function useFootballAdd() {
   const { addToSlip } = useApp();
-  return (m: { leagueName: string; home: { name: string }; away: { name: string } }, p: FootballPick) =>
-    addToSlip({ sport: 'football', league: m.leagueName, event: `${m.home.name} - ${m.away.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending' });
+  // Con el partido como lo pide el comparador y la clave del mercado (id = clave#selección), el cupón puede volver a leer la cuota
+  return (m: Pick<FootballMatch, 'id' | 'league' | 'leagueName' | 'date' | 'home' | 'away'>, p: FootballPick) => {
+    const [key, out] = p.id.split('#');
+    addToSlip({
+      sport: 'football', league: m.leagueName, event: `${m.home.name} - ${m.away.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending',
+      ...(key && out ? { live: { match: targetOfFootball(m).match, key, out } } : {})
+    });
+  };
 }
 
 function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () => void }) {
@@ -79,10 +87,13 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
             <ReliabilityMeter rel={top.rel} />
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
-          <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
-            <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
-            <span className="text-[11px] font-medium">{top.book}</span>
-          </button>
+          <div className="flex items-center gap-1">
+            <RefreshOdds match={targetOfFootball(m).match} />
+            <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
+              <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
+              <span className="text-[11px] font-medium">{top.book}</span>
+            </button>
+          </div>
           <PickWhy p={top.p} ev={top.ev} rel={top.rel.score} by="reliability" className="md:col-span-4" />
         </div>
       ) : (
@@ -92,8 +103,8 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-white/10">
-        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(p => <PickRow key={p.id} pick={p} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
-        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(p => <PickRow key={p.id} pick={p} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={targetOfFootball(m).match} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={targetOfFootball(m).match} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
       </div>
 
       {!!r.warnings?.length && <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">{r.warnings.map(w => <div key={w} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} />{w}</div>)}</div>}
@@ -118,6 +129,7 @@ function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick
         <span className="block font-score text-[18px] font-bold leading-5 text-zinc-50 tnum">{p0(p.p)}</span>
         <ValueChip pick={p} />
       </span>
+      <RefreshOdds match={targetOfFootball(d).match} />
       <button onClick={() => onAdd(d, p)} title={`Añadir al cupón: ${p.book}. Justa: ${odd(p.fair)}`}
         className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
         <span className="font-score text-[16px] font-bold leading-none tnum">{odd(p.price)}</span>

@@ -12,7 +12,8 @@ import { basketPrediction, logPredictions } from '@/lib/predictions';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
 import type { Side } from '@/lib/value';
 import { LEAGUE_NAME, esTime } from './BasketAnalyzer';
-import { targetOfGame } from './BasketOdds';
+import { matchOfGame, targetOfGame } from './BasketOdds';
+import { RefreshOdds } from './RefreshOdds';
 import { restart } from './BasketPoints';
 import { ReliabilityMeter } from './ValuePanel';
 import { Toggle } from './sport';
@@ -107,9 +108,10 @@ export const usePickAdd = () => {
   // Las de jugador llevan su línea (para resolverse solas); las de equipo las reconoce el servidor por el texto si puede
   return (p: BasketPick) => addToSlip({
     sport: 'basket', status: 'pending', league: LEAGUE_NAME[p.game.league], event: eventOf(p.game), market: p.market, selection: p.selection, odds: p.price, bookmaker: p.book,
-    ...(p.kind === 'player' && p.who && p.marketKey
-      ? { ref: { sport: 'basket' as const, match: p.game.id, start: p.game.date, key: `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}`, out: p.side } }
-      : {})
+    ...(p.kind === 'player' && p.who && p.marketKey ? (() => {
+      const key = `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}`;
+      return { ref: { sport: 'basket' as const, match: p.game.id, start: p.game.date, key, out: p.side }, live: { match: matchOfGame(p.game), key, out: p.side } };
+    })() : {})
   });
 };
 
@@ -132,6 +134,7 @@ function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
           <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
           <div className={cn('font-score text-[12px] font-semibold tnum', good ? 'text-[var(--tv-mark)]' : pick.ev > 0 ? 'text-zinc-200' : 'text-zinc-500')}>{signed(pick.ev)}</div>
         </div>
+        <RefreshOdds match={matchOfGame(pick.game)} />
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book ?? ''}. Justa: ${odd(pick.fair)}`}
           className="flex h-9 w-[58px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm bg-white/[.08] text-white transition hover:bg-[var(--tv-mark)] hover:text-black">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
@@ -175,10 +178,13 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><span className={cn('font-semibold tnum', hasValue(pick) ? 'text-[var(--tv-mark)]' : 'text-zinc-200')}>{hasValue(pick) ? 'Con valor ' : 'Valor '}{signed(pick.ev)}</span></div>
       </div>
-      <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="col-start-2 row-start-2 flex h-[58px] w-[92px] cursor-pointer flex-col items-center justify-center rounded-sm bg-[var(--tv-mark)] text-black transition hover:opacity-85 md:col-start-auto md:row-start-auto">
-        <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
-        <span className="text-[11px] font-medium">{pick.book}</span>
-      </button>
+      <div className="col-start-2 row-start-2 flex items-center gap-1 md:col-start-auto md:row-start-auto">
+        <RefreshOdds match={matchOfGame(pick.game)} />
+        <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[58px] w-[92px] cursor-pointer flex-col items-center justify-center rounded-sm bg-[var(--tv-mark)] text-black transition hover:opacity-85">
+          <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
+          <span className="text-[11px] font-medium">{pick.book}</span>
+        </button>
+      </div>
       <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="value" className="col-span-2 md:col-span-4" />
     </div>
   );

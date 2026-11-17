@@ -3,12 +3,13 @@
 // se ve lo que se puede ganar y se registran en Mis apuestas. El saldo es el de la cartera común.
 // docked: fijo en la columna derecha de las pantallas anchas (siempre visible, con aviso si está vacío);
 // sin docked: flotante abajo a la derecha (móvil y pantallas medianas), sólo cuando hay algo.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Pencil, Ticket, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Pencil, RefreshCw, Ticket, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money, odd } from '@/lib/format';
-import type { BetDraft, SlipLeg } from '@/lib/types';
+import type { BetDraft, MatchOdds, SlipLeg, SlipLive } from '@/lib/types';
+import { ageOf, applyOdds, isStale, matchKeyOf } from '@/lib/slip-live';
 import { comboOdds } from './BetForm';
 import { Button, chip, PlayNotice, seg } from './ui';
 import { askLogin, useMember } from './AuthGate';
@@ -20,7 +21,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const keyOf = (l: SlipLeg) => `${l.event}|${l.market}|${l.selection}`;
 
 export function Coupon({ docked }: { docked?: boolean }) {
-  const { slip, removeFromSlip, keepInSlip, clearSlip, openBet, betDraft, toast } = useApp();
+  const { slip, removeFromSlip, keepInSlip, updateSlip, clearSlip, openBet, betDraft, toast } = useApp();
   const member = useMember();
   const qc = useQueryClient();
   const cur = useCurrency();
@@ -31,6 +32,21 @@ export function Coupon({ docked }: { docked?: boolean }) {
   const [stakes, setStakes] = useState<Record<string, string>>({});
   const [comboStake, setComboStake] = useState('');
   const [saving, setSaving] = useState(false);
+  const [reading, setReading] = useState<string | null>(null);
+  // Al entrar una selección, se compara con la última lectura guardada (sin lanzar el lector): así la hora es la de esa
+  // lectura y no la del clic, y si la cuota ya había cambiado se ve en seguida
+  const unchecked = slip.filter(l => l.live && !l.live.checked).map(l => matchKeyOf(l.live!.match)).join(',');
+  useEffect(() => {
+    if (!unchecked) return;
+    let off = false;
+    const matches = [...new Map(slip.filter(l => l.live && !l.live.checked).map(l => [matchKeyOf(l.live!.match), l.live!.match])).entries()];
+    Promise.all(matches.map(async ([k, m]) => [k, await window.api.odds.match(m, { quiet: true }).catch(() => undefined)] as const)).then(res => {
+      if (off) return;
+      const got = new Map(res.filter((x): x is readonly [string, MatchOdds] => !!x[1]));
+      updateSlip(l => (l.live && !l.live.checked && got.has(matchKeyOf(l.live.match)) ? applyOdds(l, got.get(matchKeyOf(l.live.match))) : l));
+    });
+    return () => { off = true; };
+  }, [unchecked]);
   if (!slip.length) return docked ? <EmptyCoupon balance={money(w.balance, cur)} /> : null;
   if (betDraft && !docked) return null;
 
@@ -42,6 +58,33 @@ export function Coupon({ docked }: { docked?: boolean }) {
   const win = m === 'combo' ? num(comboStake) * comboOdds(slip) : slip.reduce((s, l) => s + num(stakes[keyOf(l)] || '') * l.odds, 0);
   const setAll = (v: string) => setStakes(Object.fromEntries(slip.map(l => [keyOf(l), v])));
   const books = [...new Set(slip.map(l => l.bookmaker).filter(Boolean))];
+  const live = slip.filter(l => l.live);
+  const anyStale = live.some(l => isStale(l.live!.at));
+
+  // Vuelve a leer las cuotas de los partidos del cupón (con cuenta, el lector las trae al momento; sin cuenta, las de la última
+  // lectura automática) y las pone en cada selección, diciendo cuáles han cambiado y cuáles ya no están
+  async function refresh() {
+    const matches = [...new Map(live.map(l => [matchKeyOf(l.live!.match), l.live!.match])).entries()];
+    if (!matches.length) return;
+    try {
+      if (member) {
+        setReading(`Leyendo ${matches.length === 1 ? 'el partido' : `${matches.length} partidos`} en las casas…`);
+        await readNow(matches.map(([, m]) => m));
+      }
+      setReading('Comparando…');
+      const got = new Map<string, MatchOdds>();
+      await Promise.all(matches.map(async ([k, m]) => { try { got.set(k, await window.api.odds.match(m)); } catch { /* sin cuotas de ese partido */ } }));
+      const now = Date.now();
+      const apply = (l: SlipLeg) => (l.live ? applyOdds(l, got.get(matchKeyOf(l.live.match)), now) : l);
+      // Las cuentas, sobre lo que hay ahora; el cambio, con la misma función (React lo aplica después)
+      const after = live.map(l => [l, apply(l)] as const);
+      const gone = after.filter(([, n]) => n.live?.gone).length;
+      const changed = after.filter(([l, n]) => !n.live?.gone && n.odds !== l.odds).length;
+      updateSlip(apply);
+      toast(gone ? `${gone} ya no ${gone === 1 ? 'está' : 'están'} en la casa` : changed ? `${changed} cuota${changed === 1 ? '' : 's'} ha${changed === 1 ? '' : 'n'} cambiado` : 'Las cuotas siguen igual');
+    } catch (e) { toast((e as Error).message); }
+    finally { setReading(null); }
+  }
 
   async function place() {
     if (!member) { askLogin({ mode: 'register', why: 'Para apuntar tus apuestas y llevar tu cartera hace falta una cuenta. El cupón se queda como está.' }); return; }
@@ -51,7 +94,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
         if (!num(comboStake)) throw new Error('Pon cuánto le metes a la combinada');
         await window.api.bets.save({
           date: today(), stake: num(comboStake), status: 'pending', bookmaker: books.length === 1 ? books[0] : '',
-          legs: slip.map(({ bookmaker: _, ...l }) => ({ ...l, status: 'pending' }))
+          legs: slip.map(({ bookmaker: _, live: __, ...l }) => ({ ...l, status: 'pending' }))
         } as BetDraft);
       } else {
         const list = slip.filter(l => num(stakes[keyOf(l)] || ''));
@@ -96,6 +139,16 @@ export function Coupon({ docked }: { docked?: boolean }) {
           ))}
         </div>
 
+        {!!live.length && (
+          <div className="mx-3 mb-2 flex items-center gap-2">
+            <span className={cn('min-w-0 flex-1 truncate text-[11px]', anyStale && !reading ? 'text-amber-300' : 'text-zinc-500')}>
+              {reading ?? (anyStale ? 'Hay cuotas de hace más de una hora' : 'Mira que sigan igual antes de apostar')}
+            </span>
+            <Button size="sm" variant="secondary" disabled={!!reading} onClick={refresh} title="Vuelve a leer las cuotas de estos partidos en las casas">
+              <RefreshCw size={13} className={cn(reading && 'animate-spin')} />Actualizar cuotas
+            </Button>
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
           {slip.map((l, i) => (
             <div key={keyOf(l)} className="rounded-xl bg-zinc-900/70 px-3 py-2.5 ring-1 ring-inset ring-zinc-800">
@@ -107,11 +160,12 @@ export function Coupon({ docked }: { docked?: boolean }) {
                   </div>
                   <div className="mt-0.5 truncate text-sm font-semibold text-zinc-50">{l.selection}</div>
                   <div className="truncate font-mono text-[11px] text-zinc-500">{[SPORT_TAG[l.sport || 'lol'], l.event].filter(Boolean).join(' · ')}</div>
+                  {l.live && <LiveNote live={l.live} odds={l.odds} />}
                 </div>
                 <button title="Quitar" onClick={() => removeFromSlip(i)} className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-rose-500/15 hover:text-rose-300"><X size={14} /></button>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <span className="font-mono text-sm font-bold text-amber-400 tnum">@ {odd(l.odds)}</span>
+                <span className={cn('whitespace-nowrap font-mono text-sm font-bold tnum', l.live?.gone ? 'text-zinc-500 line-through' : 'text-amber-400')}>@ {odd(l.odds)}</span>
                 {m === 'single' && <>
                   <span className="ml-auto hidden font-mono text-[11px] text-zinc-500 min-[380px]:inline">gana <b className="font-semibold text-emerald-400 tnum">{money(num(stakes[keyOf(l)] || '') * (l.odds - 1), cur)}</b></span>
                   <StakeInput value={stakes[keyOf(l)] || ''} onChange={v => setStakes(s => ({ ...s, [keyOf(l)]: v }))} cur={cur} />
@@ -141,7 +195,7 @@ export function Coupon({ docked }: { docked?: boolean }) {
           <div className="flex gap-1.5">
             <Button className="h-10 flex-1" disabled={saving || !total} onClick={place}>{m === 'combo' ? 'Registrar combinada' : 'Registrar apuestas'}</Button>
             {m === 'combo' && <Button variant="secondary" className="h-10 w-10" size="icon" title="Abrir en el formulario (más opciones)"
-              onClick={() => openBet({ legs: slip.map(({ bookmaker: _, ...l }) => l), stake: num(comboStake) || undefined, bookmaker: books.length === 1 ? books[0] : '', fromSlip: true })}><Pencil size={15} /></Button>}
+              onClick={() => openBet({ legs: slip.map(({ bookmaker: _, live: __, ...l }) => l), stake: num(comboStake) || undefined, bookmaker: books.length === 1 ? books[0] : '', fromSlip: true })}><Pencil size={15} /></Button>}
             <Button variant="secondary" className="h-10 w-10" size="icon" title="Vaciar el cupón" onClick={clearSlip}><Trash2 size={15} /></Button>
           </div>
           <PlayNotice className="text-center" />
@@ -149,6 +203,39 @@ export function Coupon({ docked }: { docked?: boolean }) {
       </>}
     </div>
   );
+}
+
+// De cuándo es la cuota, la de antes si ha cambiado y si la casa ya no ofrece la línea
+function LiveNote({ live, odds }: { live: SlipLive; odds: number }) {
+  if (live.gone) return <div className="mt-1 text-[11px] text-rose-300">La casa ya no ofrece esta línea: búscala otra vez en el partido</div>;
+  const up = live.was != null && odds > live.was;
+  return (
+    <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
+      {live.was != null && (
+        <span className={cn('inline-flex items-center gap-0.5 font-mono tnum', up ? 'text-emerald-400' : 'text-rose-300')}>
+          {up ? <ArrowUp size={11} /> : <ArrowDown size={11} />}antes {odd(live.was)} ·
+        </span>
+      )}
+      {live.at != null && <span className={cn('truncate', isStale(live.at) && 'text-amber-300')}>cuota leída {ageOf(live.at)}</span>}
+    </div>
+  );
+}
+
+// Lanza la lectura de cada partido y espera a que acaben todas (o a los 3 minutos, con lo que haya): el lector las hace de una
+// en una, así que con varios partidos tarda más
+function readNow(matches: SlipLive['match'][]) {
+  const nameKey = (m: { a: { name: string }; b: { name: string } }) => `${m.a.name}|${m.b.name}`;
+  return new Promise<void>(resolve => {
+    const left = new Set(matches.map(nameKey));
+    let off = () => {};
+    const end = () => { off(); clearTimeout(t); resolve(); };
+    const t = setTimeout(end, 180e3);
+    off = window.api.onOddsAuto(j => { if (j.done) { left.delete(nameKey(j.match)); if (!left.size) end(); } });
+    for (const m of matches) {
+      window.api.odds.auto(m).then(j => { if (j.done) { left.delete(nameKey(j.match)); if (!left.size) end(); } })
+        .catch(() => { left.delete(nameKey(m)); if (!left.size) end(); });
+    }
+  });
 }
 
 // Cupón fijo sin selecciones: explica cómo se llena

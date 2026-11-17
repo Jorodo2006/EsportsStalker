@@ -9,6 +9,9 @@ import { AlertTriangle, CalendarX, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { logPredictions, tennisPredictions } from '@/lib/predictions';
 import { cn, odd } from '@/lib/format';
+import { targetOfMatch } from '@/lib/odds-targets';
+import { RefreshOdds } from './RefreshOdds';
+import type { SlipLive } from '@/lib/types';
 import { TENNIS_GROUPS, TENNIS_SCOPES, arrangeTennis, boardPicks, dayBest, hasValue, type TennisBoardPick, type TennisFilters, type TennisGroup, type TennisOrder, type TennisScope } from '@/lib/tennis-picks';
 import type { TennisBoard, TennisBoardMatch, TennisMatch, TennisPick, TennisSurface, Tour } from '@/lib/types';
 import { useMedia } from '@/lib/use-media';
@@ -48,7 +51,11 @@ const usePickAdd = () => {
   const { addToSlip } = useApp();
   return (p: TennisBoardPick) => {
     const m = p.match.m;
-    addToSlip({ sport: 'tennis', status: 'pending', league: m.tournament, event: `${m.a.name} vs ${m.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price });
+    const [key, out] = p.id.split('#');
+    addToSlip({
+      sport: 'tennis', status: 'pending', league: m.tournament, event: `${m.a.name} vs ${m.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price,
+      ...(key && out ? { live: { match: targetOfMatch(m).match, key, out } } : {})
+    });
   };
 };
 
@@ -120,7 +127,7 @@ export function ValueChip({ pick }: { pick: TennisPick }) {
   );
 }
 
-export function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPick) => void }) {
+export function PickRow({ pick, onAdd, match }: { pick: TennisPick; onAdd: (p: TennisPick) => void; match?: SlipLive['match'] }) {
   return (
     <div className="px-3 py-1.5 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
       <div className="flex items-center gap-3">
@@ -132,6 +139,7 @@ export function PickRow({ pick, onAdd }: { pick: TennisPick; onAdd: (p: TennisPi
           <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
           <ValueChip pick={pick} />
         </div>
+        {match && <RefreshOdds match={match} />}
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
           className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
@@ -178,6 +186,7 @@ function BoardRow({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBo
           <div className="font-score text-[20px] font-bold leading-none text-zinc-50 tnum">{p0(pick.p)}</div>
           <EvChip pick={pick} />
         </div>
+        <RefreshOdds match={targetOfMatch(pick.match.m).match} />
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
           className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
@@ -220,10 +229,13 @@ function TopPick({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
         <ReliabilityMeter rel={pick.rel} />
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><EvChip pick={pick} long /></div>
       </div>
-      <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="col-start-2 row-start-2 flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90 md:col-start-auto md:row-start-auto">
-        <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
-        <span className="text-[11px] font-medium">{pick.book}</span>
-      </button>
+      <div className="col-start-2 row-start-2 flex items-center gap-1 md:col-start-auto md:row-start-auto">
+        <RefreshOdds match={targetOfMatch(pick.match.m).match} />
+        <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
+          <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
+          <span className="text-[11px] font-medium">{pick.book}</span>
+        </button>
+      </div>
       <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="reliability" className="col-span-2 md:col-span-4" />
     </div>
   );
@@ -245,10 +257,13 @@ function TopCard({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
           <div className="font-score text-[38px] font-bold leading-none text-[var(--tv-mark)] tnum">{p0(pick.p)}</div>
           <div className="mt-1 text-xs font-medium text-zinc-400">Probabilidad</div>
         </div>
-        <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[52px] w-[92px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
-          <span className="flex items-center gap-1 font-score text-[22px] font-bold leading-none tnum"><Plus size={14} />{odd(pick.price)}</span>
-          <span className="text-[11px] font-medium">{pick.book}</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <RefreshOdds match={targetOfMatch(pick.match.m).match} />
+          <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[52px] w-[92px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
+            <span className="flex items-center gap-1 font-score text-[22px] font-bold leading-none tnum"><Plus size={14} />{odd(pick.price)}</span>
+            <span className="text-[11px] font-medium">{pick.book}</span>
+          </button>
+        </div>
       </div>
       <div>
         <div className="mb-1 flex justify-between text-xs font-medium text-zinc-400"><span>Fiabilidad del cálculo</span><span>{pick.rel.label}</span></div>

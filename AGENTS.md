@@ -239,6 +239,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   500 px. Si tocas `web/nginx.conf`, las cabeceras de seguridad van en `web/cabeceras.conf`. Las cachés de las fuentes sirven lo
   caducado hace poco mientras lo renuevan y hay un precalentado cada 4 minutos (`server/shared/cached.js`): una caché nueva de
   tenis o fútbol, con `cachedJSON`; y no alargues `STALE` en datos de directo.
+- **Cupón al día** (`src/lib/slip-live.ts`, con sus pruebas): cada selección lleva `live` (el partido como lo pide el comparador,
+  la clave del mercado y la selección; sólo vive en el cupón, no se guarda en la apuesta). Al entrar se compara con la última
+  lectura y «Actualizar cuotas» lanza el lector; si la línea ya no está, se avisa. Si añades otro sitio que mande cuotas al cupón,
+  ponle `live` (`OddsTarget.match` o `src/lib/odds-targets.ts`), o esa selección no se podrá actualizar. En las recomendaciones,
+  `RefreshOdds` (`src/components/RefreshOdds.tsx`) lee el partido de esa fila y vuelve a pedir cuotas y recomendaciones. Va uno
+  a uno a propósito: no pongas un botón que lea todos los partidos del día, serían decenas de lecturas y las casas pueden bloquear.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
   confíes en lo que mande el renderer.
 - **Resolución automática** (`server/services/bets/settle.js`): depende de que las claves de mercado del comparador

@@ -15,7 +15,15 @@ export interface BetRef {
 }
 export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport; ref?: BetRef }
 // En el boleto se guarda también la casa de donde salió la cuota
-export type SlipLeg = BetLeg & { bookmaker?: string };
+// Para volver a leer la cuota desde el cupón: el partido como lo pide el comparador, la clave del mercado y la selección.
+// at: cuándo se leyó la cuota (o se añadió); was: la cuota de antes si al actualizar cambió; gone: la casa ya no ofrece la línea.
+// Sólo vive en el cupón: no se guarda en la apuesta
+export interface SlipLive {
+  match: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string };
+  key: string; out: string; at?: number; was?: number; gone?: boolean;
+  checked?: boolean; // ya se ha comparado con la última lectura guardada (al entrar en el cupón)
+}
+export type SlipLeg = BetLeg & { bookmaker?: string; live?: SlipLive };
 
 export interface Bet {
   id: string;

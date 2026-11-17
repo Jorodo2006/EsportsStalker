@@ -69,7 +69,8 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   const pick = (market: string, sel: string, bk: string, price: number, key: string, out: string) =>
     addToSlip({
       sport: target.sport, league: target.league, event: target.event, market, selection: sel, bookmaker: bk, odds: price, status: 'pending',
-      ref: { sport: target.sport, match: target.id, key, out, ...(target.match.start ? { start: target.match.start } : {}) }
+      ref: { sport: target.sport, match: target.id, key, out, ...(target.match.start ? { start: target.match.start } : {}) },
+      live: { match: target.match, key, out }
     });
 
   const groups = useMemo(() => {

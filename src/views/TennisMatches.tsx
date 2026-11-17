@@ -11,7 +11,8 @@ import { cn } from '@/lib/format';
 import { useMedia } from '@/lib/use-media';
 import type { TennisBoardMatch, TennisMatch, TennisPlayer } from '@/lib/types';
 import { AdSlot } from '@/components/AdSlot';
-import { SportOdds, type OddsTarget } from '@/components/BasketOdds';
+import { SportOdds } from '@/components/BasketOdds';
+import { targetOfMatch } from '@/lib/odds-targets';
 import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { TennisDayPicks, TennisPicksPage, TennisPicksPanel } from '@/components/TennisPicks';
 import { TennisSpotlight, TournamentGroup } from '@/components/TennisList';
@@ -36,11 +37,6 @@ const firstOf = (all: TennisMatch[]) => {
   return list.find(g => g.state === 'in') ?? list.filter(g => g.state === 'pre').sort((x, y) => +new Date(x.date) - +new Date(y.date))[0] ?? list[0] ?? null;
 };
 
-// El partido para el lector, el comparador y el cupón
-export const targetOfMatch = (m: TennisMatch): OddsTarget => ({
-  id: m.id, done: m.state === 'post', sport: 'tennis', event: `${m.a.name} vs ${m.b.name}`, league: m.tournament,
-  match: { a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'tennis', league: m.tournament }
-});
 
 function loadPref<T>(key: string, def: T): T { try { const v = localStorage.getItem(key); return v == null ? def : JSON.parse(v); } catch { return def; } }
 function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
