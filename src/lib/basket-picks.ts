@@ -27,6 +27,19 @@ export interface BasketPick {
   why: string; injury: string | null;
 }
 
+// Las cuotas de una sola casa. Con las dos juntas, cada línea cogía la mejor cuota de cualquiera y la probabilidad de la casa
+// mezclaba las dos: una recomendación así no se puede comprobar en ninguna web. Con una casa elegida, la cuota, su probabilidad sin
+// margen y el valor son sólo de ella, y lo que no tiene no sale. 'all': tal cual
+export type PickBook = 'all' | 'Winamax' | 'Betway';
+export const PICK_BOOKS: { value: PickBook; label: string }[] = [{ value: 'all', label: 'Las dos' }, { value: 'Winamax', label: 'Winamax' }, { value: 'Betway', label: 'Betway' }];
+export function onlyBook(odds: MatchOdds, book: PickBook): MatchOdds {
+  if (book === 'all') return odds;
+  const markets = odds.markets
+    .map(m => ({ ...m, outcomes: m.outcomes.map(o => ({ ...o, prices: o.prices[book] != null ? { [book]: o.prices[book] } : {} })) }))
+    .filter(m => m.outcomes.some(o => Object.keys(o.prices).length));
+  return { ...odds, books: odds.books.filter(b => b === book), markets };
+}
+
 const MIN_PLAYED = 3, MIN_MINUTES = 15; // los mismos filtros del escáner
 const MIN_PRICE = 1.2; // por debajo se arriesga mucho para ganar casi nada
 const MAX_PRICE = 15;

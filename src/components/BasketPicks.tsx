@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
-import { PICK_GROUPS, arrangePicks, bestPicks, hasValue, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import { VERDICT_LABEL } from '@/lib/value';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
@@ -27,6 +27,7 @@ const PREFS = 'basket-picks';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
 const MIN_ODDS = [1.3, 1.5, 1.7, 2, 2.5];
 const DEFAULT_MIN_ODDS = 1.5;
+const bookOf = (prefs: { book?: unknown }): PickBook => (PICK_BOOKS.some(b => b.value === prefs.book) ? prefs.book as PickBook : 'all');
 const STALE_MS = 6 * 3600e3;
 const PAGE = 5;
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
@@ -38,8 +39,8 @@ const hasPlayers = (o?: MatchOdds) => !!o?.markets.some(m => m.key.startsWith('p
 const hasTeams = (o?: MatchOdds) => !!o?.markets.some(m => /^(total|team_total)\|/.test(m.key));
 
 // Todo lo que hace falta de varios partidos. Los jugadores y los equipos sólo se piden si las casas tienen líneas: mirar un partido sin
-// cuotas no sirve de nada, y los partidos de los jugadores pesan
-export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
+// cuotas no sirve de nada, y los partidos de los jugadores pesan. book: calcular sólo con las cuotas de esa casa (onlyBook)
+export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], book: PickBook = 'all') {
   // La misma clave que la ficha del partido: comparten las cuotas ya leídas. Mirar muchos partidos no es abrirlos: quiet
   const oddsQ = useQueries({
     queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), meta: oddsMeta(t.match), refetchInterval: ODDS_FALLBACK }; })
@@ -59,6 +60,15 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
     queries: leagues.map(l => ({ queryKey: ['basket', 'leagueGames', l], queryFn: () => window.api.basket.leagueGames(l), staleTime: 5 * 60e3, retry: false }))
   });
   const logsKey = logs.map(q => idOf(q.data)).join(), pointsKey = points.map(q => idOf(q.data)).join();
+  // Las cuotas de la casa elegida, una vez por lectura: si se rehicieran en cada vuelta, se recalcularía todo cada vez
+  const views = useRef(new WeakMap<object, Map<PickBook, MatchOdds>>());
+  const view = (o?: MatchOdds) => {
+    if (!o || book === 'all') return o;
+    let m = views.current.get(o.markets);
+    if (!m) views.current.set(o.markets, (m = new Map()));
+    if (!m.has(book)) m.set(book, onlyBook(o, book));
+    return m.get(book);
+  };
 
   // Los equipos llegan de uno en uno: cada uno se calcula una vez, no todos cada vez que llega otro
   const done = useRef(new Map<string, { deps: unknown[]; picks: BasketPick[] }>());
@@ -72,16 +82,16 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
   const { picks, considered, lines } = useMemo(() => {
     const all: BasketPick[] = [];
     games.forEach((g, i) => {
-      const odds = oddsQ[i]?.data;
+      const odds = view(oddsQ[i]?.data);
       const leagueData = points[leagues.indexOf(g.league)]?.data;
-      if (odds && leagueData && hasTeams(odds)) all.push(...once(`${g.id}:equipos`, [g.date, odds.markets, leagueData], () => teamPicks(g, leagueData, odds)));
+      if (odds && leagueData && hasTeams(odds)) all.push(...once(`${g.id}:equipos:${book}`, [g.date, odds.markets, leagueData], () => teamPicks(g, leagueData, odds)));
     });
     teams.forEach((t, i) => {
-      const data = logs[i]?.data, odds = oddsQ[games.indexOf(t.game)]?.data;
-      if (data && odds) all.push(...once(`${t.game.id}:${t.side}`, [t.game.date, odds.markets, data, injuries.length], () => playerPicks(t.game, t.side, data, odds, injuries)));
+      const data = logs[i]?.data, odds = view(oddsQ[games.indexOf(t.game)]?.data);
+      if (data && odds) all.push(...once(`${t.game.id}:${t.side}:${book}`, [t.game.date, odds.markets, data, injuries.length], () => playerPicks(t.game, t.side, data, odds, injuries)));
     });
     return { picks: all.filter(saneLine), considered: all.length, lines: all };
-  }, [games, oddsKey, logsKey, pointsKey, injuries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [games, oddsKey, logsKey, pointsKey, injuries.length, book]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Se registran todas las líneas calculadas, no sólo las de valor, para medir después si el modelo acierta (Mis apuestas →
   // Acierto del modelo). Si sólo se guardaran las de valor, que son justo en las que el modelo no está de acuerdo con la casa,
@@ -96,6 +106,8 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[]) {
     picks, considered,
     oddsLoading: oddsQ.some(q => q.isLoading),
     noOdds: games.filter((_, i) => oddsQ[i]?.data && !oddsQ[i].data!.markets.length),
+    // Con una casa elegida: los partidos que tienen cuotas, pero no de ésa
+    noBook: book === 'all' ? [] : games.filter((_, i) => oddsQ[i]?.data?.markets.length && !view(oddsQ[i].data)!.markets.length),
     stale: games.filter((_, i) => { const t = newest(oddsQ[i]?.data); return t && now - t > STALE_MS; }),
     age: stamps.length ? now - Math.max(...stamps) : null,
     loaded: logs.filter(q => q.data).length + points.filter(q => q.data).length, total: logs.length + points.length,
@@ -203,11 +215,12 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
   const [side, setSide] = useState<Side | 'all'>(prefs.side === 'over' || prefs.side === 'under' ? prefs.side : 'all');
   const [minOdds, setMinOdds] = useState<number>(MIN_ODDS.includes(prefs.minOdds) ? prefs.minOdds : DEFAULT_MIN_ODDS);
   const [onlyValue, setOnlyValue] = useState<boolean>(prefs.onlyValue === true);
+  const [book, setBook] = useState<PickBook>(bookOf(prefs));
   const [lineText, setLineText] = useState('');
-  useEffect(() => { try { localStorage.setItem(PREFS, JSON.stringify({ group, side, minOdds, onlyValue })); } catch { /* sin almacenamiento */ } }, [group, side, minOdds, onlyValue]);
+  useEffect(() => { try { localStorage.setItem(PREFS, JSON.stringify({ group, side, minOdds, onlyValue, book })); } catch { /* sin almacenamiento */ } }, [group, side, minOdds, onlyValue, book]);
 
   const add = usePickAdd();
-  const q = useBasketPicks(games, injuries);
+  const q = useBasketPicks(games, injuries, book);
   const line = lineText.trim() ? parseLine(lineText) : null;
   const filters: PickFilters = { group, side, line, minOdds, onlyValue };
   const A = useMemo(() => arrangePicks(q.picks, filters), [q.picks, group, side, line, minOdds, onlyValue]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -224,16 +237,17 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
     </div>
   );
 
-  const sub = [oneGame ? LEAGUE_NAME[games[0].league] : `${games.length - q.noOdds.length} de ${games.length} partidos con cuotas`, q.age != null ? `cuotas ${ago(q.age)}` : ''].filter(Boolean).join(' · ');
+  const sub = [oneGame ? LEAGUE_NAME[games[0].league] : `${games.length - q.noOdds.length} de ${games.length} partidos con cuotas`, book !== 'all' ? `sólo ${book}` : '', q.age != null ? `cuotas ${ago(q.age)}` : ''].filter(Boolean).join(' · ');
   const props = { oneGame, onOpen, onAdd: add };
   return (
     <div className="flex flex-col gap-2.5">
-      <FoldOnPhone summary={[PICK_GROUPS.find(g => g.value === group)?.label, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
+      <FoldOnPhone summary={[PICK_GROUPS.find(g => g.value === group)?.label, book !== 'all' && book, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <TvTabs value={group} onChange={setGroup} items={PICK_GROUPS} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
           <TvTabs value={side} onChange={setSide} items={[{ value: 'all' as const, label: 'Más y menos' }, { value: 'over' as const, label: 'Más' }, { value: 'under' as const, label: 'Menos' }]} />
           <label className="flex items-center gap-2" title="Sólo esta línea exacta. +2,5 es Más de 2,5 y -2,5, Menos de 2,5">Línea<Input aria-label="Línea" inputMode="decimal" className="h-7 w-20 text-center font-semibold lg:h-7" placeholder="Todas" value={lineText} onChange={e => onLine(e.target.value)} /></label>
+          <label className="flex items-center gap-2" title="Calcular sólo con las cuotas de una casa: la cuota, la probabilidad de la casa y el valor salen de ella, y se pueden comprobar en su web">Casa<Select className="h-7 w-36 text-xs lg:h-7 lg:w-28 lg:text-xs" value={book} onChange={e => setBook(e.target.value as PickBook)}>{PICK_BOOKS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</Select></label>
           <label className="flex items-center gap-2" title="Fuera lo que paga menos: una cuota de 1,11 arriesga mucho para ganar casi nada">Cuota mínima<Select className="h-7 w-24 text-xs lg:h-7 lg:text-xs" value={minOdds} onChange={e => setMinOdds(Number(e.target.value))}>{MIN_ODDS.map(m => <option key={m} value={m}>{odd(m).replace('.', ',')}</option>)}</Select></label>
           <span title="Valor esperado de 2 % o más y fiabilidad de 55 o más"><Toggle on={onlyValue} onChange={setOnlyValue} label="Sólo con valor" /></span>
         </div>
@@ -267,14 +281,15 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
           <PickList title="Más complicadas" hint="Probabilidad de menos de 42 %, cuota alta" list={A.hard} {...props} />
         </div>
 
-        {(!!q.noOdds.length || !!q.stale.length) && (
+        {(!!q.noOdds.length || !!q.stale.length || !!q.noBook.length) && (
           <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">
             {!!q.noOdds.length && <Note>Sin cuotas todavía: {q.noOdds.map(eventOf).join(', ')}.</Note>}
+            {!!q.noBook.length && <Note>{book} no tiene cuotas de {q.noBook.map(eventOf).join(', ')}: esos partidos no salen.</Note>}
             {!!q.stale.length && <Note>Cuotas de hace más de 6 h en {q.stale.map(eventOf).join(', ')}: actualízalas antes de apostar.</Note>}
           </div>
         )}
         <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
-          Es una estimación, no una garantía: el valor mezcla el modelo con la casa sin margen, y la casa pesa más. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero. Las bajas de los compañeros no cambian la proyección: si son nuevas, bajan la fiabilidad de los «menos». En robos y tapones se desvía más. Ganador y hándicap no salen porque el modelo no los calcula.
+          Las cuotas se leen solas de las webs de las casas y alguna lectura puede equivocarse: compruébala en {book === 'all' ? 'la casa que sale en cada una' : book} antes de apostar.{book === 'all' ? ' Con «Las dos», cada recomendación lleva la casa con la mejor cuota; elige una casa para ver sólo las suyas.' : ''} Es una estimación, no una garantía: el valor mezcla el modelo con la casa sin margen, y la casa pesa más. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero. Las bajas de los compañeros no cambian la proyección: si son nuevas, bajan la fiabilidad de los «menos». En robos y tapones se desvía más. Ganador y hándicap no salen porque el modelo no los calcula.
         </p>
       </TvFrame>
     </div>
@@ -283,8 +298,9 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
 
 // Las mejores de las próximas 24 horas, en la lista de partidos. Sin cuotas no sale y no se piden los partidos de los jugadores
 function BasketDayPicksInner({ games, injuries, onOpen, onAll }: { games: BasketGame[]; injuries: BasketInjury[]; onOpen: (p: BasketPick) => void; onAll: () => void }) {
-  const { picks } = useBasketPicks(games, injuries);
-  const minOdds = useMemo(() => { const m = loadPrefs().minOdds; return MIN_ODDS.includes(m) ? m : DEFAULT_MIN_ODDS; }, []);
+  const prefs = useMemo(loadPrefs, []);
+  const { picks } = useBasketPicks(games, injuries, bookOf(prefs));
+  const minOdds = MIN_ODDS.includes(prefs.minOdds) ? prefs.minOdds : DEFAULT_MIN_ODDS;
   const list = useMemo(() => bestPicks(picks, minOdds, 4), [picks, minOdds]);
   if (!list.length) return null;
   return (

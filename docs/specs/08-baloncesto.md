@@ -206,6 +206,12 @@ en tenis, con otra idea de orden: una cuota de 1,11 muy probable no da dinero, a
 Lógica en `src/lib/basket-picks.ts` (funciones puras) y datos y pantalla en `src/components/BasketPicks.tsx`. Se calcula en el navegador, como el
 escáner, con el mismo `analyze`: el modelo de jugadores está en TypeScript y el servicio es CommonJS.
 
+- **Por casa (`onlyBook`, filtro *Casa*: Las dos · Winamax · Betway, se recuerda en el navegador):** con las dos, cada línea coge la mejor
+  cuota de cualquiera y la probabilidad de la casa sin margen mezcla las dos, así que una recomendación no se puede comprobar tal cual en
+  ninguna web. Con una casa elegida se calcula sólo con sus cuotas: la cuota, la probabilidad de la casa y el valor son de ella, y lo que no
+  tiene no sale (se avisa de los partidos sin cuotas suyas). La banda *Las mejores de las próximas 24 h* usa la misma. Como las cuotas se
+  leen de las webs y una lectura puede fallar, el pie pide comprobar la cuota en la casa antes de apostar. Las predicciones del *Acierto
+  del modelo* se guardan con lo que se haya calculado (con una casa, sus cuotas).
 - **Qué entra:** cada línea real de las casas de jugadores (`playerPicks`) y de totales y puntos de equipo, del partido, las mitades y los cuartos
   (`teamPicks`). Ganador y hándicap no, porque el modelo no los calcula. Sin cuotas no se recomienda nada ni se piden los partidos de los
   jugadores: los logs sólo se piden de los partidos con líneas.
