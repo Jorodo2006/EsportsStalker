@@ -3,6 +3,7 @@
 import { wmean, wvar } from './basket-model';
 import type { BasketLeagueGames, BasketPointSide, MatchOdds } from './types';
 import { devig, devigBooks, lineProbs, relCommon, reliability, sideValue, verdict, type SideValue, type ValueData } from './value';
+import type { TeamOuts } from './basket-absences';
 
 export type PointPeriod = 'game' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4';
 // odds: el número de ese tramo en las claves de las cuotas (server/services/odds/odds.js)
@@ -171,7 +172,11 @@ export function pointValues(kind: PointKind) {
 
 export interface PointAnalysis extends ValueData { mu: number; sd: number; modelOver: number; histOver: number }
 
-export function analyzePoints(P: PointProjection, kind: PointKind, line: number, odds: { over?: number | null; under?: number | null; overBook?: string; underBook?: string; books?: { over?: number | null; under?: number | null }[] } = {}): PointAnalysis {
+// outs: bajas de habituales de cada equipo (basket-absences.ts). La proyección ya resta lo medido (withOuts); con una baja grande, si
+// el modelo se inclina por el «más» del equipo afectado (o del total), además baja la fiabilidad y se avisa: se proyecta con partidos
+// en los que jugaban, lo que se resta es una media pequeña (a veces se nota más) y la casa ya lo sabe. Esa bajada es una decisión,
+// no una medida, como la de los «menos» de los jugadores cuando falta un compañero
+export function analyzePoints(P: PointProjection, kind: PointKind, line: number, odds: { over?: number | null; under?: number | null; overBook?: string; underBook?: string; books?: { over?: number | null; under?: number | null }[] } = {}, outs?: { away: TeamOuts; home: TeamOuts }): PointAnalysis {
   const { mu, sd } = P[kind];
   const model = lineProbs(mu, sd, line);
   const f = pointValues(kind);
@@ -193,12 +198,17 @@ export function analyzePoints(P: PointProjection, kind: PointKind, line: number,
   if (odds.under && odds.under > 1) sides.push(sideValue('under', pUnder, pPush, odds.under, mk.under, odds.underBook, MODEL_WEIGHT));
   const cur = Math.min(P.a.cur, P.b.cur), all = Math.min(P.a.pool.length, P.b.pool.length);
   const gap = Math.max(0, ...sides.map(s => Math.abs(s.gap ?? 0)));
+  const hit = outs ? (kind === 'total' ? [outs.away, outs.home] : [kind === 'away' ? outs.away : outs.home]).filter(o => o.big) : [];
+  const names = hit.flatMap(o => o.outs.slice(0, 2).map(c => c.name.split(' ').slice(-1)[0])).join(', ');
+  const outWarn = hit.length && pOver >= pUnder
+    ? [{ pts: 15, warning: `Faltan ${names}: la proyección ya resta lo medido (${Math.abs(hit.reduce((s, o) => s + o.shift, 0)).toFixed(1).replace('.', ',')} puntos), pero sale de partidos en los que jugaban y la casa ya lo sabe. Ojo con el «más»` }]
+    : [];
   const rel = reliability([
     { label: 'Muestra esta temporada', value01: cur / 15, max: 30, note: `${cur} partido${cur === 1 ? '' : 's'} del equipo con menos` },
     { label: 'Historial total', value01: all / 40, max: 15, note: `${all} partidos analizados del equipo con menos` },
     relCommon.distance(mu, sd, line),
     relCommon.agreement(model.over, histOver)
-  ], gap >= TOO_FAR ? [{ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(gap * 100)} puntos de probabilidad): lo normal es que ella sepa algo que él no` }] : []);
+  ], [...(gap >= TOO_FAR ? [{ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(gap * 100)} puntos de probabilidad): lo normal es que ella sepa algo que él no` }] : []), ...outWarn]);
   return {
     line, pOver, pUnder, pPush, fairOver: (1 - pPush) / pOver, fairUnder: (1 - pPush) / pUnder, margin: mk.margin, exact: mk.exact, sides, rel,
     verdict: verdict(sides, rel.score, line, pOver >= pUnder ? 'over' : 'under'), mu, sd, modelOver: model.over, histOver

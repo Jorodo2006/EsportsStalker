@@ -10,6 +10,7 @@ import {
   type BookLine, type PointKind, type PointPeriod, type PointSplit, type TableRow, type TableWindow, type TeamRow
 } from '@/lib/basket-teams';
 import { SIDE_LABEL } from '@/lib/value';
+import { NO_OUTS, outsText, teamOuts, withOuts } from '@/lib/basket-absences';
 import type { BasketGame, BasketLeagueId, MatchOdds } from '@/lib/types';
 import { LEAGUE_NAME } from './BasketAnalyzer';
 import { ValuePanel } from './ValuePanel';
@@ -272,8 +273,20 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
   const [under, setUnder] = useState('');
   const [books, setBooks] = useState<{ over?: string; under?: string }>({});
   const d = q.data;
+  // Quién falta de cada equipo (basket-absences.ts): los registros de la plantilla y, en la NBA, el parte de ESPN. Sólo antes del
+  // partido; las mismas claves que el resto de la app, así que suelen estar ya pedidos
+  const upcoming = game.state === 'pre';
+  const logsA = useQuery({ queryKey: ['basket', 'teamLogs', game.league, game.away.id], queryFn: () => window.api.basket.teamLogs(game.league, game.away.id), staleTime: 15 * 60e3, retry: 1, enabled: upcoming });
+  const logsB = useQuery({ queryKey: ['basket', 'teamLogs', game.league, game.home.id], queryFn: () => window.api.basket.teamLogs(game.league, game.home.id), staleTime: 15 * 60e3, retry: 1, enabled: upcoming });
+  const inj = useQuery({ queryKey: ['basket', 'injuries'], queryFn: () => window.api.basket.injuries(), staleTime: 10 * 60e3, enabled: upcoming && game.league === 'nba' });
   // Sólo lo anterior al partido: en uno ya jugado no se cuenta a sí mismo
-  const P = useMemo(() => (d ? projectGame(d, game.away.id, game.home.id, period, game.date) : null), [d, game.away.id, game.home.id, game.date, period]);
+  const P0 = useMemo(() => (d ? projectGame(d, game.away.id, game.home.id, period, game.date) : null), [d, game.away.id, game.home.id, game.date, period]);
+  const outs = useMemo(() => {
+    if (!P0 || !upcoming) return { away: NO_OUTS, home: NO_OUTS };
+    const statusOf = (id: string, roster: string | null | undefined) => (game.league === 'nba' ? inj.data?.find(x => x.playerId === id)?.status : null) || roster;
+    return { away: teamOuts(logsA.data, game.away.id, P0.a, game.date, statusOf), home: teamOuts(logsB.data, game.home.id, P0.b, game.date, statusOf) };
+  }, [P0, upcoming, logsA.data, logsB.data, inj.data, game.league, game.away.id, game.home.id, game.date]);
+  const P = useMemo(() => (P0 ? withOuts(P0, outs.away, outs.home) : null), [P0, outs]);
   const lines = useMemo(() => pointLines(odds, kind, period), [odds, kind, period]);
   const applyLine = (l: BookLine) => {
     setLine(fmtLine(l.line)); setOver(l.over ? fmtLine(l.over) : ''); setUnder(l.under ? fmtLine(l.under) : ''); setBooks({ over: l.overBook, under: l.underBook });
@@ -290,7 +303,7 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
   const L = toNum(line);
   // La probabilidad de la casa, de todas las casas de esa línea (devigBooks): no cambia según la cuota que se pulse
   const lineBooks = useMemo(() => lines.find(l => l.line === L)?.books, [lines, L]);
-  const A = useMemo(() => (P && L != null && L >= 0 ? analyzePoints(P, kind, L, { over: toNum(over), under: toNum(under), overBook: books.over, underBook: books.under, books: lineBooks }) : null), [P, kind, L, over, under, books, lineBooks]);
+  const A = useMemo(() => (P && L != null && L >= 0 ? analyzePoints(P, kind, L, { over: toNum(over), under: toNum(under), overBook: books.over, underBook: books.under, books: lineBooks }, outs) : null), [P, kind, L, over, under, books, lineBooks, outs]);
 
   if (q.isLoading) return <Loading label={LOADING} />;
   if (q.error) return restart(q.error);
@@ -312,6 +325,15 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
     <div className="flex flex-col gap-2.5">
       <TvFrame>
         <TvHeader title="Puntos" sub={`${LEAGUE_NAME[game.league]}: proyección con lo anterior al partido`}><PeriodTabs value={period} onChange={setPeriod} /></TvHeader>
+        {(!!outs.away.outs.length || !!outs.home.outs.length) && (
+          <p className="border-b border-white/10 px-4 py-2 text-[12px] leading-snug text-zinc-300" title="Lo que se resta está medido con partidos pasados de la NBA (scripts/backtest-puntos.ts): los compañeros absorben casi todos los tiros, y sólo las bajas grandes se notan">
+            <span className="text-amber-300">Bajas: </span>
+            {[['away', outs.away], ['home', outs.home]].filter(([, o]) => (o as typeof NO_OUTS).outs.length).map(([k, o]) => `${game[k as 'away' | 'home'].abbr} sin ${outsText(o as typeof NO_OUTS)}`).join(' · ')}
+            {outs.away.shift || outs.home.shift
+              ? `. Se resta ${(-(outs.away.shift + outs.home.shift)).toFixed(1).replace('.', ',')} al total: los compañeros absorben casi todos sus tiros (medido con la NBA).`
+              : '. Las bajas así no cambian la proyección de forma medible: los compañeros absorben sus tiros.'}
+          </p>
+        )}
         <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
           {cards.map(c => {
             const x = P[c.id], main = mainLine(pointLines(odds, c.id, period));

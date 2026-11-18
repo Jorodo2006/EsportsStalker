@@ -3,7 +3,8 @@
 // Funciones puras: components/BasketPicks.tsx pide los datos y lo enseña. Es una estimación: no hay cuotas históricas de baloncesto
 // con las que comprobar si a la larga se gana dinero.
 import { BASKET_MARKETS, fmtLine, missedByPlayer, playerLines, playerOut, scanLine, type BasketMarket } from './basket-model';
-import { POINT_PERIODS, analyzePoints, pointLines, projectGame, type PointKind, type PointPeriod } from './basket-teams';
+import { POINT_PERIODS, analyzePoints, pointLines, projectGame, type PointKind, type PointPeriod, type PointProjection } from './basket-teams';
+import { outsText, withOuts, type TeamOuts } from './basket-absences';
 import { gameCtx, teamGamesOf } from './basket-context';
 import { freshKeyOuts, matesOut } from './basket-mates';
 import type { BasketGame, BasketInjury, BasketLeagueGames, BasketTeamLogs, MatchOdds } from './types';
@@ -88,17 +89,27 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
   return out;
 }
 
-// Totales y puntos de cada equipo, del partido, las mitades y los cuartos
-export function teamPicks(game: BasketGame, d: BasketLeagueGames, odds: MatchOdds): BasketPick[] {
+// Totales y puntos de cada equipo, del partido, las mitades y los cuartos. outsOf: las bajas de habituales de cada equipo con la
+// muestra de esa proyección (basket-absences.ts); sin ella (sin parte médico o sin los registros), como antes
+export function teamPicks(game: BasketGame, d: BasketLeagueGames, odds: MatchOdds, outsOf?: (P: PointProjection) => { away: TeamOuts; home: TeamOuts }): BasketPick[] {
   const out: BasketPick[] = [];
   for (const per of POINT_PERIODS) {
-    const P = projectGame(d, game.away.id, game.home.id, per.id, game.date);
-    if (!P) continue;
+    const P0 = projectGame(d, game.away.id, game.home.id, per.id, game.date);
+    if (!P0) continue;
+    const outs = outsOf?.(P0);
+    const P = outs ? withOuts(P0, outs.away, outs.home) : P0;
+    // Lo que se enseña en amarillo en la fila: quién falta del equipo afectado
+    const noteOf = (kind: PointKind) => {
+      if (!outs) return null;
+      const list = (kind === 'total' ? [['away', outs.away], ['home', outs.home]] : [[kind, kind === 'away' ? outs.away : outs.home]]) as [PointKind, TeamOuts][];
+      const txt = list.filter(([, o]) => o.outs.length).map(([k, o]) => `${game[k as 'away' | 'home'].abbr} sin ${outsText(o, 2)}`);
+      return txt.length ? txt.join(' · ') : null;
+    };
     const pre = per.id === 'game' ? '' : `${per.label}: `;
     for (const kind of ['total', 'away', 'home'] as PointKind[]) {
       const name = kind === 'total' ? 'Total' : game[kind].abbr;
       for (const l of pointLines(odds, kind, per.id)) {
-        const A = analyzePoints(P, kind, l.line, l);
+        const A = analyzePoints(P, kind, l.line, l, outs);
         for (const v of A.sides) {
           const market = `${per.id === 'game' ? '' : `${per.label} · `}${kind === 'total' ? 'Total de puntos' : `Puntos de ${name}`}`;
           out.push({
@@ -106,7 +117,7 @@ export function teamPicks(game: BasketGame, d: BasketLeagueGames, odds: MatchOdd
             title: `${pre}${name}, ${word(v.side)} de ${fmtLine(l.line)} puntos`, market, selection: `${SIDE_LABEL[v.side]} de ${l.line}`,
             who: null, marketKey: null, period: per.id, pointKind: kind,
             book: v.book, price: v.price, p: v.p, pModel: v.pModel, pMarket: v.gap == null ? null : v.pModel - v.gap, fair: (1 - A.pPush) / v.p, ev: v.ev, rel: A.rel,
-            why: `Proyecta ${dec(A.mu)} (entre ${Math.round(A.mu - 1.2816 * A.sd)} y ${Math.round(A.mu + 1.2816 * A.sd)})`, injury: null
+            why: `Proyecta ${dec(A.mu)} (entre ${Math.round(A.mu - 1.2816 * A.sd)} y ${Math.round(A.mu + 1.2816 * A.sd)})`, injury: noteOf(kind)
           });
         }
       }

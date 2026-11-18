@@ -8,6 +8,7 @@ import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
 import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import { VERDICT_LABEL } from '@/lib/value';
+import { teamOuts } from '@/lib/basket-absences';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
 import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
 import type { Side } from '@/lib/value';
@@ -51,7 +52,8 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
   const nextId = useRef(1);
   const idOf = (o?: object) => { if (!o) return 0; if (!ids.current.has(o)) ids.current.set(o, nextId.current++); return ids.current.get(o)!; };
   const oddsKey = oddsQ.map(q => idOf(q.data?.markets)).join();
-  const teams = useMemo(() => games.flatMap((game, i) => (hasPlayers(oddsQ[i]?.data) ? [{ game, side: 'away' as const }, { game, side: 'home' as const }] : [])), [games, oddsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // También los de los partidos con sólo líneas de equipo: hacen falta para saber quién falta (bajas en los puntos de equipo)
+  const teams = useMemo(() => games.flatMap((game, i) => (hasPlayers(oddsQ[i]?.data) || hasTeams(oddsQ[i]?.data) ? [{ game, side: 'away' as const }, { game, side: 'home' as const }] : [])), [games, oddsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const logs = useQueries({
     queries: teams.map(t => ({ queryKey: ['basket', 'teamLogs', t.game.league, t.game[t.side].id], queryFn: () => window.api.basket.teamLogs(t.game.league, t.game[t.side].id), staleTime: 15 * 60e3, retry: 1 }))
   });
@@ -81,10 +83,16 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
   };
   const { picks, considered, lines } = useMemo(() => {
     const all: BasketPick[] = [];
+    const logsOf = (g: BasketGame, side: 'away' | 'home') => logs[teams.findIndex(t => t.game.id === g.id && t.side === side)]?.data;
     games.forEach((g, i) => {
       const odds = view(oddsQ[i]?.data);
       const leagueData = points[leagues.indexOf(g.league)]?.data;
-      if (odds && leagueData && hasTeams(odds)) all.push(...once(`${g.id}:equipos:${book}`, [g.date, odds.markets, leagueData], () => teamPicks(g, leagueData, odds)));
+      if (!odds || !leagueData || !hasTeams(odds)) return;
+      // Bajas de habituales de cada equipo (parte de ESPN en la NBA; si no, el de la plantilla), sólo antes del partido
+      const la = logsOf(g, 'away'), lb = logsOf(g, 'home');
+      const statusOf = (id: string, roster: string | null | undefined) => (g.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
+      const outsOf = g.state === 'pre' && (la || lb) ? (P: Parameters<NonNullable<Parameters<typeof teamPicks>[3]>>[0]) => ({ away: teamOuts(la, g.away.id, P.a, g.date, statusOf), home: teamOuts(lb, g.home.id, P.b, g.date, statusOf) }) : undefined;
+      all.push(...once(`${g.id}:equipos:${book}`, [g.date, odds.markets, leagueData, la, lb, injuries.length], () => teamPicks(g, leagueData, odds, outsOf)));
     });
     teams.forEach((t, i) => {
       const data = logs[i]?.data, odds = view(oddsQ[games.indexOf(t.game)]?.data);

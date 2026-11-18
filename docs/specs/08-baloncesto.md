@@ -276,6 +276,35 @@ Calibración en 25-26: dice 25,0 % y se cumple 24,9 %; 45,1 % y 44,6 %; 64,8 % y
 equipos, sin más, falla por 15,6 en 25-26. El peso de esta temporada no se pudo ajustar, porque 24-25 no tenía temporada anterior en la
 muestra. Tampoco aquí se ha podido medir si se le gana a la casa, y Euroliga, EuroCup, WNBA y NBL usan los parámetros de la NBA sin evaluar.
 
+### Bajas en los puntos de equipo (`src/lib/basket-absences.ts`, `scripts/backtest-puntos.ts`)
+
+La proyección sale de los marcadores y no sabe quién juega: con GS sin Curry proyectaba como si estuviera. Ahora, para cada
+jugador de la plantilla, se mira cuánto anota (sus 10 últimos partidos) y en qué parte de la muestra de la proyección estaba
+(`share`, con los mismos pesos): `delta = Σ puntos × (juega hoy − share)`. Una baja de semanas ya está en la muestra y no cambia nada.
+Cuentan las **bajas de habituales**: jugadores con 5 de los 10 últimos partidos del equipo esta temporada que el parte da como baja o
+en duda (`playChance`: baja 0, dudoso 0,25, duda 0,5, day-to-day 0,7; en la NBA el parte de ESPN, en las demás el de la plantilla).
+
+Medido con la NBA (unos 850 partidos con registros completos; ajuste hasta el 1-2-2026, comprobación después y en 26-27):
+- **Se nota mucho menos de lo que parece:** los compañeros absorben casi todos los tiros. Con bajas de ~31 puntos de la muestra el
+  equipo anotó 2,7 menos de lo proyectado (± 1,2); con bajas de 6 a 20, nada medible.
+- **Restar en proporción a cualquier baja empeoraba la proyección** con los partidos que no se usaron para ajustar (error² 138,4 →
+  141,6), y ajustar sólo las grandes con lo del primer periodo (k ≈ 0,15) también: en el segundo el efecto fue menos de la mitad.
+- **Lo que mejora en los dos periodos:** restar el 5 % de lo que falta, sólo con bajas de 20 o más (`ABSENCE`): error² de los equipos
+  con baja grande 170,9 → 158,1 (ajuste) y 132,0 → 129,7 (comprobación). En el total del partido no mejora (log-loss 0,6932 → 0,6969 en
+  comprobación, del tamaño del ruido). Por ejemplo, GS sin Curry, Williams y con Green en duda (−20,5): se resta 1 punto.
+- Además, con una baja grande y el modelo inclinado al «más» del equipo afectado o del total, la fiabilidad baja 15 y se avisa
+  (la proyección sale de partidos en los que jugaban y la casa ya lo sabe). Eso es una decisión, no una medida, como la de los
+  «menos» de los jugadores cuando falta un compañero. Con GS - DAL, el «más de 220,5» pasó de «Apostar» (fiabilidad 65) a «Valor ligero».
+- Se ve en la pestaña *Puntos* («Bajas: GS sin Stephen Curry (27,8)…») y en las recomendaciones de equipo, en amarillo.
+
+Si se toca, repetir la prueba:
+
+```bash
+docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(key, value) FROM basket.cache WHERE key LIKE 'log:nba:%'" > logs.json
+docker compose exec -T basket node -e 'fetch("http://localhost:4004/api/basket/league-games/nba").then(r=>r.json()).then(j=>console.log(JSON.stringify(j.data)))' > liga.json
+npx esbuild scripts/backtest-puntos.ts --bundle --platform=node --outfile=<temporal>/bp.cjs && node <temporal>/bp.cjs logs.json liga.json
+```
+
 ## Calibración de noviembre de 2026 (`scripts/calib-basket.ts`)
 
 Con las primeras recomendaciones reales resueltas (10 y 11 de noviembre) los "más" salían mal: decía 44 %, la casa 34 % y se
