@@ -9,6 +9,7 @@ const { chromium } = require('playwright');
 const APP = process.env.GATEWAY_URL || 'http://gateway:47365';
 const { focusGroups } = require('./foco');
 const { blocked } = require('./red');
+const { pageFind } = require('./pagefind'); // se ejecuta dentro de la página: ver pagefind.js
 const LECTOR = process.env.LECTOR_FILE || '/lector-src/marcador.js';
 const POLL = 5e3; // en local no cuesta nada, y así un "Actualizar cuotas" empieza enseguida
 const JOB_MAX = 4 * 60e3; // una lectura normal tarda de 10 a 40 s
@@ -77,33 +78,6 @@ const snapshotOf = () => ({
 });
 
 // ---------- funciones que se ejecutan dentro de la página (copiadas de la extensión) ----------
-function pageFind(teams, opts) {
-  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const strip = s => norm(s).replace(/\b(e ?sports?|gaming|team|club|academy)\b/g, ' ').replace(/\s+/g, ' ').trim();
-  const al = t => [...new Set([t.name, t.code, ...(t.alt || [])].flatMap(x => [norm(x), strip(x)]).filter(x => x && x.length >= 2))];
-  const A = al(teams[0]), B = al(teams[1]);
-  // Una palabra distintiva del nombre (5 letras o más, no genérica): "Zelli" encuentra "Rigas Zelli" cuando lo tenemos como "Riga
-  // Zelli". Los dos equipos tienen que salir en el mismo bloque, así que no empareja partidos de otros. Sólo con opts.words (equipos
-  // de baloncesto): en tenis, "Carlos" o "Daniel" los comparten muchos jugadores
-  const GEN = /^(basket|basketball|baloncesto|club|sporting|united|city|calcio|futbol|football|tennis|esports?)$/;
-  const keyWords = t => [...new Set([t.name, ...(t.alt || [])].flatMap(x => norm(x).split(' ')).filter(w => w.length >= 5 && !GEN.test(w)))];
-  const WA = opts.words ? keyWords(teams[0]) : [], WB = opts.words ? keyWords(teams[1]) : [];
-  const has = (txt, list, ws = []) => { const n = ' ' + norm(txt) + ' '; return list.some(x => n.includes(' ' + x + ' ')) || ws.some(w => n.includes(' ' + w + ' ')); };
-  const visible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  const cands = [...document.querySelectorAll(opts.selector || 'a,div,li,tr,section,article')]
-    .filter(el => { const t = el.innerText || ''; return t.length < 400 && has(t, A, WA) && has(t, B, WB) && visible(el); })
-    .sort((x, y) => (x.innerText || '').length - (y.innerText || '').length);
-  const el = cands[0];
-  if (!el) { if (opts.scroll) window.scrollBy(0, 1200); return null; }
-  for (let c = el, i = 0; c && i < 6; c = c.parentElement, i++) {
-    const a = c.closest(opts.href) || c.querySelector(opts.href);
-    if (a) return a.href;
-    const ev = c.closest('[data-eventid]') || c.querySelector('[data-eventid]');
-    if (ev) return '/sports/event/' + ev.getAttribute('data-eventid');
-  }
-  return null;
-}
-
 // cfg: { cat } la categoría de LoL, o { sport, tours } un deporte y qué torneos mirar si no está en la portada
 function winamaxFind(teams, cfg) {
   const s = window.PRELOADED_STATE;
