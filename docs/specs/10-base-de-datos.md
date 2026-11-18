@@ -215,6 +215,8 @@ Recomendaciones del modelo para medir si acierta (migración `009_predicciones.s
 es la misma para todos. Una fila por `(match, key, out)`; `p`, `p_model`, `p_market`, `price`, `ev` y `rel` son la última
 opinión antes del partido, `first_price` la cuota de la primera vez. `status`: `pending`, `won`, `lost`, `void` o
 `unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor.
+La migración `017_periodos_imposibles.sql` borró las de baloncesto con un total de mitad o cuarto que era en realidad el del
+partido entero (Betway, NBL; ver `docs/specs/08-baloncesto.md`).
 
 ### `bets.friends`
 

@@ -135,11 +135,31 @@ class Book {
   }
 
   result(sources) {
-    const markets = [...this.markets.values()]
-      .filter(m => m.outcomes.some(o => Object.keys(o.prices).length))
-      .sort((x, y) => x.period - y.period || x.group.localeCompare(y.group) || (y.main - x.main) || ((x.line ?? 0) - (y.line ?? 0)));
+    let markets = [...this.markets.values()].filter(m => m.outcomes.some(o => Object.keys(o.prices).length));
+    if (this.sport === 'basket') markets = dropImpossiblePeriods(markets);
+    markets.sort((x, y) => x.period - y.period || x.group.localeCompare(y.group) || (y.main - x.main) || ((x.line ?? 0) - (y.line ?? 0)));
     return { books: [...this.books], markets, sources };
   }
+}
+
+// Baloncesto: el total de una mitad no pasa de ~55 % del del partido, ni el de un cuarto de ~27 % (en las lecturas guardadas, el
+// mayor fue 131,5 de 245,5 y 63,5 de 245,5). Una línea de periodo que se acerca a la del partido es la del partido que una casa ha
+// dado como de un periodo (Betway, isPeriodCopy) y se quita aquí, por si se cuela: de aquí salen las recomendaciones, el acierto
+// del modelo y la resolución, y "1.er cuarto: menos de 188,5" se daba por ganada con 56 puntos. Sólo totales y totales por equipo:
+// en el hándicap y el ganador la mitad y el partido se parecen y no se puede saber por la línea
+const HALF = p => p === 1 || p === 2, QUARTER = p => p >= 11 && p <= 14;
+const PERIOD_MAX = { total: { half: 0.75, quarter: 0.45 }, team_total: { half: 0.42, quarter: 0.3 } };
+// ref: de dónde sacar el total del partido (por defecto, los mismos mercados)
+function dropImpossiblePeriods(markets, ref = markets) {
+  const full = ref.filter(m => m.period === 0 && m.key.startsWith('total|0||') && m.line != null).map(m => m.line).sort((a, b) => a - b);
+  if (!full.length) return markets;
+  const total = full[Math.floor(full.length / 2)];
+  return markets.filter(m => {
+    const lim = PERIOD_MAX[m.key.split('|')[0]];
+    if (!lim || !m.period || m.line == null) return true;
+    const f = HALF(m.period) ? lim.half : QUARTER(m.period) ? lim.quarter : null;
+    return f == null || m.line <= total * f;
+  });
 }
 
 
@@ -705,11 +725,24 @@ function intoBook(book, match, imp) {
 
 // Betway devuelve la página del partido entero cuando se le pide una pestaña que ese partido no tiene (en la NBL no hay
 // "1st-half": su mitad está en "half"), y como el periodo sale de la pestaña, las líneas del partido pasaban por las de la
-// 1.ª mitad. Esa copia se descarta si tiene los mismos mercados (título y línea) que una página del mismo trabajo sin periodo
+// 1.ª mitad o el 1.er cuarto ("1.er cuarto: menos de 188,5"). Esa copia se descarta si se parece a cualquier página de Betway del
+// mismo partido sin periodo. Antes tenía que ser del mismo trabajo y con los mismos mercados exactos, y desde las lecturas ligeras
+// (foco.js: cada página sólo sustituye a la suya) la copia de una lectura quedaba junto a la página principal de otra, con alguna
+// línea movida, y se colaba. Ahora vale con que casi todas sus líneas estén en la principal y cubran buena parte de ella: una
+// mitad de verdad comparte, como mucho, algún hándicap con la escalera del partido
 const PERIOD_TAB = /marketGroup=(1st-half|half|1st-quarter|quarter)\b/;
 const marketsPrint = imp => JSON.stringify((imp.markets || []).map(m => [m.title, m.line]));
+const linesOf = imp => new Set((imp.markets || []).filter(m => m.line != null && m.line !== '').map(m => `${m.title}@${m.line}`));
+function looksLike(imp, o) {
+  if (marketsPrint(o) === marketsPrint(imp)) return true;
+  const mine = linesOf(imp), theirs = linesOf(o);
+  if (mine.size < 2 || !theirs.size) return false;
+  let n = 0;
+  for (const k of mine) if (theirs.has(k)) n++;
+  return n / mine.size >= 0.8 && n / theirs.size >= 0.5;
+}
 const isPeriodCopy = (imp, all) => imp.book === 'betway' && PERIOD_TAB.test(imp.page || '') && !!imp.markets?.length
-  && all.some(o => o !== imp && o.id !== imp.id && o.book === 'betway' && o.job === imp.job && !PERIOD_TAB.test(o.page || '') && marketsPrint(o) === marketsPrint(imp));
+  && all.some(o => o !== imp && o.id !== imp.id && o.book === 'betway' && !PERIOD_TAB.test(o.page || '') && looksLike(imp, o));
 
 // match = { a: {name, code}, b: {name, code}, start }
 async function getMatchOdds(match) {
@@ -749,8 +782,16 @@ async function afterImport(match, imp) {
   const price = id => ml?.outcomes.find(x => x.id === id)?.prices[BOOK_LABEL[imp.book]];
   // En fútbol va también el empate (x)
   if (price('a') && price('b')) await bridge.setMoneyline(imp.id, { a: price('a'), b: price('b'), ...(price('x') ? { x: price('x') } : {}) });
+  // Baloncesto: las líneas de periodo imposibles fuera también del histórico (y de los avisos de caídas), con el total del partido
+  // de las páginas guardadas sin periodo: una copia que llega antes que su página principal no la ve isPeriodCopy
+  let list = [...book.markets.values()];
+  if ((imp.sport || match.sport) === 'basket' && list.some(m => m.period)) {
+    const ref = new Book(match.a, match.b, 'basket');
+    for (const o of await bridge.forMatch(match)) if (!PERIOD_TAB.test(o.page || '')) { try { intoBook(ref, match, o); } catch { /* una página que no se entiende no vale de referencia */ } }
+    list = dropImpossiblePeriods(list, [...ref.markets.values(), ...list]);
+  }
   const rows = [];
-  for (const m of book.markets.values()) {
+  for (const m of list) {
     for (const o of m.outcomes) {
       const p = o.prices[BOOK_LABEL[imp.book]];
       if (p) rows.push({ market_key: m.key, market: m.group, outcome_id: o.id, outcome: o.label, line: m.line, price: p });
@@ -777,4 +818,4 @@ async function getBoardFor(events) {
   return out;
 }
 
-module.exports = { getMatchOdds, getBoardFor, afterImport, orient, winamaxInto, Book, intoBook };
+module.exports = { getMatchOdds, getBoardFor, afterImport, orient, winamaxInto, Book, intoBook, isPeriodCopy, dropImpossiblePeriods };

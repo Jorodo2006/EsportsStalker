@@ -56,6 +56,15 @@ vuelven a pedir.
 - Normalizador: ganador, hándicap, total y puntos de cada equipo, del partido (periodo 0), de cada mitad (1-2) y de cada
   cuarto (11-14). Las líneas de jugador van con la clave `player|<estadística>|<jugador>|<línea>`, con los nombres de
   `BASKET_MARKETS` (Puntos, Rebotes, Asistencias, Triples anotados, Pts + Reb + Ast…). El resto va como mercado propio.
+- **Líneas del partido como de un periodo.** Cuando un partido no tiene una pestaña de periodo (la NBL no tiene `1st-half` ni
+  `1st-quarter`), Betway devuelve la página del partido entero, y como el periodo sale de la pestaña salían cosas como «1.er
+  cuarto: menos de 188,5 puntos», que la resolución daba por ganada con 56 puntos. Dos defensas en `odds.js`: `isPeriodCopy`
+  descarta la página si se parece a cualquier página principal de Betway del partido (el 80 % de sus líneas están en ella y
+  cubren la mitad de la principal; da igual de qué lectura sea), y `dropImpossiblePeriods` quita los totales de periodo que se
+  acercan al del partido: una mitad por encima del 75 % del total del partido, un cuarto del 45 %; por equipo, el 42 % y el 30 %
+  (en lo guardado, lo más alto de verdad fue el 54 % y el 26 %, y las copias, del 94 % para arriba). En el hándicap y el ganador
+  no se puede saber por la línea: ahí sólo vale la primera. La migración `bets/017_periodos_imposibles.sql` borró las
+  predicciones de ese tipo que ya se habían guardado (286 en local, todas de la NBL y de Betway).
 - Lecturas programadas: el programador de `odds` también crea trabajos para los partidos de baloncesto que empiezan en
   las próximas N horas.
 

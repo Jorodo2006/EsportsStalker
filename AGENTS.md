@@ -196,8 +196,11 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
   salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
   clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`. Si el partido no
-  tiene esa pestaña (la NBL usa `half`), Betway devuelve la del partido entero: `isPeriodCopy` la descarta, o sus líneas
-  pasarían por las de la mitad.
+  tiene esa pestaña (la NBL usa `half`), Betway devuelve la del partido entero: `isPeriodCopy` la descarta si se parece a
+  cualquier página principal de Betway del partido, sea de la lectura que sea (con las lecturas ligeras cada página sólo
+  sustituye a la suya: exigir la misma lectura dejó pasar "1.er cuarto: menos de 188,5" en noviembre de 2026). Por si se cuela,
+  `dropImpossiblePeriods` quita los totales de mitad o cuarto que se acercan al del partido (en `Book.result` y en `afterImport`);
+  pruebas en `server/test/periodos.test.js`.
 - **Fútbol en las casas** (`winamaxFootballInto` y `betwayFootballInto` en `odds.js`): el periodo sale sólo del título,
   nunca de la pestaña (la "1er Tiempo" de Betway repite los mercados del partido). El 1X2 lleva empate (`x`). Los nombres
   del partido (`targetOfFootball` y `upcomingFootball`) tienen que coincidir, porque son la clave en `odds`
