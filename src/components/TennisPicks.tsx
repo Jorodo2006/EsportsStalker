@@ -139,7 +139,7 @@ export function PickRow({ pick, onAdd, match }: { pick: TennisPick; onAdd: (p: T
           <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
           <ValueChip pick={pick} />
         </div>
-        {match && <RefreshOdds match={match} />}
+        {match && <RefreshOdds match={match} focus={pick.id.split('#')[0]} />}
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
           className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
@@ -186,7 +186,7 @@ function BoardRow({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBo
           <div className="font-score text-[20px] font-bold leading-none text-zinc-50 tnum">{p0(pick.p)}</div>
           <EvChip pick={pick} />
         </div>
-        <RefreshOdds match={targetOfMatch(pick.match.m).match} />
+        <RefreshOdds match={targetOfMatch(pick.match.m).match} focus={pick.id.split('#')[0]} />
         <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
           className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
           <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
@@ -230,7 +230,7 @@ function TopPick({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
         <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(pick.fair)}</span></span><EvChip pick={pick} long /></div>
       </div>
       <div className="col-start-2 row-start-2 flex items-center gap-1 md:col-start-auto md:row-start-auto">
-        <RefreshOdds match={targetOfMatch(pick.match.m).match} />
+        <RefreshOdds match={targetOfMatch(pick.match.m).match} focus={pick.id.split('#')[0]} />
         <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
           <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(pick.price)}</span>
           <span className="text-[11px] font-medium">{pick.book}</span>
@@ -258,7 +258,7 @@ function TopCard({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoa
           <div className="mt-1 text-xs font-medium text-zinc-400">Probabilidad</div>
         </div>
         <div className="flex items-center gap-1">
-          <RefreshOdds match={targetOfMatch(pick.match.m).match} />
+          <RefreshOdds match={targetOfMatch(pick.match.m).match} focus={pick.id.split('#')[0]} />
           <button onClick={() => onAdd(pick)} title="Añadir al cupón" className="flex h-[52px] w-[92px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
             <span className="flex items-center gap-1 font-score text-[22px] font-bold leading-none tnum"><Plus size={14} />{odd(pick.price)}</span>
             <span className="text-[11px] font-medium">{pick.book}</span>

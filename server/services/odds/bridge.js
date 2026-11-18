@@ -2,6 +2,7 @@
 // la extensión o el marcador de Chrome, y lleva los trabajos de lectura. Bet365 se quitó (no se deja leer desde Docker).
 // Todo se guarda en PostgreSQL (esquema odds); el gateway publica estas rutas en 127.0.0.1:47365.
 const { movesOf } = require('./moves');
+const { isOtherMatch } = require('./otro-partido');
 const fs = require('fs');
 const path = require('path');
 const { query, tx, notify } = require('../../shared/db');
@@ -58,6 +59,17 @@ async function add(payload) {
   if (payload?.type !== 'LOL_ET' || !BOOKS.includes(payload.book)) throw Object.assign(new Error('No son cuotas del marcador'), { status: 400 });
   const m = await assign(payload);
   const matchKey = m?.key || null;
+  // La dirección guardada puede ser de otro partido entre los mismos equipos (otro-partido.js): se rechaza y se olvida, y el
+  // lector lo busca otra vez
+  if (payload.book === 'winamax' && payload.job && matchKey) {
+    const job = await getJob(payload.job);
+    const wm = payload.state?.matches?.[payload.matchId];
+    if (isOtherMatch(job?.start, wm)) {
+      await query('DELETE FROM odds.book_urls WHERE match_key = $1 AND book = $2', [matchKey, 'winamax']);
+      const when = wm?.matchStart ? new Date(wm.matchStart * 1000).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' }) : 'otro día';
+      throw Object.assign(new Error(`Winamax ha abierto otro partido entre los mismos equipos (del ${when})`), { status: 409 });
+    }
+  }
   if (m?.sport) payload.sport = m.sport; // el normalizador de cuotas cambia según el deporte
   const map = Number(payload.map) || 1;
   const page = payload.page ? String(payload.page) : null;
@@ -153,19 +165,20 @@ function toJob(r) {
   if (!r) return null;
   return {
     id: r.id, match: r.match, books: r.books, source: r.source, steps: r.steps,
-    created: ms(r.created), picked: !!r.picked_at, done: !!r.done_at, ...(r.error ? { error: r.error } : {})
+    created: ms(r.created), picked: !!r.picked_at, done: !!r.done_at, start: r.start ? ms(r.start) : null, ...(r.error ? { error: r.error } : {})
   };
 }
 
 const getJob = async id => toJob((await query('SELECT * FROM odds.jobs WHERE id = $1', [String(id || '')])).rows[0]);
 
-async function newJob(match, source = 'manual') {
+async function newJob(match, source = 'manual', focus) {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const steps = Object.fromEntries(BOOKS.map(b => [b, { estado: 'esperando', msg: '' }]));
   const team = t => ({ name: t.name, code: t.code || '', ...(Array.isArray(t.alt) && t.alt.length ? { alt: t.alt.map(String).slice(0, 4) } : {}) });
   // sport: 'lol' (por defecto), 'basket', 'tennis', 'football' o 'mma'; el lector busca el partido en esa sección de cada casa.
   // event: el cartel ("UFC 334: Gane vs. Hokit"), con el que el lector encuentra el grupo del evento en Betway
   const m = { a: team(match.a), b: team(match.b), ...(['basket', 'tennis', 'football', 'mma'].includes(match.sport) ? { sport: match.sport, league: String(match.league || ''), ...(match.sport === 'mma' && match.event ? { event: String(match.event).slice(0, 120) } : {}) } : {}) };
+  if (typeof focus === 'string' && focus.trim()) m.focus = focus.trim().slice(0, 160);
   const { rows } = await query(`INSERT INTO odds.jobs (id, match_key, match, source, books, steps, start) VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb, $7) RETURNING *`,
     [id, keyOf(m), JSON.stringify(m), source, BOOKS, JSON.stringify(steps), match.start || null]);
   const job = toJob(rows[0]);

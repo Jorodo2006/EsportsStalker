@@ -5,6 +5,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
-COPY runner.js ./
+COPY runner.js foco.js ./
 USER pwuser
 CMD ["node", "runner.js"]

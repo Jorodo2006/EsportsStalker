@@ -190,6 +190,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   `capturas/captura-<casa>-<nombre>.json`; úsalas para ajustar selectores. `marcador.js` se monta en el contenedor
   `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio. El socket de Winamax manda el
   partido a trozos (unos 5 mercados y luego el resto): el lector espera a tener `moreBets + 1`; no lo cambies por una espera fija.
+  Las lecturas pedidas desde una recomendación o el cupón llevan el mercado (`job.match.focus`) y de Betway sólo se leen sus
+  pestañas (`server/lector/foco.js`, con pruebas en `server/test/foco.test.js`): unos 10 s en vez de 40. Si Betway cambia los
+  nombres de sus pestañas (`main-markets`, `1st-half`, `points-rebounds`…), ajústalo ahí; lo que no reconoce se lee entero.
 - **Baloncesto en las casas** (`winamaxBasketInto` y `marketsInto` en `server/services/odds/odds.js`): los periodos
   salen del título ("1ª mitad - …") o de la pestaña de Betway (`marketGroup=1st-half`); las líneas de jugador usan la
   clave `player|<estadística>|<jugador>|<línea>`, con los mismos nombres de estadística que `BASKET_MARKETS`. Si el partido no
@@ -199,6 +202,11 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   nunca de la pestaña (la "1er Tiempo" de Betway repite los mercados del partido). El 1X2 lleva empate (`x`). Los nombres
   del partido (`targetOfFootball` y `upcomingFootball`) tienen que coincidir, porque son la clave en `odds`
   (`docs/specs/11-futbol.md`). Las selecciones (`national: true` en `LEAGUES`) se piden a ESPN en español y llevan en `NATIONAL` los nombres que ESPN deja en inglés y los de las casas ("República Checa", "Holanda").
+- **Mismos equipos otra vez** (`server/services/odds/otro-partido.js`, `runJob` en `server/lector/runner.js`): las direcciones de las
+  casas (`odds.book_urls`) se guardan por los nombres, y en la NBA, el tenis o LoL los mismos equipos se repiten. Una lectura de
+  Winamax de otro partido (más de 12 h de diferencia, o terminado cuando el nuestro no ha empezado) se rechaza y se olvida su
+  dirección; si una casa falla con la dirección guardada, el lector busca el partido otra vez en la misma lectura. Sin esto, cada
+  lectura traía las cuotas del partido anterior y nunca cambiaban.
 - **Emparejar equipos** entre lolesports / ESPN / la Euroliga y las casas (`orient`/`teamScore` en
   `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
   "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.

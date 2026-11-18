@@ -7,6 +7,7 @@ const fs = require('fs');
 const { chromium } = require('playwright');
 
 const APP = process.env.GATEWAY_URL || 'http://gateway:47365';
+const { focusGroups } = require('./foco');
 const LECTOR = process.env.LECTOR_FILE || '/lector-src/marcador.js';
 const POLL = 5e3; // en local no cuesta nada, y así un "Actualizar cuotas" empieza enseguida
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -59,7 +60,7 @@ async function readPage(page, job, book) {
   if (!fin) throw new Error('El lector no ha terminado');
   if (fin.ok && fin.payload) {
     const r = await post('/odds', fin.payload);
-    if (!r || !r.ok) throw new Error('La app no ha aceptado las cuotas');
+    if (!r || !r.ok) throw new Error((r && r.error) || 'La app no ha aceptado las cuotas');
     return fin.txt;
   }
   const snap = await run(page, () => window.__lolet_snap);
@@ -272,7 +273,8 @@ async function betwayEvent(page, job, base, say, max = 10) {
   }, [], 15000) || [''];
   // Pestañas que repiten lo de otras (en fútbol "Crea tu apuesta", "Tiempo completo" y "1er Tiempo")
   const skip = cfgOf(job).skip;
-  const groups = skip ? all.filter(g => !skip.test(g)) : all;
+  // Con foco (un mercado concreto), sólo sus pestañas: foco.js
+  const groups = focusGroups(skip ? all.filter(g => !skip.test(g)) : all, job.match.focus, job.match.sport);
   const hechos = [];
   for (const g of groups.slice(0, max)) {
     say('leyendo', `Leyendo ${g || 'mercados'}…`);
@@ -385,8 +387,18 @@ async function runJob(job) {
     const flows = SPORT_CFG[job.match.sport] ? BASKET_BOOKS : BOOKS;
     await Promise.all(job.books.map(async book => {
       if (!flows[book]) return say(book, 'error', 'Casa no soportada');
-      try { await say(book, 'ok', await flows[book](job, ctx, (estado, m) => say(book, estado, m))); }
-      catch (e) { await say(book, 'error', (e && e.message) || String(e)); }
+      const read = j => flows[book](j, ctx, (estado, m) => say(book, estado, m));
+      try {
+        let msg;
+        try { msg = await read(job); } catch (e) {
+          // La dirección guardada puede ser de otro partido entre los mismos equipos (se repiten: NBA, tenis, LoL) o de uno que ya
+          // no existe: se busca el partido otra vez desde la lista, en la misma lectura
+          if (!job.urls?.[book]) throw e;
+          await say(book, 'buscando', 'La dirección guardada no vale: buscando el partido…');
+          msg = await read({ ...job, urls: { ...job.urls, [book]: '' } });
+        }
+        await say(book, 'ok', msg);
+      } catch (e) { await say(book, 'error', (e && e.message) || String(e)); }
     }));
   } finally {
     await ctx.close().catch(() => {});

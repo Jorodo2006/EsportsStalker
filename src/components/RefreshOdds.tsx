@@ -26,7 +26,8 @@ const listeners = new Set<() => void>();
 const changed = () => listeners.forEach(f => f());
 const subscribe = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
 
-export function RefreshOdds({ match, className }: { match: Match; className?: string }) {
+// focus: la clave del mercado de la recomendación (lectura ligera: sólo sus pestañas de Betway, server/lector/foco.js)
+export function RefreshOdds({ match, focus, className }: { match: Match; focus?: string; className?: string }) {
   const qc = useQueryClient();
   const { toast } = useApp();
   const member = useMember();
@@ -39,9 +40,9 @@ export function RefreshOdds({ match, className }: { match: Match; className?: st
     if (!member) { askLogin({ why: 'Leer las cuotas al momento lo hace el lector de Sharpex, y es para usuarios registrados. Sin cuenta ves las de la última lectura automática.' }); return; }
     if (busy) return;
     running.set(k, null); changed();
-    toast('Leyendo este partido en Winamax y Betway: tarda alrededor de un minuto');
+    toast(focus ? 'Leyendo esta cuota en Winamax y Betway: unos segundos, o algo más si el lector está ocupado' : 'Leyendo este partido en Winamax y Betway: tarda alrededor de un minuto');
     try {
-      const first = await window.api.odds.auto(match);
+      const first = await window.api.odds.auto(match, focus);
       running.set(k, first); changed();
       const end = await waitJob(first, j => { running.set(k, j); changed(); });
       reloadOddsAndPicks(qc);

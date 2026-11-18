@@ -88,7 +88,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
           <div className="flex items-center gap-1">
-            <RefreshOdds match={targetOfFootball(m).match} />
+            <RefreshOdds match={targetOfFootball(m).match} focus={top.id.split('#')[0]} />
             <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
               <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
               <span className="text-[11px] font-medium">{top.book}</span>
@@ -129,7 +129,7 @@ function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick
         <span className="block font-score text-[18px] font-bold leading-5 text-zinc-50 tnum">{p0(p.p)}</span>
         <ValueChip pick={p} />
       </span>
-      <RefreshOdds match={targetOfFootball(d).match} />
+      <RefreshOdds match={targetOfFootball(d).match} focus={p.id.split('#')[0]} />
       <button onClick={() => onAdd(d, p)} title={`Añadir al cupón: ${p.book}. Justa: ${odd(p.fair)}`}
         className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
         <span className="font-score text-[16px] font-bold leading-none tnum">{odd(p.price)}</span>

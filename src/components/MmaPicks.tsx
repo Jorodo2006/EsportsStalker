@@ -108,7 +108,7 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
             <div className="mt-1 flex justify-between gap-3 text-[11px] text-zinc-400"><span>Justa <span className="tnum text-zinc-200">{odd(top.fair)}</span></span><ValueChip pick={top} /></div>
           </div>
           <div className="flex items-center gap-1">
-            <RefreshOdds match={mmaMatchOf(m)} />
+            <RefreshOdds match={mmaMatchOf(m)} focus={top.id.split('#')[0]} />
             <button onClick={() => add(top)} title="Añadir al cupón" className="flex h-[58px] w-[96px] cursor-pointer flex-col items-center justify-center rounded-lg bg-[var(--tv-mark)] text-zinc-950 transition hover:opacity-90">
               <span className="flex items-center gap-1 font-score text-[24px] font-bold leading-none tnum"><Plus size={15} />{odd(top.price)}</span>
               <span className="text-[11px] font-medium">{top.book}</span>
@@ -169,7 +169,7 @@ function MmaLineScanner({ date, onOpen }: { date: string; onOpen: (id: string) =
               <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(r.date)}</span> · {surname(r.a.name)} - {surname(r.b.name)} · {r.orgName}</span>
             </button>
             <span className="w-14 shrink-0 text-right"><span className="block font-score text-[16px] font-bold leading-5 text-zinc-50 tnum">{p0(r.pick.p)}</span><ValueChip pick={r.pick} /></span>
-            <RefreshOdds match={mmaMatchOf(r)} />
+            <RefreshOdds match={mmaMatchOf(r)} focus={r.pick.id.split('#')[0]} />
             <button onClick={() => add(r, r.pick)} title={`Añadir al cupón: ${r.pick.book}. Justa: ${odd(r.pick.fair)}`}
               className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
               <span className="font-score text-[16px] font-bold leading-none tnum">{odd(r.pick.price)}</span>

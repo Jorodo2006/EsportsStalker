@@ -27,7 +27,8 @@ const routes = [
   ['POST', '/api/odds/match', async ({ body }) => { const m = matchOf(body); if (!body.quiet) await bridge.noteMatch(m); return odds.getMatchOdds(m); }],
   ['POST', '/api/odds/board', ({ body }) => odds.getBoardFor(body?.events)],
   // Botón "Actualizar cuotas": trabajo inmediato (la app abre /auto?job=ID en Chrome)
-  ['POST', '/api/odds/jobs', async ({ body }) => { const m = matchOf(body); await bridge.noteMatch(m); return bridge.newJob(m, 'manual'); }],
+  // focus: la clave del mercado que interesa (lectura ligera: el lector sólo lee sus pestañas de Betway, server/lector/foco.js)
+  ['POST', '/api/odds/jobs', async ({ body }) => { const m = matchOf(body); await bridge.noteMatch(m); return bridge.newJob(m, 'manual', body.focus); }],
   // Cómo va una lectura: la interfaz lo pregunta por si se pierde el aviso en vivo (odds:auto)
   ['GET', '/api/odds/jobs/:id', async ({ params }) => { const j = await bridge.getJob(params.id); if (!j) throw fail('No existe esa lectura', 404); return j; }],
   // Pegar del marcador: lo que el marcador copió al portapapeles cuando Chrome no le dejó enviarlo

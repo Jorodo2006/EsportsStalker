@@ -532,7 +532,8 @@ export interface Api {
     // quiet: sólo leer, sin apuntarlo como el último partido abierto (el marcador lo usa para repartir sus capturas)
     match(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }, opts?: { quiet?: boolean }): Promise<MatchOdds>;
     board(events: { id: string; a: TeamRef; b: TeamRef; start: string }[]): Promise<Record<string, { a: number; b: number; x?: number }>>; // x: empate (fútbol)
-    auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }): Promise<AutoJob>;
+    // focus: la clave del mercado que interesa; el lector sólo lee sus pestañas de Betway (más rápido). Sin ella, todo el partido
+    auto(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string; event?: string }, focus?: string): Promise<AutoJob>;
     job(id: string): Promise<AutoJob>; // cómo va una lectura
     autoStatus(): Promise<AutoStatus>;
     // Histórico de cuotas del partido (odds.price_history): una fila cada vez que cambia una cuota de una casa

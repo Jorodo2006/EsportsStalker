@@ -187,7 +187,7 @@ export const api: Api = {
     board: events => call('POST', '/api/odds/board', { events }),
     history: m => call('POST', '/api/odds/history', { match: matchOf(m) }),
     // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
-    auto: m => call('POST', '/api/odds/jobs', { match: matchOf(m) }),
+    auto: (m, focus) => call('POST', '/api/odds/jobs', { match: matchOf(m), ...(focus ? { focus } : {}) }),
     job: id => get(`/api/odds/jobs/${part(id)}`),
     autoStatus: () => get('/api/odds/auto/status')
   },

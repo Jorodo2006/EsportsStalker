@@ -66,11 +66,13 @@ export function Coupon({ docked }: { docked?: boolean }) {
   // lectura automática) y las pone en cada selección, diciendo cuáles han cambiado y cuáles ya no están
   async function refresh() {
     const matches = [...new Map(live.map(l => [matchKeyOf(l.live!.match), l.live!.match])).entries()];
+    // Con una sola selección de un partido, se lee sólo su mercado (lectura ligera); con varias, el partido entero
+    const focusOf = (k: string) => { const ks = [...new Set(live.filter(l => matchKeyOf(l.live!.match) === k).map(l => l.live!.key))]; return ks.length === 1 ? ks[0] : undefined; };
     if (!matches.length) return;
     try {
       if (member) {
         setReading(`Leyendo ${matches.length === 1 ? 'el partido' : `${matches.length} partidos`}: alrededor de un minuto cada uno…`);
-        await readNow(matches.map(([, m]) => m), setReading);
+        await readNow(matches.map(([k, m]) => [m, focusOf(k)] as const), setReading);
       }
       setReading('Comparando…');
       const got = new Map<string, MatchOdds>();
@@ -224,8 +226,8 @@ function LiveNote({ live, odds }: { live: SlipLive; odds: number }) {
 
 // Lanza la lectura de cada partido y espera a que acaben todas, reconociéndolas por su número (waitJob: aviso en vivo, consulta cada
 // pocos segundos y 4 minutos como mucho). El lector las hace de una en una, así que con varios partidos tarda más
-async function readNow(matches: SlipLive['match'][], say: (s: string) => void) {
-  const jobs = await Promise.all(matches.map(m => window.api.odds.auto(m).catch(() => null)));
+async function readNow(matches: (readonly [SlipLive['match'], string | undefined])[], say: (s: string) => void) {
+  const jobs = await Promise.all(matches.map(([m, focus]) => window.api.odds.auto(m, focus).catch(() => null)));
   const state = new Map<string, AutoJob>();
   const tell = () => {
     const list = [...state.values()], left = list.filter(j => !j.done);
