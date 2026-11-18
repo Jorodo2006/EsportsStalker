@@ -8,7 +8,7 @@ import { askLogin, useMember } from '@/components/AuthGate';
 
 // settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos);
 // legal: aviso legal, privacidad y cookies (con su dirección propia, LEGAL_PATHS)
-export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'admin' | 'account' | 'legal';
+export type View = 'matches' | 'players' | 'bets' | 'plan' | 'friends' | 'settings' | 'admin' | 'account' | 'legal';
 export type LegalPage = 'aviso-legal' | 'privacidad' | 'cookies';
 export const LEGAL_PATHS: LegalPage[] = ['aviso-legal', 'privacidad', 'cookies'];
 // La página legal de la dirección (/privacidad…), para que se pueda enlazar y la encuentre Google

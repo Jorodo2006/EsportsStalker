@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Shield, Swords, UserPlus, Users, Wallet } from 'lucide-react';
+import { CalendarDays, CircleUser, Dribbble, Target, Search, ServerCrash, Settings as Cog, Shield, Swords, UserPlus, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -28,6 +28,7 @@ import { MmaIcon } from '@/components/mma';
 import BetsView from '@/views/BetsView';
 import SettingsView from '@/views/SettingsView';
 import AdminView from '@/views/AdminView';
+import PlanView from '@/views/PlanView';
 import AccountView from '@/views/AccountView';
 import LegalView from '@/views/LegalView';
 import { askLogin, useMember, useUser } from '@/components/AuthGate';
@@ -49,6 +50,7 @@ const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'matches', label: 'Partidos', icon: CalendarDays },
   { view: 'players', label: 'Jugadores', icon: Users },
   { view: 'bets', label: 'Apuestas', icon: Wallet },
+  { view: 'plan', label: 'Plan', icon: Target },
   { view: 'friends', label: 'Amigos', icon: UserPlus }
 ];
 // En fútbol la segunda sección son las clasificaciones de las ligas; en MMA, los luchadores
@@ -194,6 +196,7 @@ export default function App() {
               {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && (member ? <BetsView key={app} /> : <GuestScreen title="Mis apuestas" what="tu registro de apuestas y tu cartera" />)}
+              {view === 'plan' && (member ? <PlanView /> : <GuestScreen title="Plan" what="el plan de apuestas" />)}
               {view === 'friends' && (member ? <FriendsView /> : <GuestScreen title="Amigos" what="tus amigos y vuestro chat" />)}
               {view === 'settings' && member && <SettingsView />}
               {view === 'admin' && member && <AdminView />}
@@ -213,7 +216,7 @@ export default function App() {
           <FooterJuego className={cn('mt-6', !wide && slip.length > 0 && 'pb-16')} inner="max-w-[1680px] px-3 lg:px-5" />
         </main>
 
-        <nav className="grid shrink-0 grid-cols-4 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <nav className="grid shrink-0 grid-cols-5 border-t border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] lg:hidden">
           {NAV.map(({ view: v, label, icon: Icon }) => (
             <button key={v} onClick={() => go(v)} aria-current={view === v}
               className={cn('flex cursor-pointer flex-col items-center gap-1 py-2 text-[11px] font-medium', view === v ? 'text-zinc-50' : 'text-zinc-500')}>
