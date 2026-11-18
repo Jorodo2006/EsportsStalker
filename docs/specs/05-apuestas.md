@@ -60,8 +60,14 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
     retorno. *Registrar combinada* la guarda y vacía el cupón; el lápiz la abre en el formulario para afinarla.
   - Enseña el saldo de la cartera y avisa si se apuesta más de lo que queda, o si las cuotas son de casas distintas.
 - **Cartera común** (`wallet` en `src/lib/format.ts`, `useWallet` en `app-context`): banca inicial + beneficio de
-  todas las apuestas (LoL, baloncesto y tenis) − lo que está en juego. Sale arriba a la derecha y en *Mis apuestas*;
-  las estadísticas de *Mis apuestas* son las de la app abierta.
+  todas las apuestas (los cinco deportes) − lo que está en juego. Sale en el menú lateral (saldo, beneficio y en juego,
+  cada cifra con su nombre), en la cabecera del móvil y en *Mis apuestas*; las estadísticas de *Mis apuestas* son las de la
+  app abierta. Sin banca inicial no se enseña saldo, que saldría en negativo con la primera apuesta: sale «Pon tu banca»,
+  que lleva a *Tu cuenta*. Una cuenta nueva la pone en la bienvenida (`src/components/Welcome.tsx`, una vez: ajuste de
+  usuario `welcomed`), con el deporte en el que se abrirá la web.
+- ***Mis apuestas*** empieza por las que están en juego (`Pending`, la más nueva arriba, con lo apostado y el cobro
+  posible); debajo, las cifras, la evolución, el desglose y el historial completo. Sin ninguna apuesta del deporte, en
+  lugar de cifras a cero, cómo apuntar la primera.
 - **Formulario**:
   - El selector *Simple / Combinada* pasa los campos de una a otra: la simple se convierte en la primera selección.
   - Hay una fila por selección (partido, mercado, selección, cuota y estado), con *Añadir selección* y la cuota

@@ -2,9 +2,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { CalendarDays, CircleUser, Dribbble, Target, Search, ServerCrash, Settings as Cog, Shield, Swords, UserPlus, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
+import { madridDay } from '@/lib/route';
+import { useLive } from '@/lib/live';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
 import { BetFormDialog } from '@/components/BetForm';
+import { Welcome } from '@/components/Welcome';
 import { Coupon } from '@/components/Coupon';
 import { LEAGUE_NAME } from '@/components/BasketAnalyzer';
 import { LiveDot } from '@/components/sport';
@@ -33,7 +36,7 @@ import AccountView from '@/views/AccountView';
 import LegalView from '@/views/LegalView';
 import { askLogin, useMember, useUser } from '@/components/AuthGate';
 import { JoinPrompt } from '@/components/MemberOnly';
-import { Button, PageHeader } from '@/components/ui';
+import { Button, Loading, PageHeader } from '@/components/ui';
 import { ScreenGuard } from '@/components/ScreenGuard';
 import { Notifier } from '@/components/Notifier';
 import { SearchDialog, useSearchShortcut } from '@/components/Search';
@@ -53,8 +56,8 @@ const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: 'plan', label: 'Plan', icon: Target },
   { view: 'friends', label: 'Amigos', icon: UserPlus }
 ];
-// En fútbol la segunda sección son las clasificaciones de las ligas; en MMA, los luchadores
-const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : v === 'players' && app === 'mma' ? 'Luchadores' : label);
+// En fútbol la segunda sección son las clasificaciones de las ligas; en MMA, los luchadores, y sus partidos son combates
+const navLabel = (app: AppId, v: View, label: string) => (v === 'players' && app === 'football' ? 'Clasificación' : v === 'players' && app === 'mma' ? 'Luchadores' : v === 'matches' && app === 'mma' ? 'Combates' : label);
 
 // Pelota de tenis (lucide no tiene): círculo con las dos curvas de la costura
 function TennisBall({ size = 16 }: { size?: number }) {
@@ -78,20 +81,18 @@ const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: {
 interface LiveItem { id: string; a: string; b: string; sa: ReactNode; sb: ReactNode; info: string; open: () => void }
 
 export default function App() {
-  const { app, switchApp, view, go, toastMsg, setOpenMatch, setFocusId, slip } = useApp();
+  const { app, switchApp, view, go, toastMsg, setOpenMatch, openGame, slip, starting } = useApp();
   const member = useMember();
+  // Ajustes y administración sólo se pintan a un administrador: con las direcciones, cualquiera puede escribir /admin, y la pantalla
+  // pedía la lista de cuentas (el servidor responde 403) antes de que app-context le devolviera a los partidos
+  const isAdmin = !!useUser().data?.isAdmin;
   const wide = useMedia('(min-width: 1400px)');
   // El cupón flotante (móvil y pantallas medianas) tapa el final de la pantalla: el pie deja hueco para que se lea entero
   const [searching, setSearching] = useState(false);
   const openSearch = useCallback(() => setSearching(true), []);
   useSearchShortcut(openSearch);
-  // Partidos en juego de cada app: aviso rojo del selector y lista "En directo" de la derecha
-  const { data: lolLive } = useQuery({ queryKey: ['live'], queryFn: () => window.api.esports.live(), refetchInterval: 60_000 });
-  const { data: basketLive } = useQuery({ queryKey: ['basket', 'live'], queryFn: () => window.api.basket.live(), refetchInterval: 60_000, enabled: !!window.api.basket });
-  const { data: tennisLive } = useQuery({ queryKey: ['tennis', 'live'], queryFn: () => window.api.tennis.live(), refetchInterval: 60_000, enabled: !!window.api.tennis });
-  const { data: footballLive } = useQuery({ queryKey: ['football', 'live'], queryFn: () => window.api.football.live(), refetchInterval: 60_000, enabled: !!window.api.football });
-  const { data: mmaLive } = useQuery({ queryKey: ['mma', 'live'], queryFn: () => window.api.mma.live(), refetchInterval: 60_000, enabled: !!window.api.mma });
-  const live: Record<AppId, number> = { lol: lolLive?.length ?? 0, basket: basketLive?.length ?? 0, tennis: tennisLive?.length ?? 0, football: footballLive?.length ?? 0, mma: mmaLive?.length ?? 0 };
+  // Partidos en juego de cada app: aviso rojo del selector y lista "En directo" de la derecha (src/lib/live.ts)
+  const { lol: lolLive, basket: basketLive, tennis: tennisLive, football: footballLive, mma: mmaLive, counts: live } = useLive();
   // Cada sección empieza arriba (si no, se hereda el desplazamiento de la anterior)
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [app, view]);
@@ -119,31 +120,31 @@ export default function App() {
   }, []);
   useEffect(() => { setHideHead(false); lastY.current = 0; }, [app, view]);
 
-  // Los de baloncesto, tenis y fútbol los abre su vista al recibir el id; los de LoL van directos al partido abierto
-  const focus = (id: string) => { setFocusId(id); go('matches'); };
+  // Cada partido se abre en su dirección, con el día de España en el que lo lista su servicio; los de LoL, enteros
+  const focus = (id: string, date: string) => openGame(id, madridDay(date));
   const liveItems: LiveItem[] = app === 'lol'
     ? (lolLive ?? []).filter(m => m.teams.length === 2).map(m => ({
       id: m.id, a: m.teams[0].code || m.teams[0].name, b: m.teams[1].code || m.teams[1].name, sa: m.teams[0].wins ?? 0, sb: m.teams[1].wins ?? 0,
-      info: [m.league, m.blockName].filter(Boolean).join(' · '), open: () => { go('matches'); setOpenMatch(m); }
+      info: [m.league, m.blockName].filter(Boolean).join(' · '), open: () => setOpenMatch(m)
     }))
     : app === 'basket'
       ? (basketLive ?? []).map(g => ({
         id: g.id, a: g.away.abbr, b: g.home.abbr, sa: g.away.score ?? 0, sb: g.home.score ?? 0,
-        info: [LEAGUE_NAME[g.league], g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+        info: [LEAGUE_NAME[g.league], g.status].filter(Boolean).join(' · '), open: () => focus(g.id, g.date)
       }))
       : app === 'tennis'
         ? (tennisLive ?? []).map(t => ({
           id: t.id, a: surname(t.a.name), b: surname(t.b.name), sa: t.a.setWins.filter(Boolean).length, sb: t.b.setWins.filter(Boolean).length,
-          info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id)
+          info: [t.tournament, t.status].filter(Boolean).join(' · '), open: () => focus(t.id, t.date)
         }))
         : app === 'football'
           ? (footballLive ?? []).map(g => ({
             id: g.id, a: g.home.short || g.home.name, b: g.away.short || g.away.name, sa: g.home.score ?? 0, sb: g.away.score ?? 0,
-            info: [g.leagueName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+            info: [g.leagueName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id, g.date)
           }))
           : (mmaLive ?? []).map(g => ({
             id: g.id, a: surname(g.a.name), b: surname(g.b.name), sa: '', sb: '',
-            info: [g.orgName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id)
+            info: [g.orgName, g.status].filter(Boolean).join(' · '), open: () => focus(g.id, g.date)
           }));
 
   // Selector de app del móvil: control segmentado; la elegida en gris claro y cada una con el punto de su color
@@ -193,13 +194,14 @@ export default function App() {
             <div className="min-w-0 flex-1">
               <BackendBanner />
               <ScreenGuard key={`${app}:${view}`}>
-              {view === 'matches' && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
+              {starting && <Loading label="Buscando los partidos de hoy…" />}
+              {view === 'matches' && !starting && (app === 'lol' ? <MatchesView /> : app === 'basket' ? <BasketMatches /> : app === 'tennis' ? <TennisMatches /> : app === 'football' ? <FootballMatches /> : <MmaFights />)}
               {view === 'players' && (app === 'lol' ? <PlayersView /> : app === 'basket' ? <BasketPlayers /> : app === 'tennis' ? <TennisPlayers /> : app === 'football' ? <FootballStandings /> : <MmaFighters />)}
               {view === 'bets' && (member ? <BetsView key={app} /> : <GuestScreen title="Mis apuestas" what="tu registro de apuestas y tu cartera" />)}
               {view === 'plan' && (member ? <PlanView /> : <GuestScreen title="Plan" what="el plan de apuestas" />)}
               {view === 'friends' && (member ? <FriendsView /> : <GuestScreen title="Amigos" what="tus amigos y vuestro chat" />)}
-              {view === 'settings' && member && <SettingsView />}
-              {view === 'admin' && member && <AdminView />}
+              {view === 'settings' && isAdmin && <SettingsView />}
+              {view === 'admin' && isAdmin && <AdminView />}
               {view === 'account' && (member ? <AccountView /> : <GuestScreen title="Tu cuenta" what="tu cuenta" />)}
               {view === 'legal' && <LegalView />}
               </ScreenGuard>
@@ -228,6 +230,7 @@ export default function App() {
       </div>
 
       <BetFormDialog />
+      <Welcome />
       {!wide && <Coupon />}
       <Notifier />
       {toastMsg && (
@@ -339,35 +342,44 @@ function GuestScreen({ title, what }: { title: string; what: string }) {
   return <><PageHeader title={title} /><JoinPrompt what={what} /></>;
 }
 
-// Cartera común a las tres apps en el menú lateral: saldo grande, beneficio y lo que hay en juego
+// Cartera común a las cinco apps en el menú lateral: el saldo en grande y, debajo, cada cifra con su nombre (antes el
+// beneficio iba sin etiqueta junto a «Cartera»). Sin banca inicial el saldo no dice nada (sale en negativo con la primera
+// apuesta): en su lugar se invita a ponerla
 function SidebarWallet({ onClick }: { onClick: () => void }) {
+  const { settings, go } = useApp();
   const w = useWallet();
   const cur = useCurrency();
+  const noBank = !!settings && !settings.initialBankroll;
+  const row = (label: string, value: ReactNode) => <div className="mt-1 flex justify-between text-xs text-zinc-500"><span>{label}</span>{value}</div>;
   return (
-    <button onClick={onClick} className="cursor-pointer border-t border-zinc-800 px-5 py-4 text-left transition hover:bg-zinc-800/40">
-      <div className="flex items-center justify-between text-xs text-zinc-500">
-        <span>Cartera</span>
-        <span className={cn('font-medium tnum', tone(w.profit))}>{money(w.profit, cur, true)}</span>
-      </div>
-      <div className="mt-1 text-xl font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</div>
-      <div className="mt-1 flex justify-between text-xs text-zinc-500">
-        <span>En juego</span><span className="text-zinc-300 tnum">{money(w.inPlay, cur)}</span>
-      </div>
-    </button>
+    <div className="border-t border-zinc-800">
+      <button onClick={noBank ? () => go('account') : onClick} className="w-full cursor-pointer px-5 py-4 text-left transition hover:bg-zinc-800/40">
+        <div className="text-xs text-zinc-500">{noBank ? 'Cartera' : 'Saldo'}</div>
+        {noBank
+          ? <div className="mt-1 text-sm font-medium text-amber-300">Pon tu banca inicial</div>
+          : <div className="mt-0.5 text-xl font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</div>}
+        {row('Beneficio', <span className={cn('font-medium tnum', tone(w.profit) || 'text-zinc-300')}>{money(w.profit, cur, true)}</span>)}
+        {row('En juego', <span className="text-zinc-300 tnum">{money(w.inPlay, cur)}</span>)}
+      </button>
+    </div>
   );
 }
 
-// Cartera en la cabecera del móvil
+// Cartera en la cabecera del móvil. Sin banca inicial, en vez de un saldo negativo, «Pon tu banca» (lleva a Tu cuenta)
 function WalletChip({ onClick }: { onClick: () => void }) {
+  const { settings, go } = useApp();
   const w = useWallet();
   const cur = useCurrency();
+  const noBank = !!settings && !settings.initialBankroll;
   return (
-    <button onClick={onClick} title={`Beneficio total ${money(w.profit, cur, true)} · en juego ${money(w.inPlay, cur)}`}
+    <button onClick={noBank ? () => go('account') : onClick} title={`Beneficio total ${money(w.profit, cur, true)} · en juego ${money(w.inPlay, cur)}`}
       className="ml-auto flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900">
       <Wallet size={15} className="text-zinc-400" />
       <span className="flex flex-col items-start leading-tight">
-        <span className="text-[11px] text-zinc-500">Saldo</span>
-        <span className="whitespace-nowrap text-[13px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>
+        <span className="text-[11px] text-zinc-500">{noBank ? 'Cartera' : 'Saldo'}</span>
+        {noBank
+          ? <span className="whitespace-nowrap text-[13px] font-medium text-amber-300">Pon tu banca</span>
+          : <span className="whitespace-nowrap text-[13px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>}
       </span>
     </button>
   );

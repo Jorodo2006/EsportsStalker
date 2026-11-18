@@ -18,8 +18,8 @@ import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { useMember } from './AuthGate';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
 
-const p0 = (v: number) => `${Math.round(v * 100)} %`;
 
 // El combate como lo pide el comparador (targetOfFight), para que el cupón y las recomendaciones puedan volver a leer la cuota
 type FightLike = { date: string; org?: string; event?: string; a: { name: string; alt?: string[] }; b: { name: string; alt?: string[] } };
@@ -86,7 +86,7 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
   const top = r.top, f = r.match;
   return (
     <TvFrame>
-      <TvHeader title="Recomendaciones" sub={[`fiabilidad del modelo: ${r.pred?.reliability ?? '–'}`, r.considered ? `${r.considered} selecciones` : ''].filter(Boolean).join(' · ')}>
+      <TvHeader title={<PicksTitle />} sub={[`fiabilidad del modelo: ${r.pred?.reliability ?? '–'}`, r.considered ? `${r.considered} selecciones` : ''].filter(Boolean).join(' · ')}>
         {r.pred && <PredBlock m={m} pred={r.pred} />}
         {f.pMarket != null && <div className="mt-1 text-[11px] text-zinc-400">Las casas dan {p0(f.pMarket)} a {surname(m.a.name)} (sin margen); el modelo pesa un {p0(f.weight)} en la mezcla.</div>}
       </TvHeader>
@@ -96,7 +96,7 @@ function MmaPicksPanelInner({ m, onOdds }: { m: MmaFight; onOdds: () => void }) 
         <div className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
           <div className="min-w-0">
             <div className="text-[24px] font-bold leading-tight tracking-tight text-zinc-50">{top.title}</div>
-            <div className="mt-1.5 truncate text-[13px] text-zinc-300">{top.why}</div>
+            <div className="mt-1.5 text-[13px] text-zinc-300">{top.why}</div>
           </div>
           <div className="text-center" title={`Modelo ${p0(top.pModel)}, casa ${p0(top.pMarket)}`}>
             <div className="font-mono text-[44px] font-bold leading-[46px] text-[var(--tv-mark)] tnum">{p0(top.p)}</div>
@@ -165,16 +165,12 @@ function MmaLineScanner({ date, onOpen }: { date: string; onOpen: (id: string) =
         : shown.map(r => (
           <div key={`${r.id}|${r.pick.id}`} className="flex items-center gap-3 border-t border-zinc-800 px-3 py-2 transition hover:bg-zinc-800/30">
             <button onClick={() => onOpen(r.id)} title={`${r.pick.market}: ${r.pick.selection}. ${r.pick.why}. Pulsa para abrir el combate`} className="min-w-0 flex-1 cursor-pointer text-left">
-              <span className="block truncate text-[13px] font-semibold text-zinc-50">{r.pick.title}</span>
+              <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{r.pick.title}</span>
               <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(r.date)}</span> · {surname(r.a.name)} - {surname(r.b.name)} · {r.orgName}</span>
             </button>
-            <span className="w-14 shrink-0 text-right"><span className="block font-score text-[16px] font-bold leading-5 text-zinc-50 tnum">{p0(r.pick.p)}</span><ValueChip pick={r.pick} /></span>
+            <PickNums p={r.pick.p} ev={r.pick.ev} good={verdictOf(r.pick.ev, r.pick.rel.score) === 'BET'} />
             <RefreshOdds match={mmaMatchOf(r)} focus={r.pick.id.split('#')[0]} />
-            <button onClick={() => add(r, r.pick)} title={`Añadir al cupón: ${r.pick.book}. Justa: ${odd(r.pick.fair)}`}
-              className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
-              <span className="font-score text-[16px] font-bold leading-none tnum">{odd(r.pick.price)}</span>
-              <span className="text-[9px] leading-tight opacity-75">{r.pick.book}</span>
-            </button>
+            <PickOdd price={r.pick.price} book={r.pick.book} fair={r.pick.fair} onAdd={() => add(r, r.pick)} />
           </div>
         ))}
     </div>
@@ -192,11 +188,11 @@ function MmaDayPicksInner({ date, onOpen }: { date: string; onOpen: (id: string)
   const row = (d: MmaDayPick) => (
     <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition last:border-0 hover:bg-zinc-800/40">
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-semibold text-zinc-50">{d.top.title}</span>
+        <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{d.top.title}</span>
         <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(d.date)}</span> · {surname(d.a.name)} - {surname(d.b.name)} · {d.orgName}</span>
       </span>
-      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-[var(--tv-mark)] tnum">{p0(d.top.p)}</span><span className="block text-[11px] text-zinc-500">prob.</span></span>
-      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-zinc-50 tnum">{odd(d.top.price)}</span><span className="block text-[11px] text-zinc-500">cuota</span></span>
+      <PickNums p={d.top.p} ev={d.top.ev} good={verdictOf(d.top.ev, d.top.rel.score) === 'BET'} />
+      <PickOddText price={d.top.price} book={d.top.book} />
       <ChevronRight size={14} className="shrink-0 text-zinc-600" />
     </button>
   );

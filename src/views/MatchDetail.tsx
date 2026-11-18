@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BarChart3, ChevronDown, ChevronsDownUp, ChevronsUpDown, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useApp, useRefreshMs } from '@/lib/app-context';
-import { cn, fmtDay, fmtTime, groupBy, k, odd, pct, summarize } from '@/lib/format';
+import { cn, decEs, decimal, fmtDay, fmtTime, groupBy, k, odd, pct, summarize } from '@/lib/format';
 import type { AutoJob, EventDetails, LiveSide, MarketLine, MatchEvent, TeamForm, TeamRef } from '@/lib/types';
 import { MIN_GAMES, analyzeLine, estimate, findPlayer, mapWinA, parseStat } from '@/lib/edge';
 import { BET_EV, SIDE_LABEL, VERDICT_LABEL, type SideValue, type ValueData } from '@/lib/value';
@@ -403,7 +403,7 @@ function lineValue(m: MarketLine, name: string, books: string[], ctx: ValueCtx):
   if (!best) return { reason: 'Sin cuotas' };
   const e = estimate(games, st.stat, m.line, pWin);
   const title = [
-    `${hit.player.name}: media ${e.mean.toFixed(1)} en sus últimas ${e.n} partidas; superó ${m.line} en ${e.hits}`,
+    `${hit.player.name}: media ${decimal(e.mean)} en sus últimas ${e.n} partidas; superó ${decEs(String(m.line))} en ${e.hits}`,
     pWin == null ? 'Sin cuota de ganador: no se ajusta por la probabilidad de ganar el mapa'
       : `Probabilidad de que su equipo gane el mapa ${st.map}: ${pct(pWin)} (cuotas sin margen)`,
     `Estimado: Más ${pct(data.pOver)} · Menos ${pct(data.pUnder)}${data.pPush > 0.001 ? ` · Nula ${pct(data.pPush)}` : ''}`,

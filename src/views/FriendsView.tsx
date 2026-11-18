@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Copy, MessageCircle, Send, UserMinus, UserPlus, X } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { useMedia } from '@/lib/use-media';
+import { useBackLayer } from '@/lib/history';
 import { STATUS_LABEL, STATUS_TONE, cn, odd } from '@/lib/format';
 import type { Bet, ChatItem, FriendRow, LegStatus, SharedBet, SharedBetData, SharedState } from '@/lib/types';
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, Loading, PageHeader, panelCls } from '@/components/ui';
@@ -61,6 +62,8 @@ export default function FriendsView() {
   const valid = sel === RECEIVED || friends.some(u => u.id === sel) || !f.data;
   const open = sel && valid ? sel : wide && f.data ? (friends[0]?.id ?? RECEIVED) : null;
   const chatWith = friends.find(u => u.id === open) ?? null;
+  // En el móvil la conversación tapa la lista: atrás del navegador vuelve a ella, como la flecha de arriba
+  useBackLayer(!wide && !!open, () => setSel(null));
   // Al ver las recibidas, dejan de contar como nuevas
   useEffect(() => {
     if (open === RECEIVED && s.data?.unseen) window.api.shared.seen().then(() => qc.invalidateQueries({ queryKey: ['shared'] })).catch(() => {});

@@ -5,7 +5,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp, useBets } from '@/lib/app-context';
-import { cn, odd, pct, summarize } from '@/lib/format';
+import { cn, decimal, odd, pct, summarize } from '@/lib/format';
+import { injuryDetailEs, injuryEs } from '@/lib/basket-labels';
 import { BASKET_MARKETS, analyze, fmtLine, playerLines, scanMarkets, suggestedLine, type BasketCtx, type BasketMarket, type CasaLine } from '@/lib/basket-model';
 import { BookHead } from './BookIcon';
 import { BasketContext } from './BasketContext';
@@ -23,7 +24,7 @@ export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: '
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 export const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 const num = (v: string) => { const n = parseFloat(v.replace(',', '.')); return isFinite(n) ? n : null; };
-const fx = (v: number | null | undefined, d = 1) => (v == null || !isFinite(v) ? '–' : v.toFixed(d));
+const fx = (v: number | null | undefined, d = 1) => (v == null || !isFinite(v) ? '–' : decimal(v, d));
 export const badInjury = (s: string) => /out/i.test(s);
 
 // market y line: con qué abrir el análisis (lo manda el escáner de líneas)
@@ -141,7 +142,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-surface p-4">
         {player.headshot && <img loading="lazy" decoding="async" src={sized(player.headshot, 64)} alt="" className="h-16 w-16 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} />}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xl font-bold">{player.name}{injury && <Badge tone={badInjury(injury) ? 'danger' : 'warning'}>{injury}</Badge>}</div>
+          <div className="flex items-center gap-2 text-xl font-bold">{player.name}{injury && <Badge tone={badInjury(injury) ? 'danger' : 'warning'}>{injuryEs(injury)}</Badge>}</div>
           <div className="text-sm text-zinc-400">{LEAGUE_NAME[player.league]}, {team}{game ? `, ${event}, ${game.state === 'pre' ? esTime(game.date) : game.status}` : ''}</div>
         </div>
         <div className="flex gap-5">
@@ -182,7 +183,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
               <div className="flex flex-wrap gap-1.5">
                 {R.factors.map(f => {
                   const d = (f.f - 1) * 100;
-                  return <span key={f.label} title={`${f.n} partidos`} className={cn('rounded-md border px-2 py-0.5 text-xs', Math.abs(d) < 0.5 ? 'border-zinc-700 text-zinc-400' : d > 0 ? 'border-emerald-500/30 text-emerald-300' : 'border-rose-500/30 text-rose-300')}>{f.label} {d >= 0 ? '+' : ''}{d.toFixed(1)} %</span>;
+                  return <span key={f.label} title={`${f.n} partidos`} className={cn('rounded-md border px-2 py-0.5 text-xs', Math.abs(d) < 0.5 ? 'border-zinc-700 text-zinc-400' : d > 0 ? 'border-emerald-500/30 text-emerald-300' : 'border-rose-500/30 text-rose-300')}>{f.label} {d >= 0 ? '+' : ''}{decimal(d)} %</span>;
                 })}
                 <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400">Modelo {pct(R.modelOver)} · histórico {pct(R.histOver)} de Más</span>
               </div>
@@ -380,8 +381,8 @@ function Injuries({ teamId, team, opp, injuries }: { teamId?: string; team: stri
             {!g.list.length ? <div className="text-sm text-zinc-600">Sin bajas</div> : g.list.map(i => (
               <div key={i.name} className="flex items-center gap-2 py-1 text-sm">
                 <span className="flex-1 truncate">{i.name}</span>
-                <span className="truncate text-xs text-zinc-500">{i.detail}</span>
-                <Badge tone={badInjury(i.status) ? 'danger' : 'warning'}>{i.status}</Badge>
+                <span className="truncate text-xs text-zinc-500">{injuryDetailEs(i.detail)}</span>
+                <Badge tone={badInjury(i.status) ? 'danger' : 'warning'}>{injuryEs(i.status)}</Badge>
               </div>
             ))}
           </div>

@@ -1,12 +1,15 @@
 // Piezas comunes de las tres apps (LoL, baloncesto y tenis) para ver partidos: título, tira de días, filtro por estado,
 // bloque de competición con sus tarjetas, la sección En directo y el marcador grande del partido abierto.
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { CalendarDays, CalendarX, ChevronDown, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
-import { TeamLogo, chip, oddBtn, panelCls } from './ui';
+import { Button, Empty, TeamLogo, chip, oddBtn, panelCls } from './ui';
+import { useApp } from '@/lib/app-context';
+import { SPORT_NAME, gamesWord, useLive } from '@/lib/live';
+import type { Sport } from '@/lib/types';
 import { sized, fallbackTo } from '@/lib/img';
 import { FavStar } from './Favorites';
-import { useMedia } from '@/lib/use-media';
 
 export type MatchState = 'pre' | 'live' | 'post';
 
@@ -27,12 +30,83 @@ export const dayName = (iso: string) => {
   return `${d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')} ${d.getDate()}`;
 };
 
+// ---------- lista vacía ----------
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+// «Hoy», «Mañana» o «El sáb 21», para empezar una frase
+const dayPhrase = (iso: string) => { const n = dayName(iso); return n === 'Hoy' || n === 'Ayer' || n === 'Mañana' ? n : `El ${n}`; };
+export const noGamesText = (app: Sport, date: string) => `${dayPhrase(date)} no hay ${gamesWord(app)} de ${SPORT_NAME[app]}.`;
+
+// El próximo día con partidos de un deporte después del elegido (dos semanas como mucho). Sólo se pide con la lista vacía
+export function useNextDay(app: Exclude<Sport, 'lol'>, date: string, enabled: boolean) {
+  const from = addDays(date, 1);
+  const q = useQuery({ queryKey: [app, 'days', 'next', from], queryFn: () => window.api[app].days(from, 14), staleTime: 10 * 60e3, enabled });
+  const hit = q.data && Object.entries(q.data).sort(([a], [b]) => (a < b ? -1 : 1)).find(([, c]) => c.total > 0);
+  return hit ? { day: hit[0], count: hit[1].total } : null;
+}
+
+// Lista vacía de un deporte: qué pasa, dicho para el usuario, y por dónde seguir: el próximo día con partidos (next) y los
+// otros deportes con partidos en juego ahora mismo. Antes sólo decía «Prueba otro día» o hablaba del «calendario cargado»
+export function NoGames({ app, text, next, onDay, children }: {
+  app: Sport; text: ReactNode; next?: { day: string; count: number } | null; onDay: (d: string) => void; children?: ReactNode;
+}) {
+  const { openList } = useApp();
+  const { counts } = useLive();
+  const others = (Object.keys(counts) as Sport[]).filter(x => x !== app && counts[x] > 0).sort((a, b) => counts[b] - counts[a]).slice(0, 2);
+  return (
+    <Empty icon={<CalendarX size={22} />}>
+      <p className="max-w-md text-zinc-300">{text}</p>
+      {(!!next || !!others.length || !!children) && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {next && <Button size="sm" onClick={() => onDay(next.day)}><span>Próximos: {cap(dayName(next.day))} · {next.count} {gamesWord(app, next.count)}</span></Button>}
+          {others.map(x => (
+            <Button key={x} size="sm" variant="secondary" onClick={() => openList(x)}>
+              <span>{cap(SPORT_NAME[x])}</span><span className="text-rose-300 tnum">{counts[x]} en juego</span>
+            </Button>
+          ))}
+          {children}
+        </div>
+      )}
+    </Empty>
+  );
+}
+
+// ---------- Partidos / Recomendaciones ----------
+// El selector de arriba de baloncesto, tenis y fútbol. Antes eran dos botones pequeños con aspecto de filtro y la gente no
+// veía que había recomendaciones (lo que más valor da de la app): ahora es un selector grande, con icono, y Recomendaciones va
+// teñida del color del deporte. Mientras alguien no la haya abierto nunca en este navegador, da un pequeño salto al cargar
+// (tres veces y se para: AGENTS.md no quiere cosas que laten sin fin; nada si el sistema pide menos movimiento)
+const PICKS_SEEN = 'picks-seen';
+export function ModeSwitch<T extends 'games' | 'picks'>({ value, onChange }: { value: T; onChange: (v: T) => void }) {
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(PICKS_SEEN) === '1'; } catch { return true; } });
+  const go = (v: T) => {
+    if (v === 'picks' && !seen) { setSeen(true); try { localStorage.setItem(PICKS_SEEN, '1'); } catch { /* sin almacenamiento */ } }
+    onChange(v);
+  };
+  const base = 'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition sm:px-6';
+  const picks = value === 'picks';
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div role="tablist" aria-label="Sección" className="grid w-full grid-cols-2 gap-1 rounded-xl bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800 sm:inline-grid sm:w-auto">
+        <button type="button" role="tab" aria-selected={!picks} onClick={() => go('games' as T)}
+          className={cn(base, !picks ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
+          <CalendarDays size={16} />Partidos
+        </button>
+        <button type="button" role="tab" aria-selected={picks} onClick={() => go('picks' as T)}
+          className={cn(base, picks ? 'bg-zinc-700 text-zinc-50' : 'bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/45 hover:bg-amber-500/25', !picks && !seen && 'attn')}>
+          <Lightbulb size={16} className={picks ? 'text-amber-400' : ''} />Recomendaciones
+        </button>
+      </div>
+      {!picks && <span className="hidden text-[13px] text-zinc-400 sm:inline">Las apuestas en las que el modelo ve valor, con su probabilidad</span>}
+    </div>
+  );
+}
+
 // Título de la lista de partidos con el día elegido en largo
-export function MatchesTitle({ date }: { date: string }) {
+export function MatchesTitle({ date, title = 'Partidos' }: { date: string; title?: string }) {
   const long = new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Partidos</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="mt-1 text-sm text-zinc-400 first-letter:uppercase">{long}</p>
     </div>
   );
@@ -173,7 +247,31 @@ export function LiveSection({ count, children }: { count: number; children: Reac
 }
 
 // games y points: los juegos del set y los puntos del juego en curso (tenis en juego); serving: saca él; color: el del equipo, de fondo en el marcador grande; plate: su escudo necesita una placa clara para verse
-export interface RowTeam { name: string; short?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
+// alt: el nombre corto ("Knicks", "Atlético"), que sale cuando el entero no cabe en la tarjeta
+export interface RowTeam { name: string; short?: string; alt?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
+
+// El nombre entero si cabe y, si no, el corto: «Knicks» se lee mejor que «New York Kn…». Mide el entero con una copia
+// invisible del mismo tamaño de letra cada vez que cambia el ancho de la tarjeta
+function FitName({ name, alt, className }: { name: string; alt?: string; className: string }) {
+  const box = useRef<HTMLSpanElement>(null), probe = useRef<HTMLSpanElement>(null);
+  const [fits, setFits] = useState(true);
+  const useAlt = !!alt && alt !== name;
+  useLayoutEffect(() => {
+    const b = box.current, p = probe.current;
+    if (!b || !p || !useAlt) return;
+    const check = () => setFits(p.offsetWidth <= b.clientWidth + 0.5);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(b);
+    return () => ro.disconnect();
+  }, [name, useAlt]);
+  return (
+    <span ref={box} className={cn('relative min-w-0 flex-1 truncate', className)} title={name}>
+      {fits || !useAlt ? name : alt}
+      {useAlt && <span ref={probe} aria-hidden className="invisible absolute left-0 top-0 whitespace-nowrap">{name}</span>}
+    </span>
+  );
+}
 
 // Rótulo de la ficha de cuota: el código del equipo (G2, LAL) o, si el "corto" no es un código (en tenis es el país),
 // el apellido del jugador
@@ -186,19 +284,19 @@ const oddsTag = (t: RowTeam) => (t.short && t.short.length <= 4 ? t.short : t.na
 // items-stretch: un <button> flex alinea al principio por defecto y la cabecera crecía con el texto en vez de recortarlo
 // noOdds: lo que se dice en lugar de las cuotas cuando todavía no hay ("Cuotas desde el dom 15, 18:00"), de cardNote en
 // lib/odds-window.ts; así el usuario sabe que no es un fallo
-// onOdd: en el móvil cada cuota es un botón que la añade al cupón (desde `lg`, donde hay cupón a la vista y se ve el
-// partido en la columna, la tarjeta entera abre el partido como siempre)
+// onOdd: cada cuota es un botón que la añade al cupón, en el móvil y en el ordenador; el resto de la tarjeta abre el partido.
+// Antes, desde `lg`, la cuota abría el partido: la misma ficha hacía dos cosas según la pantalla. La resaltada es la del
+// favorito (la más baja), y lo explica OddsLegend encima de la lista
 export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onClick, onOdd, tag, competition, featured }: {
   state: MatchState; time: string; status?: string; a: RowTeam; b: RowTeam; odds?: { a: number; b: number; x?: number } | null; noOdds?: string | null;
   active?: boolean; onClick: () => void; onOdd?: (side: 'a' | 'x' | 'b') => void; tag?: string; competition?: string; featured?: boolean;
 }) {
-  const phone = useMedia('(max-width: 1023px)');
-  const pick = phone ? onOdd : undefined;
+  const pick = onOdd;
   const games = state === 'live' && (a.games != null || b.games != null), points = state === 'live' && (a.points != null || b.points != null);
   const team = (t: RowTeam) => (
     <div className="flex min-w-0 items-center gap-2.5">
       <TeamLogo src={t.logo} name={t.short || t.name} size={featured ? 36 : 26} />
-      <span className={cn('min-w-0 flex-1 truncate', featured ? 'text-base' : 'text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'font-medium text-zinc-100')} title={t.name}>{t.name}</span>
+      <FitName name={t.name} alt={t.alt} className={cn(featured ? 'text-base' : 'text-sm', t.win ? 'font-semibold text-zinc-50' : t.lose ? 'text-zinc-500' : 'font-medium text-zinc-100')} />
       {t.serving && <span title="Saca" aria-label="Saca" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
       {state !== 'pre' && <span className={cn('font-score font-semibold tnum', featured ? 'text-2xl' : 'text-lg', t.lose ? 'text-zinc-500' : games ? 'text-zinc-50' : t.win || state === 'live' ? 'text-amber-400' : 'text-zinc-50')} title={games ? 'Sets' : undefined}>{t.score ?? ''}</span>}
       {games && <span className={cn('w-5 text-right font-score tnum text-zinc-400', featured ? 'text-xl' : 'text-base')} title="Juegos de este set">{t.games ?? ''}</span>}
@@ -207,13 +305,15 @@ export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onC
   );
   // Se resalta el favorito (la cuota más baja), como antes
   const best = odds ? Math.min(odds.a || 99, odds.b || 99, odds.x || 99) : 0;
-  // Con empate son tres por fila: menos relleno para que quepan la abreviatura ("CZE") y la cuota sin cortarse
+  // Con empate son tres por fila y van como en las casas, 1 X 2: la abreviatura ("BKH") se cortaba en una letra en las
+  // tarjetas estrechas
   const three = !!odds && odds.x != null;
+  const who = (side: 'a' | 'x' | 'b') => (side === 'x' ? 'Empate' : side === 'a' ? a.name : b.name);
   const oddChip = (o: number, tag: string, side: 'a' | 'x' | 'b') => {
-    const cls = cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between text-sm', three ? 'gap-1 px-2' : 'gap-2 px-3', !o && 'bg-zinc-900 text-zinc-600');
+    const cls = cn(oddBtn(!!o && o === best), 'flex h-10 min-w-0 items-center justify-between text-sm', three ? 'gap-1 px-2' : 'gap-1.5 px-2.5', !o && 'bg-zinc-900 text-zinc-600');
     const inner = <><span className={cn('min-w-0 truncate font-medium opacity-70', three ? 'text-[10.5px]' : 'text-xs')}>{tag}</span><span>{o ? odd(o) : '–'}</span></>;
     return pick && o
-      ? <button type="button" onClick={() => pick(side)} aria-label={`Añadir al cupón: ${tag} a ${odd(o)}`} className={cn(cls, 'active:scale-[.97]')}>{inner}</button>
+      ? <button type="button" onClick={() => pick(side)} aria-label={`Añadir al cupón: ${who(side)} a ${odd(o)}`} title={`${who(side)}: añadir al cupón${o === best ? ' · la del favorito' : ''}`} className={cn(cls, 'active:scale-[.97]')}>{inner}</button>
       : <span className={cls}>{inner}</span>;
   };
   const info = [competition, status].filter(Boolean).join(' · ');
@@ -235,10 +335,20 @@ export function MatchCard({ state, time, status, a, b, odds, noOdds, active, onC
         <div className={cn('flex flex-col', featured ? 'gap-3' : 'gap-2')}>{team(a)}{team(b)}</div>
       </button>
       {odds && (odds.x
-        ? <div onClick={open} className={cn('mt-auto grid grid-cols-3 gap-2 pt-1', open && 'cursor-pointer')}>{oddChip(odds.a, oddsTag(a), 'a')}{oddChip(odds.x, 'X', 'x')}{oddChip(odds.b, oddsTag(b), 'b')}</div>
+        ? <div onClick={open} className={cn('mt-auto grid grid-cols-3 gap-2 pt-1', open && 'cursor-pointer')}>{oddChip(odds.a, '1', 'a')}{oddChip(odds.x, 'X', 'x')}{oddChip(odds.b, '2', 'b')}</div>
         : <div onClick={open} className={cn('mt-auto grid grid-cols-2 gap-2 pt-1', open && 'cursor-pointer')}>{oddChip(odds.a, oddsTag(a), 'a')}{oddChip(odds.b, oddsTag(b), 'b')}</div>)}
       {!odds && noOdds && state === 'pre' && <div onClick={onClick} className="mt-auto flex h-10 cursor-pointer items-center justify-center rounded-md border border-zinc-800 px-3 text-xs text-zinc-500">{noOdds}</div>}
     </div>
+  );
+}
+
+// Leyenda de las cuotas de las tarjetas y las filas de tenis: qué pasa al pulsarlas y qué es la resaltada
+export function OddsLegend() {
+  return (
+    <p className="-mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 px-1 text-xs text-zinc-500">
+      <span>Pulsa una cuota para añadirla al cupón.</span>
+      <span className="inline-flex items-center gap-1.5"><span aria-hidden className="inline-block h-3 w-5 rounded-sm bg-amber-500/10 ring-1 ring-inset ring-amber-500/35" />La del favorito (la más baja).</span>
+    </p>
   );
 }
 
@@ -304,9 +414,9 @@ const onPick = (el: HTMLButtonElement | null) => el?.scrollIntoView({ inline: 'n
 export function SheetTabs<T extends string>({ value, onChange, items, right }: { value: T; onChange: (v: T) => void; items: [T, string][]; right?: ReactNode }) {
   return (
     <div className="flex items-center gap-x-2 border-t border-zinc-800 px-3 pt-1 sm:flex-wrap sm:items-end sm:gap-y-2 sm:px-4">
-      <div className="fade-r flex min-w-0 max-w-full flex-1 gap-x-4 sm:flex-none overflow-x-auto no-scrollbar sm:flex-wrap sm:overflow-visible">
+      <div className="fade-r flex min-w-0 max-w-full flex-1 gap-x-4 sm:flex-none overflow-x-auto no-scrollbar sm:flex-wrap sm:overflow-visible" role="tablist">
         {items.map(([v, label]) => (
-          <button key={v} onClick={() => onChange(v)} aria-pressed={value === v} ref={value === v ? onPick : undefined}
+          <button key={v} type="button" role="tab" onClick={() => onChange(v)} aria-selected={value === v} ref={value === v ? onPick : undefined}
             className={cn('cursor-pointer sm:-mb-px whitespace-nowrap border-b-2 py-2.5 text-[13px] font-medium transition',
               value === v ? 'border-amber-500 text-zinc-50' : 'border-transparent text-zinc-400 hover:text-zinc-100')}>{label}</button>
         ))}

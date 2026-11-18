@@ -4,12 +4,12 @@
 import { useCardOdd } from '@/lib/card-odds';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarX, RefreshCw } from 'lucide-react';
-import { sectionId, useApp, useRefreshMs, useSections } from '@/lib/app-context';
+import { RefreshCw } from 'lucide-react';
+import { sectionId, useApp, useLostMatch, useRefreshMs, useRouteDay, useRouteMatch, useSections } from '@/lib/app-context';
 import { fmtTime } from '@/lib/format';
 import type { MatchEvent } from '@/lib/types';
-import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, StateFilterBar, Toggle, isoDay, today, type MatchState, type StateFilter } from '@/components/sport';
-import { Button, Empty, ErrorBox, Loading, Select } from '@/components/ui';
+import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, OddsLegend, NoGames, StateFilterBar, Toggle, isoDay, noGamesText, today, type MatchState, type StateFilter } from '@/components/sport';
+import { Button, ErrorBox, Loading, Select } from '@/components/ui';
 import MatchDetail from './MatchDetail';
 import { FavoritesStrip } from '@/components/Favorites';
 import { cardNote } from '@/lib/odds-window';
@@ -21,11 +21,14 @@ function loadPref<T>(key: string, def: T): T { try { const v = localStorage.getI
 function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* sin almacenamiento */ } }
 
 export default function MatchesView() {
-  const { settings, saveSettings, openMatch, setOpenMatch } = useApp();
+  const { settings, saveSettings, openMatch: opened, setOpenMatch } = useApp();
   const addOdd = useCardOdd();
   const refreshMs = useRefreshMs();
   const [page, setPage] = useState<string | null>(null);
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useRouteDay();
+  // El partido abierto va en la dirección (/lol/partido/<id>); si se entra por un enlace o al recargar, el contexto no lo
+  // tiene entero y se busca en el calendario cargado
+  const openId = useRouteMatch('lol');
   const [filter, setFilter] = useState<StateFilter>('all');
   const [showOdds, setShowOdds] = useState(() => loadPref('lol-odds', true));
   const [closed, setClosed] = useState<string[]>(() => loadPref('lol-closed', []));
@@ -65,16 +68,22 @@ export default function MatchesView() {
     enabled: showOdds && pending.length > 0, refetchInterval: 60_000
   });
 
-  useSections(openMatch ? [] : [
+  const openMatch = opened ?? (openId ? events.find(e => e.id === openId) ?? null : null);
+  useSections(openId ? [] : [
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(([name, list]) => ({ id: sectionId(name), label: name, count: list.length, live: 0 }))
   ]);
+  useLostMatch(!!openId && !openMatch && schedule.isSuccess && !live.isLoading);
 
   if (openMatch) return <MatchDetail match={openMatch} onClose={() => setOpenMatch(null)} />;
+  if (openId) return <Loading label="Cargando el partido…" />;
 
   const stateCounts = { all: ofDay.length, live: ofDay.filter(e => e.state === 'inProgress').length, pre: ofDay.filter(e => e.state === 'unstarted').length, post: ofDay.filter(e => e.state === 'completed').length };
   const loaded = Object.keys(counts).sort();
   const outside = !!loaded.length && (date < loaded[0] || date > loaded[loaded.length - 1]);
+  // El próximo día con partidos de lo que ya está cargado, para la lista vacía
+  const nd = loaded.find(d => d > date && counts[d].total > 0);
+  const nextDay = nd ? { day: nd, count: counts[nd].total } : null;
   const toggle = (name: string) => { const n = closed.includes(name) ? closed.filter(x => x !== name) : [...closed, name]; setClosed(n); savePref('lol-closed', n); };
   const card = (m: MatchEvent, featured?: boolean) => {
     const [a, b] = m.teams, st = stateOf(m);
@@ -82,8 +91,8 @@ export default function MatchesView() {
       <MatchCard key={m.id} state={st} onClick={() => setOpenMatch(m)} onOdd={s => addOdd({ id: m.id, done: false, sport: 'lol', league: m.league, event: `${m.teams[0].code || m.teams[0].name} vs ${m.teams[1].code || m.teams[1].name}`, match: { a: m.teams[0], b: m.teams[1], start: m.startTime, sport: 'lol' } }, s)} odds={showOdds ? board.data?.[m.id] : null} noOdds={showOdds && board.data ? cardNote(m.startTime, { sport: 'lol' }, settings) : null} featured={featured}
         competition={featured ? m.league : undefined} status={featured ? m.blockName : undefined}
         time={st === 'pre' ? fmtTime(m.startTime) : st === 'live' ? 'En juego' : 'Final'} tag={m.bestOf ? `Bo${m.bestOf}` : undefined}
-        a={{ name: a.name, short: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}
-        b={{ name: b.name, short: b.code, logo: b.image, score: st === 'pre' ? null : b.wins ?? 0, win: b.outcome === 'win', lose: b.outcome === 'loss' }} />
+        a={{ name: a.name, short: a.code, alt: a.code, logo: a.image, score: st === 'pre' ? null : a.wins ?? 0, win: a.outcome === 'win', lose: a.outcome === 'loss' }}
+        b={{ name: b.name, short: b.code, alt: b.code, logo: b.image, score: st === 'pre' ? null : b.wins ?? 0, win: b.outcome === 'win', lose: b.outcome === 'loss' }} />
     );
   };
 
@@ -101,16 +110,16 @@ export default function MatchesView() {
           <RefreshCw size={15} className={schedule.isFetching ? 'animate-spin' : ''} />
         </Button>
       </StateFilterBar>
+      {showOdds && !!shown.length && <OddsLegend />}
 
       {schedule.isLoading ? <Loading label="Cargando calendario…" /> : schedule.error ? <ErrorBox error={schedule.error} /> : !shown.length ? (
-        <Empty icon={<CalendarX size={22} />}>
-          {outside ? 'Ese día queda fuera del calendario cargado.' : 'Ese día no hay partidos de LoL con este filtro.'}
-          <div className="mt-3 flex gap-2">
-            {outside && date < loaded[0] && schedule.data?.older && <Button size="sm" variant="secondary" onClick={() => setPage(schedule.data!.older)}>Cargar días anteriores</Button>}
-            {outside && date > loaded[loaded.length - 1] && schedule.data?.newer && <Button size="sm" variant="secondary" onClick={() => setPage(schedule.data!.newer)}>Cargar días siguientes</Button>}
+        filter !== 'all' && ofDay.length
+          ? <NoGames app="lol" text="Ningún partido de ese día con este filtro." onDay={setDate}><Button size="sm" variant="secondary" onClick={() => setFilter('all')}>Ver todos</Button></NoGames>
+          : <NoGames app="lol" text={noGamesText('lol', date)} next={nextDay} onDay={setDate}>
+            {outside && date < loaded[0] && schedule.data?.older && <Button size="sm" variant="secondary" onClick={() => setPage(schedule.data!.older)}>Ver días anteriores</Button>}
+            {outside && date > loaded[loaded.length - 1] && schedule.data?.newer && <Button size="sm" variant="secondary" onClick={() => setPage(schedule.data!.newer)}>Ver días siguientes</Button>}
             {page && <Button size="sm" variant="ghost" onClick={() => { setPage(null); setDate(today()); }}>Volver a hoy</Button>}
-          </div>
-        </Empty>
+          </NoGames>
       ) : <>
         {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(m => card(m, true))}</LiveSection>}
         {byLeague.map(([name, list]) => {

@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, CalendarDays, Check, Eye, EyeOff, Loader2, Sc
 import { cn } from '@/lib/format';
 import { Button, ErrorBox, Field, Input, Loading, seg } from './ui';
 import { FooterJuego } from './FooterJuego';
+import { useBackLayer } from '@/lib/history';
 
 // Usuario conectado (ya cargado por AuthGate cuando se usa dentro de la app)
 export function useUser() {
@@ -33,6 +34,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener('auth:lost', lost); window.removeEventListener('auth:ask', asked); };
   }, [qc]);
   useEffect(() => { if (user) setAsk(null); }, [user]);
+  // Atrás del navegador hace lo mismo que «Seguir sin cuenta»
+  useBackLayer(!user && !!ask, () => setAsk(null));
   if (isLoading) return <div className="grid h-full place-items-center"><Loading /></div>;
   if (error) return (
     <div className="mx-auto max-w-md p-6">
@@ -76,13 +79,14 @@ function errorFromUrl() {
     const u = new URL(location.href), msg = u.searchParams.get('login_error');
     if (!msg) return '';
     u.searchParams.delete('login_error');
-    history.replaceState(null, '', u.pathname + (u.search === '?' ? '' : u.search) + u.hash);
+    // history.state se conserva: lleva la posición en el historial que usa src/lib/history.ts
+    history.replaceState(history.state, '', u.pathname + (u.search === '?' ? '' : u.search) + u.hash);
     return msg;
   } catch { return ''; }
 }
 
 const FEATURES: { icon: typeof CalendarDays; title: string; text: string }[] = [
-  { icon: CalendarDays, title: 'Cuatro deportes, en directo', text: 'LoL, NBA, Euroliga, NBL, ATP, WTA, LaLiga, Champions y más, con marcadores y estadísticas.' },
+  { icon: CalendarDays, title: 'Cinco deportes, en directo', text: 'LoL, NBA, Euroliga, ATP, WTA, LaLiga, Champions, UFC y más, con marcadores y estadísticas.' },
   { icon: Scale, title: 'Cuotas comparadas', text: 'Winamax y Betway, leídas solas cada pocos minutos, con la mejor de cada línea a la vista.' },
   { icon: Target, title: 'Recomendaciones con su valor', text: 'La probabilidad del modelo frente a la de la casa, y cuánto fiarse de cada una.' },
   { icon: Wallet, title: 'Tu cartera y tus apuestas', text: 'Beneficio, ROI y gráficas. Las apuestas de cada usuario sólo las ve él.' }

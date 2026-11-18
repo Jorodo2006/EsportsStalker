@@ -5,6 +5,7 @@ import { useQueries } from '@tanstack/react-query';
 import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
+import { injuryEs } from '@/lib/basket-labels';
 import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
 import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import { VERDICT_LABEL } from '@/lib/value';
@@ -23,6 +24,7 @@ import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
 
 const PREFS = 'basket-picks';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -31,8 +33,6 @@ const DEFAULT_MIN_ODDS = 1.5;
 const bookOf = (prefs: { book?: unknown }): PickBook => (PICK_BOOKS.some(b => b.value === prefs.book) ? prefs.book as PickBook : 'all');
 const STALE_MS = 6 * 3600e3;
 const PAGE = 5;
-const p0 = (v: number) => `${Math.round(v * 100)} %`;
-const signed = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1).replace('.', ',')} %`;
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
 const eventOf = (g: BasketGame) => `${g.away.abbr} @ ${g.home.abbr}`;
 const newest = (o?: MatchOdds) => Math.max(0, ...Object.values(o?.sources ?? {}).map(s => s.ts || 0));
@@ -143,26 +143,17 @@ const tip = (p: BasketPick) => `${p.market}: ${p.selection}. Modelo ${p0(p.pMode
 function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
   const good = hasValue(pick);
   return (
-    <div className="px-3 py-1.5 transition hover:bg-white/[.04]">
-      <div className="flex items-center gap-2.5">
-        <button onClick={() => onOpen(pick)} title={tip(pick)} className="min-w-0 flex-1 cursor-pointer text-left">
-          <div className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white">{pick.title}</div>
-          <div className="line-clamp-2 text-[11px] leading-[14px] text-zinc-400">
-            {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
-            {pick.injury && <span className="text-amber-300">{pick.injury} · </span>}
-            {pick.why}
-          </div>
+    <div className="px-3 py-2 transition hover:bg-white/[.04]">
+      <button onClick={() => onOpen(pick)} title={tip(pick)} className="block w-full cursor-pointer text-left font-score text-[15px] font-semibold leading-[18px] text-white">{pick.title}</button>
+      <div className="mt-1 flex items-center gap-2.5">
+        <button onClick={() => onOpen(pick)} title={tip(pick)} className="line-clamp-2 min-w-0 flex-1 cursor-pointer text-left text-[11px] leading-[14px] text-zinc-400">
+          {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
+          {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
+          {pick.why}
         </button>
-        <div className="w-[52px] shrink-0 text-right" title={`Probabilidad estimada y valor esperado por cada euro: ${VERDICT_LABEL[pickVerdict(pick)].toLowerCase()}`}>
-          <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
-          <div className={cn('font-score text-[12px] font-semibold tnum', good ? 'text-[var(--tv-mark)]' : pick.ev > 0 ? 'text-zinc-200' : 'text-zinc-500')}>{signed(pick.ev)}</div>
-        </div>
+        <PickNums p={pick.p} ev={pick.ev} good={good} />
         <RefreshOdds match={matchOfGame(pick.game)} focus={playerKeyOf(pick)} />
-        <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book ?? ''}. Justa: ${odd(pick.fair)}`}
-          className="flex h-9 w-[58px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm bg-white/[.08] text-white transition hover:bg-[var(--tv-mark)] hover:text-black">
-          <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
-          <span className="text-[9px] leading-tight opacity-75">{pick.book}</span>
-        </button>
+        <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
       </div>
       <div className="mt-1 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
@@ -188,7 +179,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
         <div className="font-score text-[26px] font-bold leading-[28px] text-white md:text-[30px] md:leading-[32px]">{pick.title}</div>
         <div className="mt-1.5 text-[13px] text-zinc-300">
           {!oneGame && <>{eventOf(pick.game)}, {esTime(pick.game.date)} · </>}
-          {pick.injury && <span className="text-amber-300">{pick.injury} · </span>}
+          {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
           {pick.why}
         </div>
       </button>
@@ -249,7 +240,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
   const props = { oneGame, onOpen, onAdd: add };
   return (
     <div className="flex flex-col gap-2.5">
-      <FoldOnPhone summary={[PICK_GROUPS.find(g => g.value === group)?.label, book !== 'all' && book, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
+      <FoldOnPhone always label="Más filtros" remember="basket-picks-more" summary={[PICK_GROUPS.find(g => g.value === group)?.label, side === 'over' ? 'Más' : side === 'under' ? 'Menos' : '', line != null && `línea ${lineText}`, book !== 'all' && book, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <TvTabs value={group} onChange={setGroup} items={PICK_GROUPS} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
@@ -270,8 +261,9 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
       )}
 
       <TvFrame>
-        <TvHeader title="Recomendaciones" sub={sub}>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
+        <TvHeader title={<PicksTitle />} sub={sub}>
+          <p className="w-full text-xs text-zinc-400 sm:hidden">{A.count} opciones de {q.considered} líneas · {A.withValue} con valor</p>
+          <div className="hidden sm:flex sm:flex-wrap sm:gap-x-3 sm:gap-y-1">
             <TvStat label="Opciones" value={A.count} sub={`de ${q.considered} líneas`} title="Las que pasan los filtros, de todas las líneas de las casas que el modelo sabe calcular" />
             <TvStat label="Con valor" value={A.withValue} sub="para apostar" title="Las que el análisis del jugador llama «Apostar»: valor esperado de 2 % o más y fiabilidad de 55 o más" />
             {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}
@@ -315,14 +307,14 @@ function BasketDayPicksInner({ games, injuries, onOpen, onAll }: { games: Basket
     <TvFrame>
       <TvBand>Las mejores de las próximas 24 h</TvBand>
       {list.map(p => (
-        <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_2.75rem_3rem_1rem] items-center gap-2 border-b border-white/10 px-3 py-1.5 text-left transition hover:bg-white/[.05]">
-          <span className="min-w-0">
-            <span className="block truncate font-score text-[15px] font-bold text-white">{p.title}</span>
-            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]} {signed(p.ev)} · {p.book}</span>
+        <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-2.5 border-b border-white/10 px-3 py-2 text-left transition hover:bg-white/[.05]">
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-white">{p.title}</span>
+            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]}</span>
           </span>
-          <span className="text-right font-score text-[17px] font-bold text-[var(--tv-mark)] tnum">{p0(p.p)}</span>
-          <span className="text-right font-score text-[17px] font-bold text-white tnum">{odd(p.price)}</span>
-          <ChevronRight size={14} className="text-zinc-500" />
+          <PickNums p={p.p} ev={p.ev} good={hasValue(p)} />
+          <PickOddText price={p.price} book={p.book} />
+          <ChevronRight size={14} className="shrink-0 text-zinc-500" />
         </button>
       ))}
       <button onClick={onAll} className="w-full cursor-pointer py-1.5 text-xs text-zinc-400 hover:text-zinc-100">Ver todas las recomendaciones</button>

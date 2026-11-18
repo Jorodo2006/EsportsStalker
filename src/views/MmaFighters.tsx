@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 import { MmaFighterSheet } from '@/components/MmaFighterSheet';
 import { Empty, ErrorBox, Input, Loading, PageHeader, Tabs, td, th } from '@/components/ui';
 import type { MmaOrg } from '@/lib/types';
+import { useBackLayer } from '@/lib/history';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const ORG: Record<MmaOrg, string> = { ufc: 'UFC', pfl: 'PFL', wow: 'WOW' };
@@ -15,6 +16,7 @@ export default function MmaFighters() {
   const [org, setOrg] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  useBackLayer(!!open, () => setOpen(null));
   const ok = !!window.api.mma;
   const r = useQuery({ queryKey: ['mma', 'ranking'], queryFn: () => window.api.mma.ranking(), staleTime: 3600e3, enabled: ok, retry: false });
   const list = (r.data ?? []).filter(p => (org === 'all' || p.org === org) && (!q || norm(p.name).includes(norm(q))));

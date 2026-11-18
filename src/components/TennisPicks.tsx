@@ -22,6 +22,7 @@ import { Empty, ErrorBox, FoldOnPhone, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
 const PREFS = 'tennis-picks';
@@ -32,8 +33,6 @@ const DEFAULT_MIN_ODDS = 1.15;
 const STALE_MS = 6 * 3600e3;
 const PAGE = 5;
 const NEXT = 'next';
-const p0 = (v: number) => `${Math.round(v * 100)} %`;
-const signed = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1).replace('.', ',')} %`;
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 1 ? 'recién leídas' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
 const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 // La hora, y el día si no es hoy: en las próximas 24 horas entran partidos de mañana
@@ -129,22 +128,13 @@ export function ValueChip({ pick }: { pick: TennisPick }) {
 
 export function PickRow({ pick, onAdd, match }: { pick: TennisPick; onAdd: (p: TennisPick) => void; match?: SlipLive['match'] }) {
   return (
-    <div className="px-3 py-1.5 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] font-semibold text-zinc-50">{pick.title}</div>
-          <div className="truncate text-[11px] text-zinc-400">{pick.why}</div>
-        </div>
-        <div className="w-14 shrink-0 text-right">
-          <div className="font-score text-[20px] font-bold leading-none text-white tnum">{p0(pick.p)}</div>
-          <ValueChip pick={pick} />
-        </div>
+    <div className="px-3 py-2 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
+      <div className="text-[14px] font-semibold leading-[18px] text-zinc-50">{pick.title}</div>
+      <div className="mt-1 flex items-center gap-2.5">
+        <div className="line-clamp-2 min-w-0 flex-1 text-[11px] leading-[14px] text-zinc-400">{pick.why}</div>
+        <PickNums p={pick.p} ev={pick.ev} good={hasValue(pick)} />
         {match && <RefreshOdds match={match} focus={pick.id.split('#')[0]} />}
-        <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
-          className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
-          <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
-          <span className="text-[9px] leading-tight opacity-75">{pick.book}</span>
-        </button>
+        <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
       </div>
       <div className="mt-1 h-[2px] bg-zinc-800"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
@@ -172,26 +162,22 @@ function Context({ pick, oneMatch }: { pick: TennisBoardPick; oneMatch: boolean 
 interface RowProps { oneMatch: boolean; onOpen?: (x: TennisBoardMatch) => void; onAdd: (p: TennisBoardPick) => void }
 
 function BoardRow({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoardPick }) {
-  const text = <>
-    <div className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-zinc-50">{pick.title}</div>
-    <div className="line-clamp-2 text-[11px] leading-[14px] text-zinc-400"><Context pick={pick} oneMatch={oneMatch} /></div>
-  </>;
+  // El título en su línea entera y las cifras debajo, junto al partido: en las tres columnas estrechas, con las cifras al lado,
+  // el mercado se cortaba («Allen: menos...»)
+  const title = <div className="text-[14px] font-semibold leading-[18px] text-zinc-50">{pick.title}</div>;
+  const ctx = <span className="line-clamp-2 text-[11px] leading-[14px] text-zinc-400"><Context pick={pick} oneMatch={oneMatch} /></span>;
   return (
-    <div className="px-3 py-1.5 transition hover:bg-zinc-800/30">
-      <div className="flex items-center gap-2.5">
+    <div className="px-3 py-2 transition hover:bg-zinc-800/30">
+      {onOpen
+        ? <button onClick={() => onOpen(pick.match)} title={`${tip(pick)}. Pulsa para abrir el partido`} className="block w-full cursor-pointer text-left">{title}</button>
+        : <div title={tip(pick)}>{title}</div>}
+      <div className="mt-1 flex items-center gap-2.5">
         {onOpen
-          ? <button onClick={() => onOpen(pick.match)} title={`${tip(pick)}. Pulsa para abrir el partido`} className="min-w-0 flex-1 cursor-pointer text-left">{text}</button>
-          : <div title={tip(pick)} className="min-w-0 flex-1">{text}</div>}
-        <div className="w-[52px] shrink-0 text-right" title="Probabilidad estimada y valor esperado por cada euro">
-          <div className="font-score text-[20px] font-bold leading-none text-zinc-50 tnum">{p0(pick.p)}</div>
-          <EvChip pick={pick} />
-        </div>
+          ? <button onClick={() => onOpen(pick.match)} className="min-w-0 flex-1 cursor-pointer text-left">{ctx}</button>
+          : <div className="min-w-0 flex-1">{ctx}</div>}
+        <PickNums p={pick.p} ev={pick.ev} good={hasValue(pick)} />
         <RefreshOdds match={targetOfMatch(pick.match.m).match} focus={pick.id.split('#')[0]} />
-        <button onClick={() => onAdd(pick)} title={`Añadir al cupón: ${pick.book}. Justa: ${odd(pick.fair)}`}
-          className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
-          <span className="font-score text-[16px] font-bold leading-none tnum">{odd(pick.price)}</span>
-          <span className="text-[9px] leading-tight opacity-75">{pick.book}</span>
-        </button>
+        <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
       </div>
       <div className="mt-1 h-[2px] rounded-full bg-zinc-800"><div className="h-full rounded-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
@@ -281,11 +267,11 @@ function BestRows({ best, onOpen }: { best: TennisBoardPick[]; onOpen?: (x: Tenn
     {best.map(p => (
       <button key={p.match.m.id} onClick={() => onOpen?.(p.match)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition hover:bg-zinc-800/40">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-zinc-50">{p.title}</span>
+          <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{p.title}</span>
           <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(p.match.m.date)}</span> · {vsOf(p.match.m)}</span>
         </span>
-        <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-[var(--tv-mark)] tnum">{p0(p.p)}</span><span className="block text-[11px] text-zinc-500">prob.</span></span>
-        <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-zinc-50 tnum">{odd(p.price)}</span><span className="block text-[11px] text-zinc-500">cuota</span></span>
+        <PickNums p={p.p} ev={p.ev} good={hasValue(p)} />
+        <PickOddText price={p.price} book={p.book} />
         <ChevronRight size={14} className="shrink-0 text-zinc-600" />
       </button>
     ))}
@@ -353,7 +339,7 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
   );
 
   const filtersPanel = (
-    <FoldOnPhone summary={[TENNIS_GROUPS.find(g => g.value === group)?.label, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
+    <FoldOnPhone always label="Más filtros" remember="tennis-picks-more" summary={[TENNIS_GROUPS.find(g => g.value === group)?.label, TENNIS_SCOPES.find(s => s.value === scope && s.value !== 'all')?.label, order === 'value' ? 'por valor' : '', onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>
       <div className={cn(panel, 'flex flex-col gap-2.5 px-3.5 py-2.5')}>
         <TvTabs value={group} onChange={setGroup} items={TENNIS_GROUPS.map(g => ({ ...g, disabled: g.value !== 'all' && g.value !== group && !all.some(x => x.group === g.value), title: g.value !== 'all' && !all.some(x => x.group === g.value) ? 'Las casas no dan este mercado en estos partidos' : g.title }))} />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-zinc-400">
@@ -374,13 +360,16 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
 
   const main = (
       <TvFrame>
-        <TvHeader title="Recomendaciones" sub={sub}>
+        <TvHeader title={<PicksTitle />} sub={sub}>
           {one ? <MatchStats x={one} /> : (
-            <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
+            <>
+            <p className="w-full text-xs text-zinc-400 sm:hidden">{A.count} opciones · {A.withValue} con valor</p>
+            <div className="hidden sm:flex sm:flex-wrap sm:gap-x-3 sm:gap-y-1">
               <TvStat label="Opciones" value={A.count} sub={`de ${matches.reduce((t, x) => t + x.considered, 0)} líneas`} title="Las que pasan los filtros, de todas las líneas de las casas que el modelo sabe calcular" />
               <TvStat label="Con valor" value={A.withValue} sub="valor 2 % o más" title="Valor esperado de 2 % o más y fiabilidad de 55 o más" />
               {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}
             </div>
+            </>
           )}
         </TvHeader>
 

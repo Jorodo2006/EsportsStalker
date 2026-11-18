@@ -17,8 +17,8 @@ import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { targetOfFootball } from '@/lib/odds-targets';
 import { RefreshOdds } from './RefreshOdds';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
 
-const p0 = (v: number) => `${Math.round(v * 100)} %`;
 const g1 = (v: number) => v.toFixed(1).replace('.', ',');
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
 const esTime = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -62,7 +62,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
   const sub = [`${g1(f.goalsHome)} - ${g1(f.goalsAway)} goles esperados`, r.oddsAge != null ? `cuotas ${ago(r.oddsAge)}` : ''].filter(Boolean).join(' · ');
   return (
     <TvFrame>
-      <TvHeader title="Recomendaciones" sub={sub}>
+      <TvHeader title={<PicksTitle />} sub={sub}>
         <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
           <TvStat label={m.home.short || m.home.name} value={p0(f.home)} sub="modelo" />
           <TvStat label="Empate" value={p0(f.draw)} sub="modelo" />
@@ -76,7 +76,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
         <div className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
           <div className="min-w-0">
             <div className="text-[24px] font-bold leading-tight tracking-tight text-zinc-50">{top.title}</div>
-            <div className="mt-1.5 truncate text-[13px] text-zinc-300">{top.why}</div>
+            <div className="mt-1.5 text-[13px] text-zinc-300">{top.why}</div>
           </div>
           <div className="text-center" title={`Modelo ${p0(top.pModel)}, casa ${p0(top.pMarket)}`}>
             <div className="font-mono text-[44px] font-bold leading-[46px] text-[var(--tv-mark)] tnum">{p0(top.p)}</div>
@@ -122,19 +122,12 @@ function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick
   return (
     <div className="flex items-center gap-3 px-3 py-2 transition hover:bg-zinc-800/30">
       <button onClick={() => onOpen(d.id)} title={`${p.market}: ${p.selection}. ${p.why}. Pulsa para abrir el partido`} className="min-w-0 flex-1 cursor-pointer text-left">
-        <span className="block truncate text-[14px] font-semibold text-zinc-50">{p.title}</span>
+        <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-zinc-50">{p.title}</span>
         <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
       </button>
-      <span className="w-14 shrink-0 text-right">
-        <span className="block font-score text-[18px] font-bold leading-5 text-zinc-50 tnum">{p0(p.p)}</span>
-        <ValueChip pick={p} />
-      </span>
+      <PickNums p={p.p} ev={p.ev} good={verdictOf(p.ev, p.rel.score) === 'BET'} />
       <RefreshOdds match={targetOfFootball(d).match} focus={p.id.split('#')[0]} />
-      <button onClick={() => onAdd(d, p)} title={`Añadir al cupón: ${p.book}. Justa: ${odd(p.fair)}`}
-        className="flex h-10 w-[60px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg bg-zinc-800 text-zinc-50 transition hover:bg-zinc-700 hover:text-[var(--tv-mark)]">
-        <span className="font-score text-[16px] font-bold leading-none tnum">{odd(p.price)}</span>
-        <span className="text-[9px] leading-tight opacity-75">{p.book}</span>
-      </button>
+      <PickOdd price={p.price} book={p.book} fair={p.fair} onAdd={() => onAdd(d, p)} />
     </div>
   );
 }
@@ -214,7 +207,7 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
         ? <Empty>Ese día no hay partidos con cuotas leídas todavía, y sin ellas no se puede recomendar nada. El lector las trae unas horas antes de cada partido.</Empty>
         : (
           <TvFrame>
-            <TvHeader title="Recomendaciones" sub={`${data.length} ${data.length === 1 ? 'partido' : 'partidos'} con cuotas`}>
+            <TvHeader title={<PicksTitle />} sub={`${data.length} ${data.length === 1 ? 'partido' : 'partidos'} con cuotas`}>
               <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
                 <TvStat label="Con valor" value={[...tops.map(d => d.top), ...hard.map(d => d.hard!)].filter(p => verdictOf(p.ev, p.rel.score) === 'BET').length} sub="valor 2 % o más" />
               </div>
@@ -238,21 +231,26 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
   );
 }
 
+// Las del día: la lista de partidos las enseña al lado y, si no hay ninguna, no les guarda la columna (quedaba media pantalla vacía)
+export const footballDayQuery = (date: string) => ({
+  queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false
+});
+
 // Las mejores del día, al lado de la lista de partidos: cinco, el resto al pulsar y el enlace a la pantalla Recomendaciones
 function FootballDayPicksInner({ date, onOpen, onAll }: { date: string; onOpen: (id: string) => void; onAll?: () => void }) {
   const [all, setAll] = useState(false);
-  const q = useQuery({ queryKey: ['football', 'picks-day', date], queryFn: () => window.api.football.picksDay(date), staleTime: 3 * 60e3, refetchInterval: 5 * 60e3, retry: false });
+  const q = useQuery(footballDayQuery(date));
   const data = q.data ?? [];
   if (!data.length) return null;
   const list = all ? data : data.slice(0, 5);
   const row = (d: FootballDayPick) => (
     <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition last:border-0 hover:bg-zinc-800/40">
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-semibold text-zinc-50">{d.top.title}</span>
+        <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{d.top.title}</span>
         <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
       </span>
-      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-[var(--tv-mark)] tnum">{p0(d.top.p)}</span><span className="block text-[11px] text-zinc-500">prob.</span></span>
-      <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-zinc-50 tnum">{odd(d.top.price)}</span><span className="block text-[11px] text-zinc-500">cuota</span></span>
+      <PickNums p={d.top.p} ev={d.top.ev} good={verdictOf(d.top.ev, d.top.rel.score) === 'BET'} />
+      <PickOddText price={d.top.price} book={d.top.book} />
       <ChevronRight size={14} className="shrink-0 text-zinc-600" />
     </button>
   );

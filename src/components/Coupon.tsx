@@ -7,13 +7,14 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, ChevronDown, Pencil, RefreshCw, Ticket, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
-import { cn, money, odd } from '@/lib/format';
+import { cn, decEs, money, odd } from '@/lib/format';
 import type { AutoJob, BetDraft, MatchOdds, SlipLeg, SlipLive } from '@/lib/types';
 import { ageOf, applyOdds, isStale, matchKeyOf } from '@/lib/slip-live';
 import { jobStage, waitJob } from '@/lib/odds-read';
 import { comboOdds } from './BetForm';
 import { Button, chip, PlayNotice, seg } from './ui';
 import { askLogin, useMember } from './AuthGate';
+import { useBackLayer } from '@/lib/history';
 
 const QUICK = [5, 10, 25, 50];
 const SPORT_TAG: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
@@ -48,6 +49,8 @@ export function Coupon({ docked }: { docked?: boolean }) {
     });
     return () => { off = true; };
   }, [unchecked]);
+  // El flotante desplegado tapa casi toda la pantalla del móvil: atrás del navegador lo pliega
+  useBackLayer(!docked && open && slip.length > 0 && !betDraft, () => setOpen(false));
   if (!slip.length) return docked ? <EmptyCoupon balance={money(w.balance, cur)} /> : null;
   if (betDraft && !docked) return null;
 
@@ -159,9 +162,9 @@ export function Coupon({ docked }: { docked?: boolean }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-mono text-[11px]">
                     {l.bookmaker && <span className="font-semibold text-amber-400">{l.bookmaker}</span>}
-                    <span className="text-zinc-500">{l.bookmaker ? ' · ' : ''}{l.market}</span>
+                    <span className="text-zinc-500">{l.bookmaker ? ' · ' : ''}{decEs(l.market)}</span>
                   </div>
-                  <div className="mt-0.5 truncate text-sm font-semibold text-zinc-50">{l.selection}</div>
+                  <div className="mt-0.5 truncate text-sm font-semibold text-zinc-50">{decEs(l.selection)}</div>
                   <div className="truncate font-mono text-[11px] text-zinc-500">{[SPORT_TAG[l.sport || 'lol'], l.event].filter(Boolean).join(' · ')}</div>
                   {l.live && <LiveNote live={l.live} odds={l.odds} />}
                 </div>

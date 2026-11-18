@@ -4,7 +4,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Send, Target, Upload, Wallet, X, Zap } from 'lucide-react';
 import { ShareDialog } from './FriendsView';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
-import { STATUS_LABEL, STATUS_TONE, betProfit, cn, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
+import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
 import { ModelAccuracy } from '@/components/ModelAccuracy';
 import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
@@ -55,19 +55,22 @@ export default function BetsView() {
               qc.invalidateQueries({ queryKey: ['bets'] });
               toast(changed ? `${changed} apuesta${changed === 1 ? '' : 's'} resuelta${changed === 1 ? '' : 's'} con el resultado` : 'Nada nuevo: los partidos aún no han acabado o hay que resolverlas a mano');
             } catch (e) { toast((e as Error).message); } finally { setChecking(false); }
-          }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} />Comprobar<span className="hidden sm:inline"> resultados</span></Button>
+          }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} /><span>Comprobar<span className="hidden sm:inline"> resultados</span></span></Button>
         <Button className="order-first w-full sm:order-none sm:w-auto" onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
       <div className="mb-5"><Tabs value={tab} onChange={setTab} items={[{ value: 'mine', label: 'Mis apuestas' }, { value: 'model', label: 'Acierto del modelo' }]} /></div>
-      {tab === 'model' ? <ModelAccuracy /> : <>
+      {tab === 'model' ? <ModelAccuracy /> : !bets.length ? <FirstBet onNew={() => openBet()} /> : <>
+
+      <Pending bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onShare={setSharing} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 max-md:[&>:last-child:nth-child(odd)]:col-span-2 md:grid-cols-3 2xl:grid-cols-5">
         <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
           sub={`${money(w.inPlay, cur)} en juego · beneficio total ${money(w.profit, cur, true)}`} />
         <Stat label={`Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={money(s.profit, cur, true)} valueClass={tone(s.profit)}
           sub={`${s.settled} apuestas resueltas`} />
-        <Stat label="ROI / Yield" icon={<Percent size={15} />} value={pct(s.roi)} valueClass={tone(s.roi)} sub={`Apostado ${money(s.staked, cur)}`} />
+        <Stat label="ROI / Yield" icon={<Percent size={15} />} value={pct(s.roi)} valueClass={tone(s.roi)}
+          sub={s.pendingStake ? `${money(s.staked, cur)} en resueltas · ${money(s.pendingStake, cur)} pendientes` : `Apostado ${money(s.staked, cur)}`} />
         <Stat label="Acierto" icon={<Target size={15} />} value={pct(s.hit)} sub={`${s.won} de ${s.settled} · cuota media ${odd(s.avgOdds)}`} />
         <Stat label="Pendientes" value={s.pendingCount} sub={`${money(s.pendingStake, cur)} en juego · retorno ${money(s.pendingReturn, cur)}`} />
       </div>
@@ -83,6 +86,38 @@ export default function BetsView() {
       <ShareDialog bet={sharing} onClose={() => setSharing(null)} />
       </>}
     </>
+  );
+}
+
+// Sin ninguna apuesta de este deporte: en vez de cinco cifras a cero y una gráfica vacía, qué hacer para empezar
+function FirstBet({ onNew }: { onNew: () => void }) {
+  return (
+    <Card>
+      <Empty icon={<Wallet size={22} />}>
+        <p className="max-w-md text-zinc-300">Aún no has apuntado apuestas de este deporte.</p>
+        <p className="mt-1 max-w-md text-xs text-zinc-500">Pulsa una cuota en un partido para añadirla al cupón y apuntarla desde ahí, o apúntala a mano. Aquí verás tu beneficio, el ROI y su evolución.</p>
+        <Button className="mt-4" onClick={onNew}><Plus size={16} />Nueva apuesta</Button>
+      </Empty>
+    </Card>
+  );
+}
+
+// Lo que está en juego, lo primero: es lo que se viene a mirar justo después de apostar (antes quedaba bajo las cifras y la
+// gráfica, al final del historial)
+function Pending({ bets, onEdit, onSettle, onShare }: {
+  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onShare: (b: Bet) => void;
+}) {
+  const cur = useCurrency();
+  const list = useMemo(() => bets.filter(b => b.status === 'pending').sort((a, b) => b.date.localeCompare(a.date)), [bets]);
+  if (!list.length) return null;
+  const s = summarize(list);
+  return (
+    <Card className="mb-5 overflow-hidden" title={<>En juego <span className="text-sm font-normal text-zinc-500 tnum">{list.length}</span></>}
+      action={<span className="text-xs text-zinc-500 tnum">{money(s.pendingStake, cur)} apostados · cobro posible {money(s.pendingReturn, cur)}</span>}>
+      <div className="-m-5 divide-y divide-zinc-800/70">
+        {list.map(b => <BetCard key={b.id} bet={b} onEdit={onEdit} onSettle={onSettle} onShare={onShare} />)}
+      </div>
+    </Card>
   );
 }
 
@@ -213,11 +248,11 @@ function History({ bets, onEdit, onSettle, onShare }: {
                         </span>
                       </td>
                       <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.legs!.length} selecciones{done > 0 && <span className="text-zinc-600"> · {done} resueltas</span>}</td>
-                      <td className={td + ' font-semibold'}><span className="block max-w-[14rem] truncate" title={b.selection}>{b.selection}</span></td>
+                      <td className={td + ' font-semibold'}><span className="block max-w-[14rem] truncate" title={decEs(b.selection)}>{decEs(b.selection)}</span></td>
                     </> : <>
                       <td className={td + ' font-medium'}>{b.event}</td>
-                      <td className={td + ' text-zinc-400'}>{b.market}</td>
-                      <td className={td + ' font-semibold'}>{b.selection}</td>
+                      <td className={td + ' text-zinc-400'}>{decEs(b.market)}</td>
+                      <td className={td + ' font-semibold'}>{decEs(b.selection)}</td>
                     </>}
                     <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.bookmaker}</td>
                     <td className={td + ' text-right tabular-nums'}>{odd(b.odds)}</td>
@@ -279,8 +314,8 @@ function BetCard({ bet: b, onEdit, onSettle, onShare }: { bet: Bet; onEdit: (b: 
     <div className="px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{b.selection}</div>
-          <div className="truncate text-xs text-zinc-400">{combo ? `Combinada ×${b.legs!.length}` : `${b.event} · ${b.market}`}</div>
+          <div className="truncate text-sm font-semibold">{decEs(b.selection)}</div>
+          <div className="truncate text-xs text-zinc-400">{combo ? `Combinada ×${b.legs!.length}` : `${b.event} · ${decEs(b.market)}`}</div>
         </div>
         <div className={'shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
           {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}

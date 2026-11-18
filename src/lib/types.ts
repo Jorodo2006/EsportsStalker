@@ -90,6 +90,7 @@ export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
 export interface Settings {
   currency: string;
   initialBankroll: number;
+  welcomed?: boolean; // la cuenta ya vio la bienvenida (Welcome.tsx)
   featuredBooks: string;
   leaguepediaUser: string;
   leaguepediaPassword: string;

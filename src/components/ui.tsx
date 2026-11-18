@@ -10,6 +10,7 @@ import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttribute
 import { AlertTriangle, ChevronDown, Loader2, SlidersHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/format';
 import { sized, fallbackTo } from '@/lib/img';
+import { useBackLayer } from '@/lib/history';
 
 // ---------- estilos compartidos ----------
 export const panelCls = 'rounded-2xl border border-zinc-800 bg-surface';
@@ -102,6 +103,8 @@ export function Stat({ label, value, sub, valueClass, icon }: { label: string; v
 }
 
 export function Dialog({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; wide?: boolean }) {
+  // Atrás del navegador la cierra, como Escape (en Android es lo que se espera de una ventana)
+  useBackLayer(open, onClose);
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -170,30 +173,34 @@ export function PageHeader({ title, subtitle, children }: { title: string; subti
   );
 }
 
-// Filtros plegables en el móvil: una barra con lo elegido que se despliega al pulsarla, para que el contenido no quede
-// enterrado bajo cinco filas de filtros. Desde `lg` se ven siempre, como antes
-export function FoldOnPhone({ summary, children }: { summary: ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+// Filtros plegables: una barra con lo elegido que se despliega al pulsarla, para que el contenido no quede enterrado bajo
+// filas de filtros. Sin always, sólo en el móvil (desde `lg` se ven siempre); con always, también en el ordenador: así se
+// pliegan los de las recomendaciones («Más filtros»), que eran tres filas de botones iguales. remember: clave de
+// localStorage para recordar si se dejó abierta
+export function FoldOnPhone({ summary, children, always, label = 'Filtros', remember }: { summary: ReactNode; children: ReactNode; always?: boolean; label?: string; remember?: string }) {
+  const [open, setOpenState] = useState(() => { try { return !!remember && localStorage.getItem(remember) === '1'; } catch { return false; } });
+  const setOpen = (v: boolean) => { setOpenState(v); if (remember) try { localStorage.setItem(remember, v ? '1' : '0'); } catch { /* sin almacenamiento */ } };
   return (
     <>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-        className="flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-zinc-800 bg-surface px-3.5 text-left text-[13px] lg:hidden">
+        className={cn('flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-zinc-800 bg-surface px-3.5 text-left text-[13px] transition hover:border-zinc-700', !always && 'lg:hidden')}>
         <SlidersHorizontal size={15} className="shrink-0 text-zinc-400" />
-        <span className="shrink-0 font-medium text-zinc-100">Filtros</span>
+        <span className="shrink-0 font-medium text-zinc-100">{label}</span>
         <span className="min-w-0 flex-1 truncate text-zinc-500">{summary}</span>
         <ChevronDown size={16} className={cn('shrink-0 text-zinc-500 transition', open && 'rotate-180')} />
       </button>
-      <div className={cn(open ? 'block' : 'hidden', 'lg:block')}>{children}</div>
+      <div className={cn(open ? 'block' : 'hidden', !always && 'lg:block')}>{children}</div>
     </>
   );
 }
 
 // Selector segmentado: la opción elegida en gris claro, para que se distinga de los botones de acción (del acento)
+// role=tablist/tab: los lectores de pantalla las anuncian como pestañas («pestaña 2 de 3, seleccionada»), no como botones
 export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: ReactNode }[] }) {
   return (
-    <div className={segWrap}>
+    <div className={segWrap} role="tablist">
       {items.map(it => (
-        <button key={it.value} onClick={() => onChange(it.value)} aria-pressed={value === it.value} className={cn(seg(value === it.value), 'px-3 text-xs')}>
+        <button key={it.value} type="button" role="tab" onClick={() => onChange(it.value)} aria-selected={value === it.value} className={cn(seg(value === it.value), 'px-3 text-xs')}>
           {it.label}
         </button>
       ))}

@@ -66,8 +66,9 @@ Reglas:
 y competiciones de los cinco deportes. Cada servicio busca en lo suyo con `server/shared/search.js` (sin tildes ni
 mayúsculas; cada palabra al principio de una palabra del nombre, también en los otros nombres de equipos y selecciones) y
 devuelve `{ matches, competitions }`. Orden: lo que está en juego, lo que encaja por equipo o jugador antes que por
-competición y lo más cercano a ahora. Al elegir un partido la app cambia de deporte, lleva la lista a su día
-(`setFocusDay` + `useFocus(open, has, setDate)`) y lo abre; en LoL se abre directamente con el partido que trae el resultado.
+competición y lo más cercano a ahora. Al elegir un partido la app va a su dirección (`openGame(id, día, deporte)`:
+cambia de deporte, lleva la lista a su día y lo abre, en una sola entrada del historial); en LoL se abre directamente con
+el partido que trae el resultado (`setOpenMatch`).
 Pruebas: `server/test/buscador.test.js`.
 
 API de la web (la usa `src/lib/api.ts`):

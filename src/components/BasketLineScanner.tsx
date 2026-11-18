@@ -5,6 +5,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useApp } from '@/lib/app-context';
 import { cn, odd, pct } from '@/lib/format';
+import { injuryEs } from '@/lib/basket-labels';
 import { gameCtx, teamGamesOf } from '@/lib/basket-context';
 import { freshKeyOuts, matesOut } from '@/lib/basket-mates';
 import { BASKET_MARKETS, fmtLine, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
@@ -170,7 +171,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
                       <span className="flex items-center gap-2 whitespace-nowrap">
                         {r.player.headshot ? <img src={sized(r.player.headshot, 24)} alt="" loading="lazy" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
                         <button className="cursor-pointer font-medium hover:text-amber-300" title="Ver su análisis">{r.player.name}</button>
-                        {r.injury && <Badge tone={badInjury(r.injury) ? 'danger' : 'warning'}>{r.injury}</Badge>}
+                        {r.injury && <Badge tone={badInjury(r.injury) ? 'danger' : 'warning'}>{injuryEs(r.injury)}</Badge>}
                         {r.miss > 0 && <span title={`No jugó los últimos ${r.miss} partidos de su equipo`}><Badge tone={r.miss >= 3 ? 'danger' : 'warning'}>Sin jugar: {r.miss}</Badge></span>}
                       </span>
                     </td>

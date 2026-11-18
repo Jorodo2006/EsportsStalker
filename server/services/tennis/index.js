@@ -44,7 +44,8 @@ function roundEs(r) {
   if (m) return `${m[1] || m[3] ? 'Previa, ' : ''}${m[2] || m[4]}.ª ronda`;
   if (/^Qualifying Final$/i.test(s)) return 'Previa, ronda final';
   if (/^Qualifying\b/i.test(s)) return 'Previa';
-  return ({ 'round of 16': 'Octavos de final', quarterfinals: 'Cuartos de final', quarterfinal: 'Cuartos de final', semifinals: 'Semifinales', semifinal: 'Semifinales', final: 'Final' })[s.toLowerCase()] || s;
+  // "Group Stage" / "Round Robin": la fase de grupos de las Finals (ATP Finals, WTA Finals)
+  return ({ 'round of 16': 'Octavos de final', quarterfinals: 'Cuartos de final', quarterfinal: 'Cuartos de final', semifinals: 'Semifinales', semifinal: 'Semifinales', final: 'Final', 'group stage': 'Fase de grupos', 'round robin': 'Fase de grupos' })[s.toLowerCase()] || s;
 }
 
 // "2nd Set" → "2.º set", "Final" → "Final"

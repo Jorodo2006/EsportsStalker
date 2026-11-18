@@ -1,4 +1,4 @@
-// Cuota pulsada en una tarjeta de partido (sólo en el móvil): va directa al cupón, sin abrir el partido.
+// Cuota pulsada en una tarjeta de partido o en una fila de tenis: va directa al cupón, sin abrir el partido.
 // La tarjeta sólo conoce la mejor cuota de ganador; la casa y el mercado salen de las cuotas completas del partido,
 // que se piden (o se sacan de la caché) al pulsar. Es la misma selección que se haría desde la pestaña Cuotas.
 import { useQueryClient } from '@tanstack/react-query';

@@ -10,7 +10,13 @@ export function money(x: number, currency = '€', sign = false) {
   return `${sign && v > 0 ? '+' : ''}${s} ${currency}`;
 }
 export const pct = (x: number) => `${((Number(x) || 0) * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })}%`;
-export const odd = (x: number | null | undefined) => (x ? Number(x).toFixed(2) : '–');
+// Coma decimal en todo, como en el dinero y los porcentajes (antes las cuotas y las líneas iban con punto y el resto con
+// coma: «2.10» al lado de «4,5 puntos»)
+export const odd = (x: number | null | undefined) => (x ? Number(x).toFixed(2).replace('.', ',') : '–');
+export const decimal = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+// Textos que llegan del servidor con punto decimal ("MEM -9.5", "Más de 220.5"): sólo al enseñarlos. Lo guardado no se
+// toca, porque el resolvedor de apuestas lee esos textos
+export const decEs = (s: string | null | undefined) => String(s ?? '').replace(/(\d)\.(\d)/g, '$1,$2');
 export const tone = (v: number) => (v > 0 ? 'text-emerald-400' : v < 0 ? 'text-rose-400' : '');
 
 export const fmtTime = (d: string | number) => new Date(d).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -18,7 +24,7 @@ export const fmtDay = (d: string) => new Date(d).toLocaleDateString('es-ES', { w
 export const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
 // Leaguepedia devuelve "2026-10-19 10:00:00" en UTC
 export const utc = (d: string) => d.replace(' ', 'T') + 'Z';
-export const k = (v: number) => `${(v / 1000).toFixed(1)}k`;
+export const k = (v: number) => `${decimal(v / 1000)}k`;
 
 export const STATUS_LABEL: Record<BetStatus, string> = {
   pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula',

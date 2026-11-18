@@ -1,4 +1,5 @@
-// Ajustes de la app: comunes y sólo del administrador. Lo de cada usuario es su banca inicial, su filtro de ligas y sus favoritos.
+// Ajustes de la app: comunes y sólo del administrador. Lo de cada usuario es su banca inicial, su filtro de ligas, sus favoritos y si
+// ya vio la bienvenida.
 // Sin base de datos: el permiso se comprueba antes de guardar nada
 const test = require('node:test');
 const assert = require('node:assert');
@@ -6,8 +7,8 @@ const assert = require('node:assert');
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://nadie@localhost/nada'; // el pool no conecta hasta usarse
 const store = require('../services/bets/store');
 
-test('de cada usuario sólo quedan la banca inicial, el filtro de ligas y los favoritos', () => {
-  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll']);
+test('de cada usuario sólo quedan la banca inicial, el filtro de ligas, los favoritos y la bienvenida', () => {
+  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll', 'welcomed']);
 });
 
 test('los favoritos se limpian: deporte conocido, sin repetidos y el escudo sólo con https', () => {

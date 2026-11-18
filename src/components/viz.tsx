@@ -72,11 +72,13 @@ export function KpiStrip({ items, className }: { items: Kpi[]; className?: strin
 }
 
 // Selector de la barra de filtros: píldoras con contorno, la elegida teñida del acento
-export function TvTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: ReactNode; disabled?: boolean; title?: string }[] }) {
+// tabs: son pestañas que cambian de pantalla (Partidos / Recomendaciones) y no filtros: se anuncian como tales
+export function TvTabs<T extends string>({ value, onChange, items, tabs }: { value: T; onChange: (v: T) => void; items: { value: T; label: ReactNode; disabled?: boolean; title?: string }[]; tabs?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5" role={tabs ? 'tablist' : undefined}>
       {items.map(it => (
-        <button key={it.value} onClick={() => onChange(it.value)} disabled={it.disabled} title={it.title} aria-pressed={value === it.value}
+        <button key={it.value} type="button" onClick={() => onChange(it.value)} disabled={it.disabled} title={it.title}
+          {...(tabs ? { role: 'tab', 'aria-selected': value === it.value } : { 'aria-pressed': value === it.value })}
           className={chip(value === it.value)}>
           {it.label}
         </button>

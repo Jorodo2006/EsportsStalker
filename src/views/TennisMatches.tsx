@@ -3,11 +3,13 @@
 // marcador por sets, recomendaciones, cuotas de Winamax y Betway y la forma de los dos jugadores. Como en el baloncesto,
 // el selector de arriba cambia a las recomendaciones de todos los partidos.
 import { useCardOdd } from '@/lib/card-odds';
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CalendarX, Plus } from 'lucide-react';
-import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
+import { AlertTriangle, ArrowLeft, Plus } from 'lucide-react';
+import { sectionId, useApp, useLostMatch, useRouteDay, useRouteMatch, useSections } from '@/lib/app-context';
+import { useBackLayer } from '@/lib/history';
 import { cn } from '@/lib/format';
+import { countryEs } from '@/lib/countries';
 import { useMedia } from '@/lib/use-media';
 import type { TennisBoardMatch, TennisMatch, TennisPlayer } from '@/lib/types';
 import { AdSlot } from '@/components/AdSlot';
@@ -17,10 +19,10 @@ import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { TennisDayPicks, TennisPicksPage, TennisPicksPanel } from '@/components/TennisPicks';
 import { TennisSpotlight, TournamentGroup } from '@/components/TennisList';
 import { TennisCompare } from '@/components/TennisStats';
-import { SheetScroll, DayStrip, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { SheetScroll, DayStrip, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { sized, fallbackTo } from '@/lib/img';
-import { Panel, TvTabs, panel } from '@/components/viz';
+import { Panel, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
 import { TennisMatchStats } from '@/components/TennisMatchStats';
 
@@ -43,12 +45,15 @@ function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSO
 
 export default function TennisMatches() {
   const addOdd = useCardOdd();
-  const [date, setDate] = useState(today);
+  const { openGame, closeMatch } = useApp();
+  const [date, setDate] = useRouteDay();
   const [filter, setFilter] = useState<StateFilter>('all');
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
   const [mode, pickMode] = useState<Mode>('games');
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [openTab, setOpenTab] = useState<Tab | undefined>();
+  // El partido abierto va en la dirección (/tenis/partido/<id>): atrás del navegador lo cierra
+  const openId = useRouteMatch('tennis');
+  // La pestaña con la que se abrió, sólo para ese partido (con atrás no se pasa por onClose para olvidarla)
+  const [openTab, setOpenTab] = useState<{ id: string; tab: Tab } | null>(null);
   // El partido elegido en la lista, que se ve al lado en pantallas anchas
   const [selId, setSelId] = useState<string | null>(null);
   const twoCols = useMedia('(min-width: 1280px)');
@@ -89,15 +94,15 @@ export default function TennisMatches() {
   });
   const open = (games.data ?? []).find(g => g.id === openId) ?? (fromPick?.id === openId ? fromPick : null);
   useSections(open || mode === 'picks' ? [] : byTour.map(([k, list]) => ({ id: sectionId(k), label: list[0].tournament, count: list.length, live: list.filter(g => g.state === 'in').length })));
-  const openMatch = useCallback((id: string, tab?: Tab) => { setOpenTab(tab); setOpenId(id); }, []);
-  const has = useCallback((id: string) => (games.data ?? []).some(g => g.id === id), [games.data]);
-  useFocus(openMatch, has, setDate);
+  const openMatch = (id: string, tab?: Tab, day = date) => { setOpenTab(tab ? { id, tab } : null); openGame(id, day); };
+  useLostMatch(!!openId && games.isSuccess && !open);
+  const nextDay = useNextDay('tennis', date, games.isSuccess && !games.data?.length);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
-  const openPick = (x: TennisBoardMatch) => { setFromPick(x.m); setDate(x.day); openMatch(x.m.id); };
-  if (open) return <MatchDetail key={open.id} m={open} date={date} initialTab={openTab} onClose={() => { setOpenId(null); setFromPick(null); }} />;
+  const openPick = (x: TennisBoardMatch) => { setFromPick(x.m); openMatch(x.m.id, undefined, x.day); };
+  if (open) return <MatchDetail key={open.id} m={open} date={date} initialTab={openTab?.id === open.id ? openTab.tab : undefined} onClose={closeMatch} />;
 
-  const modes = <TvTabs value={mode} onChange={pickMode} items={[{ value: 'games' as const, label: 'Partidos' }, { value: 'picks' as const, label: 'Recomendaciones' }]} />;
+  const modes = <ModeSwitch value={mode} onChange={pickMode} />;
   if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<TennisPicksPage onOpen={openPick} /></div>;
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); savePref('tennis-closed', n); };
@@ -108,15 +113,24 @@ export default function TennisMatches() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
-      <FavoritesStrip />
       {modes}
+      <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={quali} onChange={v => { setQuali(v); savePref('tennis-quali', v); }} label="Previa" />
         <Toggle on={challengers} onChange={v => { setChallengers(v); savePref('tennis-challengers', v); }} label="Challenger" />
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('tennis-odds', v); }} label="Cuotas" />
       </StateFilterBar>
+      {showOdds && !!shown.length && <OddsLegend />}
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
-        : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de la ATP ni de la WTA con este filtro.</Empty>
+        : !shown.length ? (
+          filter !== 'all' && all.length
+            ? <NoGames app="tennis" text="Ningún partido de ese día con este filtro." onDay={setDate}><Button size="sm" variant="secondary" onClick={() => setFilter('all')}>Ver todos</Button></NoGames>
+            : games.data?.length
+              ? <NoGames app="tennis" text="Ese día sólo hay partidos de previa o de Challenger, y los tienes ocultos." onDay={setDate}>
+                <Button size="sm" variant="secondary" onClick={() => { setQuali(true); savePref('tennis-quali', true); setChallengers(true); savePref('tennis-challengers', true); }}>Enseñarlos</Button>
+              </NoGames>
+              : <NoGames app="tennis" text={noGamesText('tennis', date)} next={nextDay} onDay={setDate} />
+        )
           : (
             <div className={cn('grid items-start gap-4', twoCols && 'grid-cols-[minmax(0,1fr)_minmax(320px,400px)]')}>
               <div className="flex min-w-0 flex-col gap-3">
@@ -153,14 +167,15 @@ function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: s
   const [tab, setTab] = useState<Tab>(ok(initialTab) ? initialTab! : st !== 'pre' ? 'score' : full ? 'picks' : 'odds');
   const t = targetOfMatch(m);
   const [sheet, setSheet] = useState<string | null>(null);
+  useBackLayer(!!sheet, () => setSheet(null));
   if (sheet) return <TennisPlayerSheet key={sheet} tour={m.tour} id={sheet} backLabel="Partido" onBack={() => setSheet(null)} onPlayer={setSheet} />;
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
       <SheetScroll />
       <button onClick={onClose} className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={16} />Volver a partidos</button>
       <Scoreboard competition={m.tournament} detail={[m.round, m.court].filter(Boolean).join(', ')} state={st}
-        a={{ name: label(m.a), short: m.a.country, logo: m.a.flag, score: setsWon(m.a) }}
-        b={{ name: label(m.b), short: m.b.country, logo: m.b.flag, score: setsWon(m.b) }}
+        a={{ name: label(m.a), short: countryEs(m.a.country), logo: m.a.flag, score: setsWon(m.a) }}
+        b={{ name: label(m.b), short: countryEs(m.b.country), logo: m.b.flag, score: setsWon(m.b) }}
         center={esTime(m.date)}
         centerSub={st === 'pre' ? new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? (m.points ? `${m.status} · ${m.points.a}-${m.points.b}` : m.status) : 'Final'}>
         <SheetTabs value={tab} onChange={setTab} items={[

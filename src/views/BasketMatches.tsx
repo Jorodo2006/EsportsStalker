@@ -1,14 +1,17 @@
 // Baloncesto · Partidos: igual que en LoL. Tira de días (hora de España), filtro por estado, partidos agrupados por
 // competición (en pantallas anchas, las más fiables del día al lado) y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
 import { useCardOdd } from '@/lib/card-odds';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, Plus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/format';
-import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
+import { injuryEs, posEs } from '@/lib/basket-labels';
+import { sectionId, useApp, useLostMatch, useRouteDay, useRouteMatch, useSections } from '@/lib/app-context';
+import { useBackLayer } from '@/lib/history';
+import { madridDay } from '@/lib/route';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam, MatchOdds } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
-import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
 import { BasketOdds, matchOfGame, targetOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
@@ -22,7 +25,6 @@ import { BasketTeamSheet, TeamsCompare } from '@/components/BasketTeamSheet';
 import type { BasketPick } from '@/lib/basket-picks';
 import { useTeamThemes } from '@/lib/team-colors';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
-import { TvTabs } from '@/components/viz';
 import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
 import { sized, fallbackTo } from '@/lib/img';
@@ -42,16 +44,18 @@ function saveSet(key: string, s: Set<string>) { try { localStorage.setItem(key, 
 
 export default function BasketMatches() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
-  const { settings } = useApp();
+  const { settings, openGame, closeMatch } = useApp();
   const addOdd = useCardOdd();
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useRouteDay();
   const [filter, setFilter] = useState<StateFilter>('all');
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
   const [mode, pickMode] = useState<Mode>('games');
   const side = useMedia('(min-width: 1280px)'); // columna de las más fiables del día al lado de la lista
   const wide = useMedia('(min-width: 1400px)'); // con la columna del cupón y los anuncios a la derecha (App.tsx)
-  const [openId, setOpenId] = useState<string | null>(null);
-  // La recomendación puede ser de otro día que el de la tira: se guarda el partido que abre
+  // El partido abierto va en la dirección (/baloncesto/partido/<id>): atrás del navegador lo cierra
+  const openId = useRouteMatch('basket');
+  // La recomendación puede ser de otro día que el de la tira: se guarda el partido que abre. Sólo vale para ese partido
+  // (from y open lo comprueban), así que no hace falta borrarla al cerrar, que con atrás no pasa por onClose
   const [fromPick, setFromPick] = useState<BasketPick | null>(null);
   const [closed, setClosed] = useState(() => loadSet('basket-closed'));
   const [showOdds, setShowOdds] = useState(() => { try { return localStorage.getItem('basket-odds') !== '0'; } catch { return true; } });
@@ -84,42 +88,43 @@ export default function BasketMatches() {
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(({ id, list }) => ({ id: sectionId(LEAGUE_NAME[id]), label: LEAGUE_NAME[id], count: list.length, live: 0 }))
   ]);
-  const has = useCallback((id: string) => all.some(g => g.id === id), [all]);
-  useFocus(setOpenId, has, setDate);
+  useLostMatch(!!openId && games.isSuccess && !open);
+  const nextDay = useNextDay('basket', date, games.isSuccess && !all.length);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el baloncesto hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
 
   const toggle = (id: string) => { const s = new Set(closed); if (s.has(id)) s.delete(id); else s.add(id); setClosed(s); saveSet('basket-closed', s); };
-  const openPick = (p: BasketPick) => { setFromPick(p); setOpenId(p.game.id); };
+  const openPick = (p: BasketPick) => { setFromPick(p); openGame(p.game.id, madridDay(p.game.date)); };
 
-  if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} from={fromPick?.game.id === open.id ? fromPick : null} onClose={() => { setOpenId(null); setFromPick(null); }} />;
+  if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} from={fromPick?.game.id === open.id ? fromPick : null} onClose={closeMatch} />;
 
-  const modes = <TvTabs value={mode} onChange={pickMode} items={[{ value: 'games' as const, label: 'Partidos' }, { value: 'picks' as const, label: 'Recomendaciones' }]} />;
+  const modes = <ModeSwitch value={mode} onChange={pickMode} />;
   if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<PicksPage onOpen={openPick} /></div>;
 
   const card = (g: BasketGame, featured?: boolean) => {
     const st = stateOf(g), done = st === 'post';
     const sa = Number(g.away.score), sh = Number(g.home.score);
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfGame(g), s)} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data ? cardNote(g.date, { sport: 'basket' }, settings) : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => openGame(g.id, date)} onOdd={s => addOdd(targetOfGame(g), s)} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data ? cardNote(g.date, { sport: 'basket' }, settings) : null} featured={featured}
         competition={featured ? LEAGUE_NAME[g.league] : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'live' ? g.status : undefined}
-        a={{ name: g.away.name, short: g.away.abbr, logo: g.away.logo, score: g.away.score, win: done && sa > sh, lose: done && sa < sh }}
-        b={{ name: g.home.name, short: g.home.abbr, logo: g.home.logo, score: g.home.score, win: done && sh > sa, lose: done && sh < sa }} />
+        a={{ name: g.away.name, short: g.away.abbr, alt: g.away.alt?.[0], logo: g.away.logo, score: g.away.score, win: done && sa > sh, lose: done && sa < sh }}
+        b={{ name: g.home.name, short: g.home.abbr, alt: g.home.alt?.[0], logo: g.home.logo, score: g.home.score, win: done && sh > sa, lose: done && sh < sa }} />
     );
   };
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
-      <FavoritesStrip />
       {modes}
-      <StateFilterBar above={<DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
+      <FavoritesStrip />
+      <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
       </StateFilterBar>
+      {showOdds && !!all.length && <OddsLegend />}
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
-        : !all.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de NBA, Euroliga, EuroCup ni WNBA. Prueba otro día de la tira.</Empty>
+        : !all.length ? <NoGames app="basket" text={`${noGamesText('basket', date)} Aquí salen la NBA, la Euroliga, la EuroCup, la NBL y la WNBA.`} next={nextDay} onDay={setDate} />
           : <div className={cn('grid items-start gap-4', side && 'grid-cols-[minmax(0,1fr)_minmax(300px,380px)]')}>
             <div className="flex min-w-0 flex-col gap-5">
             {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
@@ -176,6 +181,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
   const odds = useBasketOdds(game);
   const [player, setPlayer] = useState<Picked | null>(from?.who ? pickedOf(from) : null);
   const [teamPick, setTeamPick] = useState<BasketPick | null>(from && !from.who ? from : null);
+  // «Valor de jugador» sin jugador elegido enseña las dos plantillas para elegirlo ahí mismo (antes mandaba a Plantillas)
   const pick = (p: { id: string; name: string; headshot?: string }, teamId: string) => { setPlayer({ id: p.id, name: p.name, league: game.league, headshot: p.headshot, teamId, game }); setTab('value'); };
   const openPick = (p: BasketPick) => {
     if (p.who) { setPlayer(pickedOf(p)); setTab('value'); } else { setTeamPick(p); setTab('points'); }
@@ -183,6 +189,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
   const event = `${game.away.abbr} @ ${game.home.abbr}`;
   const themeOf = useTeamThemes(game.league);
   const [sheet, setSheet] = useState<string | null>(null);
+  useBackLayer(!!sheet, () => setSheet(null));
   if (sheet) return <BasketTeamSheet key={sheet} league={game.league} teamId={sheet} backLabel="Volver al partido" onBack={() => setSheet(null)}
     onPlayer={(p, teamId) => { setSheet(null); pick(p, teamId); }} />;
   return (
@@ -217,7 +224,13 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
           <Roster game={game} side="home" injuries={injuries} current={player?.id} onPick={pick} />
         </div>
         : player ? <BasketAnalyzer key={`${player.id}:${player.market}:${player.line}`} player={player} games={[game]} injuries={injuries} odds={odds.data} />
-          : <Empty>Pulsa un jugador en Plantillas para analizar sus líneas.</Empty>}
+          : <div className="flex flex-col gap-3">
+            <p className="px-1 text-sm text-zinc-400">Elige un jugador para ver su proyección y el valor de sus líneas en este partido.</p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Roster game={game} side="away" injuries={injuries} onPick={pick} />
+              <Roster game={game} side="home" injuries={injuries} onPick={pick} />
+            </div>
+          </div>}
     </div>
   );
 }
@@ -232,12 +245,12 @@ function RestStrip({ game }: { game: BasketGame }) {
   };
   return (
     <div className="-mt-2 flex flex-wrap gap-x-5 gap-y-1 px-1 text-xs">
-      <span className="text-zinc-500">Descanso</span>{side(game.away.abbr, r.away, false)}{side(game.home.abbr, r.home, true)}
+      <span className="text-zinc-500">Antes del partido</span>{side(game.away.abbr, r.away, false)}{side(game.home.abbr, r.home, true)}
     </div>
   );
 }
 
-function Roster({ game, side, injuries, current, onPick }: {
+export function Roster({ game, side, injuries, current, onPick }: {
   game: BasketGame; side: 'home' | 'away'; injuries: BasketInjury[]; current?: string; onPick: (p: BasketRosterPlayer, teamId: string) => void;
 }) {
   const team = game[side];
@@ -263,9 +276,10 @@ function Roster({ game, side, injuries, current, onPick }: {
                   : <span className="h-8 w-8 shrink-0 rounded-full bg-zinc-800" />}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{p.name}</div>
-                  <div className="text-xs text-zinc-500">{p.pos}</div>
+                  <div className="text-xs text-zinc-500">{posEs(p.pos)}</div>
                 </div>
-                {inj && <Badge tone={badInjury(inj) ? 'danger' : 'warning'}>{inj}</Badge>}
+                {inj && <Badge tone={badInjury(inj) ? 'danger' : 'warning'}>{injuryEs(inj)}</Badge>}
+                <ChevronRight size={15} className="shrink-0 text-zinc-600" aria-hidden />
               </button>
             );
           })}

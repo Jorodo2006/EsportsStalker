@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { sectionId, useApp, type AppId } from '@/lib/app-context';
 import { cn } from '@/lib/format';
+import { madridDay } from '@/lib/route';
 import type { SearchCompetition, SearchMatch } from '@/lib/types';
 import { Dialog, ErrorBox } from './ui';
 
@@ -13,7 +14,6 @@ const SPORT: Record<AppId, { label: string; color: string }> = {
   lol: { label: 'LoL', color: '#3aa894' }, basket: { label: 'Baloncesto', color: '#dc7d41' },
   tennis: { label: 'Tenis', color: '#67ad53' }, football: { label: 'Fútbol', color: '#5f84cc' }, mma: { label: 'MMA', color: '#bf5a5a' }
 };
-const madridDay = (iso: string) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 // "Hoy 21:00", "Mañana 18:30", "vie 13, 20:45"
 function when(iso: string) {
   const d = madridDay(iso), today = madridDay(new Date().toISOString());
@@ -50,19 +50,18 @@ function scrollToSection(name: string) {
 
 type Row = { kind: 'match'; m: SearchMatch } | { kind: 'comp'; c: SearchCompetition };
 
-// Abre un partido encontrado: cambia de deporte, va a su día y lo abre. Lo usan el buscador y los favoritos
+// Abre un partido encontrado: cambia de deporte, va a su día y lo abre, en una sola entrada del historial. Lo usan el
+// buscador y los favoritos
 export function useOpenMatch() {
-  const { switchApp, go, setFocusId, setFocusDay, setOpenMatch } = useApp();
+  const { openGame, setOpenMatch } = useApp();
   return (m: SearchMatch) => {
-    switchApp(m.sport);
     if (m.sport === 'lol' && m.event) setOpenMatch(m.event);
-    else { setFocusDay(madridDay(m.date)); setFocusId(m.id); }
-    go('matches');
+    else openGame(m.id, madridDay(m.date), m.sport);
   };
 }
 
 export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { switchApp, go, setFocusDay, setOpenMatch } = useApp();
+  const { openList } = useApp();
   const openMatch = useOpenMatch();
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
@@ -84,10 +83,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     onClose();
     if (r.kind === 'match') { openMatch(r.m); return; }
     const c = r.c;
-    switchApp(c.sport);
-    setOpenMatch(null);
-    if (c.next) setFocusDay(madridDay(c.next));
-    go('matches');
+    openList(c.sport, c.next ? madridDay(c.next) : undefined);
     scrollToSection(c.name);
   };
   const onKey = (e: React.KeyboardEvent) => {

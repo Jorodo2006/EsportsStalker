@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { pct } from '@/lib/format';
+import { countryEs } from '@/lib/countries';
 import type { TennisResult, Tour } from '@/lib/types';
 import { TennisStatsPanel } from './TennisStats';
 import { Empty, ErrorBox, Loading, th } from './ui';
@@ -40,7 +41,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
   const season = p.season && p.season.won + p.season.lost ? p.season : p.lastSeason;
   const seasonYear = season === p.season ? p.year : p.year - 1;
   const rate = (r: { won: number; lost: number }) => (r.won + r.lost ? pct(r.won / (r.won + r.lost)) : '');
-  const meta = [p.tour.toUpperCase(), p.country, p.age ? `${p.age} años` : '', p.height, p.weight, p.hand, p.birthPlace, p.debut ? `Pro desde ${p.debut}` : '', !p.active ? 'Retirado' : ''].filter(Boolean);
+  const meta = [p.tour.toUpperCase(), countryEs(p.country), p.age ? `${p.age} años` : '', p.height, p.weight, p.hand, p.birthPlace, p.debut ? `Pro desde ${p.debut}` : '', !p.active ? 'Retirado' : ''].filter(Boolean);
   const last = p.matches.slice(0, 10);
 
   return (

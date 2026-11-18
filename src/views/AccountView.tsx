@@ -77,7 +77,9 @@ function WalletCard() {
   return (
     <Card title="Tu cartera">
       <p className="mb-4 text-sm text-zinc-400">
-        Lo que tenías para apostar al empezar. Se le suma el beneficio de tus apuestas: ahora tienes <b className="text-zinc-100 tnum">{money(w.balance, cur)}</b>.
+        {settings?.initialBankroll
+          ? <>Lo que tenías para apostar al empezar. Se le suma el beneficio de tus apuestas: ahora tienes <b className="text-zinc-100 tnum">{money(w.balance, cur)}</b>.</>
+          : <>Pon con cuánto empezaste a apostar y verás tu saldo: la banca más el beneficio de tus apuestas. Hasta entonces sólo se cuenta el beneficio (<b className="text-zinc-100 tnum">{money(w.profit, cur, true)}</b>).</>}
       </p>
       <form onSubmit={submit} className="grid grid-cols-[1fr_auto] items-end gap-3">
         <Field label={`Banca inicial (${cur})`}><Input type="number" inputMode="decimal" step="0.01" min={0} value={v} onChange={e => setV(e.target.value)} /></Field>
@@ -219,7 +221,7 @@ function AlertsCard() {
     if (on) setPerm(await askPermission());
   }
   const note = perm === 'unsupported'
-    ? 'Este navegador no deja avisar desde aquí (pasa en el móvil entrando por la IP de casa, sin https): los avisos saldrán dentro de la app mientras la tengas abierta.'
+    ? 'Este navegador no permite avisos del sistema en esta web: te avisaremos dentro de Sharpex mientras la tengas abierta.'
     : perm === 'denied' ? 'Has bloqueado los avisos para esta web: actívalos en el candado de la barra de direcciones. Mientras, salen dentro de la app.'
       : perm === 'granted' ? 'Llegan como avisos del sistema mientras la app esté abierta en alguna pestaña.'
         : 'Al encender uno, el navegador te pedirá permiso.';

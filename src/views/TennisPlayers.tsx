@@ -4,15 +4,18 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/format';
+import { countryEs } from '@/lib/countries';
 import type { Tour } from '@/lib/types';
 import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { ErrorBox, Input, Loading, PageHeader, Tabs, td, th } from '@/components/ui';
 import { sized, fallbackTo } from '@/lib/img';
+import { useBackLayer } from '@/lib/history';
 
 export default function TennisPlayers() {
   const [tour, setTour] = useState<Tour>('atp');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  useBackLayer(!!open, () => setOpen(null));
   const ok = !!window.api.tennis;
   const r = useQuery({ queryKey: ['tennis', 'rankings', tour], queryFn: () => window.api.tennis.rankings(tour), staleTime: 6 * 3600e3, enabled: ok });
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -40,7 +43,7 @@ export default function TennisPlayers() {
                     <td className={td + ' text-right font-score text-lg font-semibold tnum'}>{p.rank}</td>
                     <td className={cn(td, 'text-xs tnum', diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-rose-400' : 'text-zinc-600')} title={`Antes: ${p.previous}`}>{diff > 0 ? `▲${diff}` : diff < 0 ? `▼${-diff}` : '='}</td>
                     <td className={td}><span className="flex items-center gap-2">{p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-4 w-6 rounded-sm object-cover" />}{p.name}</span></td>
-                    <td className={td + ' hidden text-zinc-400 sm:table-cell'}>{p.country}</td>
+                    <td className={td + ' hidden text-zinc-400 sm:table-cell'}>{countryEs(p.country)}</td>
                     <td className={td + ' text-right tnum'}>{p.points.toLocaleString('es-ES')}</td>
                   </tr>
                 );

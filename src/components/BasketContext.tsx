@@ -5,6 +5,7 @@
 // es información
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/format';
+import { injuryDetailEs, injuryEs } from '@/lib/basket-labels';
 import { BASKET_MARKETS, fmtLine, type BasketMarket } from '@/lib/basket-model';
 import { withAndWithout, type MateOut } from '@/lib/basket-mates';
 import type { BasketAbsence, BasketGame, BasketInjury, BasketLogGame, BasketRest, BasketTeamLogs } from '@/lib/types';
@@ -56,7 +57,7 @@ export function BasketContext({ games, missed = [], season, game, teamId, player
 
   // Parte médico de ESPN
   const inj = injuries.find(i => i.playerId === playerId);
-  if (inj) facts.push({ label: 'Parte médico', text: `${inj.status}${inj.detail ? `: ${inj.detail}` : ''}`, tone: /out|doubt/i.test(inj.status) ? 'bad' : 'info', note: inj.returnDate ? `Vuelta prevista: ${new Date(inj.returnDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : undefined });
+  if (inj) facts.push({ label: 'Parte médico', text: `${injuryEs(inj.status)}${inj.detail ? `: ${injuryDetailEs(inj.detail)}` : ''}`, tone: /out|doubt/i.test(inj.status) ? 'bad' : 'info', note: inj.returnDate ? `Vuelta prevista: ${new Date(inj.returnDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : undefined });
 
   // Lesión: los partidos de su equipo que no jugó, seguidos. Si los últimos son ausencias, sigue fuera; si volvió hace
   // poco, cuántos lleva y con cuántos minutos (al volver suelen ir con restricción)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
-import { cn, fmtDate, pct, utc } from '@/lib/format';
+import { cn, decimal, fmtDate, k, pct, utc } from '@/lib/format';
 import type { PlayerGame, TeamGame } from '@/lib/types';
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, Stat, td, th } from '@/components/ui';
 import { SearchBox } from '@/components/SearchBox';
@@ -56,11 +56,11 @@ function PlayerPanel({ page, onTeam }: { page: string; onTeam: (t: string) => vo
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Stat label="Victorias" value={pct(s.wr)} sub={`${s.wins}V - ${games.length - s.wins}D`} valueClass={s.wr >= .5 ? 'text-emerald-400' : 'text-rose-400'} />
-        <Stat label="KDA" value={s.kda.toFixed(2)} />
-        <Stat label="K / D / A" value={<span className="text-xl">{s.k.toFixed(1)} / {s.d.toFixed(1)} / {s.a.toFixed(1)}</span>} />
+        <Stat label="KDA" value={decimal(s.kda, 2)} />
+        <Stat label="K / D / A" value={<span className="text-xl">{decimal(s.k)} / {decimal(s.d)} / {decimal(s.a)}</span>} />
         <Stat label="CS medio" value={s.cs.toFixed(0)} />
-        <Stat label="Oro medio" value={`${(s.gold / 1000).toFixed(1)}k`} />
-        <Stat label="Daño medio" value={`${(s.dmg / 1000).toFixed(1)}k`} />
+        <Stat label="Oro medio" value={k(s.gold)} />
+        <Stat label="Daño medio" value={k(s.dmg)} />
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_3fr]">
         <Card title="Campeones">
@@ -73,7 +73,7 @@ function PlayerPanel({ page, onTeam }: { page: string; onTeam: (t: string) => vo
                 </div>
                 <span className="tabular-nums text-zinc-400">{c.n}p</span>
                 <span className={cn('w-12 text-right tabular-nums', c.w / c.n >= .5 ? 'text-emerald-400' : 'text-rose-400')}>{pct(c.w / c.n)}</span>
-                <span className="w-12 text-right tabular-nums text-zinc-300">{((c.k + c.a) / Math.max(1, c.d)).toFixed(1)}</span>
+                <span className="w-12 text-right tabular-nums text-zinc-300">{decimal((c.k + c.a) / Math.max(1, c.d))}</span>
               </div>
             ))}
           </div>

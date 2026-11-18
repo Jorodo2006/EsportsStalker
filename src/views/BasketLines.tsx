@@ -8,10 +8,12 @@ import { RangeFilters, useUpcomingGames } from '@/components/BasketRange';
 import { Empty, ErrorBox, Loading } from '@/components/ui';
 import { cn } from '@/lib/format';
 import type { BasketInjury } from '@/lib/types';
+import { useBackLayer } from '@/lib/history';
 
 export default function BasketLines() {
   const u = useUpcomingGames();
   const [picked, setPicked] = useState<Picked | null>(null);
+  useBackLayer(!!picked, () => setPicked(null));
   return (
     <>
       {picked && <PickedPlayer player={picked} injuries={u.injuries} onBack={() => setPicked(null)} />}

@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   refreshSeconds: 30,
   favoriteLeagues: [],
   favorites: [], // equipos, jugadores y luchadores que sigue cada usuario: [{ sport, name, logo }]
+  welcomed: false, // ya vio la bienvenida de la cuenta nueva (banca inicial y deporte): no se le vuelve a enseñar
   // Lecturas de cuotas programadas (las hace el lector de Docker)
   oddsAutoEnabled: true,
   oddsRefreshMinutes: 5,
@@ -23,9 +24,9 @@ const DEFAULT_SETTINGS = {
 };
 
 // Los ajustes son de la app entera: sólo los cambia el administrador y valen para todos (migración 010). De cada usuario
-// quedan su banca inicial (cada uno tiene su cartera), el filtro de ligas de la lista de LoL y sus favoritos, que no son
-// ajustes de la app
-const USER_KEYS = ['initialBankroll', 'favoriteLeagues', 'favorites'];
+// quedan su banca inicial (cada uno tiene su cartera), el filtro de ligas de la lista de LoL, sus favoritos y si ya vio la
+// bienvenida de la cuenta nueva, que no son ajustes de la app
+const USER_KEYS = ['initialBankroll', 'favoriteLeagues', 'favorites', 'welcomed'];
 
 // Favoritos: lo manda el navegador, así que se limpia. Se identifican por deporte y nombre (el mismo que buscan /api/search
 // y la ficha del partido); el escudo es sólo para pintarlo, y sólo se admite una dirección https
@@ -70,7 +71,7 @@ async function getSettings(userId) {
 // común recibe un 403: la interfaz no se lo enseña, así que sería una petición a mano
 async function setSettings(userId, isAdmin, patch) {
   const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined)
-    .map(([k, v]) => [k, k === 'favorites' ? cleanFavorites(v) : v]);
+    .map(([k, v]) => [k, k === 'favorites' ? cleanFavorites(v) : k === 'welcomed' ? v === true : v]);
   if (!isAdmin && entries.some(([k]) => !USER_KEYS.includes(k))) throw fail('Sólo el administrador puede cambiar los ajustes', 403);
   await tx(async c => {
     for (const [k, v] of entries) {

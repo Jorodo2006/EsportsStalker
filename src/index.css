@@ -119,6 +119,10 @@ input[type=number]::-webkit-inner-spin-button { opacity: .4; }
 .font-mono, .font-score { font-variant-numeric: tabular-nums; }
 /* Etiqueta pequeña (cabeceras de tabla, rótulos de cifras): en minúsculas normales, sin espaciar */
 .label-data { font-size: 12px; line-height: 16px; font-weight: 500; }
+/* Botón «Recomendaciones» mientras no se ha abierto nunca (ModeSwitch en sport.tsx): un pequeño salto tres veces al cargar y
+   se para. Con «menos movimiento» en el sistema no sale, por la regla de abajo */
+@keyframes attn { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.06); } 50% { transform: scale(.98); } 75% { transform: scale(1.02); } }
+.attn { animation: attn .9s ease-in-out .8s 3; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 /* Mapas de tiros: cada tiro entra con un retraso (style animationDelay), la línea se dibuja y luego aparece la marca */
 @keyframes shot-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }

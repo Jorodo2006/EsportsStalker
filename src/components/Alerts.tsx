@@ -35,7 +35,7 @@ export function AlertsBell({ className }: { className?: string }) {
   const member = useMember();
   const qc = useQueryClient();
   const q = useAlerts();
-  const { switchApp, go, setFocusDay, setFocusId } = useApp();
+  const { go, openGame, openList } = useApp();
   const [open, setOpen] = useState(false);
   const unread = q.data?.unread ?? 0;
 
@@ -59,10 +59,11 @@ export function AlertsBell({ className }: { className?: string }) {
   function openMatch(a: OddsAlert) {
     setOpen(false);
     if (!a.open) return;
-    switchApp(a.open.sport as Sport);
-    if (a.open.sport !== 'lol' && a.open.date) setFocusDay(madridDay(a.open.date));
-    if (a.open.sport !== 'lol' && a.open.id) setFocusId(a.open.id);
-    go('matches');
+    // El partido se abre en su dirección (src/lib/route.ts), con el día de su lista; los de LoL necesitan el partido entero, así
+    // que se va a su lista
+    const sport = a.open.sport as Sport, day = a.open.date ? madridDay(a.open.date) : undefined;
+    if (sport !== 'lol' && a.open.id) openGame(a.open.id, day, sport);
+    else openList(sport, sport === 'lol' ? undefined : day);
   }
 
   if (!member) return null;
@@ -76,8 +77,10 @@ export function AlertsBell({ className }: { className?: string }) {
       <Dialog open={open} onClose={() => setOpen(false)} title="Avisos de cuotas">
         {!q.data?.list.length ? (
           <Empty icon={<Bell size={20} />}>
-            Todavía no hay avisos. Te avisaremos cuando caiga o suba mucho una cuota de tus apuestas pendientes, de tu cupón o de los
-            partidos de tus favoritos, y cuando salga una recomendación nueva con valor. Elige cuáles en <b>Tu cuenta</b>.
+            <p>
+              Todavía no hay avisos. Te avisaremos cuando caiga o suba mucho una cuota de tus apuestas pendientes, de tu cupón o de los
+              partidos de tus favoritos, y cuando salga una recomendación nueva con valor. Elige cuáles en <b>Tu cuenta</b>.
+            </p>
           </Empty>
         ) : (
           <ul className="-mx-4 -my-4 divide-y divide-zinc-800/60 sm:-mx-6 sm:-my-6">

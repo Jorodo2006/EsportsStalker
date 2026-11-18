@@ -6,12 +6,12 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
+import { countryEs } from '@/lib/countries';
 import type { TennisMatch, TennisPlayer, TennisSurface } from '@/lib/types';
 import { sized, fallbackTo } from '@/lib/img';
 import { LiveDot } from './sport';
 import { AtpLogo, ChallengerLogo, WtaLogo } from './tennis-logos';
 import { oddBtn, panelCls } from './ui';
-import { useMedia } from '@/lib/use-media';
 import { useApp } from '@/lib/app-context';
 import { cardNote } from '@/lib/odds-window';
 import { useMember } from './AuthGate';
@@ -104,9 +104,9 @@ export function TournamentGroup({ id, matches, open, onToggle, odds, selected, o
 }
 
 // ---------- Partido en la lista ----------
-// onOdd: en el móvil la cuota de cada jugador es un botón que la añade al cupón; en pantallas anchas la fila entera abre el partido
+// onOdd: la cuota de cada jugador es un botón que la añade al cupón, en el móvil y en el ordenador (antes en el ordenador abría
+// el partido, y la misma cuota hacía dos cosas según la pantalla); el resto de la fila abre el partido
 function MatchRow({ m, odds, active, onClick, onOdd }: { m: TennisMatch; odds: Odds; active: boolean; onClick: () => void; onOdd?: (side: 'a' | 'b') => void }) {
-  const phone = useMedia('(max-width: 1023px)');
   const st = stOf(m);
   const n = Math.max(m.a.sets.length, m.b.sets.length);
   const pts = st === 'live' ? m.points ?? null : null;
@@ -134,13 +134,13 @@ function MatchRow({ m, odds, active, onClick, onOdd }: { m: TennisMatch; odds: O
   // Cuotas en su propia columna a la derecha, alineadas con cada jugador
   const oddCell = (side: 'a' | 'b') => {
     const o = odds?.[side];
-    if (phone && onOdd && o) {
-      return <button type="button" onClick={() => onOdd(side)} aria-label={`Añadir al cupón: ${side === 'a' ? m.a.name : m.b.name} a ${odd(o)}`}
-        className={cn(oddBtn(fav === side), 'h-6 w-12 shrink-0 text-[12px] active:scale-[.96]')}>{odd(o)}</button>;
+    if (onOdd && o) {
+      return <button type="button" onClick={() => onOdd(side)} aria-label={`Añadir al cupón: ${side === 'a' ? m.a.name : m.b.name} a ${odd(o)}`} title={fav === side ? 'Añadir al cupón · la del favorito' : 'Añadir al cupón'}
+        className={cn(oddBtn(fav === side), 'h-6 w-12 shrink-0 text-[12px] active:scale-[.96] lg:h-5 lg:w-11 lg:text-[11.5px]')}>{odd(o)}</button>;
     }
     return <span className={cn('w-10 shrink-0 text-right font-score text-[12px] tnum', fav === side ? 'font-semibold text-amber-300' : 'text-zinc-400')}>{o ? odd(o) : ''}</span>;
   };
-  const tap = phone && !!onOdd;
+  const tap = !!onOdd;
   // Las cuotas van fuera del botón que abre el partido (un botón dentro de otro no vale); donde no son botones, abren el partido
   return (
     <div className={cn('relative flex w-full items-center transition', active ? 'bg-zinc-800/60' : 'hover:bg-zinc-900/70')}>
@@ -192,7 +192,7 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
         <Flag p={p} big />
         <span className="min-w-0 flex-1">
           <span className={cn('block truncate text-[15px] leading-5', p.winner ? 'font-semibold text-zinc-50' : lost ? 'text-zinc-500' : 'font-medium text-zinc-50')}>{p.name}</span>
-          <span className="block truncate text-[11px] leading-4 text-zinc-500">{[p.rank ? `n.º ${p.rank}` : '', p.seed ? `cabeza de serie ${p.seed}` : '', p.country].filter(Boolean).join(' · ') || ' '}</span>
+          <span className="block truncate text-[11px] leading-4 text-zinc-500">{[p.rank ? `n.º ${p.rank}` : '', p.seed ? `cabeza de serie ${p.seed}` : '', countryEs(p.country)].filter(Boolean).join(' · ') || ' '}</span>
         </span>
         {pts?.server === side && <span title="Saca" className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}
         {st !== 'pre' && Array.from({ length: n }, (_, i) => (

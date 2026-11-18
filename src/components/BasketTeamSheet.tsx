@@ -11,11 +11,10 @@ import { TeamPoints, dec, restart, signed } from './BasketPoints';
 import { Badge, Empty, Loading, TeamLogo, th } from './ui';
 import { FormChips, KpiStrip, Panel, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, logoGlow, panel, tdc } from './viz';
 import { sized } from '@/lib/img';
+import { injuryEs, posEs } from '@/lib/basket-labels';
 
 const esDate = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 const esWhen = (iso: string) => new Date(iso).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const POS: Record<string, string> = { PG: 'Base', SG: 'Escolta', SF: 'Alero', PF: 'Ala-pívot', C: 'Pívot', G: 'Exterior', F: 'Alero', Guard: 'Exterior', Forward: 'Alero', Center: 'Pívot' };
-const INJURY: Record<string, string> = { Out: 'Baja', 'Day-To-Day': 'Duda', Questionable: 'Duda', Doubtful: 'Muy dudoso', Probable: 'Probable', Suspension: 'Sanción' };
 const money = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M$` : `${Math.round(v / 1e3)} mil $`);
 const toNum = (s: string | undefined) => { const n = parseFloat(String(s ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
 
@@ -128,7 +127,7 @@ export function BasketTeamSheet({ league, teamId, onBack, onPlayer, backLabel = 
           <div className="flex flex-wrap gap-x-5 gap-y-1.5 px-3.5 py-2 text-[13px]">
             {out.map(p => (
               <span key={p.id} className="flex items-center gap-2" title={[p.injuryDetail, p.injuryReturn && `Vuelta prevista: ${esDate(p.injuryReturn)}`].filter(Boolean).join(' · ')}>
-                <Badge tone={badInjury(p.injury!) ? 'danger' : 'warning'}>{INJURY[p.injury!] ?? p.injury}</Badge>{p.name}
+                <Badge tone={badInjury(p.injury!) ? 'danger' : 'warning'}>{injuryEs(p.injury)}</Badge>{p.name}
                 {p.injuryReturn && <span className="text-[11px] text-zinc-500">vuelve {esDate(p.injuryReturn)}</span>}
               </span>
             ))}
@@ -207,10 +206,10 @@ function Roster({ team, onPlayer }: { team: BasketTeamInfo; onPlayer: (p: Basket
                   <span className="flex items-center gap-2 whitespace-nowrap">
                     {p.headshot ? <img loading="lazy" decoding="async" src={sized(p.headshot, 24)} alt="" className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 object-cover" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} /> : <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800" />}
                     <span className="font-medium">{p.name}</span>
-                    {p.injury && <Badge tone={badInjury(p.injury) ? 'danger' : 'warning'}>{INJURY[p.injury] ?? p.injury}</Badge>}
+                    {p.injury && <Badge tone={badInjury(p.injury) ? 'danger' : 'warning'}>{injuryEs(p.injury)}</Badge>}
                   </span>
                 </td>
-                <td className={tdc + ' whitespace-nowrap text-zinc-400'}>{POS[p.pos] ?? p.pos}</td>
+                <td className={tdc + ' whitespace-nowrap text-zinc-400'}>{posEs(p.pos)}</td>
                 <td className={tdc + ' text-right text-zinc-400 tnum'}>{p.age ?? '–'}</td>
                 <td className={tdc + ' whitespace-nowrap text-right text-zinc-400 tnum'}>{p.height || '–'}</td>
                 <td className={tdc + ' whitespace-nowrap text-right text-zinc-400 tnum'}>{p.weight || '–'}</td>
@@ -290,7 +289,7 @@ export function TeamsCompare({ game, onTeam }: { game: BasketGame; onTeam: (id: 
             <div key={t.id} style={themeOf(t.id)?.vars}><Panel title={`Bajas y dudas: ${t.abbr}`}>
               {!out(t).length ? <p className="px-3.5 py-2 text-[13px] text-zinc-500">Ninguna conocida.</p> : (
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-3.5 py-2 text-[13px]">
-                  {out(t).map(p => <span key={p.id} className="flex items-center gap-1.5"><Badge tone={badInjury(p.injury!) ? 'danger' : 'warning'}>{INJURY[p.injury!] ?? p.injury}</Badge>{p.name}</span>)}
+                  {out(t).map(p => <span key={p.id} className="flex items-center gap-1.5"><Badge tone={badInjury(p.injury!) ? 'danger' : 'warning'}>{injuryEs(p.injury)}</Badge>{p.name}</span>)}
                 </div>
               )}
             </Panel></div>

@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/format';
+import { countryEs } from '@/lib/countries';
 import type { MmaFight, MmaFighter, MmaFighterCard, MmaProfile } from '@/lib/types';
 import { parseRecord } from './mma';
 import { sized } from '@/lib/img';
@@ -42,7 +43,7 @@ function Face({ f, side }: { f: MmaFighter; side: 'a' | 'b' }) {
         : <div className="absolute inset-0 grid place-items-center font-mono text-5xl font-bold uppercase text-zinc-800">{initials}</div>}
       <div className={cn('absolute inset-x-0 bottom-0 p-2 sm:p-3', side === 'b' && 'text-right')}>
         <div className="truncate text-[13px] font-bold uppercase leading-tight tracking-tight text-zinc-50 sm:text-lg">{f.name.split(' ').slice(1).join(' ') || f.name}</div>
-        <div className="truncate text-[11px] text-zinc-400">{f.name.split(' ')[0]}{f.country ? ` · ${f.country}` : ''}</div>
+        <div className="truncate text-[11px] text-zinc-400">{f.name.split(' ')[0]}{f.country ? ` · ${countryEs(f.country)}` : ''}</div>
       </div>
     </div>
   );

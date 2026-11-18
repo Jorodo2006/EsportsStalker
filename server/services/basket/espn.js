@@ -13,6 +13,36 @@ const WEB = 'https://site.web.api.espn.com/apis/common/v3';
 // Temporada de ESPN = año en que termina (2026-27 → 2027)
 const seasonYear = (d = new Date()) => (d.getMonth() >= 8 ? d.getFullYear() + 1 : d.getFullYear());
 const idFromHref = s => (String(s || '').match(/\/(\d+)(?:\.png|\/|$)/) || [])[1] || null;
+
+// Estado del partido de ESPN en castellano: "5:32 - 2nd" -> "2.º cuarto · 5:32", "Halftime" -> "Descanso",
+// "End of 1st" -> "Fin del 1.er cuarto", "Final/OT" -> "Final (prórroga)". Solo es texto para enseñar: la lógica mira state.
+// La hora de los que no han empezado ("11/18 - 7:30 PM EST") se quita: la interfaz la pone en hora de España
+const QUARTER = { 1: '1.er cuarto', 2: '2.º cuarto', 3: '3.er cuarto', 4: '4.º cuarto' };
+function periodEs(p) {
+  let m = p.match(/^(?:Q(\d)|(\d)(?:st|nd|rd|th)(?: Quarter| Qtr)?)$/i);
+  if (m) return { label: QUARTER[m[1] || m[2]] || `${m[1] || m[2]}.º cuarto`, fem: false };
+  m = p.match(/^(\d)(?:st|nd|rd|th) Half$/i);
+  if (m) return { label: `${m[1]}.ª parte`, fem: true };
+  m = p.match(/^(\d*)OT$/i);
+  if (m) return { label: m[1] && m[1] !== '1' ? `${m[1]}.ª prórroga` : 'prórroga', fem: true };
+  return null;
+}
+function statusEs(s) {
+  const t = String(s || '').trim();
+  if (!t || /^\d{1,2}\/\d{1,2}( - |$)/.test(t)) return '';
+  if (/^Halftime$/i.test(t)) return 'Descanso';
+  let m = t.match(/^Final(?:\/(\d*)OT)?$/i);
+  if (m) return /OT/i.test(t) ? `Final (${m[1] && m[1] !== '1' ? `${m[1]} prórrogas` : 'prórroga'})` : 'Final';
+  m = t.match(/^End of (?:the )?(.+)$/i);
+  const end = m && periodEs(m[1]);
+  if (end) return `${end.fem ? 'Fin de la' : 'Fin del'} ${end.label}`;
+  m = t.match(/^([\d:.]+) - (.+)$/) || t.match(/^(.+?) ([\d:.]+)$/);
+  const at = m && (periodEs(m[2]) || periodEs(m[1]));
+  if (at) { const clock = periodEs(m[2]) ? m[1] : m[2]; return `${at.label.replace(/^p/, 'P')} · ${clock}`; }
+  const only = periodEs(t);
+  if (only) return only.label.replace(/^p/, 'P');
+  return ({ postponed: 'Aplazado', canceled: 'Suspendido', cancelled: 'Suspendido', delayed: 'Retrasado', suspended: 'Interrumpido', 'in progress': 'En juego', scheduled: '', tbd: '' })[t.toLowerCase()] ?? t;
+}
 const headshot = (lg, id) => `https://a.espncdn.com/i/headshots/${lg}/players/full/${id}.png`;
 
 function parseGamelog(json, season) {
@@ -68,7 +98,7 @@ async function games(lg, days) {
     const st = ev.status?.type?.state;
     return {
       id: `${lg}:${ev.id}`, league: lg, date: ev.date, state: st === 'in' ? 'in' : st === 'post' ? 'post' : 'pre',
-      status: ev.status?.type?.shortDetail || '', clock: st === 'in' ? ev.status?.type?.shortDetail || '' : '',
+      status: statusEs(ev.status?.type?.shortDetail), clock: st === 'in' ? statusEs(ev.status?.type?.shortDetail) : '',
       home: side('home'), away: side('away')
     };
   });
@@ -247,7 +277,7 @@ function boxLeaders(roster, logs) {
   return { avg, leaders };
 }
 
-module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs };
+module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs, statusEs };
 
 // Estadísticas de un partido: jugadores de cada equipo, totales y puntos por cuarto
 async function boxscore(lg, eventId) {
@@ -276,7 +306,7 @@ async function boxscore(lg, eventId) {
   });
   // Enfrentamientos de esta temporada (H2H)
   const series = (j.seasonseries?.[0]?.events || []).map(e => ({
-    date: e.date, status: e.statusType?.shortDetail || '',
+    date: e.date, status: statusEs(e.statusType?.shortDetail),
     score: (e.competitors || []).map(x => ({ abbr: x.team?.abbreviation || '', score: x.score ?? '', winner: !!x.winner }))
   }));
   return { teams, series };

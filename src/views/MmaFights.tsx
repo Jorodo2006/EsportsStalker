@@ -2,10 +2,11 @@
 // agrupados por evento con el principal arriba y, al pulsar uno, su ficha: comparativa de los luchadores con lo que dice el
 // modelo, recomendaciones y las cuotas de Winamax y Betway.
 import { useCardOdd } from '@/lib/card-odds';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
-import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
+import { ArrowLeft, Plus } from 'lucide-react';
+import { sectionId, useApp, useLostMatch, useRouteDay, useRouteMatch, useSections } from '@/lib/app-context';
+import { useBackLayer } from '@/lib/history';
 import { cn } from '@/lib/format';
 import type { MmaFight, MmaFighter, MmaOrg } from '@/lib/types';
 import { SportOdds } from '@/components/BasketOdds';
@@ -13,8 +14,8 @@ import { MmaDayPicks, MmaPicksPanel, PredBlock, usePicks } from '@/components/Mm
 import { MmaFighterSheet } from '@/components/MmaFighterSheet';
 import { MmaSpotlight } from '@/components/MmaSpotlight';
 import { fightTime, METHOD_ES, resultShort, surname, targetOfFight, winnerText } from '@/components/mma';
-import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, Scoreboard, SheetTabs, StateFilterBar, Toggle, today, type MatchState, type StateFilter } from '@/components/sport';
-import { Badge, Button, Empty, ErrorBox, Loading } from '@/components/ui';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
+import { Badge, Button, ErrorBox, Loading } from '@/components/ui';
 import { Panel, TvFrame, TvHeader, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
 import { cardNote } from '@/lib/odds-window';
@@ -28,11 +29,12 @@ function savePref(key: string, v: unknown) { try { localStorage.setItem(key, JSO
 
 export default function MmaFights() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
-  const { settings } = useApp();
+  const { settings, openGame, closeMatch } = useApp();
   const addOdd = useCardOdd();
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useRouteDay();
   const [filter, setFilter] = useState<StateFilter>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // El combate abierto va en la dirección (/mma/partido/<id>): atrás del navegador lo cierra
+  const openId = useRouteMatch('mma');
   const [closed, setClosed] = useState<string[]>(() => loadPref('mma-closed', []));
   const [showOdds, setShowOdds] = useState(() => loadPref('mma-odds', true));
   const [orgs, setOrgs] = useState<Record<MmaOrg, boolean>>(() => ({ ufc: true, pfl: true, wow: true, ...loadPref<Partial<Record<MmaOrg, boolean>>>('mma-orgs', {}) }));
@@ -66,19 +68,20 @@ export default function MmaFights() {
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byEvent.map(([k, list]) => ({ id: sectionId(k), label: list[0].event, count: list.length, live: 0 }))
   ]);
-  const has = useCallback((id: string) => (games.data ?? []).some(g => g.id === id), [games.data]);
-  useFocus(setOpenId, has, setDate);
+  useLostMatch(!!openId && games.isSuccess && !open);
+  const nextDay = useNextDay('mma', date, games.isSuccess && !games.data?.length);
+  const openFight = (id: string) => openGame(id, date);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para MMA hay que parar <code>npm run dev</code> y volver a lanzarlo.</ErrorBox>;
-  if (open) return <FightDetail key={open.id} f={open} onClose={() => setOpenId(null)} />;
+  if (open) return <FightDetail key={open.id} f={open} onClose={closeMatch} />;
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); savePref('mma-closed', n); };
   const setOrg = (id: MmaOrg, v: boolean) => { const n = { ...orgs, [id]: v }; setOrgs(n); savePref('mma-orgs', n); };
   const card = (g: MmaFight, featured?: boolean) => {
     const st = stateOf(g), r = g.result;
-    const side = (f: MmaFighter, w: 'a' | 'b') => ({ name: f.name, logo: f.flag, win: !!r && r.winner === w, lose: st === 'post' && !!r && r.winner != null && r.winner !== w });
+    const side = (f: MmaFighter, w: 'a' | 'b') => ({ name: f.name, alt: surname(f.name), logo: f.flag, win: !!r && r.winner === w, lose: st === 'post' && !!r && r.winner != null && r.winner !== w });
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfFight(g), s)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.cancelled ? cardNote(g.date, { sport: 'mma' }, settings) : null} featured={featured}
+      <MatchCard key={g.id} state={st} onClick={() => openFight(g.id)} onOdd={s => addOdd(targetOfFight(g), s)} odds={showOdds && !g.cancelled ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.cancelled ? cardNote(g.date, { sport: 'mma' }, settings) : null} featured={featured}
         competition={featured ? g.event : undefined} tag={g.cardPos === 1 ? 'Principal' : g.cardPos === 2 ? 'Co-principal' : undefined}
         time={g.cancelled ? 'Cancelado' : st === 'pre' ? fightTime(g) : st === 'live' ? 'En juego' : 'Final'}
         status={st === 'post' ? [resultShort(g), g.weightClass].filter(Boolean).join(' · ') : st === 'live' ? g.status : [g.weightClass, g.rounds >= 5 ? '5 asaltos' : ''].filter(Boolean).join(' · ')}
@@ -87,15 +90,24 @@ export default function MmaFights() {
   };
   return (
     <div className="flex flex-col gap-5">
-      <MatchesTitle date={date} />
+      <MatchesTitle date={date} title="Combates" />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         {ORGS.map(o => <Toggle key={o.id} on={orgs[o.id]} onChange={v => setOrg(o.id, v)} label={o.label} />)}
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('mma-odds', v); }} label="Cuotas" />
       </StateFilterBar>
-      <MmaDayPicks date={date} onOpen={setOpenId} />
+      {showOdds && !!shown.length && <OddsLegend />}
+      <MmaDayPicks date={date} onOpen={openFight} />
       {games.isLoading ? <Loading label="Cargando combates…" /> : games.error ? <ErrorBox error={games.error} />
-        : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay combates de UFC, PFL ni WOW con este filtro.</Empty>
+        : !shown.length ? (
+          filter !== 'all' && all.length
+            ? <NoGames app="mma" text="Ningún combate de ese día con este filtro." onDay={setDate}><Button size="sm" variant="secondary" onClick={() => setFilter('all')}>Ver todos</Button></NoGames>
+            : games.data?.length
+              ? <NoGames app="mma" text="Los combates de ese día son de organizaciones que tienes ocultas." onDay={setDate}>
+                <Button size="sm" variant="secondary" onClick={() => { const n = { ufc: true, pfl: true, wow: true }; setOrgs(n); savePref('mma-orgs', n); }}>Enseñarlos</Button>
+              </NoGames>
+              : <NoGames app="mma" text={noGamesText('mma', date)} next={nextDay} onDay={setDate} />
+        )
           : <>
             {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
             {byEvent.map(([k, list]) => (
@@ -116,6 +128,7 @@ function FightDetail({ f, onClose }: { f: MmaFight; onClose: () => void }) {
   const st = stateOf(f);
   const [tab, setTab] = useState<Tab>(st === 'pre' ? 'picks' : 'tape');
   const [sheet, setSheet] = useState<string | null>(null);
+  useBackLayer(!!sheet, () => setSheet(null));
   const t = targetOfFight(f);
   if (sheet) return <MmaFighterSheet key={sheet} id={sheet} backLabel="Combate" onBack={() => setSheet(null)} onFighter={setSheet} />;
   const done = st === 'post' || !!f.cancelled;

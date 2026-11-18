@@ -26,6 +26,9 @@ export function BasketFlow({ game, colorA, colorB }: { game: BasketGame; colorA:
   if (game.state === 'post') data.push({ ...data[data.length - 1], t: end });
   const top = Math.max(5, ...data.map(x => Math.abs(x.a - x.b)));
   const M = Math.ceil(top / 5) * 5;
+  // Marcas del eje simétricas y con el 0 (el empate) en el centro: sin ellas recharts elegía «15, 9, 1, 7, 15»
+  const step = M <= 15 ? 5 : M <= 30 ? 10 : 20;
+  const yTicks = Array.from({ length: 2 * Math.floor(M / step) + 1 }, (_, i) => (i - Math.floor(M / step)) * step);
   const A = game.away.abbr, B = game.home.abbr;
   const bounds = Array.from({ length: periods - 1 }, (_, i) => startOf(i + 2));
   const mids = Array.from({ length: periods }, (_, i) => (startOf(i + 1) + startOf(i + 2)) / 2);
@@ -53,7 +56,7 @@ export function BasketFlow({ game, colorA, colorB }: { game: BasketGame; colorA:
             <AreaChart data={data} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
               <CartesianGrid stroke="#27272a" vertical={false} />
               <XAxis dataKey="t" type="number" domain={[0, end]} ticks={mids} tickFormatter={v => perShort(mids.indexOf(v) + 1)} stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis domain={[-M, M]} tickFormatter={v => String(Math.abs(v))} stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+              <YAxis domain={[-M, M]} ticks={yTicks} interval={0} tickFormatter={v => String(Math.abs(v))} stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
               {bounds.map(x => <ReferenceLine key={x} x={x} stroke="#3f3f46" strokeDasharray="3 3" />)}
               <ReferenceLine y={0} stroke="#71717a" />
               <Tooltip cursor={{ stroke: '#a1a1aa', strokeDasharray: '3 3' }}

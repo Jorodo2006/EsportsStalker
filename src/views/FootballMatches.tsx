@@ -4,21 +4,21 @@
 // goleadores, resumen (goles, tarjetas y cambios), cuotas de Winamax y Betway, estadísticas, alineaciones, forma, cara a cara
 // y clasificación.
 import { useCardOdd } from '@/lib/card-odds';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarX, Plus } from 'lucide-react';
-import { sectionId, useApp, useFocus, useSections } from '@/lib/app-context';
+import { ArrowLeft, Plus } from 'lucide-react';
+import { sectionId, useApp, useLostMatch, useRouteDay, useRouteMatch, useSections } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import type { FootballLeagueId, FootballMatch } from '@/lib/types';
 import { SportOdds } from '@/components/BasketOdds';
 import { targetOfFootball } from '@/lib/odds-targets';
-import { FootballDayPicks, FootballPicksPage, FootballPicksPanel } from '@/components/FootballPicks';
+import { FootballDayPicks, FootballPicksPage, FootballPicksPanel, footballDayQuery } from '@/components/FootballPicks';
+import { useMember } from '@/components/AuthGate';
 import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
-import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, SheetTabs, StateFilterBar, Toggle, addDays, dayName, today, type StateFilter } from '@/components/sport';
+import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, ModeSwitch, OddsLegend, NoGames, SheetTabs, StateFilterBar, Toggle, addDays, dayName, noGamesText, today, useNextDay, type StateFilter } from '@/components/sport';
 import { esTime } from '@/components/football';
-import { Button, Empty, ErrorBox, Loading } from '@/components/ui';
-import { TvTabs } from '@/components/viz';
+import { Button, ErrorBox, Loading } from '@/components/ui';
 import { FavoritesStrip } from '@/components/Favorites';
 import { stateOf } from './football/shared';
 import { MatchHeader } from './football/MatchHeader';
@@ -40,12 +40,14 @@ function saveFlag(key: string, v: boolean) { try { localStorage.setItem(key, v ?
 
 export default function FootballMatches() {
   // Para saber desde cuándo se leen las cuotas (lib/odds-window.ts) y decirlo en las tarjetas que aún no tienen
-  const { settings } = useApp();
+  const { settings, openGame, closeMatch } = useApp();
   const addOdd = useCardOdd();
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useRouteDay();
   const [filter, setFilter] = useState<StateFilter>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [openTab, setOpenTab] = useState<Tab | undefined>();
+  // El partido abierto va en la dirección (/futbol/partido/<id>): atrás del navegador lo cierra
+  const openId = useRouteMatch('football');
+  // La pestaña con la que se abrió, sólo para ese partido (con atrás no se pasa por onClose para olvidarla)
+  const [openTab, setOpenTab] = useState<{ id: string; tab: Tab } | null>(null);
   // Se entra siempre en Partidos (lo primero son los partidos); Recomendaciones es la otra pestaña
   const [mode, pickMode] = useState<Mode>('games');
   const side = useMedia('(min-width: 1280px)'); // columna de las recomendaciones del día al lado de la lista
@@ -85,15 +87,23 @@ export default function FootballMatches() {
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(([, list]) => ({ id: sectionId(list[0].leagueName), label: list[0].leagueName, count: list.length, live: 0 }))
   ]);
-  const has = useCallback((id: string) => /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa|nations|amistosos|wchampions|ligaf|wsl):\d+$/.test(id), []);
-  useFocus(setOpenId, has, setDate);
+  // Un id que no es de ninguna liga (dirección escrita a mano o de una liga que ya no se sigue) no se pide: a la lista
+  const known = !openId || /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa|nations|amistosos|wchampions|ligaf|wsl):\d+$/.test(openId);
+  useLostMatch(!known);
+  const nextDay = useNextDay('football', date, games.isSuccess && !all.length);
+  // La columna de las recomendaciones del día sólo se guarda si hay alguna (o un anuncio, entre 1280 y 1400 px); sin cuenta
+  // sale cómo conseguirlas. Antes, sin ninguna, la lista se quedaba en la mitad izquierda y el resto vacío
+  const member = useMember();
+  const dayPicks = useQuery({ ...footballDayQuery(date), enabled: ok && member && side && mode === 'games' });
+  const showSide = side && (!member || !wide || !!dayPicks.data?.length);
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el fútbol hay que volver a lanzar <code>npm run backend</code> y recargar la página.</ErrorBox>;
   // La ficha se carga por su id: también abre los partidos que llegan desde la columna de directo aunque sean de otro día
-  if (openId) return <MatchDetail key={openId} id={openId} preview={open} initialTab={openTab} onClose={() => { setOpenId(null); setOpenTab(undefined); }} />;
+  if (openId && known) return <MatchDetail key={openId} id={openId} preview={open} initialTab={openTab?.id === openId ? openTab.tab : undefined} onClose={closeMatch} />;
 
-  const modes = <TvTabs value={mode} onChange={pickMode} items={[{ value: 'games' as const, label: 'Partidos' }, { value: 'picks' as const, label: 'Recomendaciones' }]} />;
-  const openPick = (id: string) => { setOpenTab('picks'); setOpenId(id); };
+  const modes = <ModeSwitch value={mode} onChange={pickMode} />;
+  // La ficha de fútbol se carga por su id, así que el día sólo dice a qué lista se vuelve: la que se estaba viendo
+  const openPick = (id: string) => { setOpenTab({ id, tab: 'picks' }); openGame(id, date); };
   if (mode === 'picks') {
     const next = [0, 1, 2].map(n => addDays(today(), n)).map(d => ({ value: d, label: dayName(d) }));
     return <div className="flex min-w-0 flex-col gap-5">{modes}<FootballPicksPage days={next} onOpen={openPick} /></div>;
@@ -104,25 +114,30 @@ export default function FootballMatches() {
     const st = stateOf(g), done = st === 'post' && !g.off;
     const hs = g.home.score ?? 0, as = g.away.score ?? 0;
     return (
-      <MatchCard key={g.id} state={st} onClick={() => setOpenId(g.id)} onOdd={s => addOdd(targetOfFootball(g), s)} featured={featured} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.off ? cardNote(g.date, { sport: 'football' }, settings) : null}
+      <MatchCard key={g.id} state={st} onClick={() => openGame(g.id, date)} onOdd={s => addOdd(targetOfFootball(g), s)} featured={featured} odds={showOdds ? board.data?.[g.id] : null} noOdds={showOdds && board.data && !g.off ? cardNote(g.date, { sport: 'football' }, settings) : null}
         competition={featured ? g.leagueName : undefined}
         time={st === 'pre' ? esTime(g.date) : st === 'live' ? 'En juego' : g.off ? g.status : 'Final'}
         status={st === 'live' ? g.status : g.stage || undefined}
-        a={{ name: g.home.name, short: g.home.abbr, logo: g.home.logo, score: g.off ? null : g.home.score, win: done && hs > as, lose: done && hs < as }}
-        b={{ name: g.away.name, short: g.away.abbr, logo: g.away.logo, score: g.off ? null : g.away.score, win: done && as > hs, lose: done && as < hs }} />
+        a={{ name: g.home.name, short: g.home.abbr, alt: g.home.short, logo: g.home.logo, score: g.off ? null : g.home.score, win: done && hs > as, lose: done && hs < as }}
+        b={{ name: g.away.name, short: g.away.abbr, alt: g.away.short, logo: g.away.logo, score: g.off ? null : g.away.score, win: done && as > hs, lose: done && as < hs }} />
     );
   };
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
-      <FavoritesStrip />
       {modes}
-      <StateFilterBar above={<DayStrip value={date} onChange={d => { setDate(d); setOpenId(null); }} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
+      <FavoritesStrip />
+      <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); saveFlag('football-odds', v); }} label="Cuotas" />
       </StateFilterBar>
+      {showOdds && !!shown.length && <OddsLegend />}
       {games.isLoading ? <Loading label="Cargando partidos…" /> : games.error ? <ErrorBox error={games.error} />
-        : !shown.length ? <Empty icon={<CalendarX size={22} />}>Ese día no hay partidos de las ligas que sigue la app. Prueba otro día de la tira.</Empty>
-          : <div className={cn('grid items-start gap-4', side && 'grid-cols-[minmax(0,1fr)_minmax(300px,380px)]')}>
+        : !shown.length ? (
+          filter !== 'all' && all.length
+            ? <NoGames app="football" text="Ningún partido de ese día con este filtro." onDay={setDate}><Button size="sm" variant="secondary" onClick={() => setFilter('all')}>Ver todos</Button></NoGames>
+            : <NoGames app="football" text={noGamesText('football', date)} next={nextDay} onDay={setDate} />
+        )
+          : <div className={cn('grid items-start gap-4', showSide && 'grid-cols-[minmax(0,1fr)_minmax(300px,380px)]')}>
             <div className="flex min-w-0 flex-col gap-5">
             {!!liveNow.length && <LiveSection count={liveNow.length}>{liveNow.map(g => card(g, true))}</LiveSection>}
             {byLeague.map(([id, list]) => {
@@ -135,7 +150,7 @@ export default function FootballMatches() {
               );
             })}
             </div>
-            {side && (
+            {showSide && (
               <div className="sticky top-0 flex min-w-0 flex-col gap-4">
                 <FootballDayPicks date={date} onOpen={openPick} onAll={() => pickMode('picks')} />
                 {!wide && <AdSlot size="rect" />}
