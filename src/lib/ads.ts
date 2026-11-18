@@ -15,6 +15,8 @@ let loaded = false;
 export function loadAdsense(client: string) {
   if (loaded) return;
   loaded = true;
+  // AdSense pide el script también en el index.html (para verificar el sitio): si ya está, no se carga dos veces
+  if (document.querySelector('script[src*="pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]')) return;
   const s = document.createElement('script');
   s.async = true;
   s.crossOrigin = 'anonymous';
