@@ -8,8 +8,10 @@ const { chromium } = require('playwright');
 
 const APP = process.env.GATEWAY_URL || 'http://gateway:47365';
 const { focusGroups } = require('./foco');
+const { blocked } = require('./red');
 const LECTOR = process.env.LECTOR_FILE || '/lector-src/marcador.js';
 const POLL = 5e3; // en local no cuesta nada, y así un "Actualizar cuotas" empieza enseguida
+const JOB_MAX = 4 * 60e3; // una lectura normal tarda de 10 a 40 s
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // El lector se vuelve a leer en cada trabajo: si cambias marcador.js no hace falta reconstruir la imagen
@@ -25,7 +27,8 @@ async function getBrowser() {
 // Con LECTOR_TOKEN (producción) el gateway sólo atiende al lector si manda este token
 const AUTH = process.env.LECTOR_TOKEN ? { 'x-lector-token': process.env.LECTOR_TOKEN } : {};
 
-const post = (p, body) => fetch(APP + p, { method: 'POST', headers: { 'Content-Type': 'text/plain', ...AUTH }, body: JSON.stringify(body) })
+// Con tiempo máximo: sin él, un aviso que no contesta (la red cambia a mitad) dejaba la lectura esperando para siempre
+const post = (p, body) => fetch(APP + p, { method: 'POST', headers: { 'Content-Type': 'text/plain', ...AUTH }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })
   .then(r => r.json()).catch(() => null);
 
 // ---------- utilidades de página (equivalen a las de la extensión) ----------
@@ -79,10 +82,16 @@ function pageFind(teams, opts) {
   const strip = s => norm(s).replace(/\b(e ?sports?|gaming|team|club|academy)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const al = t => [...new Set([t.name, t.code, ...(t.alt || [])].flatMap(x => [norm(x), strip(x)]).filter(x => x && x.length >= 2))];
   const A = al(teams[0]), B = al(teams[1]);
-  const has = (txt, list) => { const n = ' ' + norm(txt) + ' '; return list.some(x => n.includes(' ' + x + ' ')); };
+  // Una palabra distintiva del nombre (5 letras o más, no genérica): "Zelli" encuentra "Rigas Zelli" cuando lo tenemos como "Riga
+  // Zelli". Los dos equipos tienen que salir en el mismo bloque, así que no empareja partidos de otros. Sólo con opts.words (equipos
+  // de baloncesto): en tenis, "Carlos" o "Daniel" los comparten muchos jugadores
+  const GEN = /^(basket|basketball|baloncesto|club|sporting|united|city|calcio|futbol|football|tennis|esports?)$/;
+  const keyWords = t => [...new Set([t.name, ...(t.alt || [])].flatMap(x => norm(x).split(' ')).filter(w => w.length >= 5 && !GEN.test(w)))];
+  const WA = opts.words ? keyWords(teams[0]) : [], WB = opts.words ? keyWords(teams[1]) : [];
+  const has = (txt, list, ws = []) => { const n = ' ' + norm(txt) + ' '; return list.some(x => n.includes(' ' + x + ' ')) || ws.some(w => n.includes(' ' + w + ' ')); };
   const visible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const cands = [...document.querySelectorAll(opts.selector || 'a,div,li,tr,section,article')]
-    .filter(el => { const t = el.innerText || ''; return t.length < 400 && has(t, A) && has(t, B) && visible(el); })
+    .filter(el => { const t = el.innerText || ''; return t.length < 400 && has(t, A, WA) && has(t, B, WB) && visible(el); })
     .sort((x, y) => (x.innerText || '').length - (y.innerText || '').length);
   const el = cands[0];
   if (!el) { if (opts.scroll) window.scrollBy(0, 1200); return null; }
@@ -131,7 +140,11 @@ function winamaxFind(teams, cfg) {
     const ln = tw[tw.length - 1], fn = tw[0];
     return nw.some(x => x === ln || (ln.length >= 5 && x.length >= 5 && dist(x, ln) <= 1)) && nw.some(x => x.startsWith(fn) || fn.startsWith(x) || (fn.length >= 6 && x.length >= 6 && dist(fn, x) <= 2));
   };
-  const eq = (name, t) => { if (cfg.sport === 117) return strictEq(name, t); const n = norm(name), st = strip(name); return al(t).some(x => x === n || x === st || (x.length > 3 && (n.includes(x) || x.includes(n)))) || fuzzy(name, t); };
+  // Una palabra distintiva en común ("Zelli" en "Rigas Zelli" y "Riga Zelli"); sólo en baloncesto (en tenis los nombres de pila se
+  // repiten) y sólo vale si el otro equipo también coincide (pick)
+  const GEN = /^(basket|basketball|baloncesto|club|sporting|united|city|calcio|futbol|football|tennis|esports?)$/;
+  const shares = (name, t) => { const ws = new Set(norm(name).split(' ').filter(w => w.length >= 5 && !GEN.test(w))); return [t.name, ...(t.alt || [])].some(x => norm(x).split(' ').some(w => ws.has(w))); };
+  const eq = (name, t) => { if (cfg.sport === 117) return strictEq(name, t); const n = norm(name), st = strip(name); return al(t).some(x => x === n || x === st || (x.length > 3 && (n.includes(x) || x.includes(n)))) || fuzzy(name, t) || (cfg.sport === 2 && shares(name, t)); };
   const pick = matches => {
     for (const m of Object.values(matches || {})) {
       if (!m || !m.competitor1Name || (cfg.sport && m.sportId !== cfg.sport)) continue;
@@ -351,7 +364,7 @@ const BASKET_BOOKS = {
     let ev = (String(job.urls.betway || '').match(/event\/(\d+)/) || [])[1], page;
     if (!ev) {
       const teams = [job.match.a, job.match.b];
-      const opts = { href: 'a[href*="/sports/event/"]', selector: '[data-eventid],a[href*="/sports/event/"],div,li,article', scroll: true };
+      const opts = { href: 'a[href*="/sports/event/"]', selector: '[data-eventid],a[href*="/sports/event/"],div,li,article', scroll: true, words: (job.match.sport || 'basket') === 'basket' };
       const look = async ms => (String((await until(page, pageFind, [teams, opts], ms)) || '').match(/event\/(\d+)/) || [])[1];
       const list = cfgOf(job).bw(job);
       page = await openTab(ctx, `https://betway.es/es/es/sports/${list || cfgOf(job).bwCat}`);
@@ -379,14 +392,18 @@ const BASKET_BOOKS = {
 };
 
 // ---------- trabajos ----------
-async function runJob(job) {
-  const say = (book, estado, msg) => post('/auto/progress', { id: job.id, book, estado, msg });
+// done: cómo ha acabado cada casa, para saber cuáles cerrar si la lectura se cuelga
+async function runJob(job, done = {}) {
+  const say = (book, estado, msg) => { if (book && (estado === 'ok' || estado === 'error')) done[book] = estado; return post('/auto/progress', { id: job.id, book, estado, msg }); };
   const ctx = await (await getBrowser()).newContext({ locale: 'es-ES', timezoneId: 'Europe/Madrid', viewport: { width: 1366, height: 900 } });
   try {
     // Baloncesto y tenis van por el mismo camino (con su configuración); LoL por el suyo
     const flows = SPORT_CFG[job.match.sport] ? BASKET_BOOKS : BOOKS;
     await Promise.all(job.books.map(async book => {
       if (!flows[book]) return say(book, 'error', 'Casa no soportada');
+      // Si la red no deja llegar a la casa, decirlo en vez de buscar en una página de bloqueo y acabar en "No encuentro el partido"
+      const why = await blocked(book).catch(() => null);
+      if (why) return say(book, 'error', why);
       const read = j => flows[book](j, ctx, (estado, m) => say(book, estado, m));
       try {
         let msg;
@@ -410,12 +427,26 @@ async function loop() {
   for (;;) {
     let job = null;
     try {
-      const r = await fetch(`${APP}/jobs/next?lector=docker`, { headers: AUTH });
+      const r = await fetch(`${APP}/jobs/next?lector=docker`, { headers: AUTH, signal: AbortSignal.timeout(15000) });
       if (r.status === 200) job = await r.json().catch(() => null);
     } catch (_) { /* el gateway aún no está */ }
     if (job && job.id) {
       console.log(`Trabajo ${job.id}: ${job.match.a.name} vs ${job.match.b.name} (${job.source})`);
-      try { await runJob(job); } catch (e) { console.error('Trabajo', job.id, e.message); browser = null; }
+      // Una lectura que no acaba (una página que no responde, la red que cambia a mitad) no puede parar al lector: antes se quedaba
+      // esperándola para siempre y ninguna otra, tampoco «Actualizar cuotas», se hacía hasta reiniciar el contenedor
+      const done = {};
+      let timer;
+      const hung = new Promise((_, no) => { timer = setTimeout(() => no(new Error('colgada')), JOB_MAX); });
+      try { await Promise.race([runJob(job, done), hung]); } catch (e) {
+        console.error('Trabajo', job.id, e.message);
+        const b = browser; browser = null;
+        // Al cerrar el navegador, lo que esperaba la lectura falla y la siguiente abre uno nuevo
+        if (b) b.close().catch(() => {});
+        if (e.message === 'colgada') {
+          for (const book of job.books || []) if (!done[book]) await post('/auto/progress', { id: job.id, book, estado: 'error', msg: `La lectura de ${book === 'winamax' ? 'Winamax' : 'Betway'} no ha terminado en ${JOB_MAX / 60e3} min y se ha cancelado` });
+          await post('/auto/progress', { id: job.id, book: null, estado: 'fin' });
+        }
+      } finally { clearTimeout(timer); }
       continue; // si hay más en cola, el siguiente sin esperar
     }
     await sleep(POLL);

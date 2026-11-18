@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BarChart3, ChevronDown, ChevronsDownUp, ChevronsUpDown, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useApp, useRefreshMs } from '@/lib/app-context';
 import { cn, fmtDay, fmtTime, groupBy, k, odd, pct, summarize } from '@/lib/format';
@@ -14,6 +14,7 @@ import { SheetScroll, Scoreboard, SheetTabs } from '@/components/sport';
 import { oddsMeta } from '@/lib/odds-live';
 import { useUser } from '@/components/AuthGate';
 import { askLogin, useMember } from '@/components/AuthGate';
+import { jobFailed, waitJob } from '@/lib/odds-read';
 
 const DRAGONS: Record<string, string> = {
   ocean: 'Océano', infernal: 'Infernal', cloud: 'Nube', mountain: 'Montaña', hextech: 'Hextech', chemtech: 'Quimtec', elder: 'Ancestral'
@@ -113,10 +114,19 @@ function BooksBar({ a, b, books, sources, updatedAt, fetching, onPaste }: {
   })), [a.name, b.name]);
   const running = !!job && !job.done;
   const member = useMember();
+  const qc = useQueryClient();
+  // La propia se sigue con waitJob (aviso en vivo y, por si se pierde, preguntando cada pocos segundos): antes, sin el aviso, el
+  // botón se quedaba en «Leyendo…» para siempre
   async function start() {
     if (!member) { askLogin({ why: 'Leer las cuotas al momento lo hace el lector de Sharpex, y es para usuarios registrados. Sin cuenta ves las de la última lectura automática.' }); return; }
-    try { setJob(await window.api.odds.auto({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code } })); }
-    catch (e) { toast((e as Error).message); }
+    try {
+      const first = await window.api.odds.auto({ a: { name: a.name, code: a.code }, b: { name: b.name, code: b.code } });
+      setJob(first);
+      const end = await waitJob(first, setJob);
+      qc.invalidateQueries({ queryKey: ['odds'] });
+      if (!end) { setJob(null); toast('La lectura está tardando: sigue en marcha y las cuotas saldrán solas cuando acabe'); }
+      else if (jobFailed(end)) toast('No se han podido leer las cuotas: pasa el ratón por cada casa para ver por qué');
+    } catch (e) { toast((e as Error).message); setJob(null); }
   }
   return (
     <div className="flex flex-wrap items-center gap-2">

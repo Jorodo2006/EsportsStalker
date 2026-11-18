@@ -29,6 +29,9 @@ function teamScore(target, name) {
     // Errata de una letra en el apellido (las casas escriben "Radke" por "Radtke") con la misma inicial del nombre: casi seguro
     // el mismo luchador; con las dos partes del combate suma lo justo para emparejar
     const wt = words(t), wn = words(name);
+    // Las mismas palabras salvo una letra en alguna ("Riga Zelli" / "Rigas Zelli"): el mismo equipo. Antes sumaba sólo 0,6 por la
+    // última palabra y, con "Derthona" / "Derthona Basket" (0,8), el partido no llegaba al 1,5 y sus cuotas no se guardaban
+    if (wt.length >= 2 && wt.length === wn.length && wt.every((w, i) => w === wn[i] || (w.length >= 4 && wn[i].length >= 4 && w[0] === wn[i][0] && within1(w, wn[i])))) best = Math.max(best, 0.9);
     if (wt.length >= 2 && wn.length >= 2 && wt[0][0] === wn[0][0]) {
       const lt = wt[wt.length - 1], ln = wn[wn.length - 1];
       if (lt.length >= 5 && ln.length >= 5 && lt !== ln && within1(lt, ln)) best = Math.max(best, 0.75);

@@ -187,7 +187,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 
 - **Lectores de las casas** (`marcador.js`, `server/lector/runner.js` y `background.js`): dependen del HTML y del
   socket de Winamax y Betway, que cambian sin aviso. Cuando no encuentran algo guardan
-  `capturas/captura-<casa>-<nombre>.json`; úsalas para ajustar selectores. `marcador.js` se monta en el contenedor
+  `capturas/captura-<casa>-<nombre>.json`; úsalas para ajustar selectores. Si la red desvía la casa a una página de bloqueo
+  (la del instituto), el lector lo dice en vez de «No encuentro el partido» (`server/lector/red.js`): no es un fallo del lector.
+  Cada lectura tiene 4 min como mucho (`JOB_MAX` en `runner.js`) y sus peticiones al gateway, 15 s: antes una lectura que se
+  colgaba (al cambiar de red a mitad) dejaba al lector parado y ninguna otra, tampoco *Actualizar cuotas*, se hacía hasta reiniciar.
+  Los botones de *Actualizar cuotas* siguen su lectura por su número con `waitJob` (`src/lib/odds-read.ts`: aviso en vivo y, si se
+  pierde, preguntando cada 6 s); no los vuelvas a fiar sólo del aviso, que se quedaban en «Leyendo…» para siempre. `marcador.js` se monta en el contenedor
   `lector` y se vuelve a leer en cada trabajo: no hace falta reconstruir para probar un cambio. El socket de Winamax manda el
   partido a trozos (unos 5 mercados y luego el resto): el lector espera a tener `moreBets + 1`; no lo cambies por una espera fija.
   Las lecturas pedidas desde una recomendación o el cupón llevan el mercado (`job.match.focus`) y de Betway sólo se leen sus
@@ -213,6 +218,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Emparejar equipos** entre lolesports / ESPN / la Euroliga y las casas (`orient`/`teamScore` en
   `server/services/odds/equipos.js`, `pageFind`/`winamaxFind` en el lector): nombres distintos ("Gen.G Esports" / "GEN",
   "Real" / "Real Madrid" / "R. Madrid"). Los equipos llevan `alt` con sus otros nombres. Prueba con varios equipos.
+  Una letra de diferencia en una palabra ("Riga Zelli" / "Rigas Zelli") ya cuenta como el mismo equipo, y en baloncesto el lector
+  acepta una palabra distintiva en común (sólo ahí: en tenis los nombres de pila se repiten). Lo que no se parece en nada
+  ("Derthona" / "Tortona Basket" en Winamax) va en `ALIAS` de `server/services/basket/euroleague.js`. Pruebas en `server/test/equipos.test.js`.
 - **Leaguepedia** limita mucho las peticiones anónimas: no quites la cola ni la caché de `leaguepedia.js`.
 - **Lecturas programadas** (`server/services/odds/scheduler.js`): los cinco deportes, desde 48 h antes y más seguidas cuanto más
   cerca está el partido (tenis, fútbol y MMA, cada 8 h a más de un día); el lector las hace de una en una, primero las más cercanas.

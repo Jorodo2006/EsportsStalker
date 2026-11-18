@@ -49,7 +49,12 @@ vuelven a pedir.
 ## Cuotas
 
 - El partido se guarda como **visitante (a) contra local (b)** con los nombres de la fuente y `alt` con los demás
-  (la Euroliga da "Real" y las casas dicen "Real Madrid" o "R. Madrid"). Ver `matchOfGame` en `BasketOdds.tsx`.
+  (la Euroliga da "Real" y las casas dicen "Real Madrid" o "R. Madrid"). Ver `matchOfGame` en `BasketOdds.tsx`. Los nombres de las
+  casas que no se parecen al de la Euroliga van en `ALIAS` de `euroleague.js`, por el código del club: Winamax llama "Tortona Basket"
+  al Derthona. "Riga Zelli" / "Rigas Zelli" (una letra) lo resuelven `teamScore` (`odds/equipos.js`) y, para encontrarlo en las
+  listas de las casas, una palabra distintiva en común ("Zelli") en el lector. Comprobado el 18-11-2026 con 23 partidos con cuotas
+  de las dos casas (NBA, Euroliga, EuroCup y NBL): totales iguales o a un punto entre casas, mitades y cuartos en proporción y las
+  mismas líneas de jugador.
 - El lector busca en Winamax en el estado de la portada de baloncesto (deporte 2) y, si no está, en los torneos de la
   liga por su socket; en Betway, en la lista de la liga (`grp/basketball/usa/nba`, `international-club/euroleague`…).
   En Betway se leen todas las pestañas del partido (principales, mitades, cuartos, jugadores).

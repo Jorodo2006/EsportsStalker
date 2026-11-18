@@ -114,6 +114,11 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 
 ## Lector (`marcador.js`)
 
+- **Red que bloquea las casas** (`server/lector/red.js`): antes de abrir una casa, el lector de Docker mira a qué dirección la
+  manda el DNS. Si es una página de bloqueo (Cisco Umbrella, `146.112.61.x`, como en la red del instituto; o `0.0.0.0`/la propia
+  máquina), la lectura de esa casa termina al momento con «La red de este equipo bloquea Winamax…», en vez de abrir la página de
+  bloqueo, no ver partidos y decir «No encuentro el partido», que no era verdad. Se guarda 5 min. No se intenta saltar el bloqueo.
+  Pruebas en `server/test/red.test.js`.
 - Funciona en dos modos:
   - **Manual (bookmarklet)**: enseña una capa con el resultado. Si Chrome no deja enviar, copia las cuotas al
     portapapeles para usar *Pegar del marcador* en la app.
@@ -151,7 +156,14 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 
 ## Comparador (interfaz)
 
-- **Barra de casas**: icono, estado de cada casa y progreso de *Actualizar cuotas*.
+- **Barra de casas**: icono, estado de cada casa y progreso de *Actualizar cuotas* («En cola…», «Leyendo…» y, en cada casa, lo que
+  está leyendo). La lectura se sigue por su número con `waitJob` (`src/lib/odds-read.ts`): el aviso en vivo `odds:auto` y, por si se
+  pierde, preguntando cada 6 s; al acabar se vuelven a pedir las cuotas. Hasta noviembre de 2026 la ficha del partido (`SportOdds`
+  y la de LoL) sólo se fiaba del aviso y reconocía la lectura por los equipos: sin el aviso se quedaba en «Leyendo…» para siempre, y
+  una lectura automática del mismo partido se confundía con la propia.
+- **Lector colgado**: cada lectura tiene 4 min como mucho (`JOB_MAX` en `server/lector/runner.js`); si se pasa, se cierra el
+  navegador, las casas que faltan se dan por fallidas («no ha terminado en 4 min») y el lector sigue con la siguiente. Antes una
+  lectura colgada (pasó al cambiar de red a mitad) lo dejaba parado hasta reiniciar el contenedor.
 - **Pestañas de sección** fijas arriba: Todo, Partido, Mapa N, Jugadores y Otros.
 - **Mercados plegables**: el estado se guarda en `localStorage` con la clave `oddsClosed`, y hay *Plegar/Desplegar todo*.
 - **Columnas**: una fija por casa destacada (`featuredBooks`), con su icono. Para usar iconos reales, deja

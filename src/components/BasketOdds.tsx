@@ -13,6 +13,7 @@ import { Button, Empty, ErrorBox, Loading, chip, oddBtn, panelCls } from './ui';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { oddsExplanation } from '@/lib/odds-window';
 import { askLogin, useMember } from './AuthGate';
+import { jobFailed, jobStage, waitJob } from '@/lib/odds-read';
 
 // El partido tal y como lo guardan el lector y el comparador: visitante (a) contra local (b)
 export const matchOfGame = (g: BasketGame) => ({
@@ -58,11 +59,11 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   const [job, setJob] = useState<AutoJob | null>(null);
   const [section, setSection] = useState('Partido');
   const m = target.match;
-  useEffect(() => window.api.onOddsAuto(j => setJob(cur => {
-    if (j.match.a.name !== m.a.name || j.match.b.name !== m.b.name) return cur;
-    if (j.done) qc.invalidateQueries({ queryKey: ['odds', target.sport, target.id] });
-    return j;
-  })), [m.a.name, m.b.name, target.id, target.sport, qc]);
+  // Cuando acaba cualquier lectura de este partido (también las automáticas), sus cuotas se vuelven a pedir. La nuestra se sigue
+  // aparte, por su número (start)
+  useEffect(() => window.api.onOddsAuto(j => {
+    if (j.done && j.match.a.name === m.a.name && j.match.b.name === m.b.name) qc.invalidateQueries({ queryKey: ['odds', target.sport, target.id] });
+  }), [m.a.name, m.b.name, target.id, target.sport, qc]);
   const running = !!job && !job.done;
   const books = data?.books.length ? data.books : ['Winamax', 'Betway'];
   // Con su ref (partido, clave del mercado y selección): el servidor la resolverá sola cuando acabe el partido
@@ -86,9 +87,19 @@ export function SportOdds({ target }: { target: OddsTarget }) {
   });
   const moves = useMemo(() => movesOf(hist.data), [hist.data]);
 
+  // La lectura se sigue por su número con waitJob: escucha el aviso en vivo y, por si se pierde, pregunta cada pocos segundos. Antes
+  // sólo se fiaba del aviso y lo reconocía por los equipos: si el aviso se perdía (se corta la conexión de avisos) el botón se quedaba
+  // en «Leyendo…» para siempre, y una lectura automática del mismo partido se confundía con la nuestra
   async function start() {
     if (!member) { askLogin({ why: 'Leer las cuotas al momento lo hace el lector de Sharpex, y es para usuarios registrados. Sin cuenta ves las de la última lectura automática.' }); return; }
-    try { setJob(await window.api.odds.auto(m)); } catch (e) { toast((e as Error).message); }
+    try {
+      const first = await window.api.odds.auto(m);
+      setJob(first);
+      const end = await waitJob(first, setJob);
+      qc.invalidateQueries({ queryKey: ['odds', target.sport, target.id] });
+      if (!end) { setJob(null); toast('La lectura está tardando: sigue en marcha y las cuotas saldrán solas cuando acabe'); }
+      else if (jobFailed(end)) toast('No se han podido leer las cuotas: pasa el ratón por cada casa para ver por qué');
+    } catch (e) { toast((e as Error).message); setJob(null); }
   }
 
   if (target.done) return <Empty>El partido ha terminado: ya no hay cuotas.</Empty>;
@@ -108,7 +119,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
           );
         })}
         <span className="ml-auto font-mono text-[11px] text-zinc-500">{dataUpdatedAt && data?.markets.length ? `Actualizado ${fmtTime(dataUpdatedAt)}` : ''}{isFetching && ' …'}</span>
-        <Button size="sm" disabled={running} onClick={start}><RefreshCw size={14} className={cn(running && 'animate-spin')} />{running ? 'Leyendo…' : 'Actualizar cuotas'}</Button>
+        <Button size="sm" disabled={running} onClick={start} title={running ? jobStage(job) : 'Leer ahora las cuotas de las casas (tarda alrededor de un minuto)'}><RefreshCw size={14} className={cn(running && 'animate-spin')} />{running ? (job?.picked ? 'Leyendo…' : 'En cola…') : 'Actualizar cuotas'}</Button>
       </div>
 
       {isLoading ? <Loading label="Cargando cuotas…" /> : error ? <ErrorBox error={error} /> : !data?.markets.length ? (

@@ -19,10 +19,13 @@ async function season(lg, year = seasonStart()) {
   return j.data || [];
 }
 
+// Nombres que usan las casas y que no se parecen al de la Euroliga (por el código del club): Winamax llama "Tortona Basket" al
+// Derthona (es de Tortona), y sin esto no se encontraba el partido ni se le asignaban las cuotas
+const ALIAS = { TRT: ['Tortona', 'Tortona Basket', 'Derthona Basket'] };
 const sideOf = (t, showScore) => ({
   id: t.club?.code || '', abbr: t.club?.tvCode || t.club?.code || '', name: (t.club?.editorialName || t.club?.abbreviatedName || t.club?.name || '').trim(),
   // Nombres completos y cortos: las casas usan "Real Madrid" o "FC Barcelona", no "Real" ni "Barca"
-  alt: [...new Set([t.club?.name, t.club?.abbreviatedName].filter(Boolean).map(s => s.trim()))],
+  alt: [...new Set([t.club?.name, t.club?.abbreviatedName, ...(ALIAS[t.club?.code] || [])].filter(Boolean).map(s => s.trim()))],
   logo: t.club?.images?.crest || '', score: showScore ? String(t.score ?? 0) : null, record: ''
 });
 
