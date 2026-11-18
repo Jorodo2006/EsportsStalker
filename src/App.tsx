@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Swords, UserPlus, Users, Wallet } from 'lucide-react';
+import { CalendarDays, CircleUser, Dribbble, Search, ServerCrash, Settings as Cog, Shield, Swords, UserPlus, Users, Wallet } from 'lucide-react';
 import { useApp, useCurrency, useWallet, type AppId, type View } from '@/lib/app-context';
 import { cn, money, tone } from '@/lib/format';
 import type { BackendStatus } from '@/lib/types';
@@ -27,6 +27,7 @@ import MmaFighters from '@/views/MmaFighters';
 import { MmaIcon } from '@/components/mma';
 import BetsView from '@/views/BetsView';
 import SettingsView from '@/views/SettingsView';
+import AdminView from '@/views/AdminView';
 import AccountView from '@/views/AccountView';
 import LegalView from '@/views/LegalView';
 import { askLogin, useMember, useUser } from '@/components/AuthGate';
@@ -177,9 +178,9 @@ export default function App() {
               <Search size={16} />
             </button>
             <AlertsBell />
-            <button onClick={() => go('account')} title="Tu cuenta" aria-label="Tu cuenta" aria-current={view === 'account' || view === 'settings'}
+            <button onClick={() => go('account')} title="Tu cuenta" aria-label="Tu cuenta" aria-current={view === 'account' || view === 'settings' || view === 'admin'}
               className={cn('grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md transition',
-                view === 'account' || view === 'settings' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
+                view === 'account' || view === 'settings' || view === 'admin' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 ring-1 ring-inset ring-zinc-800 hover:bg-zinc-900 hover:text-zinc-100')}>
               <CircleUser size={16} />
             </button>
           </div>
@@ -195,6 +196,7 @@ export default function App() {
               {view === 'bets' && (member ? <BetsView key={app} /> : <GuestScreen title="Mis apuestas" what="tu registro de apuestas y tu cartera" />)}
               {view === 'friends' && (member ? <FriendsView /> : <GuestScreen title="Amigos" what="tus amigos y vuestro chat" />)}
               {view === 'settings' && member && <SettingsView />}
+              {view === 'admin' && member && <AdminView />}
               {view === 'account' && (member ? <AccountView /> : <GuestScreen title="Tu cuenta" what="tu cuenta" />)}
               {view === 'legal' && <LegalView />}
               </ScreenGuard>
@@ -285,6 +287,11 @@ function Sidebar({ live, onSearch }: { live: Record<AppId, number>; onSearch: ()
             {isAdmin && (
               <button onClick={() => go('settings')} aria-current={view === 'settings'} className={navRow(view === 'settings')} title="De la app entera: valen para todos">
                 <Cog size={16} className={view === 'settings' ? 'text-zinc-50' : ''} />Ajustes
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={() => go('admin')} aria-current={view === 'admin'} className={navRow(view === 'admin')} title="Cuentas y registro de actividad">
+                <Shield size={16} className={view === 'admin' ? 'text-zinc-50' : ''} />Administración
               </button>
             )}
           </nav>

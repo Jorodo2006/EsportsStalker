@@ -21,7 +21,7 @@ function lectorTokenOk(req) {
 
 // Prefijo de la ruta → servicio. /internal/* no se publica: es sólo entre servicios.
 const ROUTES = [
-  [/^\/api\/(auth|bets|settings|friends|shared|alerts)(\/|$)/, 'bets'],
+  [/^\/api\/(auth|bets|settings|friends|shared|alerts|admin)(\/|$)/, 'bets'],
   [/^\/api\/(esports|stats)(\/|$)/, 'esports'],
   [/^\/api\/odds(\/|$)/, 'odds'],
   [/^\/api\/basket(\/|$)/, 'basket'],
@@ -154,6 +154,8 @@ const server = http.createServer(async (req, res) => {
     try { user = await sessionUser(req); }
     catch (e) { return json(res, 502, { ok: false, error: `No se puede comprobar la sesión (${e.message})` }); }
     if (!user && isApi && !pub.isPublic(req.method, pathname)) return json(res, 401, { ok: false, error: 'Inicia sesión' });
+    // El panel de administración: con sesión pero sin ser administrador, 403 (sin sesión ya salió el 401 de arriba)
+    if (isApi && pub.isAdminPath(pathname) && !user?.isAdmin) return json(res, 403, { ok: false, error: 'Sólo para administradores' });
     if (!user && !pub.anonymousAllowed(ipOf(req))) return json(res, 429, { ok: false, error: 'Demasiadas peticiones: espera un minuto o inicia sesión' });
   }
   if (pathname === '/api/public/config') return json(res, 200, { ok: true, data: pub.publicConfig() });

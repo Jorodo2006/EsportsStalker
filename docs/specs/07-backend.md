@@ -103,8 +103,10 @@ y se apuntan en `<esquema>.migraciones`. **Nunca edites una migración ya aplica
 
 | Tabla | Contenido |
 |---|---|
-| `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt e `is_admin` |
+| `bets.users` | Cuentas: `username` (único sin distinguir mayúsculas), contraseña con scrypt, `is_admin`, `suspended_at` y `last_seen_at` (migración 018) |
 | `bets.sessions` | Sesiones de 30 días. Sólo se guarda el SHA-256 del token |
+| `bets.admin_log` | Lo que hace cada administrador sobre las cuentas (migración 018). Sin clave foránea: sobrevive al borrado de las cuentas. Se conserva 365 días |
+| `bets.auth_events` | Entradas, intentos fallidos y altas con la IP (migración 018). Datos personales: 90 días, y se dice en la política de privacidad |
 | `bets.user_settings` | Lo de cada usuario: banca inicial y filtro de ligas (el resto de ajustes son comunes, `bets.settings`) |
 | `bets.bets` | Apuestas (simples y combinadas), de `user_id`. `seq` guarda el orden de alta; `sport`: `lol`, `basket`, `tennis`, `football`, `mma` o `mix` (migraciones 002, 003, 004, 007 y 012) |
 | `bets.bet_legs` | Selecciones de las combinadas (`bet_id`, `pos`, `sport`) |
@@ -133,6 +135,22 @@ base de datos los de `POSTGRES_*`, por defecto `lolet`) o `docker compose exec d
 - **Contraseña olvidada.** `docker compose exec bets node services/bets/reset-password.js <usuario> <nueva>`.
 - **Apuestas ajenas.** El id de la apuesta lo manda el cliente y es único entre todos: guardar con un id de otro usuario da 404, e importar
   el CSV de otro le da ids nuevos.
+
+## Administración
+
+Pantalla *Administración* (`src/views/AdminView.tsx`, sólo administradores). Diseño: `docs/superpowers/specs/2026-11-18-panel-admin-design.md`; esta es la fase 1 (Usuarios y Actividad).
+
+- **Rutas** `/api/admin/*` en `bets` (`admin.js`): `GET users`, `PATCH users/:id` (`username`, `isAdmin`, `suspended`), `POST users/:id/password`,
+  `POST users/:id/sessions/close`, `DELETE users/:id` (con `{ confirm }`: el nombre exacto), `GET log` y `GET auth-events` (`limit`, `before`, `kind`).
+- **Quién puede.** El gateway exige sesión y administrador en todo `/api/admin/*` (`isAdminPath`, 401 sin sesión y 403 si no lo es) y `bets` lo
+  vuelve a comprobar con la firma de las cabeceras (`adminOf`). Las reglas están en `admin-rules.js` (puras, con prueba): nunca queda un sitio sin
+  administrador activo, no te quitas el rol ni te suspendes ni te borras a ti mismo, y sólo se borra una cuenta ya suspendida confirmando su nombre.
+  Cada cambio se hace en una transacción con un candado (`pg_advisory_xact_lock`) y escribe su fila en `bets.admin_log`, sin contraseñas.
+- **Suspender.** Cierra sus sesiones; `openSession` rechaza a una cuenta suspendida (también con Google) y `userOf` no la reconoce aunque conserve la cookie.
+- **Accesos** (`auth-events.js`): `login_ok`, `login_fail`, `register` y `register_blocked`, con la IP. Un acceso fallido sólo guarda el nombre si la cuenta
+  existe, para no registrar una contraseña escrita por error en el campo de usuario. Los accesos con Google no se registran todavía. Limpieza al arrancar y cada 24 h.
+- **Último acceso** (`last_seen_at`): se actualiza como mucho cada 5 min por usuario.
+- **Privacidad.** El administrador sólo ve cuántas apuestas tiene cada cuenta (una subconsulta por `user_id`), nunca su contenido.
 
 ## Producción y seguridad entre servicios
 

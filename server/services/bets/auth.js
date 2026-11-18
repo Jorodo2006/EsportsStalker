@@ -5,6 +5,8 @@ const { query, tx } = require('../../shared/db');
 const { fail } = require('../../shared/service');
 const store = require('./store');
 const google = require('./google');
+const { seenStale } = require('./admin-rules');
+const authEvents = require('./auth-events');
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'lolet_session';
@@ -15,7 +17,7 @@ const FIRST_USER_LOCK = 727001; // dos registros a la vez no pueden ser los dos 
 const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
 // google y googleEmail: si tiene Google vinculado; hasPassword: si puede entrar también con contraseña (quien se registró con
 // Google no tiene hasta que se la pone en «Tu cuenta»)
-const toUser = r => ({ id: String(r.id), username: r.username, isAdmin: r.is_admin, google: !!r.google_sub, googleEmail: r.google_email || null, hasPassword: !!r.password_hash });
+const toUser = r => ({ id: String(r.id), username: r.username, isAdmin: r.is_admin, google: !!r.google_sub, googleEmail: r.google_email || null, hasPassword: !!r.password_hash, suspended: !!r.suspended_at });
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -53,6 +55,8 @@ function setCookie(res, token, maxAge, secure) {
 }
 
 async function openSession(res, userId, secure) {
+  const { rows } = await query('SELECT suspended_at FROM bets.users WHERE id = $1', [userId]);
+  if (rows[0]?.suspended_at) throw fail('Cuenta suspendida', 403);
   const token = crypto.randomBytes(32).toString('hex');
   await query('DELETE FROM bets.sessions WHERE expires_at < now()');
   await query(`INSERT INTO bets.sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '${SESSION_DAYS} days')`, [sha(token), userId]);
@@ -103,7 +107,7 @@ async function bootstrapAdmin() {
 
 async function register(body, req, res) {
   const ip = ipOf(req);
-  if (registerIp.blocked(ip)) throw fail('Demasiados registros desde esta conexión: prueba más tarde', 429);
+  if (registerIp.blocked(ip)) { authEvents.record('register_blocked', { ip }); throw fail('Demasiados registros desde esta conexión: prueba más tarde', 429); }
   const username = String(body?.username || '').trim();
   if (!/^[\p{L}\p{N}_.-]{3,30}$/u.test(username)) throw fail('El usuario debe tener de 3 a 30 letras, números o . _ -');
   validPassword(body?.password);
@@ -120,6 +124,7 @@ async function register(body, req, res) {
   });
   registerIp.add(ip);
   await openSession(res, user.id, isSecure(req));
+  authEvents.record('register', { userId: user.id, username: user.username, ip });
   return toUser(user);
 }
 
@@ -134,10 +139,14 @@ async function login(body, req, res) {
   if (!ok || !rows[0]) {
     loginPair.add(pair);
     loginIp.add(ip);
+    authEvents.record('login_fail', { userId: rows[0]?.id ?? null, username: authEvents.usernameToLog(!!rows[0], username), ip });
     throw fail('Usuario o contraseña incorrectos', 401);
   }
   loginPair.clear(pair);
-  await openSession(res, rows[0].id, isSecure(req));
+  // La contraseña era correcta pero la cuenta está suspendida: se anota como intento fallido (los accesos con Google no se registran todavía)
+  try { await openSession(res, rows[0].id, isSecure(req)); }
+  catch (e) { authEvents.record('login_fail', { userId: rows[0].id, username: rows[0].username, ip }); throw e; }
+  authEvents.record('login_ok', { userId: rows[0].id, username: rows[0].username, ip });
   return toUser(rows[0]);
 }
 
@@ -152,7 +161,12 @@ async function userOf(token) {
   if (!token) return null;
   const { rows } = await query(`SELECT u.* FROM bets.sessions s JOIN bets.users u ON u.id = s.user_id
     WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha(token)]);
-  return rows[0] ? toUser(rows[0]) : null;
+  const u = rows[0];
+  // Una cuenta suspendida deja de valer aunque conserve la cookie
+  if (!u || u.suspended_at) return null;
+  // Último acceso: sólo se escribe si lleva más de 5 min sin anotarse (u.* ya trae la columna: sin consulta extra en el caso normal)
+  if (seenStale(u.last_seen_at)) query('UPDATE bets.users SET last_seen_at = now() WHERE id = $1', [u.id]).catch(() => {});
+  return toUser(u);
 }
 
 // Al cambiarla se cierran las sesiones de los demás dispositivos, pero no la de éste. Quien entró sólo con Google no tiene
@@ -182,4 +196,4 @@ function googleCallback(req, res, q) {
   });
 }
 
-module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword, googleStart, googleCallback };
+module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword, validPassword, googleStart, googleCallback };

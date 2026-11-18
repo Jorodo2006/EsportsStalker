@@ -10,6 +10,9 @@ const ODDS_READ = /^\/api\/odds\/(match|board|history)$/;
 // Entrar, registrarse y salir: abiertas como siempre
 const AUTH = /^\/api\/auth\/(config|me|register|login|logout|google|google\/callback)$/;
 
+// El panel de administración: el gateway exige sesión y administrador (index.js); aquí sólo se reconoce el prefijo
+const isAdminPath = pathname => pathname === '/api/admin' || pathname.startsWith('/api/admin/');
+
 function isPublic(method, pathname) {
   if (AUTH.test(pathname)) return true;
   if (method === 'GET') return SPORT_READ.test(pathname) || pathname === '/api/search' || pathname === '/api/settings/public' || pathname.startsWith('/api/public/');
@@ -58,4 +61,4 @@ function adsTxt(env = process.env) {
   return client ? `google.com, ${client.slice(3)}, DIRECT, f08c47fec0942fa0\n` : '# Sin cuenta de AdSense configurada (ADSENSE_CLIENT en el .env)\n';
 }
 
-module.exports = { isPublic, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT };
+module.exports = { isPublic, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT, isAdminPath };

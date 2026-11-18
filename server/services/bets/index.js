@@ -9,6 +9,8 @@ const settle = require('./settle');
 const predictions = require('./predictions');
 const friends = require('./friends');
 const alerts = require('./alerts');
+const authEvents = require('./auth-events');
+const admin = require('./admin');
 const push = require('./push');
 const internal = require('../../shared/internal');
 
@@ -36,6 +38,13 @@ function who(req) {
   return { id, isAdmin: admin === '1' };
 }
 
+// Las rutas /api/admin: el gateway ya exige administrador; aquí se vuelve a comprobar (la firma de las cabeceras lo hace fiable)
+function adminOf(req) {
+  const u = who(req);
+  if (!u.isAdmin) throw fail('Sólo para administradores', 403);
+  return u;
+}
+
 const routes = [
   // ---------- Cuenta (estas cuatro primeras son las únicas abiertas sin sesión) ----------
   ['GET', '/api/auth/config', () => auth.config()],
@@ -49,6 +58,15 @@ const routes = [
   ['POST', '/api/auth/password', ({ req, body }) => auth.changePassword(who(req).id, req, body)],
   // El gateway pregunta aquí de quién es cada sesión (no se publica)
   ['POST', '/internal/auth/session', ({ body }) => auth.userOf(body?.token)],
+
+  // ---------- Administración (admin.js): sólo administradores; cada cambio queda en bets.admin_log ----------
+  ['GET', '/api/admin/users', ({ req }) => { adminOf(req); return admin.listUsers(); }],
+  ['PATCH', '/api/admin/users/:id', ({ req, params, body }) => admin.updateUser(adminOf(req).id, params.id, body || {})],
+  ['POST', '/api/admin/users/:id/password', ({ req, params, body }) => admin.setPassword(adminOf(req).id, params.id, body?.password)],
+  ['POST', '/api/admin/users/:id/sessions/close', ({ req, params }) => admin.closeSessions(adminOf(req).id, params.id)],
+  ['DELETE', '/api/admin/users/:id', ({ req, params, body }) => admin.deleteUser(adminOf(req).id, params.id, body?.confirm)],
+  ['GET', '/api/admin/log', ({ req, query: q }) => { adminOf(req); return admin.listLog(q); }],
+  ['GET', '/api/admin/auth-events', ({ req, query: q }) => { adminOf(req); return authEvents.list(q); }],
 
   ['GET', '/api/settings', async ({ req }) => { const u = who(req); return forUi(await store.getSettings(u.id), u.isAdmin); }],
   ['PUT', '/api/settings', async ({ req, body }) => {
@@ -101,4 +119,5 @@ migrate('bets', path.join(__dirname, 'migrations'))
   .then(() => start({ name: 'bets', port: Number(process.env.PORT) || 4003, routes, health: async () => (await query('SELECT 1'), true) }))
   .then(() => settle.startSettler())
   .then(() => alerts.startAlerts())
+  .then(() => authEvents.startPurge())
   .catch(e => { console.error(e); process.exit(1); });

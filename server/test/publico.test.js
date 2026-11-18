@@ -2,7 +2,7 @@
 // el límite por IP, los ajustes sin credenciales y la configuración de AdSense. Sin red ni base de datos: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isPublic, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT } = require('../services/gateway/public');
+const { isPublic, isAdminPath, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT } = require('../services/gateway/public');
 
 test('se abren las lecturas de los deportes y de las cuotas', () => {
   for (const p of ['/api/esports/schedule', '/api/stats/players', '/api/basket/games', '/api/tennis/match-stats', '/api/football/standings/laliga', '/api/mma/fighter', '/api/search', '/api/settings/public', '/api/public/config']) {
@@ -19,6 +19,9 @@ test('lo de cada usuario, las recomendaciones y leer cuotas a mano piden cuenta'
     ['GET', '/api/tennis/picks'], ['GET', '/api/tennis/picks/board'], ['GET', '/api/tennis/picks/day'], ['GET', '/api/football/picks'],
     ['GET', '/api/football/picks/day'], ['GET', '/api/football/picks/lines'], ['GET', '/api/mma/picks'], ['GET', '/api/mma/picks/lines'], ['GET', '/api/challenger/estado'], ['POST', '/api/challenger/escanear'],
     ['GET', '/api/odds/auto/status'], ['GET', '/api/bets/predictions'], ['POST', '/api/auth/password'],
+    // Panel de administración: nunca abierto (el gateway además exige ser administrador)
+    ['GET', '/api/admin/users'], ['PATCH', '/api/admin/users/3'], ['POST', '/api/admin/users/3/password'], ['DELETE', '/api/admin/users/3'],
+    ['GET', '/api/admin/log'], ['GET', '/api/admin/auth-events'],
     // Avisos de cuotas: los de cada usuario y su suscripción a las notificaciones
     ['GET', '/api/alerts'], ['POST', '/api/alerts/read'], ['GET', '/api/alerts/prefs'], ['PUT', '/api/alerts/prefs'], ['PUT', '/api/alerts/watch'],
     ['POST', '/api/alerts/push'], ['POST', '/api/alerts/push/remove'],
@@ -55,4 +58,9 @@ test('AdSense: sin cuenta no hay anuncios; con ella, el ads.txt y los huecos vá
   assert.equal(c.ads.slots.half, null);
   assert.equal(adsTxt(env), 'google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n');
   assert.equal(publicConfig({ ADSENSE_CLIENT: 'ca-pub-12; evil' }).ads, null);
+});
+
+test('isAdminPath: sólo el prefijo /api/admin', () => {
+  for (const p of ['/api/admin', '/api/admin/', '/api/admin/users', '/api/admin/log', '/api/admin/users/3/password']) assert.equal(isAdminPath(p), true, p);
+  for (const p of ['/api/administrador', '/api/bets', '/api/settings', '/api/auth/me', '/admin']) assert.equal(isAdminPath(p), false, p);
 });

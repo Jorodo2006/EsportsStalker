@@ -122,6 +122,15 @@ export const api: Api = {
     changePassword: (current, next) => call('POST', '/api/auth/password', { current, next })
   },
   settings: { get: () => get('/api/settings'), set: p => call('PUT', '/api/settings', p), public: () => get('/api/settings/public') },
+  admin: {
+    users: () => get('/api/admin/users'),
+    updateUser: (id, patch) => call('PATCH', `/api/admin/users/${part(id)}`, patch),
+    setPassword: (id, password) => call('POST', `/api/admin/users/${part(id)}/password`, { password }),
+    closeSessions: id => call('POST', `/api/admin/users/${part(id)}/sessions/close`, {}),
+    deleteUser: (id, confirm) => call('DELETE', `/api/admin/users/${part(id)}`, { confirm }),
+    log: p => get('/api/admin/log', p),
+    authEvents: p => get('/api/admin/auth-events', p)
+  },
   publicConfig: () => get('/api/public/config'),
   friends: {
     list: () => get('/api/friends'),

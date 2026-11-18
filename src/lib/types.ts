@@ -461,6 +461,12 @@ export interface BoxTeam { id: string; name: string; abbr: string; logo: string;
 export interface BasketBox { teams: BoxTeam[]; series: { date: string; status: string; score: { abbr: string; score: string; winner: boolean }[] }[] }
 
 // google: tiene Google vinculado (googleEmail, su correo); hasPassword: también puede entrar con contraseña
+// Panel de administración (docs/superpowers/specs/2026-11-18-panel-admin-design.md): cuentas y registros, sólo para administradores
+export interface AdminUser { id: string; username: string; isAdmin: boolean; suspended: boolean; createdAt: string; lastSeenAt: string | null; hasPassword: boolean; googleEmail: string | null; bets: number; sessions: number }
+export interface AdminLogRow { id: string; at: string; adminId: string | null; adminName: string; action: string; targetId: string | null; targetName: string | null; detail: Record<string, unknown> }
+export type AuthEventKind = 'login_ok' | 'login_fail' | 'register' | 'register_blocked';
+export interface AuthEventRow { id: string; at: string; kind: AuthEventKind; userId: string | null; username: string | null; ip: string | null }
+
 export interface AuthUser { id: string; username: string; isAdmin: boolean; google?: boolean; googleEmail?: string | null; hasPassword?: boolean }
 
 export interface Api {
@@ -476,6 +482,15 @@ export interface Api {
   };
   // public: los comunes sin credenciales, para quien no ha entrado
   settings: { get(): Promise<Settings>; set(p: Partial<Settings>): Promise<Settings>; public(): Promise<Settings> };
+  admin: {
+    users(): Promise<AdminUser[]>;
+    updateUser(id: string, patch: { username?: string; isAdmin?: boolean; suspended?: boolean }): Promise<AdminUser>;
+    setPassword(id: string, password: string): Promise<{ ok: true }>;
+    closeSessions(id: string): Promise<{ closed: number }>;
+    deleteUser(id: string, confirm: string): Promise<{ ok: true }>;
+    log(p?: { limit?: number; before?: string }): Promise<AdminLogRow[]>;
+    authEvents(p?: { kind?: string; limit?: number; before?: string }): Promise<AuthEventRow[]>;
+  };
   // Anuncios (cuenta de AdSense) y responsable de la web (aviso legal), del .env del servidor
   publicConfig(): Promise<PublicConfig>;
   bets: {

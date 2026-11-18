@@ -3,7 +3,7 @@
 // todos: están en SettingsView
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, LogOut, Settings as Cog, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LogOut, Settings as Cog, Shield, X } from 'lucide-react';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { cn, money } from '@/lib/format';
 import { GoogleMark, useUser } from '@/components/AuthGate';
@@ -32,6 +32,12 @@ export default function AccountView() {
           <Card title="Ajustes de la app">
             <p className="mb-4 text-sm text-zinc-400">Moneda, casas del comparador, cuotas automáticas, registro de cuentas… Eres administrador: lo que cambies allí vale para todos los usuarios.</p>
             <Button variant="secondary" onClick={() => go('settings')}><Cog size={14} />Abrir los ajustes</Button>
+          </Card>
+        )}
+        {isAdmin && (
+          <Card title="Administración">
+            <p className="mb-4 text-sm text-zinc-400">Las cuentas de los usuarios (renombrar, rol, suspender, contraseña temporal, borrar) y el registro de actividad.</p>
+            <Button variant="secondary" onClick={() => go('admin')}><Shield size={14} />Abrir la administración</Button>
           </Card>
         )}
       </div>

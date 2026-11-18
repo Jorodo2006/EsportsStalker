@@ -8,7 +8,7 @@ import { askLogin, useMember } from '@/components/AuthGate';
 
 // settings: los ajustes de la app, sólo del administrador; account: la cuenta de cada uno (contraseña, cartera, avisos);
 // legal: aviso legal, privacidad y cookies (con su dirección propia, LEGAL_PATHS)
-export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'account' | 'legal';
+export type View = 'matches' | 'players' | 'bets' | 'friends' | 'settings' | 'admin' | 'account' | 'legal';
 export type LegalPage = 'aviso-legal' | 'privacidad' | 'cookies';
 export const LEGAL_PATHS: LegalPage[] = ['aviso-legal', 'privacidad', 'cookies'];
 // La página legal de la dirección (/privacidad…), para que se pueda enlazar y la encuentre Google
@@ -128,13 +128,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     app,
     switchApp(a) {
-      setApp(a); setView(v => (v === 'settings' || v === 'account' ? 'matches' : v)); setViewParam(undefined); setOpenMatch(null);
+      setApp(a); setView(v => (v === 'settings' || v === 'admin' || v === 'account' ? 'matches' : v)); setViewParam(undefined); setOpenMatch(null);
       try { localStorage.setItem('app', a); } catch { /* sin almacenamiento */ }
     },
     view,
     go(v, param) {
       // Los ajustes de la app son sólo del administrador (el servidor tampoco deja guardarlos a los demás)
-      if (v === 'settings' && !qc.getQueryData<{ isAdmin?: boolean } | null>(['me'])?.isAdmin) return;
+      if ((v === 'settings' || v === 'admin') && !qc.getQueryData<{ isAdmin?: boolean } | null>(['me'])?.isAdmin) return;
       // Pulsar "Partidos" estando ya en un partido vuelve a la lista; el resto de secciones lo conservan
       if (v === 'matches' && view === 'matches') setOpenMatch(null);
       setView(v); setViewParam(param);
