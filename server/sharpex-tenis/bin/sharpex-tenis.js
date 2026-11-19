@@ -21,10 +21,13 @@ Uso: sharpex-tenis <comando> [opciones]
   entrenar   --datos <carpeta|csv> [--salida modelo.json] [--niveles ${HISTORY_LEVELS.join(',')}]
              Calcula los ratings de todos los jugadores con el histórico.
 
-  validar    --datos <carpeta|csv> --desde AAAA-MM-DD [--ajustar] [--niveles …] [--puntuar C]
+  validar    --datos <carpeta|csv> --desde AAAA-MM-DD [--hasta AAAA-MM-DD] [--ajustar | --pesos]
+             [--variables actividad,semana,local | ninguna] [--niveles …] [--puntuar C]
              Mide lo bueno que es el modelo en partidos que no ha visto. Sólo puntúa los
              Challengers; el resto es historial. Con --ajustar busca los parámetros en el
-             año anterior a --desde, no en los partidos que puntúa.
+             año anterior a --desde, no en los partidos que puntúa; con --pesos, sólo los
+             pesos (Elo, saque y resto, cola y las variables de --variables: torneos de las 5
+             semanas anteriores, partidos de la semana anterior y jugar en casa; todas si no se dice).
 
   escanear   --modelo modelo.json --cuotas <json|csv> [--superficie Clay]
              [--min-edge 0.03] [--min-cuota 1.3] [--max-cuota 4] [--incluir-pocos-datos]
@@ -86,8 +89,10 @@ try {
     case 'entrenar': {
       const levels = list(a.niveles, HISTORY_LEVELS);
       const matches = loadMatches(need(a, 'datos'), { levels });
-      const model = new EloModel().fit(matches);
-      model.venues = venueSurfaces(matches); // para saber la superficie cuando la fuente de cuotas no la dice
+      const model = new EloModel();
+      // Superficie y país de cada ciudad, antes de entrenar: el factor local la usa en cada partido
+      model.venues = venueSurfaces(matches);
+      model.fit(matches);
       const out = a.salida ?? 'modelo.json';
       // Aparte y luego se renombra: el servicio challenger lo vuelve a leer en cuanto cambia y no debe verlo a medias
       writeFileSync(`${out}.nuevo`, JSON.stringify(model));
@@ -110,24 +115,39 @@ try {
       const matches = loadMatches(need(a, 'datos'), { levels });
       const testFrom = need(a, 'desde');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(testFrom)) throw new Error('--desde tiene que ser AAAA-MM-DD');
+      const testTo = a.hasta && a.hasta !== true ? a.hasta : undefined;
+      if (testTo && !/^\d{4}-\d{2}-\d{2}$/.test(testTo)) throw new Error('--hasta tiene que ser AAAA-MM-DD');
+      // Variables de la fase 2 que se ajustan (con --ajustar o --pesos): todas si no se dice
+      const VARS = { actividad: 'weeks5', semana: 'lastWeek', local: 'home' };
+      const vars = list(a.variables, Object.keys(VARS));
+      const features = vars.includes('ninguna') ? [] : vars.map((v) => {
+        if (!VARS[v]) throw new Error(`Variable desconocida: ${v} (actividad, semana, local o ninguna)`);
+        return VARS[v];
+      });
+      const venues = venueSurfaces(matches);
       let modelOptions = {};
-      if (a.ajustar) {
+      if (a.ajustar || a.pesos) {
         const tuneFrom = `${Number(testFrom.slice(0, 4)) - 1}${testFrom.slice(4)}`;
-        console.log(`Probando combinaciones de parámetros con los partidos de ${tuneFrom} a ${testFrom}…`);
-        const res = tune(matches, { tuneFrom, tuneTo: testFrom, scoreLevels });
-        console.table(res.slice(0, 8).map((r) => ({ ...r, logLoss: r.logLoss.toFixed(4), brier: r.brier.toFixed(4), accuracy: pct(r.accuracy) })));
-        if (res.length) {
-          const { surfaceWeight, kBase, kShape } = res[0];
-          modelOptions = { surfaceWeight, kBase, kShape };
+        if (a.ajustar) {
+          console.log(`Probando combinaciones de parámetros con los partidos de ${tuneFrom} a ${testFrom}…`);
+          const res = tune(matches, { tuneFrom, tuneTo: testFrom, scoreLevels });
+          console.table(res.slice(0, 8).map((r) => ({ ...r, logLoss: r.logLoss.toFixed(4), brier: r.brier.toFixed(4), accuracy: pct(r.accuracy) })));
+          if (res.length) {
+            const { surfaceWeight, kBase, kShape } = res[0];
+            modelOptions = { surfaceWeight, kBase, kShape };
+          }
         }
-        // Y con esos, los pesos del Elo y de saque y resto y la cola, en el mismo periodo
-        const w = fitWeights(matches, { tuneFrom, tuneTo: testFrom, scoreLevels, modelOptions });
-        if (w) modelOptions = { ...modelOptions, wElo: w.wElo, wStats: w.wStats, tailSlope: w.tailSlope };
-        console.log(`Se evalúa con los mejores de ese periodo: ${JSON.stringify(modelOptions)}`);
+        // Los pesos del Elo, de saque y resto, la cola y los de las variables, en el mismo periodo
+        const w = fitWeights(matches, { tuneFrom, tuneTo: testFrom, scoreLevels, modelOptions, features, venues });
+        if (w) {
+          const { wElo, wStats, tailSlope, bWeeks, bLastWeek, bHome } = w;
+          modelOptions = { ...modelOptions, wElo, wStats, tailSlope, bWeeks, bLastWeek, bHome };
+        }
+        console.log(`Variables: ${features.length ? vars.join(', ') : 'ninguna'}. Se evalúa con los mejores de ${tuneFrom} a ${testFrom}: ${JSON.stringify(modelOptions)}`);
       }
-      const { metrics: m } = evaluate(matches, { testFrom, scoreLevels, modelOptions });
+      const { metrics: m } = evaluate(matches, { testFrom, testTo, scoreLevels, modelOptions, venues });
       if (!m) { console.log('No hay partidos para validar en ese periodo.'); break; }
-      console.log(`\nPartidos evaluados: ${m.n} de nivel ${scoreLevels.join(', ')} (desde ${testFrom}, sin jugadores con pocos datos)`);
+      console.log(`\nPartidos evaluados: ${m.n} de nivel ${scoreLevels.join(', ')} (desde ${testFrom}${testTo ? ` hasta ${testTo}` : ''}, sin jugadores con pocos datos)`);
       console.log(`Acierto del favorito: ${pct(m.accuracy)} · Brier: ${m.brier.toFixed(4)} · Log-loss: ${m.logLoss.toFixed(4)}`);
       console.log('\nCalibración (si el modelo dice 70 %, ¿gana el 70 %?):');
       console.table(m.calibration.map((c) => ({ tramo: c.range, partidos: c.n, dice: pct(c.predicted), real: pct(c.actual) })));

@@ -308,6 +308,33 @@ function parseDraw(items) {
   return { ...head, rounds, draw, matches };
 }
 
+// ---------- Cuadro final (mds.pdf): sólo cómo entró cada uno ----------
+// Del cuadro final del torneo sólo hace falta la columna de la izquierda: posición, entrada (PR ranking protegido, WC, Q, LL, SE…),
+// siembra, "APELLIDO, Nombre" y país. Lo usa el motor de los Challenger para el aviso de ranking protegido (riesgo de retirada).
+// Los ganadores y las rondas no se leen: los da LiveScore
+function parseEntries(items) {
+  const head = headerOf(items);
+  const names = items.filter(i => DRAW_NAME.test(i.text.trim()));
+  if (!head || names.length < 8) return null;
+  const minX = Math.min(...names.map(i => i.x));
+  const col = items.filter(i => (DRAW_NAME.test(i.text.trim()) || /^Bye$/i.test(i.text.trim())) && i.x >= minX - 2 && i.x < minX + 30);
+  const rows = rowsBy(items.filter(i => i.y >= Math.min(...col.map(n => n.y)) - 3 && i.x < minX + 100), 2.5);
+  const entries = [];
+  for (const nm of col) {
+    if (/^Bye$/i.test(nm.text.trim())) continue;
+    const row = rows.find(r => r.items.includes(nm));
+    const left = row.items.filter(i => i.x < nm.x).map(i => i.text.trim());
+    const pos = Number(left.find(t => /^\d{1,3}$/.test(t)));
+    if (!pos) continue;
+    const nums = left.filter(t => /^\d{1,2}$/.test(t)).map(Number);
+    const m = nm.text.trim().match(DRAW_NAME);
+    entries.push({ pos, seed: nums.length > 1 ? nums[nums.length - 1] : null, entry: left.find(t => ENTRY.test(t)) || null, ...nameOf(m[1], m[2] || ''),
+      country: row.items.filter(i => i.x > nm.x).map(i => i.text.trim()).find(t => /^[A-Z]{3}$/.test(t)) || '' });
+  }
+  entries.sort((a, b) => a.pos - b.pos);
+  return entries.length >= 8 ? { ...head, entries } : null;
+}
+
 // ---------- Orden de juego (op.pdf) ----------
 // "ORDER OF PLAY - TUESDAY, NOVEMBER 17, 2026". Arriba, una fila con las pistas ("COURT" y "2" van en trozos distintos); debajo,
 // por pista, filas con "Starts At 10:00", "Not Before 11:30" o "Followed By" y en cada una un partido: la línea de un jugador
@@ -374,4 +401,4 @@ function parseOrder(items) {
   return { ...head, day, matches: out };
 }
 
-module.exports = { pdfItems, parseDraw, parseOrder, parseScore, headerOf };
+module.exports = { pdfItems, parseDraw, parseEntries, parseOrder, parseScore, headerOf };

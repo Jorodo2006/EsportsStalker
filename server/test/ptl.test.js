@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://nadie@localhost/nada'; // el pool no conecta hasta usarse
-const { parseScore, parseDraw, parseOrder } = require('../services/tennis/ptlpdf');
+const { parseScore, parseDraw, parseEntries, parseOrder } = require('../services/tennis/ptlpdf');
 const { zoneOf, atLocal, candidates } = require('../services/tennis/protennislive');
 
 const it = (text, x, y, size = 8) => ({ text, x, y, size });
@@ -99,4 +99,27 @@ test('qué torneos probar: la misma semana de los años anteriores, con una de m
   ];
   const ids = candidates(list, monday, new Set(['helsinki'])).map(c => c.id).sort((a, b) => a - b);
   assert.deepEqual(ids, [637, 2817, 7397, 8310]);
+});
+
+test('cuadro final: sólo cómo entró cada uno (PR, WC, Q…), con la forma del de Champaign', () => {
+  const players = [['1', '1', '', 'WENDELKEN, Harry', 'GBR'], ['2', '', 'Q', 'HUSSEY, Giles', 'GBR'], ['3', '', '', 'SMITH, Colton', 'USA'],
+    ['4', '', 'PR', 'MALONEY, Patrick', 'USA'], ['5', '', 'WC', 'LEE, Jordan', 'USA'], ['6', '', 'LL', 'DOMINKO, Sebastian', 'CRO'],
+    ['7', '', '', 'Bye', ''], ['8', '4', '', 'HUERTAS DEL PINO CORD…', 'PER'], ['9', '', '', 'KOVACEVIC, Aleksandar', 'USA']];
+  const items = [...head, it('Singles Main Draw', 504, 780), it('Round of 32', 157, 765), it('Round of 16', 243, 765)];
+  players.forEach(([pos, seed, entry, name, country], k) => {
+    const y = 750 - k * 13;
+    items.push(it(pos, 19, y), it(name, 54, y));
+    if (entry) items.push(it(entry, 33, y));
+    if (seed) items.push(it(seed, 43, y));
+    if (country) items.push(it(country, 133, y));
+  });
+  items.push(it('H. Wendelken', 157, 744)); // un ganador en la columna siguiente: no se lee
+  const md = parseEntries(items);
+  assert.equal(md.city, 'Sydney, Australia');
+  assert.equal(md.entries.length, 8, 'sin el Bye');
+  assert.deepEqual(md.entries.filter(e => e.entry).map(e => [e.entry, e.name]), [['Q', 'Giles Hussey'], ['PR', 'Patrick Maloney'], ['WC', 'Jordan Lee'], ['LL', 'Sebastian Dominko']]);
+  assert.equal(md.entries[0].seed, 1);
+  assert.equal(md.entries.find(e => e.last.startsWith('Huertas')).seed, 4);
+  assert.equal(md.entries.find(e => e.name === 'Patrick Maloney').country, 'USA');
+  assert.equal(parseEntries(items.slice(0, 8)), null, 'con menos de 8 jugadores no es un cuadro');
 });

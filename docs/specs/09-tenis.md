@@ -53,8 +53,8 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 
 - **Por qué esta fuente:** el `robots.txt` de la web de LiveScore prohíbe `/api/` y sus condiciones no se pudieron leer (la página no se carga sin JavaScript). Su servidor de datos no tiene `robots.txt`. **Se decidió usarla el 5/11/2026, a petición del usuario y para uso personal**, a sabiendas de que
   Tennis Abstract y tennis-data.co.uk se descartaron por su `robots.txt`. Las peticiones van sin disfrazar. **Si la app se fuese a vender o a publicar, hay que volver a mirarlo.**
-- **Sólo marcador y cuotas:** sin *Recomendaciones* ni *Forma de los jugadores*, porque ni el modelo (TennisMyLife) ni las fichas (ESPN) tienen sus datos. No hay banderas, ranking ni cabezas de serie.
-- **Motor propio (servicio `challenger`, `server/sharpex-tenis`):** Elo de los Challenger con el histórico de Sackmann y TennisMyLife, en `/api/challenger`. Todavía no sale en la interfaz. `GET /api/challenger/comparar?fecha=AAAA-MM-DD` da, para cada Challenger del día, la probabilidad del modelo, la superficie (por la ciudad del torneo) y las cuotas de apertura y de cierre de cada casa con la probabilidad del mercado sin margen: con los resultados, dirá si el modelo gana a la casa antes de enseñar picks.
+- **Recomendaciones de su motor, sin fichas:** sin *Forma de los jugadores*, porque las fichas son de ESPN. No hay banderas, ranking ni cabezas de serie. Sus recomendaciones son las del motor propio (abajo), no las del modelo de la ATP y la WTA.
+- **Motor propio (servicio `challenger`, `server/sharpex-tenis`):** Elo con saque y resto, actividad y factor local, con el histórico de Sackmann y TennisMyLife, en `/api/challenger`. En la app (`src/components/ChallengerPicks.tsx`): pestaña *Recomendaciones* de cada Challenger, el circuito *Challenger* de la pantalla *Recomendaciones*, *Las más fiables del día* y la columna del partido elegido, con `GET /api/challenger/recomendaciones?fecha=`. Salen *Alta probabilidad* (siempre con «sin ventaja sobre la casa») y *Valor*, que está oculto mientras la fase 0 no diga que el modelo gana a la cuota de cierre (`docs/superpowers/specs/2026-11-19-motor-challenger-v2-design.md`). `GET /api/challenger/comparar?fecha=AAAA-MM-DD` da, para cada Challenger del día, la probabilidad del modelo, la superficie (por la ciudad del torneo) y las cuotas de apertura y de cierre de cada casa con la probabilidad del mercado sin margen: con los resultados, dirá si el modelo gana a la casa antes de enseñar picks.
 - **Cuotas:** son decenas al día, así que no se leen como el resto del tenis. Sólo los del cuadro final, dos veces (`scheduler.js`, ajuste `challengerOddsEnabled`, *Ajustes → Cuotas automáticas → Leer los Challenger*): una hasta 12 h antes y la de cierre, a 20 min de la hora prevista; si sigue sin empezar, otra cada 40 min hasta 5 h después (las horas de LiveScore son aproximadas). Unas 50-75 lecturas al día. También se pueden pedir con *Actualizar cuotas*, si las casas los tienen.
 - **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. En la ATP y la WTA la previa va en el nombre de la fase (`: Qualification`).
 - **La previa de los Challenger no la tiene LiveScore** (comprobado el 16-11-2026): no sale en los días de previa (sólo las finales de
@@ -68,7 +68,13 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 ## Previa de los Challenger (`server/services/tennis/protennislive.js` y `ptlpdf.js`)
 
 De ProTennisLive, la web oficial de resultados de la ATP (sin `robots.txt`): cada torneo publica en
-`www.protennislive.com/posting/<año>/<id ATP>/` el cuadro de la previa (`qs.pdf`) y el orden de juego del día (`op.pdf`).
+`www.protennislive.com/posting/<año>/<id ATP>/` el cuadro de la previa (`qs.pdf`), el orden de juego del día (`op.pdf`) y el
+cuadro final (`mds.pdf`).
+
+- **Cuadro final** (`parseEntries`): sólo la columna de los jugadores, para saber cómo entró cada uno (PR ranking protegido, WC, Q,
+  LL, SE…). Va en `entry` de los jugadores de los Challenger de LiveScore (`entryOf`, por la ciudad y el apellido) y lo usa el motor
+  de los Challenger para el aviso de ranking protegido y el riesgo de retirada. Se lee de los torneos con la previa leída o cuya
+  ciudad sale en LiveScore esa semana, desde tres días antes del lunes: cada 3 h hasta que sale y luego cada 6 h.
 
 - **Qué torneos:** el id ATP de un Challenger se repite de un año a otro. Se prueban los de la misma semana (con una de margen) de
   los dos años anteriores, sacados del histórico de Sackmann por el servicio `challenger` (`GET /internal/challenger/torneos`, sólo

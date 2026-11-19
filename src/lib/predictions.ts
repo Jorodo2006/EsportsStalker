@@ -7,7 +7,7 @@ import { BASKET_MARKETS } from './basket-model';
 import { POINT_PERIODS } from './basket-teams';
 import type { BasketPick } from './basket-picks';
 import { alert, firstTime } from './notify';
-import type { FootballPick, MmaPick, PredictionIn, TennisPick } from './types';
+import type { ChallengerMatchPicks, ChallengerPick, FootballPick, MmaPick, PredictionIn, TennisPick } from './types';
 
 const sent = new Map<string, string>();
 let queue: PredictionIn[] = [];
@@ -16,12 +16,13 @@ let timer: number | undefined;
 // Una recomendación que merece aviso: mucho valor y bastante fiable (como las de arriba de Recomendaciones)
 const STRONG_EV = 0.08, STRONG_REL = 65;
 
-export function logPredictions(list: PredictionIn[]) {
+// alert: false, sin aviso de recomendación fuerte (las que se registran para medirlas pero no se enseñan, como el Valor de los Challenger)
+export function logPredictions(list: PredictionIn[], { alert: notify = true }: { alert?: boolean } = {}) {
   const now = Date.now();
   const strong: PredictionIn[] = [];
   for (const x of list) {
     if (!x.start || +new Date(x.start) <= now) continue;
-    if (x.ev >= STRONG_EV && (x.rel ?? 0) >= STRONG_REL && firstTime(`pick:${x.match}|${x.key}|${x.out}`)) strong.push(x);
+    if (notify && x.ev >= STRONG_EV && (x.rel ?? 0) >= STRONG_REL && firstTime(`pick:${x.match}|${x.key}|${x.out}`)) strong.push(x);
     const id = `${x.match}|${x.key}|${x.out}`, sig = `${x.price}|${x.p.toFixed(3)}`;
     if (sent.get(id) === sig) continue;
     sent.set(id, sig);
@@ -75,6 +76,16 @@ export function tennisPredictions(m: { id: string; date: string; tournament?: st
       league: m.tournament ?? '', book: x.book, price: x.price, p: x.p, pModel: x.pModel, pMarket: x.pMarket, ev: x.ev, rel: x.rel.score
     };
   }).filter(x => x.key && x.out && KNOWN.test(x.key));
+}
+
+// Challenger (motor aparte, servicio challenger): el ganador del partido, con el tipo y el tramo de cuota en el grupo para medir
+// cada uno por separado. which: cuáles (las que se enseñan o las que no)
+export function challengerPredictions(m: ChallengerMatchPicks, which: (p: ChallengerPick) => boolean = () => true): PredictionIn[] {
+  return m.picks.filter(which).map((p): PredictionIn => ({
+    sport: 'tennis', match: m.id, start: m.fecha, key: 'moneyline|0||', out: p.lado,
+    group: `Challenger · ${p.tipo === 'valor' ? 'Valor' : 'Alta probabilidad'} · cuota ${p.tramo}`, title: `Gana ${p.jugador}`,
+    event: `${m.a} - ${m.b}`, league: m.torneo, book: p.casa, price: p.cuota, p: p.p, pModel: p.pModelo, pMarket: p.pCasa, ev: p.valor, rel: p.fiabilidad
+  }));
 }
 
 // Fútbol: igual que el tenis (el mismo formato de id); el local es el primero

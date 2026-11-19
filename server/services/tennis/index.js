@@ -160,6 +160,12 @@ async function withChallengers(list, from, to) {
   const city = n => String(n || '').split(',')[0].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   const panel = new Map(extra.map(m => [city(m.tournament), m]));
   ptl.hint(extra.map(m => ({ tournament: m.tournament, tournamentId: m.tournamentId })));
+  // Cómo entró cada uno al cuadro final, del de ProTennisLive (PR: ranking protegido, para el motor de los Challenger)
+  const entered = p => { const entry = ptl.entryOf(p.tournament, p.name); return entry ? { ...p.player, entry } : p.player; };
+  for (let i = 0; i < extra.length; i++) {
+    const m = extra[i];
+    extra[i] = { ...m, a: entered({ tournament: m.tournament, name: m.a.name, player: m.a }), b: entered({ tournament: m.tournament, name: m.b.name, player: m.b }) };
+  }
   const quali = ptl.games(a, b).filter(q => !extra.some(m => sameMatch(m, q))).map(q => {
     const ls = panel.get(city(q.tournament));
     return ls ? { ...q, tournament: ls.tournament, tournamentId: ls.tournamentId } : q;

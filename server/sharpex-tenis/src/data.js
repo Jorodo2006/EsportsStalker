@@ -1,9 +1,11 @@
 // Carga de resultados históricos y normalización a un formato común.
 //
 // Formato interno de un partido:
-//   { date: 'YYYY-MM-DD', tourney, level, surface, round,
-//     winnerId, winnerName, loserId, loserName, score, completed,
+//   { date: 'YYYY-MM-DD', tourney, tourneyId, level, surface, round,
+//     winnerId, winnerName, winnerIoc, winnerEntry, loserId, loserName, loserIoc, loserEntry, completed, retired,
 //     serve: [puntos al saque del ganador, ganados, puntos al saque del perdedor, ganados] | null }
+// Ioc: el país del jugador; Entry: cómo entró al cuadro ('WC' invitado, 'Q' de la previa, 'PR' ranking protegido…, o '').
+// retired: acabó porque el perdedor se retiró (RET en el marcador), para el riesgo de retirada (fase 4).
 //
 // Fuentes soportadas:
 //   - Ficheros de Jeff Sackmann (tennis_atp): atp_matches_qual_chall_YYYY.csv
@@ -54,13 +56,31 @@ export function venueKey(name) {
     .replace(VENUE_NOISE, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** De los Challengers del histórico: ciudad → { surface, date } del último que se jugó allí. */
+/**
+ * De los Challengers del histórico: ciudad → { surface, date, ioc } del último que se jugó allí. ioc: el país de la ciudad, el de
+ * la mayoría de sus invitados (las invitaciones casi siempre son para los de casa) en todas sus ediciones, con al menos dos y
+ * la mitad del total; si no, no se pone. Desde junio de 2026 TennisMyLife no dice quién entró invitado: las ciudades nuevas se
+ * quedan sin país (y en directo lo da el nombre de LiveScore, countryOf en form.js).
+ */
 export function venueSurfaces(matches) {
   const out = {};
+  const wc = new Map(); // ciudad → país → invitados
   for (const m of matches) {
     if (m.level !== 'C') continue;
     const k = venueKey(m.tourney);
-    if (k && (!out[k] || out[k].date <= m.date)) out[k] = { surface: m.surface, date: m.date };
+    if (!k) continue;
+    if (!out[k] || out[k].date <= m.date) out[k] = { surface: m.surface, date: m.date };
+    for (const [entry, ioc] of [[m.winnerEntry, m.winnerIoc], [m.loserEntry, m.loserIoc]]) {
+      if (entry !== 'WC' || !ioc) continue;
+      const c = wc.get(k) ?? new Map();
+      c.set(ioc, (c.get(ioc) ?? 0) + 1);
+      wc.set(k, c);
+    }
+  }
+  for (const [k, c] of wc) {
+    const total = [...c.values()].reduce((s, v) => s + v, 0);
+    const [ioc, n] = [...c.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (out[k] && n >= 2 && n / total >= 0.5) out[k].ioc = ioc;
   }
   return out;
 }
@@ -95,6 +115,9 @@ function isCompleted(score) {
   if (s.includes('W/O') || s.includes('WALKOVER') || s.includes('DEF')) return false;
   return true; // Las retiradas (RET) cuentan: se jugó parte del partido.
 }
+
+// "6-3 2-1 RET", "7-5 Ret.": se jugó parte y el perdedor no pudo seguir (lesión, enfermedad)
+const isRetired = (score) => /\bRET/i.test(String(score ?? ''));
 
 function sackmannDate(d) {
   const s = String(d);
@@ -149,10 +172,13 @@ export function fromSackmann(r, { levels = ['C'], source = 'sk', intern = same }
     winnerId: s(r.winner_id ? `${source}:${r.winner_id}` : playerKey(r.winner_name)),
     winnerName: s(r.winner_name),
     winnerIoc: s(r.winner_ioc ?? ''),
+    winnerEntry: s(String(r.winner_entry ?? '').trim().toUpperCase()),
     loserId: s(r.loser_id ? `${source}:${r.loser_id}` : playerKey(r.loser_name)),
     loserName: s(r.loser_name),
     loserIoc: s(r.loser_ioc ?? ''),
+    loserEntry: s(String(r.loser_entry ?? '').trim().toUpperCase()),
     completed: isCompleted(r.score),
+    retired: isRetired(r.score),
     serve: serveOf(r),
   };
 }
@@ -251,10 +277,15 @@ export function fromSharpex(r) {
     order: Number(r.order) || 0,
     winnerId: playerKey(r.winner),
     winnerName: r.winner,
+    winnerIoc: r.winner_ioc ?? '',
+    winnerEntry: '',
     loserId: playerKey(r.loser),
     loserName: r.loser,
+    loserIoc: r.loser_ioc ?? '',
+    loserEntry: '',
     score: r.score ?? '',
     completed: isCompleted(r.score || 'x'),
+    retired: isRetired(r.score),
     serve: null, // el formato propio no trae estadísticas
   };
 }

@@ -130,7 +130,8 @@ export function scan(model, oddsRows, opts = {}) {
       skipped.push({ ...r, reason: `Jugador no encontrado o ambiguo: ${!a ? r.p1 : r.p2}` });
       continue;
     }
-    const pred = model.predict(a.id, b.id, r.surface);
+    // Con la fecha y el torneo cuentan la actividad y el factor local (sin fecha, la de hoy)
+    const pred = model.predict(a.id, b.id, r.surface, r.start || new Date().toISOString(), { tournament: r.tournament });
     if (pred.lowData && !o.allowLowData) {
       skipped.push({ ...r, reason: `Pocos partidos en el histórico (${pred.nA} / ${pred.nB})` });
       continue;
@@ -160,6 +161,7 @@ export function scan(model, oddsRows, opts = {}) {
         lowData: pred.lowData,
         matchesA: pred.nA,
         matchesB: pred.nB,
+        factors: pred.factors,
       };
       if (e >= o.minEdge && s.odds >= o.minOdds && s.odds <= o.maxOdds) results.push(row);
     }

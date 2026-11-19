@@ -1,6 +1,7 @@
 # Motor de los Challenger, segunda versión — diseño
 
-Fecha: 2026-11-19 · Estado: fase 1 hecha (ver «Fase 1: resultado»); pendiente de revisión por Jordi
+Fecha: 2026-11-19 · Estado: fases 0 a 4 hechas (ver sus «resultado»; de la 4 falta el tiempo muerto médico, sin fuente); pendiente de
+revisión por Jordi
 
 ## Intención
 
@@ -123,11 +124,79 @@ resolución automática de la app las retiradas ya se resuelven a mano.
 ## Fases
 
 0. **Comprobar la premisa** con los Challenger ya guardados en producción: log-loss de la casa, del modelo y de la mezcla, y CLV de
-   las que habrían sido recomendaciones. Necesita permiso de Jordi para leer su base de datos.
-1. **Estadísticas de saque y resto, y calibración por tramos.**
-2. Actividad, factor local y ranking protegido.
-3. Mezcla con la casa, las dos salidas, los tramos y su registro.
-4. Riesgo de retirada y avisos de tiempos muertos médicos (primero sólo guardándolos; peso cuando haya 3-6 meses medidos).
+   las que habrían sido recomendaciones. Hecha (permiso de Jordi, Hugo y Roberto; regla 9 de `AGENTS.md`). Repetirla cuando haya
+   4-6 semanas de cuotas: con una semana, las cifras tienen mucho margen.
+1. **Estadísticas de saque y resto, y calibración por tramos.** Hecha.
+2. **Actividad y factor local.** Hecha. El ranking protegido pasa a la fase 4 (ver «Fase 2: resultado»).
+3. **Mezcla con la casa, las dos salidas, los tramos y su registro.** Hecha (Valor, oculto: ver «Fase 0: resultado»).
+4. **Riesgo de retirada y avisos físicos.** Hecha la retirada reciente y el ranking protegido (del cuadro final de ProTennisLive).
+   El tiempo muerto médico queda para más adelante: LiveScore no lo da y no hay otra fuente (19-11-2026, decisión de Hugo).
+
+## Fase 4: resultado (19-11-2026)
+
+**Riesgo de retirada** (`retirementRisk` en `src/form.js`), medido en los Challenger del histórico (cuadro final y previas), con las
+tasas de 2021-2023 y la comprobación en 2024-2026. Se retira alguno en el 3,6-3,8 % de los partidos; cada jugador, en el 1,8 %:
+
+| Jugador | 2021-2023 (tasas) | 2024-2026 (comprobación) |
+|---|---|---|
+| Sin retirada en los 90 días anteriores | 1,67 % | 1,69 % |
+| Se retiró en los últimos 90 días | 2,49 % (×1,5) | 2,90 % (×1,7) |
+| Con ranking protegido (sólo Sackmann, que dice la entrada) | 4,04 % (×2,2; 470 casos) | 3,11 % (×1,7; 386) |
+| Vuelve tras 180 días o más sin jugar | 1,73 % | 2,30 % |
+
+- Entran la retirada reciente (×1,5) y el ranking protegido (×2,2): `r = 1,67 % × 1,5 × 2,2` según lo que tenga cada uno. El
+  parón largo no cambia nada claro y no entra. Por separado, 14 y 15-35 días dan lo mismo que 36-90 (2,5 % en 2021-2023).
+- **Cómo pagan las casas** (`RETIRE_RULE` en `src/picks.js`): Winamax anula la apuesta al ganador si uno se retira (su reglamento,
+  sección Tenis; la «Garantía Abandono», que la paga, es sólo para la ATP y la WTA: los Challenger no entran). Betway, también según
+  las comparativas, sin confirmar en su reglamento de España. Con la apuesta anulada, una retirada devuelve lo apostado: el valor
+  esperado es `(1 − r) · (p · cuota − 1)`, con r el riesgo de los dos.
+- **Avisos físicos:** `retirada_reciente` (en los últimos 90 días) y `ranking_protegido`, con de qué jugador es cada uno (`who`).
+  Con uno, no hay *Alta probabilidad*. El modelo guarda la fecha de la última retirada de cada jugador (`lastRet`); el 19-11-2026,
+  2.982 jugadores tienen una y 84 en los últimos 90 días.
+- **Ranking protegido en directo:** del cuadro final de cada Challenger en ProTennisLive (`mds.pdf`, `parseEntries` en
+  `server/services/tennis/ptlpdf.js`), que marca con PR a quien entra con él (en Champaign, noviembre de 2026: Patrick Maloney).
+  El servicio tennis lo pone en `entry` de cada jugador de los Challenger de LiveScore y el motor lo recibe en `predict`.
+- **Tiempo muerto médico:** sin fuente (LiveScore no lo trae en sus incidencias). El aviso `tmo_reciente` existe y quita la alta
+  probabilidad, pero nada lo pone todavía.
+
+## Fase 0: resultado (19-11-2026)
+
+Cuotas de ganador de producción (sólo lectura) de los Challenger del cuadro final del 12 al 18 de noviembre, resultados de LiveScore
+y el motor entrenado sólo con lo anterior a cada partido (con datos hasta el 8 de noviembre los del 12 al 15, y hasta el 15 los del
+16 al 18). 155 partidos medibles: 50 sin cuotas, 4 con un jugador sin emparejar y 2 con pocos datos. 103 de los 155 tenían una sola
+casa, y la cuota se movió de media 1,6 puntos de la apertura al cierre.
+
+| | Log-loss |
+|---|---|
+| Casa (apertura / cierre, sin margen) | 0,5931 / 0,5932 |
+| Modelo solo | 0,5955 |
+| Mezcla al 25 % con la apertura / con el cierre | 0,5901 / 0,5900 |
+
+- La mezcla al 25 % baja el log-loss de la casa de cierre en 0,0031, con un error de ±0,0042: mejora, pero no se puede dar por
+  segura. Con el 10 %, −0,0015 ± 0,0017.
+- **Peso de la mezcla:** el mejor en la mitad grande (16-18, 119 partidos) es 0,15 con la apertura y 0,20 con el cierre, y comprobado
+  en la otra mitad (12-15, 36) también gana a la casa (0,6657 frente a 0,6751). Ajustado en la mitad pequeña sale 1, que en la grande
+  es peor que la casa: con 36 partidos no vale. Se usa **w = 0,20**.
+- **Valor frente a la cuota de cierre:** las que el modelo solo daría como valor (58) pierden frente al cierre: CLV −7,2 % ± 1,3 %
+  y sólo el 36 % mejora la cuota de cierre, en los tres tramos. Con la mezcla al 25 % y los umbrales de abajo sale una sola en 155
+  partidos. **El modelo no aporta nada frente a la cuota de cierre: *Valor* se calcula y se registra, pero no se enseña**
+  (`VALUE_VISIBLE` en `src/picks.js`), hasta que el CLV de las registradas diga lo contrario.
+
+## Fase 3: resultado (19-11-2026)
+
+- **Motor** (`src/picks.js`): `blendWithMarket` (w 0,20), `marketOf` (lo último de cada casa, sin margen por el método potencia,
+  la mejor cuota de cada uno), `reliabilityOf` (datos de los jugadores, acuerdo con la casa, cuotas y contexto; misma forma que la
+  del tenis) y `picksOfMatch` con los tramos y mínimos de «Salidas». Avisos de ahora: `local`, `pocos_datos` (menos de 25 partidos)
+  y `datos_viejos` (actividad sin la semana anterior); los físicos llegan con la fase 4.
+- **Servicio:** `GET /api/challenger/recomendaciones?fecha=` (con sesión): los Challenger del día sin empezar con el modelo, la casa,
+  la mezcla, la fiabilidad, los avisos y las recomendaciones. Se guarda un minuto por día.
+- **App:** pestaña *Recomendaciones* en la ficha de cada Challenger, el circuito *Challenger* en la pantalla *Recomendaciones* del
+  tenis (con *Todos*, debajo de la ATP y la WTA), las de alta probabilidad en *Las más fiables del día* y en la columna del partido
+  elegido. *Alta probabilidad* dice siempre «sin ventaja sobre la casa» y su valor esperado; *Valor*, oculto con su motivo.
+- **Registro:** se apuntan todas en *Acierto del modelo*, en grupos «Challenger · Alta probabilidad · cuota baja», «Challenger ·
+  Valor · cuota media»…; las de Valor ocultas, sin el aviso de recomendación fuerte (`logPredictions` con `alert: false`).
+- El 19-11-2026, de los 21 Challenger sin empezar, 3 con alta probabilidad (78-80 %, cuota 1,22-1,25, valor −2,5 a −2,8 %), 15 sin
+  ninguna que llegue al nivel, 2 con pocos datos y 1 sin cuotas.
 
 ## Fase 1: resultado (19-11-2026)
 
@@ -147,6 +216,31 @@ Saque y resto (`src/stats.js`) y la cola de la calibración (`tailSlope` en `src
 - La cola apenas cambia nada: con el Elo real, el exceso de confianza con los favoritos es pequeño. Se queda porque no empeora.
 - No contar las retiradas en saque y resto: igual. No entra.
 - Entrenar con 256 MB: 17 s, `model.json` de 2,8 MB.
+
+## Fase 2: resultado (19-11-2026)
+
+Actividad y factor local (`src/form.js`) en el logit, con sus pesos ajustados con 2023 junto a los de la fase 1 (`fitWeights`
+con `features`). En los mismos 28.117 Challengers del 1-1-2024 al 14-11-2026:
+
+| Modelo | Log-loss | Brier | Acierto |
+|---|---|---|---|
+| Fase 1 | 0,6157 | 0,2141 | 65,5 % |
+| + torneos en las 5 semanas anteriores | 0,6138 | 0,2133 | 65,7 % |
+| + partidos de la semana anterior | 0,6155 | 0,2140 | 65,6 % |
+| + juega en su país | 0,6153 | 0,2139 | 65,7 % |
+| **+ torneos en 5 semanas y juega en su país (el de ahora)** | **0,6134** | **0,2131** | 65,8 % |
+
+- Entran los torneos de las 5 semanas anteriores (`bWeeks` 0,101) y jugar en su país (`bHome` 0,107). Mejoran los dos tramos
+  (Sackmann hasta mayo de 2026: 0,6122 → 0,6097; TennisMyLife desde junio: 0,6373 → 0,6364) y ningún tramo de probabilidad
+  empeora más allá de su margen.
+- Los partidos de la semana anterior no entran: con los torneos de 5 semanas no añaden nada (0,6139 frente a 0,6138).
+- El país del torneo: el de la mayoría de sus invitados en todas sus ediciones (396 de 455 ciudades) y, en directo, el del nombre
+  de LiveScore. Desde junio de 2026 TennisMyLife no dice quién entra invitado: las ciudades nuevas se quedan sin país al evaluar.
+- **Ranking protegido, a la fase 4:** Sackmann trae la entrada al cuadro, pero desde junio de 2026 TennisMyLife la deja vacía (7.114
+  de 7.124 partidos) y en directo nadie la da, así que no se podría usar al predecir.
+- En directo, si el modelo no llega a la semana anterior al partido (TennisMyLife va con días de retraso), la actividad no cuenta
+  (`factors.stale`).
+- Entrenar con 256 MB: 8 s, `model.json` de 2,9 MB. `comparar` devuelve `modelo.factores` de cada partido.
 
 ## Límites
 

@@ -262,6 +262,7 @@ export type Tour = 'atp' | 'wta';
 export interface TennisPlayer {
   id: string; name: string; short: string; flag: string; country: string; seed: number | null; rank: number | null;
   sets: number[]; setWins: boolean[]; tiebreaks: (number | null)[]; winner: boolean; alt: string[];
+  entry?: string | null; // Challenger: cómo entró al cuadro, de ProTennisLive ('PR' ranking protegido, 'WC', 'Q'…)
 }
 // Estadísticas de un jugador en un partido (server/services/tennis/matchstats.js); null si la fuente no lo da
 export interface TennisStatSide {
@@ -363,6 +364,27 @@ export type TennisPicks = ({ ready: true } & TennisMatchPicks) | { ready: false;
 // Las recomendaciones de los partidos de un día (day, en hora de España) y los que todavía no tienen cuotas
 export interface TennisBoardMatch extends TennisMatchPicks { m: TennisMatch; day: string }
 export interface TennisBoard { matches: TennisBoardMatch[]; noOdds: { id: string; date: string; a: string; b: string }[] }
+
+// Recomendaciones de los Challenger (servicio challenger, fase 3 del motor: server/sharpex-tenis/src/picks.js). En cada partido,
+// las probabilidades son del jugador a; en cada pick, de su jugador. tipo 'probabilidad': alta probabilidad, sin ventaja sobre la
+// casa; 'valor': valor esperado mínimo por tramo, que no se enseña mientras valorVisible sea false (se registra para medirlo)
+export type ChallengerAviso = 'local' | 'pocos_datos' | 'datos_viejos' | 'ranking_protegido' | 'retirada_reciente' | 'tmo_reciente';
+export interface ChallengerPick {
+  tipo: 'valor' | 'probabilidad'; tramo: 'baja' | 'media' | 'alta'; lado: 'a' | 'b'; jugador: string; p: number; pModelo: number; pCasa: number;
+  valor: number; cuota: number; casa: string; fiabilidad: number; avisos: ChallengerAviso[]; visible: boolean;
+}
+export interface ChallengerMatchPicks {
+  id: string; fecha: string; torneo: string; ronda: string; a: string; b: string; superficie: TennisSurface; superficieConocida: boolean;
+  partidosJugados: [number, number] | null; modelo: number | null; casa: number | null; final: number | null; fiabilidad: Reliability | null;
+  factores: {
+    weeks5: [number, number]; lastWeek: [number, number]; home: [number | null, number | null]; venue: string | null; stale: boolean;
+    retire?: [number, number]; recentRet?: [boolean, boolean]; pr?: [boolean, boolean];
+  } | null;
+  // quien: de qué jugador es cada aviso; retirada: probabilidad de que se retire cada uno (fase 4); entradas: cómo entró cada uno al cuadro
+  avisos: ChallengerAviso[]; quien?: Partial<Record<ChallengerAviso, ('a' | 'b')[]>>; retirada?: { a: number; b: number; total: number };
+  entradas?: [string | null, string | null]; descartado: 'sin_modelo' | 'sin_cuotas' | 'pocos_datos' | 'discrepancia' | 'ninguna' | null; picks: ChallengerPick[];
+}
+export interface ChallengerDay { fecha: string; peso: number; valorVisible: boolean; modelo: { ultimoPartido: string | null }; partidos: ChallengerMatchPicks[] }
 
 // Ficha de un tenista: datos personales, balance y últimos resultados
 export interface TennisRecord { won: number; lost: number; titles: number; doublesTitles: number; prize: number }
@@ -602,6 +624,10 @@ export interface Api {
     picks(date: string, id: string): Promise<TennisPicks>;
     picksDay(date: string): Promise<TennisDayPick[]>;
     picksBoard(date: string): Promise<TennisBoard>;
+  };
+  // Motor de los Challenger (servicio challenger): las recomendaciones de los Challenger de un día
+  challenger: {
+    picks(date: string): Promise<ChallengerDay>;
   };
   basket: {
     leagues(): Promise<BasketLeague[]>;

@@ -9,10 +9,14 @@
 //   En los días de previa, cada torneo cada 5 min de día (cada 30 de noche, hora del torneo); antes, cada 3 h hasta que sale el
 //   cuadro. Peticiones condicionales (ETag): si no ha cambiado responde 304 sin el PDF. De una en una y como poco a 8 s; con un 429
 //   se para 5 min y se espacia más. Unas 2 por minuto con ocho torneos en previa, casi todas 304.
+// - Cuadro final (mds.pdf): sólo para saber cómo entró cada uno (PR, WC, Q, LL…): el motor de los Challenger avisa del ranking
+//   protegido, que dobla el riesgo de retirada. De los torneos con su previa leída o cuya ciudad sale en LiveScore esa semana (no
+//   hace falta la previa: con el torneo empezado ya no se pide), desde tres días antes del lunes hasta que acaba: cada 3 h hasta
+//   que sale y luego cada 6 h (cambian los lucky losers). Las semanas se comprueban con las fechas del propio cuadro.
 // - Lo leído se guarda en tennis.cache (ptl:<año>-<id>) para no volver a pedirlo al arrancar.
 const { query } = require('../../shared/db');
 const client = require('../../shared/client');
-const { pdfItems, parseDraw, parseOrder } = require('./ptlpdf');
+const { pdfItems, parseDraw, parseEntries, parseOrder } = require('./ptlpdf');
 
 const BASE = 'https://www.protennislive.com/posting';
 const MIN_GAP = 8e3, MAX_GAP = 60e3, PAUSE_429 = 5 * 60e3;
@@ -133,7 +137,7 @@ const save = t => query(`INSERT INTO tennis.cache (key, value, t) VALUES ($1, $2
   [`ptl:${t.key}`, JSON.stringify(t)]).catch(e => console.error('[tennis] ProTennisLive (guardar):', e.message));
 async function restore() {
   const { rows } = await query(`SELECT value FROM tennis.cache WHERE key LIKE 'ptl:%' AND t > now() - interval '10 days'`).catch(() => ({ rows: [] }));
-  for (const r of rows) if (r.value?.key) state.set(r.value.key, { ...r.value, qsAt: 0, opAt: 0 });
+  for (const r of rows) if (r.value?.key) state.set(r.value.key, { ...r.value, qsAt: 0, opAt: 0, mdsAt: 0 });
 }
 
 let catalog = { t: 0, list: [] };
@@ -213,11 +217,41 @@ async function readOrder(t) {
   await save(t);
 }
 
+// Cuadro final: cómo entró cada uno. Si aún no ha salido (404, o la hoja de aviso de antes), se vuelve a mirar más tarde
+async function readMain(t) {
+  const buf = await ask(`${BASE}/${t.year}/${t.id}/mds.pdf`);
+  t.mdsAt = Date.now();
+  if (!buf || buf === 'same') return;
+  const md = parseEntries(pdfItems(buf));
+  if (!md) { if (buf.length >= 20000) console.error(`[tennis] ProTennisLive: no se entiende el cuadro final de ${t.id}`); return; }
+  // Como con la previa: si el cuadro no es de esta semana o la siguiente, el id es de otro torneo este año
+  const week = mondays().find(m => Math.abs(dayMs(md.start) - m) <= 3 * DAY);
+  if (week == null) { t.mainOther = true; return; }
+  t.main = { at: Date.now(), city: md.city, monday: week, entries: md.entries.filter(e => e.entry).map(({ first, last, name, entry, country }) => ({ first, last, name, entry, country })) };
+  await save(t);
+}
+
+// Cómo entró al cuadro final un jugador de un Challenger de esta semana o la siguiente ("PR", "WC", "Q"…), por la ciudad del torneo y
+// su apellido; null si no se sabe o entró directo
+function entryOf(tournament, name) {
+  const k = cityKey(tournament), last = lastWord(name);
+  for (const t of state.values()) {
+    if (!t.main || cityKey(t.main.city) !== k || t.main.monday + 7 * DAY < Date.now()) continue;
+    const hit = t.main.entries.filter(e => lastWord(e.last) === last);
+    if (hit.length === 1) return hit[0].entry; // dos con el mismo apellido: no se sabe cuál
+  }
+  return null;
+}
+
 // Qué toca ahora: lo más atrasado de todo
 function dueJobs(now = Date.now()) {
   const jobs = [];
   for (const t of state.values()) {
     if (t.monday + 7 * DAY < now) continue; // torneo acabado
+    // Cuadro final: de los que tienen su previa o cuya ciudad sale en LiveScore, desde tres días antes del lunes
+    const real = (t.draw && t.status === 'active') || hinted.has(cityKey(t.name));
+    const mdsEvery = t.main ? 6 * 3600e3 : 3 * 3600e3;
+    if (real && !t.mainOther && now >= t.monday - 3 * DAY && now - (t.mdsAt || 0) >= mdsEvery) jobs.push({ t, kind: 'mds', late: now - (t.mdsAt || 0) - mdsEvery });
     if (t.status === 'other' || t.status === 'unreadable') { if (now - t.qsAt > 24 * 3600e3) jobs.push({ t, kind: 'qs', late: now - t.qsAt }); continue; }
     if (!t.draw) {
       // Con el torneo ya empezado, si no ha salido su cuadro ya no va a salir: no se sigue preguntando
@@ -268,7 +302,7 @@ async function loop() {
       }
       const [job] = dueJobs();
       if (!job) { await sleep(30e3); continue; }
-      await (job.kind === 'qs' ? readDraw(job.t) : readOrder(job.t)).catch(e => { if (e.message !== '429') console.error(`[tennis] ProTennisLive ${job.t.id} ${job.kind}:`, e.message); });
+      await (job.kind === 'qs' ? readDraw(job.t) : job.kind === 'op' ? readOrder(job.t) : readMain(job.t)).catch(e => { if (e.message !== '429') console.error(`[tennis] ProTennisLive ${job.t.id} ${job.kind}:`, e.message); });
     } catch (e) {
       console.error('[tennis] ProTennisLive:', e.message);
       await sleep(60e3);
@@ -335,4 +369,4 @@ const status = () => [...state.values()].filter(t => t.monday + 7 * DAY >= Date.
 }));
 const requests = () => ({ gap, pausedUntil: pausedUntil > Date.now() ? new Date(pausedUntil).toISOString() : null });
 
-module.exports = { start, games, status, requests, hint, zoneOf, atLocal, candidates, mondays };
+module.exports = { start, games, entryOf, status, requests, hint, zoneOf, atLocal, candidates, mondays };

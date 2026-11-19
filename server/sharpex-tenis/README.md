@@ -15,6 +15,7 @@ node bin/sharpex-tenis.js datos  # descarga el histórico real en ./datos (63 MB
 1. **Modelo: Elo por superficie más saque y resto** (`src/elo.js`, `src/stats.js`)
    Cada jugador tiene un rating general y otro por superficie. La predicción mezcla los dos (`surfaceWeight`, 0.3 por defecto, ajustado con datos reales). Los ratings se calculan con Challengers, ATP, previas e ITF; sólo se apuesta en Challengers. El K baja a medida que el jugador acumula partidos y sube un poco tras un parón largo (vuelta de lesión). Si alguno de los dos tiene menos de 10 partidos en el histórico, el partido se marca como "pocos datos" y el escáner no lo recomienda.
    Desde noviembre de 2026 cuenta también lo que gana cada uno al saque y al resto por encima de lo esperado ante cada rival (la idea de `server/services/tennis/model.js`, copiada porque el motor es un paquete aparte), con lo reciente pesando más; de ahí sale, punto a punto, la probabilidad de ganar el partido. La final es `σ(wElo·logit(Elo) + wStats·logit(saque y resto))` con la cola aplanada por encima del 75 % (`tailSlope`), y los pesos se ajustan con los Challengers del año anterior (`fitWeights`). Los ITF no traen estadísticas: sus jugadores se quedan en la media y manda el Elo. Un `model.json` de antes predice como antes (sólo Elo) hasta que se vuelve a entrenar.
+   Desde la fase 2 (noviembre de 2026, `src/form.js`) se suman a esa z la **actividad** (torneos jugados en las 5 semanas anteriores, hasta 4: `bWeeks`) y el **factor local** (juega en su país: `bHome`), como diferencias entre los dos. El país del torneo sale de la tabla de ciudades (el de la mayoría de sus invitados en todas sus ediciones, guardado en `model.venues`) o, en directo, del nombre de LiveScore ("Knoxville, USA"). Si el modelo no llega a la semana anterior al partido (TennisMyLife va con días de retraso), la actividad no cuenta y `factors.stale` lo dice. `predict` devuelve `factors` con lo de cada uno, y el servicio lo enseña en `comparar` (`modelo.factores`).
 
 2. **Validación sin trampas** (`src/evaluate.js`)
    El modelo predice cada partido *antes* de ver el resultado y solo se puntúan los Challengers desde la fecha que elijas. Saca el acierto, el Brier y el log-loss, más una tabla de calibración ("cuando dice 70 %, ¿gana el 70 %?"). Con `--ajustar` prueba combinaciones de parámetros del Elo y ajusta los pesos de la mezcla **en el año anterior** a esa fecha, no en los partidos que puntúa (si no, las cifras salen mejores de lo que serán).
@@ -67,6 +68,22 @@ Con más historial hay menos jugadores con pocos datos, así que se pueden puntu
 - Entrenar sigue cabiendo en los 256 MB del servicio: 17 s y un `model.json` de 2,8 MB (antes 2,0).
 - La prueba de abajo daba 0,6155 → 0,6087 para lo mismo; no está el código con el que se hizo y aquí sale menos (−0,0027). Vale la de arriba, que se puede repetir con `validar`.
 
+**Actividad y factor local** (fase 2, noviembre de 2026; los mismos 28.117 Challengers, cada variante con sus pesos ajustados con 2023; `validar --desde 2024-01-01 --pesos --variables …`):
+
+| Modelo | Log-loss | Brier | Acierto | Hasta mayo 2026 (Sackmann, 24.220) | Desde junio (TennisMyLife, 3.897) |
+|---|---|---|---|---|---|
+| Fase 1 (Elo + saque y resto + cola) | 0,6157 | 0,2141 | 65,5 % | 0,6122 | 0,6373 |
+| + torneos en las 5 semanas anteriores | 0,6138 | 0,2133 | 65,7 % | 0,6102 | 0,6364 |
+| + partidos de la semana anterior | 0,6155 | 0,2140 | 65,6 % | 0,6120 | 0,6369 |
+| + juega en su país | 0,6153 | 0,2139 | 65,7 % | 0,6118 | 0,6373 |
+| **+ torneos en 5 semanas y juega en su país (el de ahora)** | **0,6134** | **0,2131** | 65,8 % | 0,6097 | 0,6364 |
+
+- Pesos (2023): `wElo` 0,69, `wStats` 0,294, `tailSlope` 0,875, `bWeeks` 0,101 (4 torneos frente a 1: unos +7 puntos a igualdad de lo demás) y `bHome` 0,107 (unos +2,7 puntos).
+- Calibrado en todos los tramos, ninguno peor que en la fase 1 más allá de su margen: el peor, cuando dice 82 % gana el 81 % (1.720 partidos).
+- El país sale de 396 de las 455 ciudades del histórico. Desde junio de 2026 TennisMyLife no dice quién entra invitado: una ciudad que no estaba antes se queda sin país al ajustar y evaluar (de ahí que el factor local no mueva el tramo de TennisMyLife); en directo, lo da el nombre de LiveScore.
+- Entrenar sigue cabiendo en 256 MB: 8 s y un `model.json` de 2,9 MB (de cada jugador se guardan sólo sus torneos de las últimas semanas).
+- El ranking protegido (que en Sackmann restaba 7,8 puntos) no entra: desde junio de 2026 TennisMyLife no dice cómo entró cada uno al cuadro y en directo nadie lo da. Queda para los avisos de la fase 4.
+
 **Lo que se ha probado y no se ha metido** (Challengers 2024-2026, ajuste con 2023):
 
 | Idea | Log-loss | Por qué no |
@@ -75,6 +92,7 @@ Con más historial hay menos jugadores con pocos datos, así que se pueden puntu
 | Margen de victoria (juegos ganados) | 0,6150 | Casi nada, y empeora la calibración de los favoritos claros |
 | Rating inicial según el ranking | 0,6154 | Nada |
 | Retiradas con medio peso | igual | Nada |
+| Partidos de la semana anterior (fase 2, sobre la fase 1) | 0,6155; con los torneos de 5 semanas, 0,6139 frente a 0,6138 | Lo recogen los torneos de 5 semanas |
 
 ## En la web: servicio `challenger`
 
@@ -90,6 +108,7 @@ Con `npm run backend` el motor corre como servicio (`server/services/challenger`
 | `GET /api/challenger/comparar?fecha=AAAA-MM-DD` | con sesión | Los Challenger del día (LiveScore) con la probabilidad del modelo, la superficie (por la ciudad del torneo) y la cuota de apertura y de cierre de cada casa, con la probabilidad del mercado sin margen. Las cuotas las lee el lector dos veces por partido (`server/services/odds/scheduler.js`, ajuste *Leer los Challenger*) |
 | `POST /api/challenger/picks/:id/cierre` | administrador | `{ cuota, rival? }` |
 | `POST /api/challenger/picks/:id/resultado` | administrador | `{ resultado: won \| lost \| void }` (o ganada, perdida, nula) |
+| `GET /api/challenger/recomendaciones?fecha=AAAA-MM-DD` | con sesión | Los Challenger del día sin empezar con el modelo, la casa sin margen (lo último de cada casa), la mezcla (`src/picks.js`, peso 0,20), la fiabilidad, los avisos y las recomendaciones: *Alta probabilidad* y *Valor* (éste con `visible: false` mientras la fase 0 no diga que el modelo gana a la cuota de cierre). Se guarda un minuto. Lo enseña la app de tenis |
 | `GET /api/challenger/estado` | con sesión | Jugadores, último partido, cuándo se entrenó y cómo fue la última actualización |
 | `POST /api/challenger/actualizar` | administrador | Baja los datos y reentrena ya (responde enseguida) |
 
@@ -104,6 +123,8 @@ node bin/sharpex-tenis.js entrenar --datos datos/ --salida modelo.json
 
 # 2. ¿Es bueno el modelo? (entrena con lo anterior, puntúa los Challengers desde la fecha)
 node bin/sharpex-tenis.js validar --datos datos/ --desde 2024-01-01 --ajustar
+#    Sólo los pesos (sin la búsqueda del K), con las variables que se quieran y hasta una fecha
+node bin/sharpex-tenis.js validar --datos datos/ --desde 2024-01-01 --hasta 2026-06-01 --pesos --variables actividad,local
 
 # 3. Buscar valor en las cuotas de hoy y registrar los picks
 node bin/sharpex-tenis.js escanear --modelo modelo.json --cuotas cuotas.json \
@@ -151,4 +172,8 @@ node bin/sharpex-tenis.js historial --historial picks.jsonl
 5. Más mercados: total de juegos, hándicap.
 6. ~~Exponerlo como API para la web de Sharpex.~~ Hecho: servicio `challenger` (arriba).
 7. ~~Leer las cuotas de los Challenger con el lector (una por la mañana y la de cierre).~~ Hecho (`comparar`).
-8. Con 4-6 semanas de cuotas y resultados, medir el modelo frente a la casa (log-loss del modelo, del mercado y de la mezcla) y decidir cuánto pesa cada uno. Después, picks solos en el historial y en la app de tenis.
+8. ~~Medir el modelo frente a la casa y decidir cuánto pesa cada uno.~~ Hecho con una semana (fase 0 de `docs/superpowers/specs/2026-11-19-motor-challenger-v2-design.md`: peso 0,20 y Valor oculto, porque el modelo no ganó a la cuota de cierre). Repetirlo con 4-6 semanas.
+9. ~~Recomendaciones en la app de tenis.~~ Hecho (fase 3): *Alta probabilidad* y, cuando se demuestre, *Valor*.
+10. ~~Riesgo de retirada y avisos físicos.~~ Hecho (fase 4): retirada en los últimos 90 días (×1,5) y ranking protegido (×2,2,
+    del cuadro final de ProTennisLive), con el valor esperado según cómo pague cada casa una retirada. Falta el tiempo muerto médico
+    (no hay fuente).

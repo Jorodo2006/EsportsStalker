@@ -41,8 +41,12 @@ un Chromium sin cabeza dentro de Docker (contenedor `lector`).
    pide sesión salvo las públicas de `server/services/gateway/public.js` (entrar, y leer partidos, estadísticas y cuotas). Una ruta
    nueva de un deporte que sea de lectura queda abierta sin más: si es de un usuario o son recomendaciones, ciérrala ahí y en
    `server/test/publico.test.js`.
-8. **Nada de `git commit` ni `git push` sin que Jordi lo pida explícitamente en ese momento.** Prepara los cambios y
-   espera su confirmación.
+8. **Nada de `git commit` ni `git push` sin que lo pida explícitamente en ese momento Jordi, Hugo o Roberto** (basta con uno
+   de los tres). Prepara los cambios y espera su confirmación.
+9. **Los datos de producción** (la base de datos de la VM compartida, `/opt/stacks/sharpex`) **no se leen ni se tocan sin el
+   permiso de Jordi, Hugo o Roberto** (basta con uno de los tres) para esa tarea. Aun con permiso, sólo lo que haga falta y en
+   modo lectura (`SET default_transaction_read_only = on`), salvo que pidan expresamente cambiar algo; nada de copiar el `.env`
+   ni los datos de los usuarios fuera de la VM.
 
 ## Comandos
 
@@ -259,8 +263,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Modelo de MMA** (`server/services/mma/model.js`, `history.js`, `picks.js`): bien calibrado pero discrimina poco (57,6 % de ganadores acertados; cifras en `docs/specs/12-mma.md`). Si lo tocas, repite `docker compose exec mma node services/mma/backtest.js` (ajusta con un periodo y comprueba con otro). Las claves de mercado de MMA (`moneyline|0||`, `method|0|<ko|sub|dec>|`, `distance|0||`, `total_rounds|0||<línea>`) las usan las recomendaciones y `settle.js`: si cambias una en `odds.js`, ajusta los dos. En los mercados de método la casa no suma 100 % entre A y B (`open` en `picks.js`).
 - **Motor de los Challenger** (`server/sharpex-tenis`, servicio `challenger`): si tocas el modelo, repite `validar` (ajuste con un
   año, evaluación con otro, sólo Challengers) con los datos de `sharpex-tenis datos`; cifras en su `README.md`. Es Elo más saque y
-  resto (`src/stats.js`, copia de la idea de `server/services/tennis/model.js` porque el motor es un paquete aparte), con los pesos
-  de `fitWeights`; la segunda versión del motor está en `docs/superpowers/specs/2026-11-19-motor-challenger-v2-design.md`, y cada
+  resto (`src/stats.js`, copia de la idea de `server/services/tennis/model.js` porque el motor es un paquete aparte) más la
+  actividad y el factor local (`src/form.js`, fase 2), con los pesos de `fitWeights`; la segunda versión del motor está en `docs/superpowers/specs/2026-11-19-motor-challenger-v2-design.md`, y cada
   variable nueva entra sólo si mejora la log-loss de la evaluación sin empeorar la calibración. Entrenar tiene que seguir cabiendo
   en los 256 MB del servicio (`--max-old-space-size=256`). Las dos fuentes usan
   identificadores distintos y se juntan en `mergeSources` (`src/data.js`): si cambias algo ahí, mira cuántos jugadores se emparejan y
@@ -271,7 +275,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   aviso: «Qualifying Final» se quedó sin traducir y pasaba por cuadro final. La que ESPN no trae sale de LiveScore; la de los
   Challenger, de los PDF de ProTennisLive (`protennislive.js`, `ptlpdf.js`): no bajes de 5 min por torneo (es lo que dura su caché)
   ni de 8 s entre peticiones, que responde 429; y si cambian sus PDF, ajusta la lectura con `server/test/ptl.test.js`.
-- **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`). Detalle en `docs/specs/09-tenis.md`.
+- **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`), con sus recomendaciones en `src/components/ChallengerPicks.tsx` (*Alta probabilidad* siempre con «sin ventaja sobre la casa»; *Valor* oculto mientras `VALUE_VISIBLE` de `server/sharpex-tenis/src/picks.js` sea `false`: no lo enseñes sin repetir la fase 0 de su especificación). Detalle en `docs/specs/09-tenis.md`.
 - **Estadísticas de partido de tenis** (`server/services/tennis/matchstats.js`): WTA de su web oficial (al momento) y, si no, TennisMyLife (días después). ESPN no las tiene. No uses LiveScore para esto: su robots.txt prohíbe `/api/` y se decidió no ampliar su uso ahora que la web es pública (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **CSP con nonce** (`web/cabeceras.conf`, `location = /index.html` de `web/nginx.conf`): nginx pone el nonce de cada petición

@@ -18,6 +18,7 @@ import { targetOfMatch } from '@/lib/odds-targets';
 import { TennisPlayerSheet } from '@/components/TennisPlayerSheet';
 import { TennisDayPicks, TennisPicksPage, TennisPicksPanel } from '@/components/TennisPicks';
 import { TennisSpotlight, TournamentGroup } from '@/components/TennisList';
+import { ChallengerPicksPanel } from '@/components/ChallengerPicks';
 import { TennisCompare } from '@/components/TennisStats';
 import { SheetScroll, DayStrip, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
 import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
@@ -100,16 +101,18 @@ export default function TennisMatches() {
 
   if (!ok) return <ErrorBox error="Falta reiniciar la app">Para el tenis hay que parar <code>npm run dev</code> y volver a lanzarlo (cambió el preload).</ErrorBox>;
   const openPick = (x: TennisBoardMatch) => { setFromPick(x.m); openMatch(x.m.id, undefined, x.day); };
+  // Un Challenger desde sus recomendaciones (motor aparte): por su id y su día, en la pestaña Recomendaciones
+  const openChallenger = (id: string, day: string) => { setFromPick(null); openMatch(id, 'picks', day); };
   if (open) return <MatchDetail key={open.id} m={open} date={date} initialTab={openTab?.id === open.id ? openTab.tab : undefined} onClose={closeMatch} />;
 
   const modes = <ModeSwitch value={mode} onChange={pickMode} />;
-  if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<TennisPicksPage onOpen={openPick} /></div>;
+  if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<TennisPicksPage onOpen={openPick} onOpenChallenger={openChallenger} /></div>;
 
   const toggle = (k: string) => { const n = closed.includes(k) ? closed.filter(x => x !== k) : [...closed, k]; setClosed(n); savePref('tennis-closed', n); };
   // Con la columna del partido elegido, el primer toque lo elige y el segundo abre su ficha; sin ella, la abre directamente
   const sel = twoCols ? shown.find(g => g.id === selId) ?? firstOf(shown) : null;
   const pick = (g: TennisMatch) => (twoCols && sel?.id !== g.id ? setSelId(g.id) : openMatch(g.id));
-  const dayPicks = <TennisDayPicks date={date} onOpen={openPick} onAll={() => pickMode('picks')} />;
+  const dayPicks = <TennisDayPicks date={date} onOpen={openPick} onAll={() => pickMode('picks')} onOpenChallenger={openChallenger} />;
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
@@ -161,10 +164,10 @@ type Tab = 'score' | 'odds' | 'picks' | 'form';
 function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: string; initialTab?: Tab; onClose: () => void }) {
   const { openBet } = useApp();
   const st = stateOf(m);
-  // Los Challenger no tienen modelo ni fichas de jugador: sólo marcador y cuotas (su motor va aparte, servicio challenger)
+  // Los Challenger no tienen fichas de jugador (son de ESPN), y sus recomendaciones son las de su motor aparte (servicio challenger)
   const full = !m.level;
-  const ok = (t?: Tab) => !!t && (t !== 'picks' || (st === 'pre' && full)) && (t !== 'odds' || st !== 'post');
-  const [tab, setTab] = useState<Tab>(ok(initialTab) ? initialTab! : st !== 'pre' ? 'score' : full ? 'picks' : 'odds');
+  const ok = (t?: Tab) => !!t && (t !== 'picks' || st === 'pre') && (t !== 'odds' || st !== 'post');
+  const [tab, setTab] = useState<Tab>(ok(initialTab) ? initialTab! : st !== 'pre' ? 'score' : 'picks');
   const t = targetOfMatch(m);
   const [sheet, setSheet] = useState<string | null>(null);
   useBackLayer(!!sheet, () => setSheet(null));
@@ -179,11 +182,11 @@ function MatchDetail({ m, date, initialTab, onClose }: { m: TennisMatch; date: s
         center={esTime(m.date)}
         centerSub={st === 'pre' ? new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : st === 'live' ? (m.points ? `${m.status} · ${m.points.a}-${m.points.b}` : m.status) : 'Final'}>
         <SheetTabs value={tab} onChange={setTab} items={[
-          ['score', 'Marcador'], ...(st === 'pre' && full ? [['picks', 'Recomendaciones']] as [Tab, string][] : []), ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]), ...(full ? [['form', 'Forma de los jugadores']] as [Tab, string][] : [])
+          ['score', 'Marcador'], ...(st === 'pre' ? [['picks', 'Recomendaciones']] as [Tab, string][] : []), ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]), ...(full ? [['form', 'Forma de los jugadores']] as [Tab, string][] : [])
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'tennis', league: m.tournament, event: t.event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {m.fixed && <p className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={13} className="shrink-0" />{m.fixed}</p>}
-      {tab === 'score' ? <><Sets m={m} /><TennisMatchStats m={m} onForm={full ? () => setTab('form') : undefined} /></> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <Form m={m} onPlayer={setSheet} />}
+      {tab === 'score' ? <><Sets m={m} /><TennisMatchStats m={m} onForm={full ? () => setTab('form') : undefined} /></> : tab === 'odds' ? <SportOdds target={t} /> : tab === 'picks' ? (full ? <TennisPicksPanel m={m} date={date} onOdds={() => setTab('odds')} /> : <ChallengerPicksPanel id={m.id} date={date} onOdds={() => setTab('odds')} />) : <Form m={m} onPlayer={setSheet} />}
     </div>
   );
 }

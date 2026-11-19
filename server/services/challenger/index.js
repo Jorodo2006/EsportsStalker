@@ -228,7 +228,8 @@ async function comparar({ req, query: q }) {
   const partidos = await Promise.all(games.map(async g => {
     const sup = surfaceOf(m.venues, g.tournament);
     const a = find(g.a.name), b = find(g.b.name);
-    const pred = a && b ? m.predict(a.id, b.id, sup.surface) : null;
+    // Con la fecha y el torneo, la actividad y el factor local de cada uno (fase 2 del motor)
+    const pred = a && b ? m.predict(a.id, b.id, sup.surface, g.date, { tournament: g.tournament }) : null;
     const hist = await client.call('odds', 'POST', '/api/odds/history', { match: { a: { name: g.a.name }, b: { name: g.b.name }, sport: 'tennis', start: g.date } })
       .catch(e => { console.error('[challenger] histórico de cuotas:', e.message); return []; });
     const casas = pricesOf(hist);
@@ -240,7 +241,7 @@ async function comparar({ req, query: q }) {
       id: g.id, fecha: g.date, estado: g.state, torneo: g.tournament, ronda: g.round, a: g.a.name, b: g.b.name,
       superficie: sup.surface, superficieConocida: sup.known,
       modelo: pred
-        ? { a: pred.pA, pocosDatos: pred.lowData, partidos: [pred.nA, pred.nB], jugadores: [a.name, b.name] }
+        ? { a: pred.pA, pocosDatos: pred.lowData, partidos: [pred.nA, pred.nB], jugadores: [a.name, b.name], factores: pred.factors }
         : { error: `No encuentro en el histórico a ${!a ? g.a.name : g.b.name}` },
       casas, mercado,
       // Valor con la mejor cuota de cierre de las casas: lo que habría dado apostar justo antes de empezar
@@ -253,6 +254,57 @@ async function comparar({ req, query: q }) {
     modelo: { ultimoPartido: m.lastDate },
     partidos: partidos.sort((x, y) => String(x.fecha).localeCompare(String(y.fecha)))
   };
+}
+
+// ---------- Recomendaciones (fase 3 del motor) ----------
+// Las de los Challenger de un día que no han empezado: el modelo mezclado con la casa, en dos tipos (Valor y Alta probabilidad)
+// y tres tramos de cuota (picksOfMatch en server/sharpex-tenis/src/picks.js). Las cuotas, lo último que leyó el lector de cada
+// casa. Se guarda un minuto por día: la piden la lista de tenis, su pantalla Recomendaciones y la ficha de cada partido, y cada
+// partido son dos llamadas (al servicio tennis y al de cuotas)
+const recos = new Map();
+const known = p => p?.name && !/^(tbd|por determinar)$/i.test(p.name);
+const BOOK = { winamax: 'Winamax', betway: 'Betway' }; // como las escribe el resto de la app
+async function recomendaciones({ req, query: q }) {
+  who(req);
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(q.fecha || '') ? q.fecha : madridDay();
+  const hit = recos.get(day);
+  if (hit && Date.now() - hit.t < 60e3) return hit.v;
+  const v = (async () => {
+    const games = (await client.call('tennis', 'GET', `/api/tennis/games?date=${day}`))
+      .filter(g => g.level === 'challenger' && g.state === 'pre' && !/^previa/i.test(g.round || '') && known(g.a) && known(g.b));
+    const m = await model();
+    const { matcher, surfaceOf, marketOf, picksOfMatch, PICKS, VALUE_VISIBLE } = await motor;
+    const find = matcher(m);
+    const partidos = await Promise.all(games.map(async g => {
+      const sup = surfaceOf(m.venues, g.tournament);
+      const a = find(g.a.name), b = find(g.b.name);
+      // entry: cómo entró cada uno al cuadro final (del de ProTennisLive, servicio tennis): el ranking protegido sube el riesgo de retirada
+      const pred = a && b ? m.predict(a.id, b.id, sup.surface, g.date, { tournament: g.tournament, entryA: g.a.entry, entryB: g.b.entry }) : null;
+      const hist = await client.call('odds', 'POST', '/api/odds/history', { match: { a: { name: g.a.name }, b: { name: g.b.name }, sport: 'tennis', start: g.date } })
+        .catch(e => { console.error('[challenger] histórico de cuotas:', e.message); return []; });
+      const books = Object.fromEntries(Object.entries(pricesOf(hist)).map(([book, x]) => [book, x.cierre]));
+      const r = picksOfMatch({ pred, market: marketOf(books), surfaceKnown: sup.known });
+      return {
+        id: g.id, fecha: g.date, torneo: g.tournament, ronda: g.round, a: g.a.name, b: g.b.name,
+        superficie: sup.surface, superficieConocida: sup.known, partidosJugados: pred ? [pred.nA, pred.nB] : null,
+        // Para el jugador a: lo que dice el modelo sin mirar la casa, la casa sin margen y la mezcla
+        modelo: r.pModel ?? pred?.pA ?? null, casa: r.pMarket ?? null, final: r.pFinal ?? null, fiabilidad: r.rel ?? null,
+        factores: pred?.factors ?? null, avisos: r.avisos, quien: r.who, retirada: r.retirada, entradas: [g.a.entry ?? null, g.b.entry ?? null],
+        descartado: r.excluded,
+        picks: r.picks.map(p => ({
+          tipo: p.tipo, tramo: p.tramo, lado: p.side, jugador: p.side === 'a' ? g.a.name : g.b.name, p: p.p, pModelo: p.pModel, pCasa: p.pMarket,
+          valor: p.ev, cuota: p.price, casa: BOOK[p.book] ?? p.book, fiabilidad: p.rel, avisos: p.avisos, visible: p.visible
+        }))
+      };
+    }));
+    return {
+      fecha: day, peso: PICKS.w, valorVisible: VALUE_VISIBLE, modelo: { ultimoPartido: m.lastDate },
+      partidos: partidos.sort((x, y) => String(x.fecha).localeCompare(String(y.fecha)))
+    };
+  })();
+  recos.set(day, { t: Date.now(), v });
+  v.catch(() => recos.delete(day));
+  return v;
 }
 
 const RESULT = { won: 'won', lost: 'lost', void: 'void', ganada: 'won', perdida: 'lost', nula: 'void' };
@@ -286,6 +338,7 @@ const routes = [
   ['GET', '/internal/challenger/torneos', () => torneos()],
   ['POST', '/api/challenger/escanear', escanear],
   ['GET', '/api/challenger/comparar', comparar],
+  ['GET', '/api/challenger/recomendaciones', recomendaciones],
 
   // Rendimiento, CLV y si el historial sigue íntegro (nadie ha cambiado ni borrado un pick antiguo)
   ['GET', '/api/challenger/historial', async ({ req }) => {

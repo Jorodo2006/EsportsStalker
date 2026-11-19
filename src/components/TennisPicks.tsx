@@ -22,6 +22,7 @@ import { Empty, ErrorBox, FoldOnPhone, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
+import { ChallengerBestRows, ChallengerBoard, challengerQuery } from './ChallengerPicks';
 import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
@@ -61,9 +62,9 @@ const usePickAdd = () => {
 // ---------- Datos ----------
 const boardQuery = (date: string) => ({ queryKey: ['tennis', 'board', date], queryFn: () => window.api.tennis.picksBoard(date), staleTime: 60_000, refetchInterval: 3 * 60e3, retry: false });
 
-// Circuito de un partido para el filtro
-type Circuit = Tour;
-const CIRCUITS: { value: Circuit; label: string }[] = [{ value: 'atp', label: 'ATP' }, { value: 'wta', label: 'WTA' }];
+// Circuito de un partido para el filtro. Los Challenger tienen sus recomendaciones aparte (motor de los Challenger, ChallengerBoard)
+type Circuit = Tour | 'challenger';
+const CIRCUITS: { value: Tour; label: string }[] = [{ value: 'atp', label: 'ATP' }, { value: 'wta', label: 'WTA' }];
 const circuitOf = (m: TennisMatch): Circuit => m.tour;
 const circuitOfId = (id: string): Circuit => (id.startsWith('wta:') ? 'wta' : 'atp');
 
@@ -88,7 +89,7 @@ export function useUpcomingTennis() {
     const limit = Date.now() + 24 * 3600e3;
     const inRange = (date: string) => range !== NEXT || +new Date(date) < limit;
     const all = qs.flatMap(q => q.data?.matches ?? []).filter(x => inRange(x.m.date));
-    const tours = CIRCUITS.filter(c => all.some(x => circuitOf(x.m) === c.value));
+    const tours: { value: Circuit; label: string }[] = [...CIRCUITS.filter(c => all.some(x => circuitOf(x.m) === c.value)), { value: 'challenger', label: 'Challenger' }];
     const byTour = all.filter(x => tour === 'all' || circuitOf(x.m) === tour).sort((a, b) => +new Date(a.m.date) - +new Date(b.m.date));
     const noOdds = matchId ? [] : qs.flatMap(q => q.data?.noOdds ?? []).filter(x => inRange(x.date) && (tour === 'all' || circuitOfId(x.id) === tour));
     return { tours, byTour, matches: byTour.filter(x => !matchId || x.m.id === matchId), noOdds };
@@ -108,10 +109,10 @@ function RangeFilters({ u }: { u: ReturnType<typeof useUpcomingTennis> }) {
     <div className={cn(panel, 'flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-2.5')}>
       <TvTabs value={u.range} onChange={u.pickRange} items={[{ value: NEXT, label: 'Próximas 24 h' }, ...u.days.map(d => ({ value: d, label: dayName(d) }))]} />
       <TvTabs value={u.tour} onChange={u.pickTour} items={[{ value: 'all' as const, label: 'Todos' }, ...u.tours]} />
-      <Select aria-label="Partido" className="h-7 w-full text-xs sm:w-72 lg:h-7 lg:text-xs" value={u.matchId} onChange={e => u.pickMatch(e.target.value)}>
+      {u.tour !== 'challenger' && <Select aria-label="Partido" className="h-7 w-full text-xs sm:w-72 lg:h-7 lg:text-xs" value={u.matchId} onChange={e => u.pickMatch(e.target.value)}>
         <option value="">Todos los partidos con cuotas ({u.byTour.length})</option>
         {u.byTour.map(x => <option key={x.m.id} value={x.m.id}>{vsOf(x.m)}, {when(x.m.date)}</option>)}
-      </Select>
+      </Select>}
     </div>
   );
 }
@@ -421,10 +422,15 @@ function TennisPicksPanelInner({ m, date, onOdds }: { m: TennisMatch; date: stri
 }
 
 // Pantalla Recomendaciones: todos los partidos con cuotas de las próximas 24 horas o del día que se elija
-function TennisPicksPageInner({ onOpen }: { onOpen: (x: TennisBoardMatch) => void }) {
+// onOpenChallenger: abrir un Challenger por su id y su día (sus recomendaciones no son del tablero)
+function TennisPicksPageInner({ onOpen, onOpenChallenger }: { onOpen: (x: TennisBoardMatch) => void; onOpenChallenger: (id: string, day: string) => void }) {
   const u = useUpcomingTennis();
   const split = useMedia('(min-width: 1280px)');
   const wide = useMedia('(min-width: 1400px)'); // con la columna del cupón y los anuncios a la derecha (App.tsx)
+  const chDays = u.range === NEXT ? u.days.slice(0, 2) : [u.range];
+  const until = useMemo(() => (u.range === NEXT ? Date.now() + 24 * 3600e3 : undefined), [u.range]);
+  const challengers = (u.tour === 'all' || u.tour === 'challenger') && !u.matchId && <ChallengerBoard days={chDays} until={until} onOpen={onOpenChallenger} />;
+  if (u.tour === 'challenger') return <div className="flex flex-col gap-2.5"><RangeFilters u={u} />{challengers}</div>;
   return (
     <div className="flex flex-col gap-2.5">
       <RangeFilters u={u} />
@@ -433,22 +439,26 @@ function TennisPicksPageInner({ onOpen }: { onOpen: (x: TennisBoardMatch) => voi
           ? `Todavía no hay cuotas de estos partidos (${list(u.noOdds.map(x => vs(x.a, x.b)), 3)}), y sin ellas no se puede recomendar nada. El lector las trae solo unas horas antes de cada partido.`
           : 'No quedan partidos de la ATP ni de la WTA por empezar en ese intervalo. Prueba con otro día.'}</Empty>
         : <TennisPicksBoard matches={u.matches} noOdds={u.noOdds} onOpen={onOpen} split={split} sideExtra={!wide && <AdSlot size="rect" />} />}
+      {challengers}
     </div>
   );
 }
 
 // La más fiable de cada partido del día, en la lista de partidos
-function TennisDayPicksInner({ date, onOpen, onAll }: { date: string; onOpen: (x: TennisBoardMatch) => void; onAll: () => void }) {
+function TennisDayPicksInner({ date, onOpen, onAll, onOpenChallenger }: { date: string; onOpen: (x: TennisBoardMatch) => void; onAll: () => void; onOpenChallenger: (id: string, day: string) => void }) {
   const q = useQuery({ ...boardQuery(date), enabled: date >= today() });
   const minOdds = useMemo(() => { const m = loadPrefs().minOdds; return MIN_ODDS.includes(m) ? m : DEFAULT_MIN_ODDS; }, []);
   const matches = useMemo(() => q.data?.matches ?? [], [q.data]);
   useLogPicks(matches);
   const best = useMemo(() => dayBest(matches, minOdds, 4), [matches, minOdds]);
-  if (!best.length) return null;
+  const ch = useQuery(challengerQuery(date));
+  const chCount = (ch.data?.partidos ?? []).reduce((t, m) => t + m.picks.filter(p => p.visible && p.tipo === 'probabilidad').length, 0);
+  if (!best.length && !chCount) return null;
   return (
     <TvFrame>
       <TvBand>Las más fiables del día</TvBand>
-      <BestRows best={best} onOpen={onOpen} />
+      {best.length ? <BestRows best={best} onOpen={onOpen} /> : <p className="border-b border-zinc-800 px-4 py-2.5 text-[13px] text-zinc-400">De la ATP y la WTA, ninguna todavía: sin cuotas no se puede recomendar nada.</p>}
+      <ChallengerBestRows date={date} onOpen={onOpenChallenger} />
       <button onClick={onAll} className="w-full cursor-pointer py-2 text-xs text-zinc-400 transition hover:text-zinc-100">Ver todas las recomendaciones</button>
     </TvFrame>
   );

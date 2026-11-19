@@ -15,6 +15,7 @@ import { oddBtn, panelCls } from './ui';
 import { useApp } from '@/lib/app-context';
 import { cardNote } from '@/lib/odds-window';
 import { useMember } from './AuthGate';
+import { useChallengerTop } from './ChallengerPicks';
 
 type Odds = { a: number; b: number } | null | undefined;
 type St = 'pre' | 'live' | 'post';
@@ -177,6 +178,8 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
     enabled: member && st === 'pre' && !m.level
   });
   const top = board.data?.matches.find(x => x.m.id === m.id)?.top ?? null;
+  // En los Challenger, la de alta probabilidad de su motor aparte (sin ventaja sobre la casa)
+  const chTop = useChallengerTop(m.id, date, member && st === 'pre' && !!m.level);
   const n = Math.max(m.a.sets.length, m.b.sets.length);
   const pts = st === 'live' ? m.points ?? null : null;
   // Lo que dan las casas a cada uno, quitando su margen
@@ -260,6 +263,20 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
           <span className="shrink-0 text-right">
             <span className="block font-score text-[17px] font-bold leading-5 text-amber-400 tnum">{pct(top.p)}</span>
             <span className="block text-[11px] text-zinc-500 tnum">{odd(top.price)} · {top.book}</span>
+          </span>
+          <ChevronRight size={15} className="shrink-0 text-zinc-600" />
+        </button>
+      )}
+      {chTop && (
+        <button onClick={() => onOpen('picks')} title="Ver las recomendaciones del partido"
+          className="flex w-full cursor-pointer items-center gap-3 border-t border-zinc-800 px-4 py-3 text-left transition hover:bg-zinc-900/70">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-medium text-zinc-500">Alta probabilidad · sin ventaja sobre la casa</span>
+            <span className="block truncate text-[14px] font-semibold text-zinc-50">Gana {chTop.jugador}</span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block font-score text-[17px] font-bold leading-5 text-amber-400 tnum">{pct(chTop.p)}</span>
+            <span className="block text-[11px] text-zinc-500 tnum">{odd(chTop.cuota)} · {chTop.casa}</span>
           </span>
           <ChevronRight size={15} className="shrink-0 text-zinc-600" />
         </button>

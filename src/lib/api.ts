@@ -254,6 +254,9 @@ export const api: Api = {
     }),
     picksBoard: date => get('/api/tennis/picks/board', { date })
   },
+  challenger: {
+    picks: date => get('/api/challenger/recomendaciones', { fecha: date })
+  },
   basket: {
     leagues: () => get('/api/basket/leagues'),
     games: date => get('/api/basket/games', { date }),
