@@ -491,6 +491,8 @@ export interface Api {
     deleteUser(id: string, confirm: string): Promise<{ ok: true }>;
     log(p?: { limit?: number; before?: string }): Promise<AdminLogRow[]>;
     authEvents(p?: { kind?: string; limit?: number; before?: string }): Promise<AuthEventRow[]>;
+    // Acierto del modelo: las recomendaciones resueltas de todos los deportes
+    predictions(): Promise<PredictionReport>;
   };
   // Anuncios (cuenta de AdSense) y responsable de la web (aviso legal), del .env del servidor
   publicConfig(): Promise<PublicConfig>;
@@ -501,7 +503,6 @@ export interface Api {
     export(): Promise<string | null>; import(): Promise<number>;
     // Recomendaciones del modelo, para medir si acierta (no son de ningún usuario)
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
-    predictions(): Promise<PredictionReport>;
     // Enviar una apuesta tuya a amigos (sin tu importe ni tus notas; ven cómo va)
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
   };

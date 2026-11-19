@@ -129,7 +129,8 @@ export const api: Api = {
     closeSessions: id => call('POST', `/api/admin/users/${part(id)}/sessions/close`, {}),
     deleteUser: (id, confirm) => call('DELETE', `/api/admin/users/${part(id)}`, { confirm }),
     log: p => get('/api/admin/log', p),
-    authEvents: p => get('/api/admin/auth-events', p)
+    authEvents: p => get('/api/admin/auth-events', p),
+    predictions: () => get('/api/admin/predictions')
   },
   publicConfig: () => get('/api/public/config'),
   friends: {
@@ -161,7 +162,6 @@ export const api: Api = {
     delete: id => call('DELETE', `/api/bets/${part(id)}`),
     settle: () => call('POST', '/api/bets/settle', {}),
     recordPredictions: list => call('POST', '/api/bets/predictions', { list }),
-    predictions: () => get('/api/bets/predictions'),
     share: (id, to, note) => call('POST', `/api/bets/${part(id)}/share`, { to, note }),
     export: async () => {
       const name = `apuestas-${new Date().toISOString().slice(0, 10)}.csv`;

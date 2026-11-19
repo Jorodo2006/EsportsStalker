@@ -115,7 +115,7 @@ solas con el resultado del partido.
 
 ## Acierto del modelo (`bets.predictions`, `server/services/bets/predictions.js`)
 
-En Mis apuestas → **Acierto del modelo** se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
+En Administración → **Acierto del modelo** (sólo administradores: `/api/admin/predictions`, `src/views/admin/ModelTab.tsx`) se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
 app (Recomendaciones, la columna de al lado de la lista, la ficha del partido), `src/lib/predictions.ts` manda al servidor todas las líneas
 que calcula el modelo de baloncesto y las recomendaciones que enseñan tenis, fútbol y MMA (la principal es "la más fiable", que puede no tener valor), con su partido
 y mercado (la misma clave que el `ref` de una apuesta), la probabilidad que enseña la app (`p`) y sus dos partes (modelo y

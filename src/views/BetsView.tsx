@@ -8,7 +8,6 @@ import { AutoMark } from '@/views/bets/AutoMark';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
-import { ModelAccuracy } from '@/components/ModelAccuracy';
 import { Badge, Button, Card, Empty, Loading, PageHeader, Stat, Tabs, td, th } from '@/components/ui';
 
 
@@ -29,8 +28,6 @@ export default function BetsView() {
   const w = useWallet();
 
   const [checking, setChecking] = useState(false);
-  // Tus apuestas, o el acierto de las recomendaciones del modelo (las apostaras o no)
-  const [tab, setTab] = useState<'mine' | 'model'>('mine');
 
   async function quickSettle(b: Bet, status: BetStatus) {
     // En una combinada el estado sale de sus selecciones: "ganada" las marca todas como ganadas
@@ -61,8 +58,7 @@ export default function BetsView() {
         <Button className="order-first w-full sm:order-none sm:w-auto" onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
-      <div className="mb-5"><Tabs value={tab} onChange={setTab} items={[{ value: 'mine', label: 'Mis apuestas' }, { value: 'model', label: 'Acierto del modelo' }]} /></div>
-      {tab === 'model' ? <ModelAccuracy /> : !bets.length ? <FirstBet onNew={() => openBet()} /> : <>
+      {!bets.length ? <FirstBet onNew={() => openBet()} /> : <>
 
       <Pending bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onShare={setSharing} />
 

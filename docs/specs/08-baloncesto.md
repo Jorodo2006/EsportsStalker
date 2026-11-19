@@ -423,7 +423,7 @@ en los B2B, sin empeorar el resto.
 
 La misma prueba enseña que **el modelo solo se pasa de seguro**: cuando dice 63 %, sale un 54-56 %; cuando dice 27 %, un
 34-37 %. En la app lo suaviza la mezcla con la casa (`MODEL_WEIGHT`), y el acierto real de lo que enseña se mide en
-Mis apuestas → Acierto del modelo. Si ahí también sale descalibrado, el siguiente paso es encoger la probabilidad del
+Administración → Acierto del modelo. Si ahí también sale descalibrado, el siguiente paso es encoger la probabilidad del
 modelo hacia el 50 % o bajar su peso.
 
 Para repetir la prueba:
