@@ -214,7 +214,7 @@ La valida `cleanRef` en `store.js`; lo que no cuadra se descarta y la apuesta se
 Recomendaciones del modelo para medir si acierta (migración `009_predicciones.sql`). No tiene `user_id`: la recomendación
 es la misma para todos. Una fila por `(match, key, out)`; `p`, `p_model`, `p_market`, `price`, `ev` y `rel` son la última
 opinión antes del partido, `first_price` la cuota de la primera vez. `status`: `pending`, `won`, `lost`, `void` o
-`unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor.
+`unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor. `tried_at` (migración 019): la última vez que el resolvedor la intentó sin conseguirlo; cada pasada (cada 5 min, 3000 como mucho) coge primero las nunca intentadas y deja 30 min entre intentos, para que las que no tienen resultado no tapen a las demás.
 La migración `017_periodos_imposibles.sql` borró las de baloncesto con un total de mitad o cuarto que era en realidad el del
 partido entero (Betway, NBL; ver `docs/specs/08-baloncesto.md`).
 

@@ -7,7 +7,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { useQuery } from '@tanstack/react-query';
 import { cn, odd, pct, tone } from '@/lib/format';
 import { verdictOf } from '@/lib/value';
-import type { PredictionRow, Sport } from '@/lib/types';
+import type { PredictionQueue, PredictionReport, PredictionRow, Sport } from '@/lib/types';
 import { Button, chip, Empty, ErrorBox, Loading, Tabs } from '@/components/ui';
 import { Panel, panel, TvTabs } from '@/components/viz';
 
@@ -97,7 +97,7 @@ export default function ModelTab() {
         <Tabs value={sport} onChange={pickSport} items={[{ value: 'all' as SportF, label: 'Todo' }, ...sports.map(s => ({ value: s as SportF, label: SPORT_NAME[s] }))]} />
         <Tabs value={range} onChange={setRange} items={[{ value: '30', label: '30 días' }, { value: '90', label: '90 días' }, { value: 'all', label: 'Siempre' }]} />
         <Tabs value={scope} onChange={setScope} items={[{ value: 'picks', label: 'Recomendadas' }, { value: 'lines', label: 'Todas las líneas' }]} />
-        <span className="text-xs text-zinc-500 lg:ml-auto">{data.pending} por resolver{data.since ? ` · desde el ${new Date(data.since).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}` : ''}</span>
+        {data.since && <span className="text-xs text-zinc-500 lg:ml-auto">Registro desde el {new Date(data.since).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>}
       </div>
       {leagues.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800/70 pt-3" role="group" aria-label="Competición">
@@ -111,6 +111,7 @@ export default function ModelTab() {
   if (!rows.length) return (
     <>
       {toolbar}
+      <Registry data={data} sport={sport} />
       <Empty>
         Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${league !== 'all' ? leagueName(league) : SPORT_NAME[sport].toLowerCase()}` : ''}{scope === 'picks' && (sport === 'basket' || sport === 'all') ? ' entre las recomendadas (prueba con «Todas las líneas»)' : ''}.
         Se guardan todas las líneas que calcula el modelo de baloncesto y las recomendaciones de tenis, fútbol y MMA que se ven en la app; cuando
@@ -152,6 +153,7 @@ export default function ModelTab() {
   return (
     <>
       {toolbar}
+      <Registry data={data} sport={sport} />
 
       <section className={cn(panel, 'mb-4 grid overflow-hidden 2xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]')} aria-label="Resumen">
         <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 2xl:border-b-0 2xl:border-r">
@@ -180,6 +182,7 @@ export default function ModelTab() {
       <div className="mb-4 grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <Panel title="¿Cuando dice X %, sale X %?" aside="Calibración">
           <div className="flex flex-col gap-3 p-4">
+            <Lead>Las recomendaciones agrupadas por la probabilidad que daba el modelo, frente a las que salieron de verdad. Un modelo bien calibrado tiene cada barra en su raya.</Lead>
             {buckets.map(b => (
               <div key={b.lo} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3">
                 <span className="text-xs text-zinc-400 tnum">{Math.round(b.lo * 100)}-{Math.min(100, Math.round(b.hi * 100))} %</span>
@@ -235,6 +238,53 @@ export default function ModelTab() {
   );
 }
 
+const Lead = ({ children }: { children: ReactNode }) => <p className="text-xs leading-5 text-zinc-500">{children}</p>;
+
+// Estado del registro: cuántas hay en cada punto del camino, del deporte elegido o de todos. Aquí sólo se analizan las resueltas;
+// el resto son partidos por jugar (de baloncesto se guardan todas las líneas: cientos por partido), en juego, acabados esperando
+// resultado o que no se pudieron resolver en 4 días
+const STAGES: { key: keyof Omit<PredictionQueue, 'oldestWaiting'>; label: string; dot: string; what: string }[] = [
+  { key: 'resolved', label: 'Resueltas', dot: 'bg-emerald-500/80', what: 'Con resultado: son las que se analizan aquí.' },
+  { key: 'upcoming', label: 'Por jugar', dot: 'bg-zinc-600', what: 'Partidos que todavía no han empezado.' },
+  { key: 'playing', label: 'En juego', dot: 'bg-zinc-400', what: 'Empezaron hace menos de 2 horas.' },
+  { key: 'waiting', label: 'Esperando resultado', dot: 'bg-amber-400', what: 'Acabados: se resuelven solos cada 5 minutos.' },
+  { key: 'unknown', label: 'Sin resolver', dot: 'bg-rose-500/70', what: 'Sin resultado en 4 días (aplazados, mercados raros): fuera de las cuentas.' }
+];
+function Registry({ data, sport }: { data: PredictionReport; sport: SportF }) {
+  const empty: PredictionQueue = { resolved: 0, upcoming: 0, playing: 0, waiting: 0, unknown: 0, oldestWaiting: null };
+  const q = sport === 'all' ? data.queue : data.queue.bySport[sport] ?? empty;
+  const total = STAGES.reduce((s, x) => s + q[x.key], 0);
+  if (!total) return null;
+  const n = (v: number) => v.toLocaleString('es-ES');
+  // Más de 12 h esperando resultado ya no es lo normal: el resolvedor no encuentra el resultado de ese partido
+  const stuck = q.waiting > 0 && q.oldestWaiting && Date.now() - +new Date(q.oldestWaiting) > 12 * 3600e3;
+  return (
+    <Panel title="Estado del registro" aside={`${n(total)} en total${sport === 'all' ? '' : ` de ${SPORT_NAME[sport].toLowerCase()}`}`} className="mb-4">
+      <div className="flex flex-col gap-4 p-4">
+        <Lead>Todo lo que ha guardado la app, se haya resuelto o no, sin los filtros de periodo ni de recomendadas. De baloncesto se guardan todas las líneas que calcula el modelo (cientos por partido), así que casi siempre hay miles por jugar.</Lead>
+        <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-zinc-800" aria-hidden="true">
+          {STAGES.map(x => q[x.key] > 0 && <div key={x.key} className={x.dot} style={{ width: `${Math.max(0.6, (q[x.key] / total) * 100)}%` }} />)}
+        </div>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 2xl:grid-cols-5">
+          {STAGES.map(x => (
+            <div key={x.key} className="min-w-0">
+              <dt className="flex items-center gap-2 text-xs text-zinc-400"><i className={cn('inline-block h-2 w-2 shrink-0 rounded-sm', x.dot)} />{x.label}</dt>
+              <dd className="mt-0.5 font-score text-lg font-semibold text-zinc-50 tnum">{n(q[x.key])}</dd>
+              <dd className="text-[11px] leading-4 text-zinc-500">{x.what}</dd>
+            </div>
+          ))}
+        </dl>
+        {stuck && (
+          <p className="rounded-md bg-rose-500/10 px-3 py-2 text-[13px] leading-5 text-rose-200" role="status">
+            Hay {n(q.waiting)} esperando resultado y la más antigua es de un partido del {new Date(q.oldestWaiting!).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.
+            Lo normal es que se resuelvan en menos de una hora: si no bajan, el resolvedor no encuentra esos resultados (mira el registro del servicio bets).
+          </p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 // Una cifra de la cabecera
 function Metric({ label, value, sub, valueClass, children }: { label: string; value: ReactNode; sub?: ReactNode; valueClass?: string; children?: ReactNode }) {
   return (
@@ -281,7 +331,8 @@ function Breakdown({ groups, sportAll }: { groups: Record<GroupF, { label: strin
   const list = groups[cur].rows;
   return (
     <Panel title="Desglose" aside={`${list.length} grupo${list.length === 1 ? '' : 's'}`} className="mb-4">
-      <div className="border-b border-zinc-800/70 px-4 py-3">
+      <div className="flex flex-col gap-3 border-b border-zinc-800/70 px-4 py-3">
+        <Lead>Las mismas cuentas por grupos, para ver dónde acierta y dónde pierde. La barra es lo que salió; la raya, lo que esperaba.</Lead>
         <TvTabs value={cur} onChange={setBy} items={keys.map(k => ({ value: k, label: groups[k].label }))} />
       </div>
       <div className="hidden grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px] gap-4 px-4 pt-3 text-[11px] text-zinc-500 sm:grid">
@@ -387,6 +438,7 @@ function ProfitCurve({ rows }: { rows: PredictionRow[] }) {
   const last = data[data.length - 1];
   return (
     <Panel title="Beneficio acumulado" aside="a 1 unidad por recomendación" className="mb-4">
+      <div className="px-4 pt-3"><Lead>Lo que se habría ganado apostando 1 unidad a cada una, día a día, frente a lo que esperaba el modelo. Si la real va por debajo durante semanas, el modelo es optimista.</Lead></div>
       <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 pt-3">
         <div><div className="text-[11px] text-zinc-500">real</div><div className={cn('font-score text-lg font-semibold tnum', tone(last.pl))}>{units(last.pl)}</div></div>
         <div><div className="text-[11px] text-zinc-500">lo que esperaba el modelo</div><div className={cn('font-score text-lg font-semibold tnum', tone(last.ev))}>{units(last.ev)}</div></div>

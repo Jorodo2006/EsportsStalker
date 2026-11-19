@@ -82,7 +82,10 @@ export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
 }
-export interface PredictionReport { pending: number; unknown: number; since: string | null; rows: PredictionRow[] }
+// Lo que falta por resolver, por lo que le pasa: por jugar, en juego (menos de 2 h), acabadas esperando resultado y sin poder
+// resolver en 4 días (fuera de las cuentas). oldestWaiting: el partido más antiguo de las que esperan resultado
+export interface PredictionQueue { resolved: number; upcoming: number; playing: number; waiting: number; unknown: number; oldestWaiting: string | null }
+export interface PredictionReport { pending: number; unknown: number; since: string | null; queue: PredictionQueue & { bySport: Partial<Record<Sport, PredictionQueue>> }; rows: PredictionRow[] }
 
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
 export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
