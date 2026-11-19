@@ -1,9 +1,15 @@
-// Modelo Elo para tenis con rating general + rating por superficie.
+// Modelo de tenis: Elo (general + por superficie) y saque y resto, juntados y calibrados.
 //
 // Base: el Elo que popularizaron FiveThirtyEight y Tennis Abstract.
 //  - K decreciente con la experiencia del jugador: K = kBase / (n + kOffset)^kShape
 //  - Rating por superficie aparte, y la predicción mezcla general y superficie.
 //  - Los jugadores con pocos partidos se marcan como poco fiables.
+// Desde noviembre de 2026, además, los puntos ganados al saque y al resto (src/stats.js), y la probabilidad final es
+//   z = wElo · logit(p del Elo) + wStats · logit(p de saque y resto), con la cola de z aplanada (tail)
+// Pesos y cola ajustados con los Challengers de 2023 y comprobados con los de 2024-2026 (fitWeights en evaluate.js; cifras en
+// el README). Se sigue llamando EloModel porque así lo usan el escáner, el servicio y los model.json guardados.
+
+import { ServeReturn, STATS_DEFAULTS, roundRatings } from './stats.js';
 
 export const DEFAULTS = {
   initial: 1500,
@@ -13,10 +19,16 @@ export const DEFAULTS = {
   // 0 = solo general, 1 = solo superficie. 0.3 fue el mejor ajustando con los Challengers de 2023 (con 0.2 y 0.5 la
   // log-loss empeora); kBase 200-300 y kShape 0.4-0.5 salen casi iguales, por eso se quedan como estaban.
   surfaceWeight: 0.3,
-  // La predicción es sigmoid(confidence · logit(p del Elo)). En el cuadro final de los Challengers (lo que dan las casas)
-  // el Elo se pasa de confiado: decía 87 % y ganaba el 82 %. 0.91 se ajustó con 2023 y en 2024-2026 lo deja en 85 %
-  // (log-loss 0,6318 → 0,6308; jun-nov 2026: 0,6383 → 0,6361). En las previas no cambia nada. No toca los ratings.
-  confidence: 0.91,
+  // Pesos de la mezcla, ajustados con los Challengers de 2023 (fitWeights). En los 28.117 de 2024 a noviembre de 2026: log-loss
+  // 0,6184 → 0,6157 y Brier 0,2152 → 0,2141 frente al Elo solo (wElo 0.91, wStats 0, que es lo que da un model.json de
+  // antes), y la mejora es la misma antes y después de junio de 2026 (0,6149 → 0,6122 y 0,6400 → 0,6373)
+  wElo: 0.691,
+  wStats: 0.28,
+  // Cola: por encima de |z| = tailFrom (logit 1,1 ≈ 75 %), z crece sólo tailSlope por cada unidad, para no pasarse de confiado
+  // con los favoritos claros. Con el Elo solo no cambiaba nada (0,6184 igual); con saque y resto quita 0,0004
+  tailFrom: 1.1,
+  tailSlope: 0.916,
+  stats: STATS_DEFAULTS,
   minMatches: 10, // por debajo, la predicción se marca como "poca info"
   inactivityDays: 120, // tras este parón, el K vuelve a subir un poco (vuelta de lesión)
 };
@@ -25,15 +37,27 @@ export function expected(ra, rb) {
   return 1 / (1 + Math.pow(10, (rb - ra) / 400));
 }
 
+const logit = (p) => Math.log(p / (1 - p));
+const clampP = (p) => Math.min(0.995, Math.max(0.005, p));
+
 function daysBetween(a, b) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 }
 
+/** La probabilidad final con los pesos y la cola de unas opciones: la usan predict y el ajuste de fitWeights. */
+export function combine(pElo, pStats, o) {
+  let z = o.wElo * logit(clampP(pElo)) + o.wStats * logit(clampP(pStats));
+  const a = Math.abs(z);
+  if (a > o.tailFrom) z = Math.sign(z) * (o.tailFrom + o.tailSlope * (a - o.tailFrom));
+  return 1 / (1 + Math.exp(-z));
+}
+
 export class EloModel {
-  constructor(opts = {}) {
-    this.o = { ...DEFAULTS, ...opts };
+  constructor(opts = {}, statsTotals = {}) {
+    this.o = { ...DEFAULTS, ...opts, stats: { ...STATS_DEFAULTS, ...(opts.stats ?? {}) } };
     this.players = new Map();
     this.lastDate = null;
+    this.sr = new ServeReturn(this.o.stats, statsTotals);
   }
 
   player(id, name) {
@@ -58,18 +82,24 @@ export class EloModel {
   }
 
   /**
-   * Probabilidad de que A gane a B en esa superficie.
-   * Devuelve { pA, ratingA, ratingB, nA, nB, lowData }
+   * Probabilidad de que A gane a B en esa superficie. date: el día del partido (por defecto hoy), para saber cuánto pesa lo
+   * último que jugó cada uno al saque y al resto.
+   * Devuelve { pA, pElo, pStats, ratingA, ratingB, nA, nB, lowData }
    */
-  predict(idA, idB, surface) {
-    const a = this.players.get(idA) ?? { overall: this.o.initial, surface: {}, n: 0, nSurface: {} };
-    const b = this.players.get(idB) ?? { overall: this.o.initial, surface: {}, n: 0, nSurface: {} };
+  predict(idA, idB, surface, date = null) {
+    const none = { overall: this.o.initial, surface: {}, n: 0, nSurface: {} };
+    const a = this.players.get(idA) ?? none;
+    const b = this.players.get(idB) ?? none;
     const ra = this.ratingOn(a, surface);
     const rb = this.ratingOn(b, surface);
-    const p = expected(ra, rb);
-    const c = this.o.confidence ?? 1;
+    const pElo = expected(ra, rb);
+    const day = (date ? Date.parse(date) : Date.now()) / 86400000;
+    // Sin peso para las estadísticas no se calculan (es lo caro): así se predice igual que antes
+    const pStats = this.o.wStats ? this.sr.predict(a, b, surface, day).p : 0.5;
     return {
-      pA: c === 1 ? p : 1 / (1 + ((1 - p) / p) ** c),
+      pA: combine(pElo, pStats, this.o),
+      pElo,
+      pStats,
       ratingA: ra,
       ratingB: rb,
       nA: a.n,
@@ -78,11 +108,14 @@ export class EloModel {
     };
   }
 
-  /** Actualiza los ratings con un resultado. Devuelve la predicción previa (útil para validar). */
-  update(m) {
+  /**
+   * Actualiza los ratings con un resultado. Devuelve la predicción previa (útil para validar); con { predict: false } no la
+   * calcula, que al entrenar con los 320.000 partidos del histórico es lo que más tarda.
+   */
+  update(m, { predict = true } = {}) {
     const w = this.player(m.winnerId, m.winnerName);
     const l = this.player(m.loserId, m.loserName);
-    const pred = this.predict(w.id, l.id, m.surface);
+    const pred = predict ? this.predict(w.id, l.id, m.surface, m.date) : null;
 
     // General
     const eo = expected(w.overall, l.overall);
@@ -100,6 +133,9 @@ export class EloModel {
     w.surface[m.surface] = ws + kws * (1 - es);
     l.surface[m.surface] = ls - kls * (1 - es);
 
+    // Saque y resto, si el partido trae estadísticas (los ITF no)
+    this.sr.update(w, l, m.surface, m.date, m.serve);
+
     w.n++; l.n++;
     w.nSurface[m.surface] = (w.nSurface[m.surface] ?? 0) + 1;
     l.nSurface[m.surface] = (l.nSurface[m.surface] ?? 0) + 1;
@@ -109,7 +145,7 @@ export class EloModel {
   }
 
   fit(matches) {
-    for (const m of matches) this.update(m);
+    for (const m of matches) this.update(m, { predict: false });
     return this;
   }
 
@@ -122,11 +158,19 @@ export class EloModel {
   }
 
   toJSON() {
-    return { options: this.o, lastDate: this.lastDate, venues: this.venues ?? {}, players: [...this.players.values()] };
+    return {
+      options: this.o, lastDate: this.lastDate, venues: this.venues ?? {}, statsTotals: this.sr.totals,
+      players: [...this.players.values()].map((p) => (p.sr ? { ...p, sr: roundRatings(p.sr) } : p)),
+    };
   }
 
   static fromJSON(obj) {
-    const m = new EloModel(obj.options);
+    const o = { ...obj.options };
+    // Un modelo guardado antes de las estadísticas: su rebaja de confianza es el peso del Elo y no hay más (predice igual
+    // que cuando se guardó hasta que el servicio lo vuelva a entrenar)
+    if (o.wElo == null) Object.assign(o, { wElo: o.confidence ?? 1, wStats: 0, tailSlope: 1 });
+    delete o.confidence;
+    const m = new EloModel(o, obj.statsTotals ?? {});
     m.lastDate = obj.lastDate;
     m.venues = obj.venues ?? {}; // superficie del último Challenger de cada ciudad (venueSurfaces en data.js)
     for (const p of obj.players) m.players.set(p.id, p);

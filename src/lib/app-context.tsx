@@ -257,6 +257,13 @@ export function useApp() {
 
 export const useCurrency = () => useApp().settings?.currency || '€';
 
+// Lo que vale una unidad para este usuario: la que puso en Tu cuenta o, si no, el 1 % de la banca inicial (la costumbre de los
+// tipsters: una banca de 100 unidades). Sin ninguna de las dos, 0, y no se enseñan unidades
+export function useUnit() {
+  const { settings } = useApp();
+  return settings?.unitSize || (settings?.initialBankroll || 0) / 100;
+}
+
 // Saldo de la cartera común a las tres apps
 export function useWallet() {
   const { settings } = useApp();

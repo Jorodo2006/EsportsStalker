@@ -22,13 +22,15 @@ export const seg = (on: boolean) => cn('shrink-0 cursor-pointer whitespace-nowra
 export const oddBtn = (best?: boolean) => cn('cursor-pointer rounded-md font-mono font-semibold tnum transition disabled:cursor-default',
   best ? 'bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/35 hover:bg-amber-500/20' : 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700');
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+// success, danger e info son los de ganada, perdida y nula (el color de su etiqueta en Mis apuestas)
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'info';
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-amber-500 font-semibold text-zinc-950 hover:bg-amber-400',
   secondary: 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700',
   ghost: 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100',
   danger: 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25',
-  success: 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+  success: 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25',
+  info: 'bg-sky-500/15 text-sky-300 hover:bg-sky-500/25'
 };
 
 export function Button({ variant = 'primary', size = 'md', className, ...p }:

@@ -4,16 +4,16 @@
 // scoreLevels: niveles que se puntúan (p. ej. ['C']). Los demás (ATP, ITF) sólo sirven de historial para los ratings:
 // el motor apuesta en Challengers, así que es ahí donde hay que medirlo.
 
-import { EloModel } from './elo.js';
+import { EloModel, combine } from './elo.js';
 
 export function evaluate(matches, { testFrom, testTo, scoreLevels = null, modelOptions = {}, buckets = 10, includeLowData = false } = {}) {
   const model = new EloModel(modelOptions);
   const preds = [];
   for (const m of matches) {
-    const p = model.update(m); // predicción previa al resultado
-    if (testFrom && m.date < testFrom) continue;
-    if (testTo && m.date >= testTo) continue;
-    if (scoreLevels && !scoreLevels.includes(m.level)) continue;
+    const scored = !(testFrom && m.date < testFrom) && !(testTo && m.date >= testTo) && !(scoreLevels && !scoreLevels.includes(m.level));
+    // Predicción previa al resultado, sólo de los que se puntúan: con saque y resto, calcularla en todo el histórico es lo lento
+    const p = model.update(m, { predict: scored });
+    if (!scored) continue;
     if (!includeLowData && p.lowData) continue;
     // Para no sesgar, puntuamos desde el punto de vista del jugador con mayor rating.
     const favWon = p.pA >= 0.5;
@@ -74,4 +74,42 @@ export function tune(matches, { tuneFrom, tuneTo, scoreLevels = null, grid } = {
       }
   results.sort((a, b) => a.logLoss - b.logLoss);
   return results;
+}
+
+/**
+ * Pesos de la mezcla (wElo, wStats) y pendiente de la cola (tailSlope), ajustados con los partidos de [tuneFrom, tuneTo).
+ * Una sola pasada guarda la probabilidad del Elo y la de saque y resto de cada partido, que no dependen de los pesos, y luego
+ * se busca lo que da menos log-loss. Como en tune, ese periodo tiene que ser distinto del que se evalúa después.
+ * stats: false ajusta sólo el Elo y la cola (para comparar).
+ */
+export function fitWeights(matches, { tuneFrom, tuneTo, scoreLevels = null, modelOptions = {}, stats = true } = {}) {
+  const model = new EloModel({ ...modelOptions, wStats: 1 }); // con peso, para que predict calcule las estadísticas
+  const xs = [];
+  for (const m of matches) {
+    const inTune = m.date >= tuneFrom && m.date < tuneTo && (!scoreLevels || scoreLevels.includes(m.level));
+    const p = model.update(m, { predict: inTune });
+    if (inTune && !p.lowData) xs.push([p.pElo, p.pStats]); // desde el ganador: el resultado es siempre 1
+  }
+  if (!xs.length) return null;
+  const k = model.o.tailFrom, lg = (p) => Math.log(Math.min(0.995, Math.max(0.005, p)) / (1 - Math.min(0.995, Math.max(0.005, p))));
+  const pts = xs.map(([e, s]) => [lg(e), stats ? lg(s) : 0]);
+  // Descenso por gradiente de la log-loss. z0 = wE·le + wS·ls; por encima de k, la cola: z = k + t·(|z0| − k) con su signo
+  let wE = 1, wS = 0, t = 1;
+  for (let it = 0; it < 3000; it++) {
+    let gE = 0, gS = 0, gT = 0;
+    for (const [le, ls] of pts) {
+      const z0 = wE * le + wS * ls, a = Math.abs(z0), tail = a > k;
+      const z = tail ? Math.sign(z0) * (k + t * (a - k)) : z0;
+      const d = 1 / (1 + Math.exp(-z)) - 1; // derivada de −log σ(z)
+      const dz0 = tail ? t : 1;
+      gE += d * dz0 * le; gS += d * dz0 * ls;
+      if (tail) gT += d * Math.sign(z0) * (a - k);
+    }
+    const lr = 1 / pts.length;
+    wE -= lr * gE; if (stats) wS -= lr * gS; t = Math.min(1.5, Math.max(0.2, t - lr * gT));
+  }
+  const o = { ...model.o, wElo: wE, wStats: wS, tailSlope: t };
+  const logLoss = xs.reduce((s, [e, st]) => s - Math.log(combine(e, st, o)), 0) / xs.length;
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  return { wElo: r3(wE), wStats: r3(wS), tailSlope: r3(t), n: xs.length, logLoss };
 }

@@ -25,14 +25,21 @@ export const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { 
 // Leaguepedia devuelve "2026-10-19 10:00:00" en UTC
 export const utc = (d: string) => d.replace(' ', 'T') + 'Z';
 export const k = (v: number) => `${decimal(v / 1000)}k`;
+// Unidades («+2,50 u»): el beneficio como lo cuentan los tipsters, sin enseñar el dinero. El redondeo antes del signo evita
+// «-0,00 u» con restos de céntimos
+export function units(v: number) {
+  const r = Math.round((Number(v) || 0) * 100) / 100 || 0;
+  return `${r > 0 ? '+' : ''}${decimal(r, 2)} u`;
+}
 
 export const STATUS_LABEL: Record<BetStatus, string> = {
   pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula',
   cashout: 'Cash out', halfwon: 'Medio ganada', halflost: 'Medio perdida'
 };
-// El color de la etiqueta (Badge) de cada estado: en Mis apuestas y en las que se pasan los amigos
-export const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning'> = {
-  pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'neutral', cashout: 'warning'
+// El color de la etiqueta (Badge) de cada estado: en Mis apuestas y en las que se pasan los amigos. La nula en azul, como su
+// botón de Mis apuestas (antes era gris y no se distinguía de una pendiente)
+export const STATUS_TONE: Record<BetStatus, 'neutral' | 'success' | 'danger' | 'warning' | 'info'> = {
+  pending: 'neutral', won: 'success', halfwon: 'success', lost: 'danger', halflost: 'danger', void: 'info', cashout: 'warning'
 };
 
 // Beneficio de una apuesta resuelta (las pendientes y nulas cuentan 0)

@@ -1,5 +1,5 @@
-// Ajustes de la app: comunes y sólo del administrador. Lo de cada usuario es su banca inicial, su filtro de ligas, sus favoritos y si
-// ya vio la bienvenida.
+// Ajustes de la app: comunes y sólo del administrador. Lo de cada usuario es su banca inicial, su unidad, su filtro de ligas, sus
+// favoritos y si ya vio la bienvenida.
 // Sin base de datos: el permiso se comprueba antes de guardar nada
 const test = require('node:test');
 const assert = require('node:assert');
@@ -7,8 +7,17 @@ const assert = require('node:assert');
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://nadie@localhost/nada'; // el pool no conecta hasta usarse
 const store = require('../services/bets/store');
 
-test('de cada usuario sólo quedan la banca inicial, el filtro de ligas, los favoritos y la bienvenida', () => {
-  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll', 'welcomed']);
+test('de cada usuario sólo quedan la banca inicial, la unidad, el filtro de ligas, los favoritos y la bienvenida', () => {
+  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll', 'unitSize', 'welcomed']);
+});
+
+test('la unidad se guarda como cantidad: de 0 en adelante y con dos decimales', () => {
+  assert.strictEqual(store.cleanAmount(10), 10);
+  assert.strictEqual(store.cleanAmount('12.345'), 12.35);
+  assert.strictEqual(store.cleanAmount(-5), 0);
+  assert.strictEqual(store.cleanAmount('diez'), 0);
+  assert.strictEqual(store.cleanAmount(null), 0);
+  assert.strictEqual(store.cleanAmount(Infinity), 1e9);
 });
 
 test('los favoritos se limpian: deporte conocido, sin repetidos y el escudo sólo con https', () => {

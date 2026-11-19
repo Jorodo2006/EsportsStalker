@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { cn, odd, pct, tone } from '@/lib/format';
+import { cn, odd, pct, tone, units } from '@/lib/format';
 import { verdictOf } from '@/lib/value';
 import type { PredictionRow, Sport } from '@/lib/types';
 import { Button, Card, chip, Empty, ErrorBox, Loading, Stat, Tabs, td, th } from './ui';
@@ -45,7 +45,6 @@ const brier = (rows: PredictionRow[], p: (r: PredictionRow) => number | null) =>
   return xs.length ? xs.reduce((s, r) => s + (p(r)! - (won(r) ? 1 : 0)) ** 2, 0) / xs.length : null;
 };
 const PRICE_BANDS: [number, number, string][] = [[1, 1.5, 'Hasta 1,50'], [1.5, 2, '1,50-2'], [2, 3, '2-3'], [3, 5, '3-5'], [5, 8, '5-8'], [8, 1e9, 'Más de 8']];
-const units = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2).replace('.', ',')} u`;
 
 export function ModelAccuracy() {
   const q = useQuery({ queryKey: ['predictions'], queryFn: () => window.api.bets.predictions(), staleTime: 60e3 });

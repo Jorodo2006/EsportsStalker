@@ -12,11 +12,12 @@ node bin/sharpex-tenis.js datos  # descarga el histórico real en ./datos (63 MB
 
 ## Cómo funciona
 
-1. **Modelo Elo por superficie** (`src/elo.js`)
-   Cada jugador tiene un rating general y otro por superficie. La predicción mezcla los dos (`surfaceWeight`, 0.3 por defecto, ajustado con datos reales). Los ratings se calculan con Challengers, ATP, previas e ITF; sólo se apuesta en Challengers. La confianza de la predicción se rebaja un poco (`confidence`, 0.91): en el cuadro final de los Challengers el Elo se pasaba de confiado con los favoritos claros. El K baja a medida que el jugador acumula partidos y sube un poco tras un parón largo (vuelta de lesión). Si alguno de los dos tiene menos de 10 partidos en el histórico, el partido se marca como "pocos datos" y el escáner no lo recomienda.
+1. **Modelo: Elo por superficie más saque y resto** (`src/elo.js`, `src/stats.js`)
+   Cada jugador tiene un rating general y otro por superficie. La predicción mezcla los dos (`surfaceWeight`, 0.3 por defecto, ajustado con datos reales). Los ratings se calculan con Challengers, ATP, previas e ITF; sólo se apuesta en Challengers. El K baja a medida que el jugador acumula partidos y sube un poco tras un parón largo (vuelta de lesión). Si alguno de los dos tiene menos de 10 partidos en el histórico, el partido se marca como "pocos datos" y el escáner no lo recomienda.
+   Desde noviembre de 2026 cuenta también lo que gana cada uno al saque y al resto por encima de lo esperado ante cada rival (la idea de `server/services/tennis/model.js`, copiada porque el motor es un paquete aparte), con lo reciente pesando más; de ahí sale, punto a punto, la probabilidad de ganar el partido. La final es `σ(wElo·logit(Elo) + wStats·logit(saque y resto))` con la cola aplanada por encima del 75 % (`tailSlope`), y los pesos se ajustan con los Challengers del año anterior (`fitWeights`). Los ITF no traen estadísticas: sus jugadores se quedan en la media y manda el Elo. Un `model.json` de antes predice como antes (sólo Elo) hasta que se vuelve a entrenar.
 
 2. **Validación sin trampas** (`src/evaluate.js`)
-   El modelo predice cada partido *antes* de ver el resultado y solo se puntúan los Challengers desde la fecha que elijas. Saca el acierto, el Brier y el log-loss, más una tabla de calibración ("cuando dice 70 %, ¿gana el 70 %?"). Con `--ajustar` prueba combinaciones de parámetros **en el año anterior** a esa fecha, no en los partidos que puntúa (si no, las cifras salen mejores de lo que serán).
+   El modelo predice cada partido *antes* de ver el resultado y solo se puntúan los Challengers desde la fecha que elijas. Saca el acierto, el Brier y el log-loss, más una tabla de calibración ("cuando dice 70 %, ¿gana el 70 %?"). Con `--ajustar` prueba combinaciones de parámetros del Elo y ajusta los pesos de la mezcla **en el año anterior** a esa fecha, no en los partidos que puntúa (si no, las cifras salen mejores de lo que serán).
 
 3. **Escáner** (`src/scanner.js`)
    - Quita el margen de la casa (método potencia, que carga más margen en el no favorito, como hacen las casas en tenis).
@@ -43,11 +44,28 @@ Validación con datos reales (Challengers desde el 1-1-2024, parámetros ajustad
 |---|---|---|---|---|---|
 | Sólo Challengers (el de antes) | 20.696 | 63,0 % | 0,2259 | 0,6432 | 77 % |
 | Challengers + ATP + previas + ITF (ahora) | los mismos 20.696 | 64,5 % | 0,2202 | 0,6301 | 79 % |
-| Motor actual (con TennisMyLife hasta nov. 2026 y `confidence`), todos los que no son "pocos datos" | 27.908 | 65,5 % | 0,2151 | 0,6182 | 81 % |
+| Motor de antes de saque y resto (con TennisMyLife hasta nov. 2026 y su rebaja de confianza), todos los que no son "pocos datos" | 27.908 | 65,5 % | 0,2151 | 0,6182 | 81 % |
 
 Con más historial hay menos jugadores con pocos datos, así que se pueden puntuar (y recomendar) más partidos.
 
 **Datos al día.** En los mismos 3.412 Challengers de junio a noviembre de 2026, el modelo parado el 1 de junio da log-loss 0,6543 (acierto 62,0 %); al día con TennisMyLife, 0,6422 (63,4 %). Es la mejora más grande de todas: siete veces lo que dan las estadísticas de saque. Esos partidos son sólo de cuadro final, que es más difícil que las previas: en el mismo tramo de 2025, con Sackmann, daba 0,6402.
+
+**Saque y resto** (noviembre de 2026; los 28.117 Challengers de 2024 al 14-11-2026, cuadro final y previas, pesos y parámetros ajustados con 2023):
+
+| Modelo | Log-loss | Brier | Acierto |
+|---|---|---|---|
+| Elo solo (el de antes) | 0,6184 | 0,2152 | 65,5 % |
+| Elo con la cola recalibrada | 0,6184 | 0,2152 | 65,5 % |
+| Elo + saque y resto (parámetros del modelo de ATP y WTA) | 0,6163 | 0,2143 | 65,6 % |
+| **Elo + saque y resto + cola, con los parámetros elegidos en 2023 (el de ahora)** | **0,6157** | **0,2141** | 65,5 % |
+
+- Igual en los dos tramos: de enero de 2024 a mayo de 2026 (Sackmann), 0,6149 → 0,6122; de junio a noviembre de 2026 (TennisMyLife), 0,6400 → 0,6373.
+- Parámetros de saque y resto elegidos por la log-loss de 2023 entre media vida 120/200/365 días, muestra mínima 150/350/700 puntos y peso de la superficie 250/500/1000: 120, 150 y 1000. La diferencia entre todos es pequeña (0,6190 a 0,6196 en 2023).
+- Calibrado en todos los tramos: el peor, cuando dice 82 % gana el 80 % (1.635 partidos, ±1,9).
+- No contar en saque y resto los partidos con retirada: igual (0,6158).
+- `validar --ajustar` (que ahora ajusta también estos pesos) elige además kBase 300 y kShape 0,5 con 2023 y da 0,6154: casi igual, así que el K se queda como estaba.
+- Entrenar sigue cabiendo en los 256 MB del servicio: 17 s y un `model.json` de 2,8 MB (antes 2,0).
+- La prueba de abajo daba 0,6155 → 0,6087 para lo mismo; no está el código con el que se hizo y aquí sale menos (−0,0027). Vale la de arriba, que se puede repetir con `validar`.
 
 **Lo que se ha probado y no se ha metido** (Challengers 2024-2026, ajuste con 2023):
 
@@ -57,7 +75,6 @@ Con más historial hay menos jugadores con pocos datos, así que se pueden puntu
 | Margen de victoria (juegos ganados) | 0,6150 | Casi nada, y empeora la calibración de los favoritos claros |
 | Rating inicial según el ranking | 0,6154 | Nada |
 | Retiradas con medio peso | igual | Nada |
-| Elo + puntos al saque y al resto (como `server/services/tennis/model.js`) | 0,6087 → 0,6068 (sin retiradas) | Mejora poco para lo que complica: los ITF no traen estadísticas. Es la siguiente mejora del modelo si hace falta |
 
 ## En la web: servicio `challenger`
 

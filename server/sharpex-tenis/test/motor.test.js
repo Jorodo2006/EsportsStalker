@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   parseCsv, toCsv, PlayerIndex, parseName, EloModel, expected, fairProbs, edge, kelly, clv, overround,
-  evaluate, scan, normalizeOddsInput, Ledger, generate, fromSackmann, normalizeSurface, mergeSources,
+  evaluate, fitWeights, ServeReturn, matchWin, holdProb, scan, normalizeOddsInput, Ledger, generate, fromSackmann, normalizeSurface, mergeSources,
   GENESIS, chainEntry, pickData, closeData, settleData, verifyChain, pickOf, statsOf, venueKey, venueSurfaces, surfaceOf, matcher,
 } from '../src/index.js';
 
@@ -77,8 +77,8 @@ test('Elo: el ganador sube, el perdedor baja, y predice simétrico', () => {
 test('Elo aprende de datos simulados y queda bien calibrado', () => {
   const { matches } = generate({ years: 3, seed: 11 });
   // En el mundo simulado la superficie pesa lo que diga synthetic.js, no lo que pesa en los Challengers reales
-  // (de ahí salen surfaceWeight y confidence por defecto): aquí se prueba que el Elo aprende, con lo que se escribió
-  const { metrics } = evaluate(matches, { testFrom: '2025-01-01', modelOptions: { surfaceWeight: 0.5, confidence: 1 } });
+  // (de ahí salen surfaceWeight y los pesos por defecto): aquí se prueba que el Elo aprende, con lo que se escribió
+  const { metrics } = evaluate(matches, { testFrom: '2025-01-01', modelOptions: { surfaceWeight: 0.5, wElo: 1, wStats: 0, tailSlope: 1 } });
   assert.ok(metrics.n > 1000);
   assert.ok(metrics.accuracy > 0.65, `acierto ${metrics.accuracy}`);
   for (const c of metrics.calibration.filter((x) => x.n > 150)) {
@@ -234,4 +234,68 @@ test('historial: CLV, estadísticas y detección de retoques', () => {
   const v = new Ledger(path).verify();
   assert.equal(v.ok, false);
   assert.equal(v.brokenAt, 0);
+});
+
+// ---------- Saque y resto (src/stats.js) ----------
+test('punto a punto: juego, partido y simetría', () => {
+  close(holdProb(0.5), 0.5);
+  assert.ok(holdProb(0.65) > 0.82 && holdProb(0.65) < 0.84, `hold con 65 % de puntos: ${holdProb(0.65)}`);
+  close(matchWin(0.64, 0.64), 0.5);
+  close(matchWin(0.66, 0.62) + matchWin(0.62, 0.66), 1);
+  assert.ok(matchWin(0.66, 0.62) > 0.5);
+  // A cinco sets el mejor gana más a menudo
+  assert.ok(matchWin(0.66, 0.62, 5) > matchWin(0.66, 0.62, 3));
+});
+
+test('saque y resto: aprende quién saca mejor, con el rival en cuenta, y sin estadísticas se queda en la media', () => {
+  const sr = new ServeReturn({}, {});
+  const a = {}, b = {}, c = {};
+  // A gana el 72 % de sus puntos al saque y B el 60 %, partido tras partido; C nunca trae estadísticas (como un ITF)
+  for (let i = 0; i < 40; i++) {
+    const date = new Date(Date.UTC(2025, 0, 1 + i * 7)).toISOString().slice(0, 10);
+    sr.update(a, b, 'Hard', date, [80, 58, 80, 48]);
+  }
+  const day = Date.parse('2025-10-15') / 86400000;
+  assert.ok(sr.rates(a, 'Hard', day).sv > sr.rates(b, 'Hard', day).sv);
+  assert.ok(sr.predict(a, b, 'Hard', day).p > 0.7);
+  close(sr.predict(a, b, 'Hard', day).p + sr.predict(b, a, 'Hard', day).p, 1, 1e-9);
+  const rc = sr.rates(c, 'Hard', day);
+  close(rc.sv, 0); close(rc.ret, 0);
+  sr.update(a, c, 'Hard', '2025-10-20', null); // sin estadísticas no cambia nada
+  assert.equal(c.sr, undefined);
+});
+
+test('Sackmann: guarda los puntos al saque si los trae, y nada si no (los ITF)', () => {
+  const base = { tourney_level: 'C', tourney_name: 'Biella', surface: 'Clay', tourney_date: '20250310', match_num: '1', round: 'R32',
+    winner_id: '1', winner_name: 'A B', loser_id: '2', loser_name: 'C D', score: '6-4 6-4' };
+  const st = { w_svpt: '60', w_1stWon: '30', w_2ndWon: '12', l_svpt: '58', l_1stWon: '25', l_2ndWon: '9' };
+  assert.deepEqual(fromSackmann({ ...base, ...st }).serve, [60, 42, 58, 34]);
+  assert.equal(fromSackmann(base).serve, null);
+  assert.equal(fromSackmann({ ...base, ...st, w_1stWon: '70' }).serve, null); // más ganados que jugados: error de la fuente
+});
+
+test('modelo con saque y resto: el JSON guardado predice lo mismo, y uno de antes predice como antes', () => {
+  const m = new EloModel({ wElo: 0.8, wStats: 0.5, tailSlope: 0.7 });
+  for (let i = 0; i < 30; i++) {
+    const date = new Date(Date.UTC(2025, 0, 1 + i * 7)).toISOString().slice(0, 10);
+    m.update({ date, surface: 'Hard', winnerId: i % 4 ? 'a' : 'b', winnerName: 'A', loserId: i % 4 ? 'b' : 'a', loserName: 'B', serve: i % 4 ? [70, 50, 70, 40] : [70, 45, 70, 44] });
+  }
+  const p = m.predict('a', 'b', 'Hard', '2025-08-01');
+  assert.ok(p.pStats > 0.5 && p.pA > 0.5);
+  const r = EloModel.fromJSON(JSON.parse(JSON.stringify(m)));
+  close(r.predict('a', 'b', 'Hard', '2025-08-01').pA, p.pA, 1e-4);
+  // Un model.json de antes de las estadísticas: options con confidence y sin wElo
+  const old = JSON.parse(JSON.stringify(m));
+  old.options = { ...old.options, confidence: 0.91 };
+  delete old.options.wElo; delete old.options.wStats; delete old.options.tailSlope; delete old.statsTotals;
+  const o = EloModel.fromJSON(old).predict('a', 'b', 'Hard', '2025-08-01');
+  close(o.pA, 1 / (1 + ((1 - o.pElo) / o.pElo) ** 0.91));
+});
+
+test('ajuste de pesos: con datos simulados da pesos finitos, y sin estadísticas deja su peso a cero', () => {
+  const { matches } = generate({ years: 3, seed: 5 });
+  const f = fitWeights(matches, { tuneFrom: '2024-01-01', tuneTo: '2025-01-01', stats: false });
+  assert.ok(f.n > 500 && Number.isFinite(f.wElo) && f.wElo > 0);
+  assert.equal(f.wStats, 0);
+  assert.ok(f.tailSlope >= 0.2 && f.tailSlope <= 1.5);
 });

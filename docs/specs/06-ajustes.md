@@ -6,8 +6,9 @@ Los ajustes son **de la app entera**: la página *Ajustes* sólo la ve el admini
 todos (el servidor manda el aviso SSE `settings:changed` y cada navegador conectado los recarga). Si otro usuario manda un ajuste
 común, `PUT /api/settings` responde 403, y a los demás tampoco les llegan las claves (`SECRET_KEYS`).
 
-De cada usuario quedan sólo dos cosas (`USER_KEYS`, en `bets.user_settings`): `initialBankroll`, porque cada uno tiene su
-cartera, y `favoriteLeagues`, el filtro de ligas de la lista de LoL. La banca inicial se cambia en **Tu cuenta**
+De cada usuario quedan (`USER_KEYS`, en `bets.user_settings`): `initialBankroll`, porque cada uno tiene su
+cartera; `unitSize`, lo que vale su unidad; `favoriteLeagues`, el filtro de ligas de la lista de LoL; `favorites` y
+`welcomed`. La banca inicial y la unidad se cambian en **Tu cuenta**
 (`src/views/AccountView.tsx`), que ven todos, junto con la contraseña, salir y los avisos de su navegador. La moneda, las
 casas del comparador y el refresco eran de cada usuario hasta la migración `bets/010_ajustes_comunes.sql`, que dejó para
 todos los del primer administrador.
@@ -16,6 +17,7 @@ todos los del primer administrador.
 |---|---|---|
 | `currency` | `€` | Moneda de las cantidades |
 | `initialBankroll` | 0 | Banca inicial de cada usuario (en *Tu cuenta*), que se suma a su beneficio |
+| `unitSize` | 0 | Lo que vale una unidad de cada usuario (en *Tu cuenta*), para el beneficio en unidades de *Mis apuestas*; 0 = el 1 % de la banca inicial |
 | `featuredBooks` | `Bet365,Winamax,Betway` | Columnas del comparador y su orden |
 | `refreshSeconds` | 30 | Refresco del calendario y del directo (mínimo 10) |
 | `oddsAutoEnabled` | `true` | Lecturas de cuotas programadas (las hace el lector de Docker) |

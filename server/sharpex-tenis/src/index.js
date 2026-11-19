@@ -5,9 +5,10 @@ export {
   ARCHIVE, ARCHIVE_FILES, TML, TML_FROM, TML_FILES,
 } from './data.js';
 export { PlayerIndex, playerKey, parseName } from './names.js';
-export { EloModel, expected, DEFAULTS } from './elo.js';
+export { EloModel, expected, combine, DEFAULTS } from './elo.js';
+export { ServeReturn, matchWin, holdProb, STATS_DEFAULTS } from './stats.js';
 export { implied, overround, fairProbs, edge, fairOdds, kelly, clv } from './odds.js';
-export { evaluate, metrics, tune } from './evaluate.js';
+export { evaluate, metrics, tune, fitWeights } from './evaluate.js';
 export { scan, normalizeOddsInput, matcher } from './scanner.js';
 export {
   Ledger, GENESIS, RESULTS, chainEntry, pickData, closeData, settleData, verifyChain, pickOf, picksOf, statsOf,

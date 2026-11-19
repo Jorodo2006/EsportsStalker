@@ -90,6 +90,7 @@ export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
 export interface Settings {
   currency: string;
   initialBankroll: number;
+  unitSize?: number; // lo que vale una unidad (Mis apuestas); 0 = el 1 % de la banca inicial (useUnit)
   welcomed?: boolean; // la cuenta ya vio la bienvenida (Welcome.tsx)
   featuredBooks: string;
   leaguepediaUser: string;

@@ -86,7 +86,19 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 - **Historial**:
   - La combinada sale como una fila con la insignia *Combinada ×N*. Ya no se despliega: al pulsarla se abre el formulario para marcar sus selecciones; en Mercado pone cuántas hay resueltas.
   - Cada selección se marca como ganada, perdida, nula o pendiente desde ahí.
-  - Las combinadas no tienen los botones rápidos de ganada/perdida.
+  - Las simples pendientes se resuelven desde la lista con tres botones: ✓ ganada (verde), ✗ perdida (rojo) y ⊘ nula
+    (azul, se devuelve lo apostado), en la tabla y en *En juego*. En el móvil van en su propia fila y con su nombre. La
+    etiqueta *Nula* también es azul (`STATUS_TONE`): antes era gris, como la de pendiente. Las combinadas no tienen
+    estos botones.
+  - Filtros: buscar, estado y **periodo** (`src/lib/bet-period.ts`, con pruebas): todas las fechas, últimos 7 o 30 días,
+    cada año y cada mes con apuestas (sólo salen los que tienen alguna) o entre dos fechas. Con cualquier filtro puesto,
+    encima de la lista sale lo que suman las que quedan (apuestas, apostado, beneficio y ROI) y *Quitar filtros*. Las
+    cifras de arriba, la gráfica y el desglose no cambian con el filtro.
+- **Beneficio en unidades**: cada beneficio de *Mis apuestas* (cifras, historial, desglose, gráfica y resumen del filtro)
+  lleva entre paréntesis las unidades («+25,00 € (+2,50 u)»), como lo cuentan los tipsters que no enseñan su dinero. La
+  unidad es el ajuste de usuario `unitSize` (*Tu cuenta*, junto a la banca) o, si está vacío, el 1 % de la banca inicial
+  (`useUnit` en `app-context`); sin ninguna de las dos no salen unidades. Las de *Acierto del modelo* son otra cosa: 1 unidad
+  por recomendación.
 
 ## Resolución automática (`server/services/bets/settle.js`)
 

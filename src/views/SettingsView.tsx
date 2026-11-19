@@ -24,8 +24,8 @@ export default function SettingsView() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    // La banca inicial es de cada uno: no va en los ajustes comunes
-    const { initialBankroll: _own, favoriteLeagues: _filter, ...common } = f;
+    // La banca inicial y la unidad son de cada uno: no van en los ajustes comunes
+    const { initialBankroll: _own, unitSize: _unit, favoriteLeagues: _filter, ...common } = f;
     await saveSettings({ ...common, refreshSeconds: Math.max(10, parseInt(String(f.refreshSeconds), 10) || 30) });
     toast('Ajustes guardados para todos los usuarios');
   }

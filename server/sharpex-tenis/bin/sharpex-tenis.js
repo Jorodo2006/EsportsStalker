@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  EloModel, loadMatches, evaluate, tune, scan, normalizeOddsInput, Ledger, generate, toCsv, PlayerIndex,
+  EloModel, loadMatches, evaluate, tune, fitWeights, scan, normalizeOddsInput, Ledger, generate, toCsv, PlayerIndex,
   HISTORY_LEVELS, BET_LEVELS, download, venueSurfaces,
 } from '../src/index.js';
 
@@ -119,8 +119,11 @@ try {
         if (res.length) {
           const { surfaceWeight, kBase, kShape } = res[0];
           modelOptions = { surfaceWeight, kBase, kShape };
-          console.log(`Se evalúa con los mejores de ese periodo: ${JSON.stringify(modelOptions)}`);
         }
+        // Y con esos, los pesos del Elo y de saque y resto y la cola, en el mismo periodo
+        const w = fitWeights(matches, { tuneFrom, tuneTo: testFrom, scoreLevels, modelOptions });
+        if (w) modelOptions = { ...modelOptions, wElo: w.wElo, wStats: w.wStats, tailSlope: w.tailSlope };
+        console.log(`Se evalúa con los mejores de ese periodo: ${JSON.stringify(modelOptions)}`);
       }
       const { metrics: m } = evaluate(matches, { testFrom, scoreLevels, modelOptions });
       if (!m) { console.log('No hay partidos para validar en ese periodo.'); break; }

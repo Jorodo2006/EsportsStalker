@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decEs, decimal, k, odd } from './format';
+import { decEs, decimal, k, odd, units } from './format';
 
 // Coma decimal en todo lo que se enseña: cuotas, líneas y cifras (antes «2.10» convivía con «4,5 puntos»)
 describe('formato decimal', () => {
@@ -16,5 +16,12 @@ describe('formato decimal', () => {
     expect(decEs('Gen.G')).toBe('Gen.G');
     expect(decEs('1.ª parte · Total')).toBe('1.ª parte · Total');
     expect(decEs(undefined)).toBe('');
+  });
+  it('las unidades llevan signo, coma y dos decimales, y nunca «-0,00»', () => {
+    expect(units(2.5)).toBe('+2,50 u');
+    expect(units(-1)).toBe('-1,00 u');
+    expect(units(0)).toBe('0,00 u');
+    expect(units(-0.001)).toBe('0,00 u');
+    expect(units(NaN)).toBe('0,00 u');
   });
 });

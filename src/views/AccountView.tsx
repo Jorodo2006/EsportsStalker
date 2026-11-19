@@ -59,18 +59,23 @@ function Notice() {
   );
 }
 
-// La banca inicial de cada uno: con el beneficio de sus apuestas da su cartera
+// La banca inicial de cada uno: con el beneficio de sus apuestas da su cartera. Y lo que vale su unidad, para ver el beneficio
+// también en unidades en Mis apuestas (vacía, el 1 % de la banca: useUnit)
 function WalletCard() {
   const { settings, saveSettings, toast } = useApp();
   const cur = useCurrency();
   const w = useWallet();
   const [v, setV] = useState('');
+  const [u, setU] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (settings) setV(String(settings.initialBankroll ?? 0)); }, [settings?.initialBankroll]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (settings) setU(settings.unitSize ? String(settings.unitSize) : ''); }, [settings?.unitSize]); // eslint-disable-line react-hooks/exhaustive-deps
+  const amount = (s: string) => Math.max(0, parseFloat(s.replace(',', '.')) || 0);
+  const autoUnit = amount(v) / 100;
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    try { await saveSettings({ initialBankroll: Math.max(0, parseFloat(v.replace(',', '.')) || 0) }); toast('Banca guardada'); }
+    try { await saveSettings({ initialBankroll: amount(v), unitSize: amount(u) }); toast('Banca y unidad guardadas'); }
     catch (err) { toast((err as Error).message); }
     finally { setBusy(false); }
   }
@@ -81,10 +86,18 @@ function WalletCard() {
           ? <>Lo que tenías para apostar al empezar. Se le suma el beneficio de tus apuestas: ahora tienes <b className="text-zinc-100 tnum">{money(w.balance, cur)}</b>.</>
           : <>Pon con cuánto empezaste a apostar y verás tu saldo: la banca más el beneficio de tus apuestas. Hasta entonces sólo se cuenta el beneficio (<b className="text-zinc-100 tnum">{money(w.profit, cur, true)}</b>).</>}
       </p>
-      <form onSubmit={submit} className="grid grid-cols-[1fr_auto] items-end gap-3">
+      <form onSubmit={submit} className="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <Field label={`Banca inicial (${cur})`}><Input type="number" inputMode="decimal" step="0.01" min={0} value={v} onChange={e => setV(e.target.value)} /></Field>
-        <Button type="submit" variant="secondary" disabled={busy}>Guardar</Button>
+        <Field label={`Una unidad (${cur})`}>
+          <Input type="number" inputMode="decimal" step="0.01" min={0} value={u} onChange={e => setU(e.target.value)}
+            placeholder={autoUnit ? money(autoUnit, cur).replace(` ${cur}`, '') : ''} />
+        </Field>
+        <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1" disabled={busy}>Guardar</Button>
       </form>
+      <p className="mt-3 text-xs text-zinc-500">
+        La unidad es lo que sueles apostar. En <i>Mis apuestas</i> verás el beneficio en {cur} y, entre paréntesis, en unidades, como lo
+        cuentan los tipsters. {autoUnit ? <>Si la dejas vacía vale el 1 % de la banca: {money(autoUnit, cur)}.</> : 'Si la dejas vacía vale el 1 % de la banca.'}
+      </p>
     </Card>
   );
 }

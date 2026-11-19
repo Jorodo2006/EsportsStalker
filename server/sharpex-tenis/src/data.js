@@ -2,7 +2,8 @@
 //
 // Formato interno de un partido:
 //   { date: 'YYYY-MM-DD', tourney, level, surface, round,
-//     winnerId, winnerName, loserId, loserName, score, completed }
+//     winnerId, winnerName, loserId, loserName, score, completed,
+//     serve: [puntos al saque del ganador, ganados, puntos al saque del perdedor, ganados] | null }
 //
 // Fuentes soportadas:
 //   - Ficheros de Jeff Sackmann (tennis_atp): atp_matches_qual_chall_YYYY.csv
@@ -118,6 +119,15 @@ export function interner() {
 }
 const same = (s) => s;
 
+// Puntos al saque de cada uno, para las estadísticas de saque y resto (src/stats.js). Los ITF no las traen, y una fila con
+// menos de 10 puntos o más ganados que jugados es un error de la fuente: null. Siempre la misma propiedad (null o la lista),
+// para que todos los partidos tengan la misma forma en memoria
+function serveOf(r) {
+  const n = (v) => Number(v) || 0;
+  const wp = n(r.w_svpt), lp = n(r.l_svpt), ws = n(r.w_1stWon) + n(r.w_2ndWon), ls = n(r.l_1stWon) + n(r.l_2ndWon);
+  return wp >= 10 && lp >= 10 && ws <= wp && ls <= lp ? [wp, ws, lp, ls] : null;
+}
+
 /**
  * Convierte una fila de Sackmann (o de TennisMyLife, mismo formato: source 'tml') al formato interno.
  * Devuelve null si no sirve. El marcador no se guarda: sólo sirve para saber si el partido se jugó.
@@ -143,6 +153,7 @@ export function fromSackmann(r, { levels = ['C'], source = 'sk', intern = same }
     loserName: s(r.loser_name),
     loserIoc: s(r.loser_ioc ?? ''),
     completed: isCompleted(r.score),
+    serve: serveOf(r),
   };
 }
 
@@ -244,6 +255,7 @@ export function fromSharpex(r) {
     loserName: r.loser,
     score: r.score ?? '',
     completed: isCompleted(r.score || 'x'),
+    serve: null, // el formato propio no trae estadísticas
   };
 }
 
