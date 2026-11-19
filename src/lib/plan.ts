@@ -15,7 +15,10 @@ export interface Ticket { legs: PlanPick[]; price: number; p: number; stake: num
 
 export type RiskLevel = 'bajo' | 'medio' | 'alto' | 'muy alto';
 export interface Risk { pReach: number; pProfit: number; pLoseAll: number; expectedReturn: number; level: RiskLevel; message: string }
-export interface Plan { budget: number; target: number; tickets: Ticket[]; risk: Risk; warnings: string[]; eligible: number }
+// options: alternativas para la misma cuota (combinada o sencilla), cada una con todo el dinero, de más a menos probable y sin
+// compartir partido. join: las muy fiables juntas en una combinada, por si el usuario quiere probarlo (sólo si hay dos o más)
+export interface Join { of: number[]; ticket: Ticket }
+export interface Plan { budget: number; target: number; tickets: Ticket[]; risk: Risk; warnings: string[]; eligible: number; options: Ticket[]; join: Join | null }
 
 // Las cuotas sólo se leen para lo que empieza pronto: es la ventana del plan
 export const WINDOW_HOURS = 48;
@@ -206,7 +209,7 @@ function structures(L: PlanPick[]): PlanPick[][][] {
 
 function emptyPlan(budget: number, target: number, eligible: number, why = 'No hay apuestas disponibles en las próximas 48 horas para armar un plan.'): Plan {
   const risk = riskOf([], budget, target);
-  return { budget, target, tickets: [], risk, eligible, warnings: [why] };
+  return { budget, target, tickets: [], risk, eligible, warnings: [why], options: [], join: null };
 }
 
 // Lo que elige el usuario: qué deportes entran y qué tipo de apuesta. combo: una combinada; single: una sencilla. mixed es el
@@ -297,13 +300,45 @@ function maxCombo(elig: PlanPick[]): number {
 const SPORT_TEXT: Record<PlanSport, string> = { tennis: 'tenis', football: 'fútbol', mma: 'MMA', basket: 'baloncesto' };
 const oddText = (v: number) => v.toFixed(2).replace('.', ',');
 
-// Un plan de una sola apuesta (la combinada o la sencilla) con todo el dinero
-function onlyTicket(legs: PlanPick[], budget: number, target: number, eligible: number): Plan {
-  const tickets = [ticketOf(legs, budget)];
+// Cuántas alternativas se enseñan y desde qué fiabilidad (la del cálculo, de 0 a 100; «Alta» es 70) una es «muy fiable»: todas sus
+// selecciones con 75 o más. Las dos cifras son una decisión, no una medida
+export const MAX_OPTIONS = 5;
+export const VERY_RELIABLE = 75;
+export const veryReliable = (t: Ticket) => t.legs.every(l => l.rel >= VERY_RELIABLE);
+
+// Las mejores para la cuota, una tras otra, quitando cada vez los partidos ya usados: así son opciones distintas de verdad y,
+// como no comparten partido, se pueden juntar sin que una dependa de otra
+function optionsOf(elig: PlanPick[], need: number, mode: 'combo' | 'single'): PlanPick[][] {
+  const out: PlanPick[][] = [];
+  let rest = elig;
+  while (out.length < MAX_OPTIONS && rest.length) {
+    const legs = mode === 'combo' ? bestCombo(rest, need) : (p => (p ? [p] : null))(bestSingle(rest, need));
+    if (!legs) break;
+    out.push(legs);
+    const used = new Set(legs.map(l => l.match));
+    rest = rest.filter(p => !used.has(p.match));
+  }
+  return out;
+}
+
+// Las muy fiables juntas, en orden, mientras quepan en una combinada
+function joinOf(options: Ticket[], budget: number): Join | null {
+  const of: number[] = [];
+  let legs: PlanPick[] = [];
+  options.forEach((t, i) => {
+    if (veryReliable(t) && legs.length + t.legs.length <= MAX_LEGS) { of.push(i); legs = [...legs, ...t.legs]; }
+  });
+  return of.length >= 2 ? { of, ticket: ticketOf(legs, budget) } : null;
+}
+
+// Plan de combinada o de sencilla: el riesgo es el de la primera opción (la más probable); las demás son alternativas
+function optionsPlan(list: PlanPick[][], budget: number, target: number, eligible: number): Plan {
+  const options = list.map(legs => ticketOf(legs, budget));
+  const tickets = [options[0]];
   const risk = riskOf(tickets, budget, target);
   const warnings = planWarnings(risk, budget, target);
-  if (legs.some(l => l.sport === 'basket')) warnings.splice(warnings.length - 1, 0, 'Las de baloncesto son una estimación: no hay cuotas antiguas con las que comprobar si su modelo acierta.');
-  return { budget, target, tickets, risk, warnings, eligible };
+  if (list.some(legs => legs.some(l => l.sport === 'basket'))) warnings.splice(warnings.length - 1, 0, 'Las de baloncesto son una estimación: no hay cuotas antiguas con las que comprobar si su modelo acierta.');
+  return { budget, target, tickets, risk, warnings, eligible, options, join: joinOf(options, budget) };
 }
 
 export function buildPlan(pool: PlanPick[], budget: number, target: number, now: number = Date.now(), opts: PlanOptions = {}): Plan {
@@ -319,16 +354,16 @@ export function buildPlan(pool: PlanPick[], budget: number, target: number, now:
   const need = opts.odds ?? 1 + target / budget;
 
   if (mode === 'combo') {
-    const legs = bestCombo(elig, need);
-    if (legs) return onlyTicket(legs, budget, target, elig.length);
+    const list = optionsOf(elig, need, 'combo');
+    if (list.length) return optionsPlan(list, budget, target, elig.length);
     const top = maxCombo(elig);
     return emptyPlan(budget, target, elig.length, top
       ? `Con las apuestas que hay ahora ninguna combinada llega a cuota ${oddText(need)}: la más alta posible es ${oddText(top)}. Prueba con una cuota más baja u otro deporte.`
       : 'Para una combinada hacen falta al menos dos partidos con apuestas; ahora sólo hay uno.');
   }
   if (mode === 'single') {
-    const pick = bestSingle(elig, need);
-    if (pick) return onlyTicket([pick], budget, target, elig.length);
+    const list = optionsOf(elig, need, 'single');
+    if (list.length) return optionsPlan(list, budget, target, elig.length);
     const top = Math.max(...elig.map(p => p.price));
     return emptyPlan(budget, target, elig.length, `Ninguna apuesta sencilla de las que hay ahora paga ${oddText(need)} o más: la más alta es ${oddText(top)}. Prueba con una combinada o una cuota más baja.`);
   }
@@ -356,5 +391,5 @@ export function buildPlan(pool: PlanPick[], budget: number, target: number, now:
   const tickets = [...best.tickets].sort((a, b) => b.stake - a.stake);
   const risk = riskOf(tickets, budget, target);
   const warnings = planWarnings(risk, budget, target);
-  return { budget, target, tickets, risk, warnings, eligible: elig.length };
+  return { budget, target, tickets, risk, warnings, eligible: elig.length, options: [], join: null };
 }

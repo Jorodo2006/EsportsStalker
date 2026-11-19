@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestCombo, bestSingle, buildPlan, isEligible, levelOf, MAX_LEGS, parseEuros, parseOdds, planWarnings, poolStats, riskOf, targetOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
+import { bestCombo, bestSingle, buildPlan, isEligible, levelOf, MAX_LEGS, MAX_OPTIONS, VERY_RELIABLE, parseEuros, parseOdds, planWarnings, poolStats, riskOf, targetOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
 
 const NOW = Date.parse('2026-11-18T10:00:00Z');
 const H = 3600_000;
@@ -297,4 +297,34 @@ describe('cuota objetivo, deporte y tipo de apuesta', () => {
   it('cuenta las de baloncesto por partido', () => {
     expect(poolStats(pool, NOW).basket).toEqual({ matches: 2, picks: 5 });
   });
+
+  it('varias opciones: distintas de verdad (sin partido en común), de más a menos probable, cada una con todo el dinero', () => {
+    const many = Array.from({ length: 14 }, (_, i) => pick({ id: `o${i}`, match: `om${i}`, price: 1.3 + i * 0.05, p: 0.75 - i * 0.02 }));
+    for (const mode of ['combo', 'single'] as const) {
+      const plan = buildPlan(many, 100, 50, NOW, { mode, odds: 1.5 });
+      expect(plan.options.length).toBe(MAX_OPTIONS);
+      expect(plan.tickets[0]).toBe(plan.options[0]);
+      const matches = plan.options.flatMap(t => t.legs.map(l => l.match));
+      expect(new Set(matches).size).toBe(matches.length);
+      for (let i = 1; i < plan.options.length; i++) expect(plan.options[i].p).toBeLessThanOrEqual(plan.options[i - 1].p + 1e-12);
+      expect(plan.options.every(t => t.stake === 100 && t.price >= 1.5 - 1e-9)).toBe(true);
+    }
+  });
+
+  it('se paran cuando ya no quedan partidos con los que llegar a la cuota', () => {
+    const plan = buildPlan(pool, 100, 100, NOW, { mode: 'single', odds: 2 });
+    // b3 (b:1), t2 (t:1) y f2 (f:2): las únicas sencillas de 2 o más, de partidos distintos
+    expect(plan.options.map(t => t.legs[0].id)).toEqual(['b3', 't2', 'f2']);
+  });
+
+  it('juntar: sólo con dos o más muy fiables, y la probabilidad es la de que salgan todas', () => {
+    const rel = (r: number) => Array.from({ length: 4 }, (_, i) => pick({ id: `j${r}${i}`, match: `jm${r}${i}`, price: 2 + i * 0.1, p: 0.48 - i * 0.02, rel: i === 1 ? 60 : r }));
+    const plan = buildPlan(rel(VERY_RELIABLE), 100, 100, NOW, { mode: 'single', odds: 2 });
+    expect(plan.join?.of).toEqual([0, 2, 3]);
+    const legs = [0, 2, 3].map(i => plan.options[i].legs[0]);
+    expect(plan.join?.ticket.p).toBeCloseTo(legs.reduce((a, l) => a * l.p, 1));
+    expect(plan.join?.ticket.price).toBeCloseTo(legs.reduce((a, l) => a * l.price, 1));
+    expect(buildPlan(rel(VERY_RELIABLE - 1), 100, 100, NOW, { mode: 'single', odds: 2 }).join).toBeNull();
+  });
 });
+
