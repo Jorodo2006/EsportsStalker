@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { fromFootball, fromMma, fromTennis, windowDays } from './plan-sources';
-import type { FootballDayPick, MmaDayPick, TennisDayPick } from './types';
+import { fromBasket, fromFootballLines, fromMmaLines, fromTennisBoard, windowDays } from './plan-sources';
+import type { BasketPick } from './basket-picks';
+import type { FootballLineRow, MmaLineRow, TennisBoard } from './types';
 
 describe('windowDays', () => {
   it('da hoy, mañana y pasado en hora de España', () => {
@@ -20,24 +21,28 @@ describe('windowDays', () => {
 const pk = (id: string, score = 66) => ({ id, title: `Gana ${id}`, book: 'Winamax', price: 1.5, p: 0.7, ev: -0.02, rel: { score } });
 
 describe('adaptadores', () => {
-  it('tenis: top y hard con el mismo partido', () => {
-    const m = { id: 't1', tournament: 'Torneo', date: '2026-11-18T15:00:00Z', a: { name: 'Nombre A' }, b: { name: 'Nombre B' }, top: pk('x', 71), hard: pk('y', 50) } as unknown as TennisDayPick;
-    const out = fromTennis([m]);
-    expect(out).toHaveLength(2);
-    expect(out[0].match).toBe(out[1].match);
+  it('tenis: todas las líneas del tablero, con el mismo partido', () => {
+    const board = { noOdds: [], matches: [{ m: { id: 't1', tournament: 'Torneo', date: '2026-11-18T15:00:00Z', a: { name: 'Nombre A' }, b: { name: 'Nombre B' } }, picks: [pk('x', 71), pk('y', 50), pk('z')] }] } as unknown as TennisBoard;
+    const out = fromTennisBoard(board);
+    expect(out).toHaveLength(3);
+    expect(new Set(out.map(p => p.match)).size).toBe(1);
     expect(out[0]).toMatchObject({ sport: 'tennis', event: 'Nombre A vs Nombre B', league: 'Torneo', rel: 71, start: '2026-11-18T15:00:00Z', id: 'tennis:t1:x' });
-    expect(fromTennis([{ ...m, hard: null } as unknown as TennisDayPick])).toHaveLength(1);
   });
-  it('fútbol usa los nombres de los equipos y la liga', () => {
-    const m = { id: 'f1', leagueName: 'LaLiga', date: '2026-11-18T19:00:00Z', home: { name: 'Real' }, away: { name: 'Betis' }, top: pk('x'), hard: null } as unknown as FootballDayPick;
-    expect(fromFootball([m])[0]).toMatchObject({ sport: 'football', event: 'Real vs Betis', league: 'LaLiga', match: 'football:f1' });
+  it('fútbol: una fila por línea, con los equipos y la liga', () => {
+    const row = (id: string) => ({ id: 'f1', leagueName: 'LaLiga', date: '2026-11-18T19:00:00Z', home: { name: 'Real' }, away: { name: 'Betis' }, pick: pk(id) });
+    const out = fromFootballLines([row('x'), row('y'), row('x')] as unknown as FootballLineRow[]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ sport: 'football', event: 'Real vs Betis', league: 'LaLiga', match: 'football:f1' });
   });
   it('MMA usa los luchadores y la organización', () => {
-    const m = { id: 'm1', orgName: 'UFC', date: '2026-11-19T02:00:00Z', a: { name: 'Uno' }, b: { name: 'Dos' }, top: pk('x'), hard: null } as unknown as MmaDayPick;
-    expect(fromMma([m])[0]).toMatchObject({ sport: 'mma', event: 'Uno vs Dos', league: 'UFC' });
+    const r = { id: 'm1', orgName: 'UFC', date: '2026-11-19T02:00:00Z', a: { name: 'Uno' }, b: { name: 'Dos' }, pick: pk('x') } as unknown as MmaLineRow;
+    expect(fromMmaLines([r])[0]).toMatchObject({ sport: 'mma', event: 'Uno vs Dos', league: 'UFC' });
   });
-  it('el mismo partido en dos listas no duplica sus apuestas', () => {
-    const m = { id: 't1', tournament: 'T', date: '2026-11-18T15:00:00Z', a: { name: 'A' }, b: { name: 'B' }, top: pk('x'), hard: pk('y') } as unknown as TennisDayPick;
-    expect(fromTennis([m, m])).toHaveLength(2);
+  it('baloncesto: las del navegador, con la liga y el partido', () => {
+    const game = { id: 'g1', league: 'nba', date: '2026-11-19T01:00:00Z', away: { name: 'Golden State Warriors' }, home: { name: 'Dallas Mavericks' } };
+    const b = (id: string) => ({ id, game, title: 'Total: más de 220,5', book: 'Betway', price: 1.9, p: 0.55, ev: 0.04, rel: { score: 60 } });
+    const out = fromBasket([b('a'), b('b'), b('a')] as unknown as BasketPick[]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ sport: 'basket', match: 'basket:g1', event: 'Golden State Warriors @ Dallas Mavericks', league: 'NBA', rel: 60, start: '2026-11-19T01:00:00Z' });
   });
 });

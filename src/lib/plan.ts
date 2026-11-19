@@ -1,7 +1,7 @@
 // Plan de apuestas por objetivo: reparte el dinero entre las recomendaciones de las próximas 48 h para intentar llegar a un
 // beneficio, y dice con qué probabilidad se llega. Todo son funciones puras (sin red ni reloj propio), con sus pruebas en plan.test.ts.
 
-export type PlanSport = 'tennis' | 'football' | 'mma';
+export type PlanSport = 'tennis' | 'football' | 'mma' | 'basket';
 
 export interface PlanPick {
   id: string; sport: PlanSport;
@@ -31,9 +31,9 @@ export function isEligible(p: PlanPick, now: number): boolean {
 }
 
 export function poolStats(pool: PlanPick[], now: number): Record<PlanSport, { matches: number; picks: number }> {
-  const seen: Record<PlanSport, Set<string>> = { tennis: new Set(), football: new Set(), mma: new Set() };
+  const seen: Record<PlanSport, Set<string>> = { tennis: new Set(), football: new Set(), mma: new Set(), basket: new Set() };
   const out: Record<PlanSport, { matches: number; picks: number }> = {
-    tennis: { matches: 0, picks: 0 }, football: { matches: 0, picks: 0 }, mma: { matches: 0, picks: 0 }
+    tennis: { matches: 0, picks: 0 }, football: { matches: 0, picks: 0 }, mma: { matches: 0, picks: 0 }, basket: { matches: 0, picks: 0 }
   };
   for (const p of pool) {
     if (!isEligible(p, now)) continue;
@@ -204,15 +204,134 @@ function structures(L: PlanPick[]): PlanPick[][][] {
   return out.filter(st => st.length >= 1 && st.length <= MAX_TICKETS);
 }
 
-function emptyPlan(budget: number, target: number, eligible: number): Plan {
+function emptyPlan(budget: number, target: number, eligible: number, why = 'No hay apuestas disponibles en las próximas 48 horas para armar un plan.'): Plan {
   const risk = riskOf([], budget, target);
-  return { budget, target, tickets: [], risk, eligible, warnings: ['No hay apuestas disponibles en las próximas 48 horas para armar un plan.'] };
+  return { budget, target, tickets: [], risk, eligible, warnings: [why] };
 }
 
-export function buildPlan(pool: PlanPick[], budget: number, target: number, now: number = Date.now()): Plan {
-  const elig = pool.filter(p => isEligible(p, now));
+// Lo que elige el usuario: qué deportes entran y qué tipo de apuesta. combo: una combinada; single: una sencilla. mixed es el
+// reparto de la primera versión (sencillas y combinadas a la vez), que ya no sale en la pantalla
+export type PlanMode = 'combo' | 'single' | 'mixed';
+// odds: la cuota pedida; si no se da, la que sale del beneficio (que va redondeado a céntimos y puede quedar un pelo por encima)
+export interface PlanOptions { mode?: PlanMode; sports?: PlanSport[]; odds?: number }
+
+// Cuotas objetivo de la pantalla: el beneficio buscado es el dinero × (cuota − 1)
+export const TARGET_ODDS = [1.5, 1.75, 2] as const;
+export const targetOf = (budget: number, odds: number) => Math.round(budget * (odds - 1) * 100) / 100;
+
+// «1,5», «1.75» o «2». Una cuota de verdad: más de 1 y como mucho 50
+export function parseOdds(text: string): number | null {
+  const t = text.trim();
+  if (!/^\d+([.,]\d{1,2})?$/.test(t)) return null;
+  const v = Number(t.replace(',', '.'));
+  return v > 1 && v <= 50 ? v : null;
+}
+
+// La sencilla más probable de las que pagan al menos la cuota pedida (a igual probabilidad, la de más valor)
+export function bestSingle(elig: PlanPick[], need: number): PlanPick | null {
+  let best: PlanPick | null = null;
+  for (const p of elig) {
+    if (p.price < need - 1e-9) continue;
+    if (!best || p.p > best.p + 1e-12 || (Math.abs(p.p - best.p) <= 1e-12 && (p.ev > best.ev || (p.ev === best.ev && p.id < best.id)))) best = p;
+  }
+  return best;
+}
+
+// Las líneas de un partido que merece la pena mirar: las que no tienen otra que pague más y acierte más a la vez
+function frontier(lines: PlanPick[]): PlanPick[] {
+  const out: PlanPick[] = [];
+  let bestP = -1;
+  for (const l of [...lines].sort((x, y) => y.price - x.price || y.p - x.p || (x.id < y.id ? -1 : 1))) {
+    if (l.p > bestP + 1e-12) { out.push(l); bestP = l.p; }
+  }
+  return out;
+}
+
+// La combinada más probable que llega a la cuota pedida, de 2 a 8 partidos distintos y con cualquier línea de cada partido. Es una
+// mochila: se recorren los partidos guardando, para cada número de patas y cada tramo de cuota (en logaritmos, de 0,2 % en 0,2 %),
+// la combinación más probable. Al juntar las que caen en el mismo tramo se puede perder una opción casi igual, nunca una que no llegue
+export const MAX_LEGS = 8;
+const STEP = 0.002;
+interface Node { pick: PlanPick; prev: Node | null }
+interface State { lp: number; lq: number; legs: number; path: Node | null }
+export function bestCombo(elig: PlanPick[], need: number): PlanPick[] | null {
+  const goal = Math.log(need) - 1e-9;
+  const cap = Math.ceil(goal / STEP) + 1;
+  const byMatch = new Map<string, PlanPick[]>();
+  for (const p of elig) byMatch.set(p.match, [...(byMatch.get(p.match) ?? []), p]);
+  const matches = [...byMatch.keys()].sort().map(k => frontier(byMatch.get(k)!));
+  const keyOf = (legs: number, lq: number) => legs * (cap + 1) + (lq >= goal ? cap : Math.min(cap - 1, Math.floor(lq / STEP)));
+  let states = new Map<number, State>([[0, { lp: 0, lq: 0, legs: 0, path: null }]]);
+  for (const lines of matches) {
+    const next = new Map(states);
+    for (const st of states.values()) {
+      if (st.legs >= MAX_LEGS) continue;
+      for (const l of lines) {
+        const cand: State = { lp: st.lp + Math.log(l.p), lq: st.lq + Math.log(l.price), legs: st.legs + 1, path: { pick: l, prev: st.path } };
+        const k = keyOf(cand.legs, cand.lq);
+        const cur = next.get(k);
+        if (!cur || cand.lp > cur.lp + 1e-12) next.set(k, cand);
+      }
+    }
+    states = next;
+  }
+  let best: State | null = null;
+  for (const st of states.values()) {
+    if (st.legs < 2 || st.lq < goal) continue;
+    if (!best || st.lp > best.lp + 1e-12 || (Math.abs(st.lp - best.lp) <= 1e-12 && st.legs < best.legs)) best = st;
+  }
+  if (!best) return null;
+  const legs: PlanPick[] = [];
+  for (let n = best.path; n; n = n.prev) legs.unshift(n.pick);
+  return legs;
+}
+
+// La cuota más alta a la que se puede llegar: las 8 líneas de más cuota, de partidos distintos
+function maxCombo(elig: PlanPick[]): number {
+  const top = new Map<string, number>();
+  for (const p of elig) top.set(p.match, Math.max(top.get(p.match) ?? 0, p.price));
+  const list = [...top.values()].sort((a, b) => b - a).slice(0, MAX_LEGS);
+  return list.length >= 2 ? list.reduce((a, b) => a * b, 1) : 0;
+}
+
+const SPORT_TEXT: Record<PlanSport, string> = { tennis: 'tenis', football: 'fútbol', mma: 'MMA', basket: 'baloncesto' };
+const oddText = (v: number) => v.toFixed(2).replace('.', ',');
+
+// Un plan de una sola apuesta (la combinada o la sencilla) con todo el dinero
+function onlyTicket(legs: PlanPick[], budget: number, target: number, eligible: number): Plan {
+  const tickets = [ticketOf(legs, budget)];
+  const risk = riskOf(tickets, budget, target);
+  const warnings = planWarnings(risk, budget, target);
+  if (legs.some(l => l.sport === 'basket')) warnings.splice(warnings.length - 1, 0, 'Las de baloncesto son una estimación: no hay cuotas antiguas con las que comprobar si su modelo acierta.');
+  return { budget, target, tickets, risk, warnings, eligible };
+}
+
+export function buildPlan(pool: PlanPick[], budget: number, target: number, now: number = Date.now(), opts: PlanOptions = {}): Plan {
+  const mode = opts.mode ?? 'mixed';
+  const sports = opts.sports?.length ? new Set(opts.sports) : null;
+  const elig = pool.filter(p => (!sports || sports.has(p.sport)) && isEligible(p, now));
   const L = onePerMatch(elig).slice(0, 14);
-  if (!L.length || !(budget > 0)) return emptyPlan(budget, target, elig.length);
+  if (!L.length || !(budget > 0)) {
+    const which = sports ? [...sports].map(s => SPORT_TEXT[s]).join(', ') : '';
+    return emptyPlan(budget, target, elig.length, which && pool.length
+      ? `No hay apuestas de ${which} en las próximas 48 horas para armar un plan.` : undefined);
+  }
+  const need = opts.odds ?? 1 + target / budget;
+
+  if (mode === 'combo') {
+    const legs = bestCombo(elig, need);
+    if (legs) return onlyTicket(legs, budget, target, elig.length);
+    const top = maxCombo(elig);
+    return emptyPlan(budget, target, elig.length, top
+      ? `Con las apuestas que hay ahora ninguna combinada llega a cuota ${oddText(need)}: la más alta posible es ${oddText(top)}. Prueba con una cuota más baja u otro deporte.`
+      : 'Para una combinada hacen falta al menos dos partidos con apuestas; ahora sólo hay uno.');
+  }
+  if (mode === 'single') {
+    const pick = bestSingle(elig, need);
+    if (pick) return onlyTicket([pick], budget, target, elig.length);
+    const top = Math.max(...elig.map(p => p.price));
+    return emptyPlan(budget, target, elig.length, `Ninguna apuesta sencilla de las que hay ahora paga ${oddText(need)} o más: la más alta es ${oddText(top)}. Prueba con una combinada o una cuota más baja.`);
+  }
 
   let best: { tickets: Ticket[]; d: Dist } | null = null;
   const seen = new Set<string>();
@@ -236,5 +355,6 @@ export function buildPlan(pool: PlanPick[], budget: number, target: number, now:
   // Los tickets más grandes primero
   const tickets = [...best.tickets].sort((a, b) => b.stake - a.stake);
   const risk = riskOf(tickets, budget, target);
-  return { budget, target, tickets, risk, warnings: planWarnings(risk, budget, target), eligible: elig.length };
+  const warnings = planWarnings(risk, budget, target);
+  return { budget, target, tickets, risk, warnings, eligible: elig.length };
 }

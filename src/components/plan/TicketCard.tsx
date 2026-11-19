@@ -3,7 +3,7 @@ import { Badge, panelCls } from '@/components/ui';
 import { money, odd, pct } from '@/lib/format';
 import { useCurrency } from '@/lib/app-context';
 
-const SPORT: Record<PlanSport, string> = { tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
+const SPORT: Record<PlanSport, string> = { tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', basket: 'Baloncesto' };
 
 // Una apuesta del plan: sus selecciones con la cuota, cuánto poner y cuánto se cobra si sale
 export function TicketCard({ ticket, index }: { ticket: Ticket; index: number }) {
@@ -20,7 +20,7 @@ export function TicketCard({ ticket, index }: { ticket: Ticket; index: number })
           <li key={l.id} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2"><Badge>{SPORT[l.sport]}</Badge><span className="truncate text-[13px] text-zinc-200">{l.event}</span></div>
-              <div className="mt-1 text-[13px] text-zinc-400">{l.title} <span className="text-zinc-600">· {l.book}</span></div>
+              <div className="mt-1 text-[13px] text-zinc-400">{l.title} {l.book && <span className="text-zinc-600">· {l.book}</span>}</div>
             </div>
             <span className="shrink-0 text-sm font-medium text-zinc-100 tnum">{odd(l.price)}</span>
           </li>

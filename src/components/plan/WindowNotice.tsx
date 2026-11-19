@@ -4,7 +4,7 @@ import { WINDOW_HOURS } from '@/lib/plan';
 import type { usePlanPool } from '@/components/plan/usePlanPool';
 import { panelCls } from '@/components/ui';
 
-const NAMES: Record<PlanSport, string> = { tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
+const NAMES: Record<PlanSport, string> = { tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', basket: 'Baloncesto' };
 
 // El aviso de las 48 h, siempre arriba: el plan sólo usa partidos que empiezan pronto, que es cuando se leen las cuotas
 export function WindowNotice({ stats, sports, updatedAt, now }: {
@@ -12,7 +12,8 @@ export function WindowNotice({ stats, sports, updatedAt, now }: {
 }) {
   const line = (s: PlanSport) => {
     const st = sports[s];
-    if (st.loading) return 'cargando…';
+    if (st.off) return 'sin elegir';
+    if (st.loading) return s === 'basket' ? 'calculando…' : 'cargando…';
     if (st.error) return 'no se pudo cargar';
     const x = stats[s];
     if (!x.picks) return 'sin partidos con cuotas';
@@ -27,7 +28,6 @@ export function WindowNotice({ stats, sports, updatedAt, now }: {
       </div>
       <ul className="grid gap-x-6 gap-y-1 text-xs text-zinc-400 sm:grid-cols-2">
         {(Object.keys(NAMES) as PlanSport[]).map(s => <li key={s}><span className="text-zinc-300">{NAMES[s]}:</span> {line(s)}</li>)}
-        <li><span className="text-zinc-300">Baloncesto:</span> próximamente</li>
         <li><span className="text-zinc-300">LoL:</span> sin recomendaciones</li>
       </ul>
       {mins !== null && <div className="text-xs text-zinc-500">Recomendaciones calculadas hace {mins} min.</div>}

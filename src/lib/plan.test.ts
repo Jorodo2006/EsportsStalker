@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPlan, isEligible, levelOf, parseEuros, planWarnings, poolStats, riskOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
+import { bestCombo, bestSingle, buildPlan, isEligible, levelOf, MAX_LEGS, parseEuros, parseOdds, planWarnings, poolStats, riskOf, targetOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
 
 const NOW = Date.parse('2026-11-18T10:00:00Z');
 const H = 3600_000;
@@ -39,7 +39,7 @@ describe('poolStats', () => {
   it('cuenta sólo las elegibles y los partidos distintos', () => {
     const pool = [pick({ match: 'x' }), pick({ match: 'x' }), pick({ match: 'y' }), pick({ sport: 'football', rel: 10 })];
     expect(poolStats(pool, NOW)).toEqual({
-      tennis: { matches: 2, picks: 3 }, football: { matches: 0, picks: 0 }, mma: { matches: 0, picks: 0 }
+      tennis: { matches: 2, picks: 3 }, football: { matches: 0, picks: 0 }, mma: { matches: 0, picks: 0 }, basket: { matches: 0, picks: 0 }
     });
   });
 });
@@ -194,5 +194,107 @@ describe('buildPlan', () => {
     const t0 = performance.now();
     buildPlan(big, 100, 40, NOW);
     expect(performance.now() - t0).toBeLessThan(200);
+  });
+});
+
+describe('cuota objetivo, deporte y tipo de apuesta', () => {
+  // Varias líneas por partido, como llegan ahora (todas las calculadas, no sólo la más fiable)
+  const pool = [
+    pick({ id: 'b1', sport: 'basket', match: 'b:1', price: 1.2, p: 0.8 }),
+    pick({ id: 'b2', sport: 'basket', match: 'b:1', price: 1.9, p: 0.5 }),
+    pick({ id: 'b3', sport: 'basket', match: 'b:1', price: 2.1, p: 0.47 }),
+    pick({ id: 'b4', sport: 'basket', match: 'b:2', price: 1.45, p: 0.66 }),
+    pick({ id: 'b5', sport: 'basket', match: 'b:2', price: 1.3, p: 0.6 }), // peor que b4 en las dos cosas: no se mira
+    pick({ id: 't1', sport: 'tennis', match: 't:1', price: 1.25, p: 0.78 }),
+    pick({ id: 't2', sport: 'tennis', match: 't:1', price: 2.05, p: 0.46 }),
+    pick({ id: 'f1', sport: 'football', match: 'f:1', price: 1.4, p: 0.69 }),
+    pick({ id: 'f2', sport: 'football', match: 'f:2', price: 2.4, p: 0.4 })
+  ];
+  const ids = (l: PlanPick[] | null) => (l ?? []).map(x => x.id).sort();
+
+  it('la cuota objetivo da el beneficio y se lee como cuota', () => {
+    expect(targetOf(100, 1.75)).toBe(75);
+    expect(targetOf(10.6, 2)).toBe(10.6);
+    expect(parseOdds('1,5')).toBe(1.5);
+    expect(parseOdds('2.75')).toBe(2.75);
+    expect(parseOdds('1')).toBeNull();
+    expect(parseOdds('51')).toBeNull();
+    expect(parseOdds('abc')).toBeNull();
+  });
+
+  it('simple: la más probable de las que pagan la cuota o más, de cualquier deporte elegido', () => {
+    expect(bestSingle(pool, 2)?.id).toBe('b3');
+    expect(bestSingle(pool.filter(p => p.sport !== 'basket'), 2)?.id).toBe('t2');
+    expect(bestSingle(pool, 3)).toBeNull();
+    const plan = buildPlan(pool, 100, targetOf(100, 2), NOW, { mode: 'single', odds: 2 });
+    expect(plan.tickets).toHaveLength(1);
+    expect(plan.tickets[0]).toMatchObject({ stake: 100, legs: [{ id: 'b3' }] });
+    expect(plan.risk.pReach).toBeCloseTo(0.47);
+  });
+
+  it('simple que no existe: no se inventa y dice la cuota más alta', () => {
+    const plan = buildPlan(pool, 100, targetOf(100, 3), NOW, { mode: 'single', odds: 3 });
+    expect(plan.tickets).toHaveLength(0);
+    expect(plan.warnings[0]).toMatch(/Ninguna apuesta sencilla .* paga 3,00 o más: la más alta es 2,40/);
+  });
+
+  it('combinada a cuota 2: la más probable, con cualquier línea de cada partido y nunca dos del mismo', () => {
+    // b4 × f1 = 2,03 con 0,455 gana a b1 × t1 × f1 = 2,10 con 0,43 y a cualquier sencilla de 2 o más
+    const legs = bestCombo(pool, 2)!;
+    expect(ids(legs)).toEqual(['b4', 'f1']);
+    expect(new Set(legs.map(l => l.match)).size).toBe(legs.length);
+    const plan = buildPlan(pool, 100, targetOf(100, 2), NOW, { mode: 'combo', odds: 2 });
+    expect(plan.tickets[0].price).toBeGreaterThanOrEqual(2);
+    expect(plan.risk.pReach).toBeCloseTo(0.66 * 0.69);
+  });
+
+  it('combinada de un solo deporte', () => {
+    const plan = buildPlan(pool, 100, targetOf(100, 1.5), NOW, { mode: 'combo', sports: ['basket'], odds: 1.5 });
+    expect(plan.tickets[0].legs.every(l => l.sport === 'basket')).toBe(true);
+    expect(ids(plan.tickets[0].legs)).toEqual(['b1', 'b4']); // 1,74 con 0,528
+    expect(plan.warnings.some(w => /baloncesto son una estimación/.test(w))).toBe(true);
+  });
+
+  it('combinada que no llega: no se arma y dice la cuota más alta', () => {
+    const plan = buildPlan(pool, 100, targetOf(100, 40), NOW, { mode: 'combo', sports: ['tennis', 'football'], odds: 40 });
+    expect(plan.tickets).toHaveLength(0);
+    expect(plan.warnings[0]).toMatch(/ninguna combinada llega a cuota 40,00: la más alta posible es 6,89/);
+  });
+
+  it('la combinada es la mejor posible (frente a probarlas todas)', () => {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let round = 0; round < 25; round++) {
+      const list: PlanPick[] = [];
+      for (let m = 0; m < 6; m++) for (let k = 0; k < 3; k++) {
+        const price = 1.1 + rnd() * 2.5;
+        list.push(pick({ id: `r${round}-${m}-${k}`, match: `m${m}`, price, p: Math.min(0.95, (1 / price) * (0.85 + rnd() * 0.2)) }));
+      }
+      const need = 1.5 + rnd() * 4;
+      // Todas: para cada partido, ninguna línea o una de las tres
+      let bestP = -1;
+      const walk = (m: number, price: number, p: number, legs: number) => {
+        if (m === 6) { if (legs >= 2 && legs <= MAX_LEGS && price >= need && p > bestP) bestP = p; return; }
+        walk(m + 1, price, p, legs);
+        for (const l of list.filter(x => x.match === `m${m}`)) walk(m + 1, price * l.price, p * l.p, legs + 1);
+      };
+      walk(0, 1, 1, 0);
+      const got = bestCombo(list, need);
+      if (bestP < 0) { expect(got).toBeNull(); continue; }
+      const p = got!.reduce((a, l) => a * l.p, 1), price = got!.reduce((a, l) => a * l.price, 1);
+      expect(price).toBeGreaterThanOrEqual(need - 1e-9);
+      // Los tramos de cuota pueden juntar dos casi iguales: como mucho un 1 % peor que la mejor
+      expect(p).toBeGreaterThanOrEqual(bestP * 0.99);
+    }
+  });
+
+  it('sin apuestas del deporte elegido lo dice', () => {
+    const plan = buildPlan(pool, 100, 100, NOW, { mode: 'combo', sports: ['mma'], odds: 2 });
+    expect(plan.tickets).toHaveLength(0);
+    expect(plan.warnings[0]).toMatch(/No hay apuestas de MMA/);
+  });
+
+  it('cuenta las de baloncesto por partido', () => {
+    expect(poolStats(pool, NOW).basket).toEqual({ matches: 2, picks: 5 });
   });
 });

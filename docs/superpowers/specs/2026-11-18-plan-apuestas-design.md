@@ -101,6 +101,27 @@ servidor (el modelo de baloncesto está escrito para el navegador y portarlo es 
 - Sin apuestas suficientes: mensaje claro de qué falta (p. ej. «hoy sólo hay N apuestas de tenis con cuotas»), sin plan inventado.
 - `PlayNotice` junto al plan. Recuerda las dos últimas cifras en `localStorage` (`try/catch`).
 
+## Cambio del 19-11: cuota objetivo, deportes y tipo (petición de Jordi)
+
+Lo que se pide: «si pido una cuota 2, que el modelo me dé la mejor cuota 2 posible», con uno o varios deportes, en combinada o en simple.
+
+- **Cuota objetivo** en vez de beneficio en euros: 1,50 · 1,75 · 2,00 u «Otra» (más de 1 y como mucho 50; de partida, 2). El beneficio
+  es dinero × (cuota − 1) y se enseña bajo el selector (`targetOf`, `parseOdds`). La cuota se pasa tal cual a `buildPlan` (`odds`): el
+  beneficio va redondeado a céntimos y una línea de 1,75 justa podía quedarse fuera.
+- **Deportes:** baloncesto, tenis, fútbol y MMA, uno o varios (al menos uno). Sólo se piden los elegidos.
+- **Todas las líneas, no sólo dos por partido:** tenis del tablero (`picksBoard`), fútbol y MMA del escáner de líneas (`picksLines`),
+  baloncesto con `useBasketPicks`, el mismo cálculo que su pantalla de recomendaciones (se calcula en el navegador y es lo que más
+  tarda; sólo si se elige). Con la más fiable y la «difícil» de cada partido casi nada llegaba a cuota 2.
+- **Combinada** (`bestCombo`): la combinada de 2 a 8 partidos distintos más probable entre las que llegan a la cuota, eligiendo
+  cualquier línea de cada partido (una por partido, para que sean independientes). Es una mochila por partidos con tramos de cuota
+  del 0,2 % en logaritmos; una prueba la compara con probarlas todas (como mucho un 1 % peor por juntar tramos).
+- **Simple** (`bestSingle`): la sencilla más probable de las que pagan la cuota o más.
+- Si nada llega a la cuota, no se arma nada y se dice la cuota más alta posible. Con baloncesto en el plan se avisa de que es una estimación.
+- «Más probable» es la probabilidad del modelo de cada deporte, que ya mezcla la casa; los filtros de siempre siguen (fiabilidad ≥ 45,
+  valor esperado ≥ −10 %, cuota 1,10–15, próximas 48 h). El reparto de la primera versión (`mode: 'mixed'`) sigue en `plan.ts` y sus
+  pruebas, pero ya no sale en la pantalla.
+- Se recuerdan en el navegador (`plan-inputs`) el dinero, la cuota, el tipo y los deportes.
+
 ## Entregas
 
 1. **Núcleo y tres deportes:** `plan.ts` con pruebas, adaptadores de tenis, fútbol y MMA, pantalla, navegación (escritorio y móvil), avisos.
