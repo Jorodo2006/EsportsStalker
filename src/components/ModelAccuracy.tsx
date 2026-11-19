@@ -20,6 +20,9 @@ const isPick = (r: PredictionRow) => r.sport !== 'basket' || verdictOf(r.ev, r.r
 
 const SPORT_NAME: Record<string, string> = { basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', lol: 'LoL' };
 const SPORT_ORDER: Sport[] = ['basket', 'tennis', 'football', 'mma', 'lol'];
+// La competición tal como se guarda (en baloncesto, el código de la liga en mayúsculas) y cómo se enseña
+const LEAGUE_NAME: Record<string, string> = { NBA: 'NBA', WNBA: 'WNBA', NBL: 'NBL', EUROLEAGUE: 'Euroliga', EUROCUP: 'EuroCup' };
+const leagueName = (l: string) => LEAGUE_NAME[l] ?? (l || 'Sin competición');
 // Movimiento de la cuota desde la primera vez que se recomendó hasta la última antes de empezar (CLV): +5 % es que la
 // cuota bajó un 5 %, es decir, que el mercado fue hacia lo que decía el modelo. La última es la que se vio por última vez en la
 // app antes del partido, que suele estar cerca del cierre, pero no siempre
@@ -52,10 +55,21 @@ export function ModelAccuracy() {
   const [sport, setSport] = useState<SportF>('all');
   const [range, setRange] = useState<RangeF>('all');
   const [scope, setScope] = useState<ScopeF>('picks');
+  // Competición: sólo con un deporte elegido; al cambiar de deporte vuelve a todas
+  const [league, setLeague] = useState<string>('all');
+  const pickSport = (s: SportF) => { setSport(s); setLeague('all'); };
   const rows = useMemo(() => {
     const since = range === 'all' ? 0 : Date.now() - Number(range) * 864e5;
-    return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && +new Date(r.start) >= since && (scope === 'lines' || isPick(r)));
-  }, [q.data, sport, range, scope]);
+    return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && (league === 'all' || r.league === league)
+      && +new Date(r.start) >= since && (scope === 'lines' || isPick(r)));
+  }, [q.data, sport, league, range, scope]);
+  // Las competiciones del deporte elegido que tienen alguna, de la que más a la que menos
+  const leagues = useMemo(() => {
+    if (sport === 'all') return [];
+    const n = new Map<string, number>();
+    for (const r of q.data?.rows ?? []) if (r.sport === sport) n.set(r.league, (n.get(r.league) ?? 0) + 1);
+    return [...n].sort((a, b) => b[1] - a[1]).map(([l]) => l);
+  }, [q.data, sport]);
   // Sólo los deportes que ya tienen alguna resuelta
   const sports = useMemo(() => SPORT_ORDER.filter(s => (q.data?.rows ?? []).some(r => r.sport === s)), [q.data]);
 
@@ -65,9 +79,16 @@ export function ModelAccuracy() {
 
   const filters = (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <Tabs value={sport} onChange={setSport} items={[{ value: 'all' as SportF, label: 'Todo' }, ...sports.map(s => ({ value: s as SportF, label: SPORT_NAME[s] }))]} />
+      <Tabs value={sport} onChange={pickSport} items={[{ value: 'all' as SportF, label: 'Todo' }, ...sports.map(s => ({ value: s as SportF, label: SPORT_NAME[s] }))]} />
       <Tabs value={range} onChange={setRange} items={[{ value: '30', label: '30 días' }, { value: '90', label: '90 días' }, { value: 'all', label: 'Todo' }]} />
       <Tabs value={scope} onChange={setScope} items={[{ value: 'picks', label: 'Recomendadas' }, { value: 'lines', label: 'Todas las líneas' }]} />
+      {leagues.length > 1 && (
+        <div className="flex w-full flex-wrap items-center gap-2" role="group" aria-label="Competición">
+          {[{ v: 'all', label: 'Todas' }, ...leagues.map(l => ({ v: l, label: leagueName(l) }))].map(x => (
+            <button key={x.v} type="button" className={chip(league === x.v)} aria-pressed={league === x.v} onClick={() => setLeague(x.v)}>{x.label}</button>
+          ))}
+        </div>
+      )}
       <span className="text-xs text-zinc-500">{data.pending} por resolver{data.since ? ` · registro desde el ${new Date(data.since).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}` : ''}</span>
     </div>
   );
@@ -75,7 +96,7 @@ export function ModelAccuracy() {
     <>
       {filters}
       <Empty>
-        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${SPORT_NAME[sport].toLowerCase()}` : ''}. Se guardan todas las líneas que calcula el modelo de baloncesto y
+        Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${league !== 'all' ? leagueName(league) : SPORT_NAME[sport].toLowerCase()}` : ''}{scope === 'picks' && (sport === 'basket' || sport === 'all') ? ' entre las recomendadas (prueba con «Todas las líneas»)' : ''}. Se guardan todas las líneas que calcula el modelo de baloncesto y
         las recomendaciones de tenis, fútbol y MMA mientras las ves en la app (Recomendaciones, la ficha de cada partido), las apuestes o no; cuando
         acaban sus partidos se resuelven solas y salen aquí. Hacen falta unas cuantas decenas para que las cifras digan algo.
       </Empty>
@@ -92,6 +113,7 @@ export function ModelAccuracy() {
   }).filter(b => b.n);
   const byGroup = groupRows(rows, r => `${SPORT_NAME[r.sport] ?? r.sport} · ${r.group}`);
   const bySport = groupRows(rows, r => SPORT_NAME[r.sport] ?? r.sport);
+  const byLeague = groupRows(rows, r => leagueName(r.league));
   const clvs = rows.map(clv).filter((v): v is number => v != null);
   const clvAvg = clvs.length ? clvs.reduce((a, v) => a + v, 0) / clvs.length : null;
   const clvBeat = clvs.length ? clvs.filter(v => v > 0).length / clvs.length : null;
@@ -120,6 +142,7 @@ export function ModelAccuracy() {
 
       <ProfitCurve rows={rows} />
       {sport === 'all' && bySport.length > 1 && <div className="mb-5"><GroupTable title="Por deporte" rows={bySport} /></div>}
+      {sport !== 'all' && league === 'all' && byLeague.length > 1 && <div className="mb-5"><GroupTable title="Por competición" rows={byLeague} /></div>}
 
       <div className="mb-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
         <Card title="¿Cuando dice X %, sale X %?" action={<span className="text-[11px] text-zinc-500">Calibración</span>}>
