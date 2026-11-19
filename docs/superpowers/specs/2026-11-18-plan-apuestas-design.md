@@ -121,6 +121,12 @@ Lo que se pide: «si pido una cuota 2, que el modelo me dé la mejor cuota 2 pos
   valor esperado ≥ −10 %, cuota 1,10–15, próximas 48 h). El reparto de la primera versión (`mode: 'mixed'`) sigue en `plan.ts` y sus
   pruebas, pero ya no sale en la pantalla.
 - Se recuerdan en el navegador (`plan-inputs`) el dinero, la cuota, el tipo y los deportes.
+- **Varias opciones** (`optionsOf`, hasta `MAX_OPTIONS` = 5): la mejor, y luego la mejor con los partidos que quedan, y así; van de más
+  a menos probable y no comparten partido (opciones distintas de verdad, y se pueden juntar sin que una dependa de otra). Son
+  alternativas, cada una con todo el dinero: la pantalla lo dice («elige una, no las juegues todas»). El riesgo de arriba es el de la 1.
+- **Muy fiable** (petición de Jordi: avisar si alguna lo es, por si el usuario quiere juntarlas): todas sus selecciones con fiabilidad
+  de `VERY_RELIABLE` = 75 o más (la escala del cálculo, en la que «Alta» es 70; la cifra es una decisión). Con dos o más, un recuadro
+  dice qué cuota y qué probabilidad tendría juntarlas (`join`), y que fiable no quiere decir que vaya a salir.
 
 ## Entregas
 

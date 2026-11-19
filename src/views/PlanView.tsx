@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useCurrency, useWallet } from '@/lib/app-context';
-import { buildPlan, parseEuros, parseOdds, poolStats, targetOf, TARGET_ODDS, type PlanMode, type PlanSport } from '@/lib/plan';
-import { money, odd } from '@/lib/format';
-import { Button, chip, Empty, Field, Input, Loading, PageHeader, PlayNotice, Tabs } from '@/components/ui';
+import { buildPlan, parseEuros, parseOdds, poolStats, targetOf, TARGET_ODDS, veryReliable, VERY_RELIABLE, type Join, type PlanMode, type PlanSport } from '@/lib/plan';
+import { money, odd, pct } from '@/lib/format';
+import { Button, chip, Empty, Field, Input, Loading, PageHeader, panelCls, PlayNotice, Tabs } from '@/components/ui';
 import { usePlanPool } from '@/components/plan/usePlanPool';
 import { WindowNotice } from '@/components/plan/WindowNotice';
 import { RiskPanel } from '@/components/plan/RiskPanel';
@@ -22,6 +22,23 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
       <legend className="mb-1.5 text-xs font-medium text-zinc-400">{label}</legend>
       {children}
     </fieldset>
+  );
+}
+
+// Las muy fiables juntas: cuánto sube la cuota y cuánto baja la probabilidad, para que el usuario lo vea antes de probarlo
+function JoinCard({ join }: { join: Join }) {
+  const cur = useCurrency();
+  const n = join.of.map(i => i + 1);
+  const names = `${n.slice(0, -1).join(', ')} y ${n[n.length - 1]}`;
+  const t = join.ticket;
+  return (
+    <section className={`${panelCls} flex flex-col gap-2 p-4`} aria-label="Juntar las muy fiables">
+      <h3 className="text-sm font-semibold text-zinc-100">Las opciones {names} son muy fiables</h3>
+      <p className="text-[13px] text-zinc-300">
+        Todas sus selecciones tienen una fiabilidad de {VERY_RELIABLE} o más. Si las juntas en una combinada de {t.legs.length}, la cuota sube a <span className="font-medium text-zinc-50 tnum">{odd(t.price)}</span> (se cobrarían {money(t.toReturn, cur)}), pero la probabilidad baja a <span className="font-medium text-zinc-50 tnum">{pct(t.p)}</span>: tienen que salir todas a la vez.
+      </p>
+      <p className="text-xs text-zinc-500">Fiable quiere decir que el cálculo tiene buenos datos, no que vaya a salir.</p>
+    </section>
   );
 }
 
@@ -116,11 +133,24 @@ export default function PlanView() {
       {plan && !(loading && !pool.length) && (plan.tickets.length ? (
         <>
           <RiskPanel plan={plan} />
-          <div className="grid gap-3 2xl:grid-cols-2">
-            {plan.tickets.map((t, i) => <TicketCard key={t.legs.map(l => l.id).join('+')} ticket={t} index={i} />)}
-          </div>
+          {plan.options.length ? (
+            <>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-sm font-semibold text-zinc-100">{plan.options.length === 1 ? 'La opción para esta cuota' : `${plan.options.length} opciones para esta cuota`}</h2>
+                {plan.options.length > 1 && <p className="text-xs text-zinc-500">Son alternativas, cada una con todo el dinero: elige una, no las juegues todas. Van de más a menos probable y no comparten partido. El riesgo de arriba es el de la opción 1.</p>}
+              </div>
+              <div className="grid gap-3 2xl:grid-cols-2">
+                {plan.options.map((t, i) => <TicketCard key={t.legs.map(l => l.id).join('+')} ticket={t} index={i} title={`Opción ${i + 1}`} tag={veryReliable(t) ? 'Muy fiable' : undefined} />)}
+              </div>
+              {plan.join && <JoinCard join={plan.join} />}
+            </>
+          ) : (
+            <div className="grid gap-3 2xl:grid-cols-2">
+              {plan.tickets.map((t, i) => <TicketCard key={t.legs.map(l => l.id).join('+')} ticket={t} index={i} />)}
+            </div>
+          )}
           <div className="text-xs text-zinc-500">
-            {plan.tickets.length} apuesta{plan.tickets.length === 1 ? '' : 's'} con {legs} {legs === 1 ? 'selección' : 'selecciones'}, de {plan.eligible} que cumplen los requisitos.
+            {plan.options.length ? `${plan.eligible} apuestas cumplen los requisitos.` : `${plan.tickets.length} apuesta${plan.tickets.length === 1 ? '' : 's'} con ${legs} ${legs === 1 ? 'selección' : 'selecciones'}, de ${plan.eligible} que cumplen los requisitos.`}
           </div>
         </>
       ) : (

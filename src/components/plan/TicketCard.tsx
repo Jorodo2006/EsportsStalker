@@ -6,13 +6,14 @@ import { useCurrency } from '@/lib/app-context';
 const SPORT: Record<PlanSport, string> = { tennis: 'Tenis', football: 'Fútbol', mma: 'MMA', basket: 'Baloncesto' };
 
 // Una apuesta del plan: sus selecciones con la cuota, cuánto poner y cuánto se cobra si sale
-export function TicketCard({ ticket, index }: { ticket: Ticket; index: number }) {
+// title: el rótulo (por defecto «Apuesta N»); tag: una etiqueta junto a él, como «Muy fiable»
+export function TicketCard({ ticket, index, title, tag }: { ticket: Ticket; index: number; title?: string; tag?: string }) {
   const cur = useCurrency();
   const combo = ticket.legs.length > 1;
   return (
     <article className={`${panelCls} flex flex-col gap-3 p-4`}>
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-zinc-100">Apuesta {index + 1} · {combo ? `Combinada de ${ticket.legs.length}` : 'Sencilla'}</h3>
+        <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-zinc-100">{title ?? `Apuesta ${index + 1}`} · {combo ? `Combinada de ${ticket.legs.length}` : 'Sencilla'}{tag && <Badge tone="success">{tag}</Badge>}</h3>
         <span className="text-xs text-zinc-500 tnum">Probabilidad {pct(ticket.p)}</span>
       </header>
       <ul className="flex flex-col divide-y divide-zinc-800/70">
