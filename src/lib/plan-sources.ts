@@ -23,7 +23,7 @@ function adapt(sport: PlanSport, rows: Row[]): PlanPick[] {
     if (out.has(id)) continue;
     out.set(id, {
       id, sport, match: `${sport}:${matchId}`, event, league, title: pk.title, start, book: pk.book,
-      price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score
+      price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score, market: pk.market, selection: pk.selection
     });
   }
   return [...out.values()];
@@ -51,7 +51,8 @@ export function fromBasket(picks: BasketPick[]): PlanPick[] {
     if (out.has(id)) continue;
     out.set(id, {
       id, sport: 'basket', match: `basket:${g.id}`, event: `${g.away.name} @ ${g.home.name}`, league: BASKET_LEAGUE[g.league] ?? g.league,
-      title: pk.title, start: g.date, book: pk.book ?? '', price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score
+      title: pk.title, start: g.date, book: pk.book ?? '', price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score,
+      market: pk.market, selection: pk.selection
     });
   }
   return [...out.values()];

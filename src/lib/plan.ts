@@ -8,6 +8,8 @@ export interface PlanPick {
   // match identifica el partido (clave de «una sola apuesta por partido»); event es sólo la etiqueta «A vs B»
   match: string; event: string; league: string; title: string;
   start: string; book: string; price: number; p: number; ev: number; rel: number;
+  // Para llevarla al cupón con el mercado y la selección por separado (los adaptadores los rellenan si los tienen)
+  market?: string; selection?: string;
 }
 
 // Una apuesta sencilla (1 pata) o una combinada: cuota y probabilidad son el producto de las patas
@@ -20,26 +22,40 @@ export interface Risk { pReach: number; pProfit: number; pLoseAll: number; expec
 export interface Join { of: number[]; ticket: Ticket }
 export interface Plan { budget: number; target: number; tickets: Ticket[]; risk: Risk; warnings: string[]; eligible: number; options: Ticket[]; join: Join | null }
 
-// Las cuotas sólo se leen para lo que empieza pronto: es la ventana del plan
+// Las cuotas sólo se leen para lo que empieza pronto: es la ventana más larga del plan. El usuario puede acortarla
+// (sólo lo que empieza en las próximas 2, 5, 10 o 24 h)
 export const WINDOW_HOURS = 48;
+export const WINDOWS = [2, 5, 10, 24, 48] as const;
 const HOUR = 3600_000;
 const MAX_TICKETS = 12;
 
 // Filtro de elegibles. No se filtra por veredicto: con datos reales casi todas las más fiables son «No apostar» (cuota 1,15-1,22
 // y valor esperado cerca de −6 %), y el plan se quedaría sin apuestas. El valor esperado negativo se avisa aparte (planWarnings)
-export function isEligible(p: PlanPick, now: number): boolean {
+export function isEligible(p: PlanPick, now: number, hours: number = WINDOW_HOURS): boolean {
   const t = Date.parse(p.start);
   if (!Number.isFinite(t)) return false;
-  return t > now && t < now + WINDOW_HOURS * HOUR && p.rel >= 45 && p.ev >= -0.10 && p.price >= 1.10 && p.price <= 15;
+  return t > now && t < now + Math.min(hours, WINDOW_HOURS) * HOUR && p.rel >= 45 && p.ev >= -0.10 && p.price >= 1.10 && p.price <= 15;
 }
 
-export function poolStats(pool: PlanPick[], now: number): Record<PlanSport, { matches: number; picks: number }> {
+// Competición de una apuesta para el filtro: «basket:NBA», «football:LaLiga»…
+export const leagueKey = (p: Pick<PlanPick, 'sport' | 'league'>) => `${p.sport}:${p.league}`;
+
+// Las competiciones de cada deporte con apuestas en la ventana, de más a menos apuestas, para elegir cuáles entran
+export function leaguesOf(pool: PlanPick[], now: number, hours: number = WINDOW_HOURS): Record<PlanSport, { league: string; picks: number }[]> {
+  const count: Record<PlanSport, Map<string, number>> = { tennis: new Map(), football: new Map(), mma: new Map(), basket: new Map() };
+  for (const p of pool) if (p.league && isEligible(p, now, hours)) count[p.sport].set(p.league, (count[p.sport].get(p.league) ?? 0) + 1);
+  const out = {} as Record<PlanSport, { league: string; picks: number }[]>;
+  for (const s of Object.keys(count) as PlanSport[]) out[s] = [...count[s]].map(([league, picks]) => ({ league, picks })).sort((a, b) => b.picks - a.picks || a.league.localeCompare(b.league));
+  return out;
+}
+
+export function poolStats(pool: PlanPick[], now: number, hours: number = WINDOW_HOURS): Record<PlanSport, { matches: number; picks: number }> {
   const seen: Record<PlanSport, Set<string>> = { tennis: new Set(), football: new Set(), mma: new Set(), basket: new Set() };
   const out: Record<PlanSport, { matches: number; picks: number }> = {
     tennis: { matches: 0, picks: 0 }, football: { matches: 0, picks: 0 }, mma: { matches: 0, picks: 0 }, basket: { matches: 0, picks: 0 }
   };
   for (const p of pool) {
-    if (!isEligible(p, now)) continue;
+    if (!isEligible(p, now, hours)) continue;
     out[p.sport].picks++;
     seen[p.sport].add(p.match);
   }
@@ -207,7 +223,7 @@ function structures(L: PlanPick[]): PlanPick[][][] {
   return out.filter(st => st.length >= 1 && st.length <= MAX_TICKETS);
 }
 
-function emptyPlan(budget: number, target: number, eligible: number, why = 'No hay apuestas disponibles en las próximas 48 horas para armar un plan.'): Plan {
+function emptyPlan(budget: number, target: number, eligible: number, why = `No hay apuestas disponibles en las próximas ${WINDOW_HOURS} horas para armar un plan.`): Plan {
   const risk = riskOf([], budget, target);
   return { budget, target, tickets: [], risk, eligible, warnings: [why], options: [], join: null };
 }
@@ -215,8 +231,10 @@ function emptyPlan(budget: number, target: number, eligible: number, why = 'No h
 // Lo que elige el usuario: qué deportes entran y qué tipo de apuesta. combo: una combinada; single: una sencilla. mixed es el
 // reparto de la primera versión (sencillas y combinadas a la vez), que ya no sale en la pantalla
 export type PlanMode = 'combo' | 'single' | 'mixed';
-// odds: la cuota pedida; si no se da, la que sale del beneficio (que va redondeado a céntimos y puede quedar un pelo por encima)
-export interface PlanOptions { mode?: PlanMode; sports?: PlanSport[]; odds?: number }
+// odds: la cuota pedida; si no se da, la que sale del beneficio (que va redondeado a céntimos y puede quedar un pelo por encima).
+// hours: sólo lo que empieza en las próximas N horas (como mucho WINDOW_HOURS). skipLeagues: competiciones que no entran (leagueKey)
+export interface PlanOptions { mode?: PlanMode; sports?: PlanSport[]; odds?: number; hours?: number; skipLeagues?: string[] }
+const hoursText = (h: number) => (h >= 24 && h % 24 === 0 ? (h === 24 ? 'las próximas 24 horas' : `los próximos ${h / 24} días`) : `las próximas ${h} horas`);
 
 // Cuotas objetivo de la pantalla: el beneficio buscado es el dinero × (cuota − 1)
 export const TARGET_ODDS = [1.5, 1.75, 2] as const;
@@ -344,12 +362,15 @@ function optionsPlan(list: PlanPick[][], budget: number, target: number, eligibl
 export function buildPlan(pool: PlanPick[], budget: number, target: number, now: number = Date.now(), opts: PlanOptions = {}): Plan {
   const mode = opts.mode ?? 'mixed';
   const sports = opts.sports?.length ? new Set(opts.sports) : null;
-  const elig = pool.filter(p => (!sports || sports.has(p.sport)) && isEligible(p, now));
+  const hours = Math.min(opts.hours ?? WINDOW_HOURS, WINDOW_HOURS);
+  const skip = new Set(opts.skipLeagues ?? []);
+  const elig = pool.filter(p => (!sports || sports.has(p.sport)) && !skip.has(leagueKey(p)) && isEligible(p, now, hours));
   const L = onePerMatch(elig).slice(0, 14);
   if (!L.length || !(budget > 0)) {
     const which = sports ? [...sports].map(s => SPORT_TEXT[s]).join(', ') : '';
     return emptyPlan(budget, target, elig.length, which && pool.length
-      ? `No hay apuestas de ${which} en las próximas 48 horas para armar un plan.` : undefined);
+      ? `No hay apuestas de ${which}${skip.size ? ' (con las competiciones elegidas)' : ''} en ${hoursText(hours)} para armar un plan.${hours < WINDOW_HOURS ? ' Prueba con más horas.' : ''}`
+      : undefined);
   }
   const need = opts.odds ?? 1 + target / budget;
 

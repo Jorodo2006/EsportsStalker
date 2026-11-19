@@ -128,6 +128,21 @@ Lo que se pide: «si pido una cuota 2, que el modelo me dé la mejor cuota 2 pos
   de `VERY_RELIABLE` = 75 o más (la escala del cálculo, en la que «Alta» es 70; la cifra es una decisión). Con dos o más, un recuadro
   dice qué cuota y qué probabilidad tendría juntarlas (`join`), y que fiable no quiere decir que vaya a salir.
 
+## Cambio del 19-11 (tarde): más fácil de usar, cuándo y qué competiciones (petición de Jordi)
+
+- **Pantalla en pasos** (`PlanSetup`): 1 cuánto (con 10, 20, 50 y 100 € de un toque y «Mi cartera»), 2 a qué cuota (1,50, 1,75, 2, 3 u
+  otra, y lo que se cobra), 3 cuándo empiezan, 4 deportes y competiciones, 5 combinada o simple. Desde `xl`, los pasos a la izquierda y
+  el resultado al lado; en el móvil, un resumen arriba («Tu mejor apuesta ahora») baja al resultado.
+- **Resultado** (`OptionCard.tsx`): la más probable destacada (`BestCard`, con su riesgo, la barra de probabilidad, cuándo empieza
+  cada partido y lo que se cobra) y las demás opciones debajo. El aviso de valor esperado negativo sigue a la vista; el resto de
+  avisos, plegados en «Avisos y cómo se calcula».
+- **Cuándo**: 2, 5, 10, 24 o 48 h (`WINDOWS`, `hours` en `buildPlan`, `isEligible`, `poolStats` y `leaguesOf`). Nunca más de 48 h.
+- **Competiciones**: las de cada deporte con apuestas en la ventana (`leaguesOf`); se guardan las que se quitan (`skipLeagues`, con
+  `leagueKey`), para que una nueva entre sola. Con todas puestas, tocar una deja sólo esa (baloncesto sólo NBA de un toque); «Todas» lo
+  deshace.
+- **Al cupón**: cada opción se lleva al cupón con su mercado y su selección (`market` y `selection` en `PlanPick`). Las que ya estaban
+  no se tocan (pulsar una que está la quitaría). Sigue sin apuntar nada: se apunta desde el cupón, con el importe que ponga el usuario.
+
 ## Entregas
 
 1. **Núcleo y tres deportes:** `plan.ts` con pruebas, adaptadores de tenis, fútbol y MMA, pantalla, navegación (escritorio y móvil), avisos.
@@ -143,7 +158,7 @@ Cada entrega termina con `npm run typecheck` y `npm test` sin errores y probando
 - Los umbrales del índice de riesgo (60 / 35 / 15 %) y el aviso por cuota necesaria mayor de 3.
 - Quinta pestaña en la barra inferior del móvil; icono `Target`; nombre «Plan».
 - Sólo se calcula con lo que ya hay guardado: no se lanzan lecturas de cuotas.
-- No se pasa al cupón en esta versión.
+- ~~No se pasa al cupón en esta versión.~~ Desde el 19-11 sí (ver arriba).
 
 ## Lo que queda al criterio de quien construya
 

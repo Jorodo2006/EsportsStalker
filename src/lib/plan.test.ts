@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestCombo, bestSingle, buildPlan, isEligible, levelOf, MAX_LEGS, MAX_OPTIONS, VERY_RELIABLE, parseEuros, parseOdds, planWarnings, poolStats, riskOf, targetOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
+import { bestCombo, bestSingle, buildPlan, isEligible, leagueKey, leaguesOf, levelOf, MAX_LEGS, MAX_OPTIONS, VERY_RELIABLE, parseEuros, parseOdds, planWarnings, poolStats, riskOf, targetOf, ticketOf, type PlanPick, type Risk, type Ticket } from './plan';
 
 const NOW = Date.parse('2026-11-18T10:00:00Z');
 const H = 3600_000;
@@ -328,3 +328,37 @@ describe('cuota objetivo, deporte y tipo de apuesta', () => {
   });
 });
 
+
+describe('ventana de horas y competiciones', () => {
+  const at = (h: number, over: Partial<PlanPick> = {}) => pick({ start: iso(NOW + h * H), price: 2.1, p: 0.5, ...over });
+
+  it('isEligible respeta la ventana pedida y nunca pasa de 48 h', () => {
+    expect(isEligible(at(1.5), NOW, 2)).toBe(true);
+    expect(isEligible(at(3), NOW, 2)).toBe(false);
+    expect(isEligible(at(9), NOW, 10)).toBe(true);
+    expect(isEligible(at(30), NOW, 72)).toBe(true);
+    expect(isEligible(at(50), NOW, 72)).toBe(false);
+  });
+
+  it('buildPlan sólo usa lo que empieza en las horas elegidas, y si no hay nada lo dice', () => {
+    const pool = [at(1, { id: 'pronto', match: 'x1' }), at(8, { id: 'tarde', match: 'x2', p: 0.6 })];
+    expect(buildPlan(pool, 10, 11, NOW, { mode: 'single', odds: 2.1, hours: 2 }).options.map(t => t.legs[0].id)).toEqual(['pronto']);
+    expect(buildPlan(pool, 10, 11, NOW, { mode: 'single', odds: 2.1, hours: 10 }).options[0].legs[0].id).toBe('tarde');
+    const empty = buildPlan([at(8, { match: 'x3' })], 10, 11, NOW, { mode: 'single', odds: 2.1, sports: ['tennis'], hours: 2 });
+    expect(empty.tickets).toHaveLength(0);
+    expect(empty.warnings[0]).toMatch(/2 horas.*Prueba con más horas/);
+  });
+
+  it('se pueden dejar fuera competiciones (baloncesto sólo NBA)', () => {
+    const nba = at(3, { id: 'nba', sport: 'basket', league: 'NBA', match: 'b1', p: 0.5 });
+    const euro = at(3, { id: 'euro', sport: 'basket', league: 'Euroliga', match: 'b2', p: 0.6 });
+    const plan = buildPlan([nba, euro], 10, 11, NOW, { mode: 'single', odds: 2.1, skipLeagues: [leagueKey(euro)] });
+    expect(plan.options.map(t => t.legs[0].id)).toEqual(['nba']);
+  });
+
+  it('leaguesOf lista las competiciones de cada deporte, de más a menos apuestas', () => {
+    const pool = [at(3, { sport: 'basket', league: 'Euroliga' }), at(3, { sport: 'basket', league: 'NBA' }), at(4, { sport: 'basket', league: 'NBA' }), at(30, { sport: 'basket', league: 'NBL' })];
+    expect(leaguesOf(pool, NOW, 10).basket).toEqual([{ league: 'NBA', picks: 2 }, { league: 'Euroliga', picks: 1 }]);
+    expect(leaguesOf(pool, NOW).basket.map(l => l.league)).toEqual(['NBA', 'Euroliga', 'NBL']);
+  });
+});
