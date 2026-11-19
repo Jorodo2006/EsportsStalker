@@ -3,6 +3,8 @@
 Fecha: 2026-11-19 · Estado: fases 0 a 4 hechas (ver sus «resultado»; de la 4 falta el tiempo muerto médico, sin fuente); pendiente de
 revisión por Jordi
 
+Estado, decisiones y cómo retomarlo desde otro equipo: [`docs/superpowers/plans/2026-11-19-motor-challenger-estado.md`](../plans/2026-11-19-motor-challenger-estado.md).
+
 ## Intención
 
 Mejorar el motor de valor de los ATP Challenger (`server/sharpex-tenis`, servicio `challenger`) con el mismo rigor que el de
