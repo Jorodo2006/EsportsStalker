@@ -4,7 +4,7 @@ import { Ban, Check, Clock, Layers, Plus, Trash2, X } from 'lucide-react';
 import { useApp, useCurrency, useBets } from '@/lib/app-context';
 import { cn, money, odd, pct } from '@/lib/format';
 import type { BetDraft, BetLeg, BetRef, BetStatus, LegStatus, MatchOdds, Schedule } from '@/lib/types';
-import { Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
+import { Badge, Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
 import { MatchPicker, matchName } from './MatchPicker';
 import { OptionInput, type Option } from './OptionInput';
 
@@ -145,112 +145,134 @@ export function BetFormDialog() {
 
   const canAdd = !betDraft?.id && !legs && !!f.selection && parseFloat(f.odds) > 1;
   const title = legs ? (betDraft?.id ? 'Editar combinada' : 'Nueva combinada') : betDraft?.id ? 'Editar apuesta' : 'Nueva apuesta';
+  const editing = !!betDraft?.id;
+  const SPORT_NAME: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
+  const mixed = !!legs && new Set(legs.map(l => l.sport || 'lol')).size > 1;
+  const sec = 'border-b border-zinc-800 pb-1 text-xs font-medium text-zinc-400';
+
+  const when = (
+    <div className={cn('grid grid-cols-1 gap-3', legs ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
+      <Field label="Fecha"><Input type="date" required value={f.date || ''} onChange={set('date')} /></Field>
+      {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : foot ? 'LaLiga, Champions…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
+      <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Winamax, Betway…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
+    </div>
+  );
 
   return (
-    <Dialog open={!!betDraft} onClose={closeBet} title={title} wide={!!legs}>
+    <Dialog open={!!betDraft} onClose={closeBet} title={title} wide>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-2">
-          <div className={segWrap}>
-            {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
-              <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
-                className={seg(!!legs === x.v)}>{x.l}</button>
-            ))}
+        {editing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>{legs ? `Combinada ×${legs.length}` : 'Simple'}</Badge>
+            <Badge>{mixed ? 'Varios deportes' : SPORT_NAME[f.sport || 'lol']}</Badge>
+            {!legs && f.league && <Badge>{f.league}</Badge>}
           </div>
-          <div className={segWrap}
-            title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de cada app'}>
-            {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }, { v: 'football', l: 'Fútbol' }, { v: 'mma', l: 'MMA' }].map(x => (
-              <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
-                className={seg((f.sport || 'lol') === x.v)}>{x.l}</button>
-            ))}
-          </div>
-        </div>
-        <div className={cn('grid grid-cols-1 gap-3', legs ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
-          <Field label="Fecha"><Input type="date" required value={f.date || ''} onChange={set('date')} /></Field>
-          {!legs && <Field label="Liga"><Input list="dl-leagues" placeholder={nba ? 'NBA, Euroliga…' : foot ? 'LaLiga, Champions…' : 'LEC, LCK, Worlds…'} value={f.league || ''} onChange={set('league')} /></Field>}
-          <Field label="Casa de apuestas"><Input list="dl-books" placeholder="Winamax, Betway…" value={f.bookmaker || ''} onChange={set('bookmaker')} /></Field>
-        </div>
-        {legs ? (
-          <div className="rounded-xl border border-zinc-800">
-            <div className="hidden grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-400 lg:grid">
-              <span>Partido</span><span>Mercado</span><span>Selección</span><span>Cuota</span><span>Estado</span><span />
-            </div>
-            <div className="flex flex-col gap-2 p-3">
-              {legs.map((l, i) => (
-                <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 lg:grid-cols-[1.3fr_1.2fr_1.1fr_84px_148px_32px] lg:border-0 lg:pb-0">
-                  <div className="col-span-6 lg:col-span-1">
-                    {(l.sport || 'lol') !== 'lol'
-                      ? <Input list="dl-events" placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : 'LAL @ BOS'} value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
-                      : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
-                        onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
-                  </div>
-                  <div className="col-span-6 lg:col-span-1"><OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} /></div>
-                  <Input className="col-span-6 lg:col-span-1" placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
-                  <Input className="col-span-2 lg:col-span-1" type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
-                  <div className="col-span-3 flex gap-1 lg:col-span-1">
-                    {(Object.keys(LEG_LABEL) as LegStatus[]).map(v => {
-                      const Icon = LEG_ICON[v];
-                      return (
-                        <button key={v} type="button" title={LEG_LABEL[v]} aria-pressed={l.status === v} onClick={() => setLeg(i, { status: v })}
-                          className={cn('grid h-9 flex-1 cursor-pointer place-items-center rounded-lg border transition',
-                            l.status === v ? LEG_ON[v] : 'border-zinc-800 bg-zinc-900 text-zinc-600 hover:border-zinc-700 hover:text-zinc-300')}>
-                          <Icon size={15} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <Button type="button" size="icon" variant="ghost" title="Quitar" disabled={legs.length <= 2} onClick={() => setLegs(legs.filter((_, j) => j !== i))}><X size={15} /></Button>
-                </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <div className={segWrap}>
+              {[{ v: false, l: 'Simple' }, { v: true, l: 'Combinada' }].map(x => (
+                <button key={x.l} type="button" onClick={() => x.v ? !legs && toCombo() : legs && toSingle()}
+                  className={seg(!!legs === x.v)}>{x.l}</button>
               ))}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: sportNow }])}><Plus size={14} />Añadir selección</Button>
-                <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
-              </div>
             </div>
-          </div>
-        ) : <>
-          <Field label="Partido">
-            {free
-              ? <Input required list="dl-events" placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''} onChange={set('event')} />
-              : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
-                onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
-          </Field>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
-            <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
-          </div>
-        </>}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {legs
-            ? <Field label="Cuota total"><div className={inputCls + ' flex items-center font-semibold tabular-nums text-zinc-300'}>{odd(o)}</div></Field>
-            : <Field label="Cuota (decimal)"><Input type="number" step="0.01" min="1.01" required value={f.odds || ''} onChange={set('odds')} /></Field>}
-          <Field label={`Stake (${currency})`}><Input type="number" step="0.01" min="0" required value={f.stake || ''} onChange={set('stake')} /></Field>
-          <Field label="Estado">
-            {legs ? (
-              <Select value={f.status === 'cashout' ? 'cashout' : 'auto'} onChange={e => setF(p => ({ ...p, status: e.target.value === 'cashout' ? 'cashout' : 'pending' }))}>
-                <option value="auto">Auto: {LEG_LABEL[comboStatus(legs)]}</option>
-                <option value="cashout">Cash out</option>
-              </Select>
-            ) : (
-              <Select value={f.status || 'pending'} onChange={set('status')}>
-                {(['pending', 'won', 'lost', 'void', 'cashout', 'halfwon', 'halflost'] as BetStatus[]).map(v => (
-                  <option key={v} value={v}>{{ pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula / devuelta', cashout: 'Cash out', halfwon: 'Medio ganada', halflost: 'Medio perdida' }[v]}</option>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Field label="Importe cash out"><Input type="number" step="0.01" min="0" disabled={f.status !== 'cashout'} value={f.cashout || ''} onChange={set('cashout')} /></Field>
-        </div>
-        <Field label="Notas"><textarea rows={2} className={inputCls + ' h-auto py-2'} value={f.notes || ''} onChange={set('notes')} /></Field>
-
-        {o > 1 && s > 0 && (
-          <div className="grid grid-cols-3 gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-sm">
-            <div><div className="text-xs text-zinc-500">Si gana</div><div className="font-semibold text-emerald-400">{money(s * (o - 1), currency, true)}</div></div>
-            <div><div className="text-xs text-zinc-500">Retorno total</div><div className="font-semibold">{money(s * o, currency)}</div></div>
-            <div><div className="text-xs text-zinc-500">Prob. implícita</div><div className="font-semibold">{pct(1 / o)}</div></div>
+            <div className={segWrap}
+              title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de cada app'}>
+              {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }, { v: 'football', l: 'Fútbol' }, { v: 'mma', l: 'MMA' }].map(x => (
+                <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
+                  className={seg((f.sport || 'lol') === x.v)}>{x.l}</button>
+              ))}
+            </div>
           </div>
         )}
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-[1.6fr_1fr]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className={sec}>La apuesta</div>
+            {legs ? (
+              <div className="rounded-xl border border-zinc-800">
+                <div className="flex flex-col gap-2 p-3">
+                  {legs.map((l, i) => (
+                    <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 ">
+                      <div className="col-span-6 sm:col-span-3">
+                        {(l.sport || 'lol') !== 'lol'
+                          ? <Input list="dl-events" placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : 'LAL @ BOS'} value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                          : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
+                            onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
+                      </div>
+                      <div className="col-span-6 sm:col-span-3"><OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} /></div>
+                      <Input className="col-span-6 sm:col-span-2" placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
+                      <Input className="col-span-3 sm:col-span-1" type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
+                      <div className="col-span-3 flex gap-1 sm:col-span-2">
+                        {(Object.keys(LEG_LABEL) as LegStatus[]).map(v => {
+                          const Icon = LEG_ICON[v];
+                          return (
+                            <button key={v} type="button" title={LEG_LABEL[v]} aria-pressed={l.status === v} onClick={() => setLeg(i, { status: v })}
+                              className={cn('grid h-9 flex-1 cursor-pointer place-items-center rounded-lg border transition',
+                                l.status === v ? LEG_ON[v] : 'border-zinc-800 bg-zinc-900 text-zinc-600 hover:border-zinc-700 hover:text-zinc-300')}>
+                              <Icon size={15} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <Button type="button" size="icon" variant="ghost" title="Quitar" disabled={legs.length <= 2} onClick={() => setLegs(legs.filter((_, j) => j !== i))}><X size={15} /></Button>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: sportNow }])}><Plus size={14} />Añadir selección</Button>
+                    <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
+                  </div>
+                </div>
+              </div>
+            ) : <>
+              <Field label="Partido">
+                {free
+                  ? <Input required list="dl-events" placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''} onChange={set('event')} />
+                  : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
+                    onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
+              </Field>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
+                <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
+              </div>
+            </>}
+            {when}
+            <Field label="Notas"><textarea rows={2} className={inputCls + ' h-auto py-2'} value={f.notes || ''} onChange={set('notes')} /></Field>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4 lg:border-l lg:border-zinc-800 lg:pl-6">
+            <div className={sec}>Dinero y resultado</div>
+            <div className="grid grid-cols-2 gap-3">
+              {legs
+                ? <Field label="Cuota total"><div className={inputCls + ' flex items-center font-semibold tabular-nums text-zinc-300'}>{odd(o)}</div></Field>
+                : <Field label="Cuota (decimal)"><Input type="number" step="0.01" min="1.01" required value={f.odds || ''} onChange={set('odds')} /></Field>}
+              <Field label={`Stake (${currency})`}><Input type="number" step="0.01" min="0" required value={f.stake || ''} onChange={set('stake')} /></Field>
+            </div>
+            <Field label="Estado">
+              {legs ? (
+                <Select value={f.status === 'cashout' ? 'cashout' : 'auto'} onChange={e => setF(p => ({ ...p, status: e.target.value === 'cashout' ? 'cashout' : 'pending' }))}>
+                  <option value="auto">Auto: {LEG_LABEL[comboStatus(legs)]}</option>
+                  <option value="cashout">Cash out</option>
+                </Select>
+              ) : (
+                <Select value={f.status || 'pending'} onChange={set('status')}>
+                  {(['pending', 'won', 'lost', 'void', 'cashout', 'halfwon', 'halflost'] as BetStatus[]).map(v => (
+                    <option key={v} value={v}>{{ pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula / devuelta', cashout: 'Cash out', halfwon: 'Medio ganada', halflost: 'Medio perdida' }[v]}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label={`Importe cash out (${currency})`}><Input type="number" step="0.01" min="0" disabled={f.status !== 'cashout'} value={f.cashout || ''} onChange={set('cashout')} /></Field>
+            {o > 1 && s > 0 && (
+              <div className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-sm">
+                <div className="flex items-baseline justify-between gap-3"><span className="text-xs text-zinc-500">Si sale</span><span className="font-semibold text-emerald-400 tabular-nums">{money(s * (o - 1), currency, true)}</span></div>
+                <div className="flex items-baseline justify-between gap-3"><span className="text-xs text-zinc-500">Cobro total</span><span className="font-semibold tabular-nums">{money(s * o, currency)}</span></div>
+                <div className="flex items-baseline justify-between gap-3"><span className="text-xs text-zinc-500">Prob. implícita</span><span className="font-semibold tabular-nums">{pct(1 / o)}</span></div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-zinc-800 pt-4">
           <Button type="submit" disabled={saving}>Guardar apuesta</Button>
           <Button type="button" variant="ghost" onClick={closeBet}>Cancelar</Button>
           {canAdd && (

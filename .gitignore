@@ -40,3 +40,6 @@ tareas.md
 .claude/settings.local.json
 .DS_Store
 Thumbs.db
+
+# Maquetas del asistente de diseño
+.superpowers/

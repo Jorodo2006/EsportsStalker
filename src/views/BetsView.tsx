@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, Download, Layers, Pencil, Percent, Plus, RefreshCw, Search, Send, Target, Upload, Wallet, X, Zap } from 'lucide-react';
+import { Check, Download, Pencil, Percent, Plus, RefreshCw, Send, Target, Upload, Wallet, X } from 'lucide-react';
 import { ShareDialog } from './FriendsView';
+import { History } from '@/views/bets/History';
+import { AutoMark } from '@/views/bets/AutoMark';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
 import { ModelAccuracy } from '@/components/ModelAccuracy';
-import { Badge, Button, Card, Empty, Input, Loading, PageHeader, Select, Stat, Tabs, td, th } from '@/components/ui';
+import { Badge, Button, Card, Empty, Loading, PageHeader, Stat, Tabs, td, th } from '@/components/ui';
 
 
 
@@ -196,116 +198,7 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
   );
 }
 
-function History({ bets, onEdit, onSettle, onShare }: {
-  bets: Bet[]; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onShare: (b: Bet) => void;
-}) {
-  const cur = useCurrency();
-  const [q, setQ] = useState('');
-  const [st, setSt] = useState('');
-  const list = useMemo(() => bets
-    .filter(b => !st || b.status === st)
-    .filter(b => !q || [b.event, b.selection, b.league, b.bookmaker, b.market, b.notes, ...(b.legs || []).map(l => l.market)].join(' ').toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => b.date.localeCompare(a.date)), [bets, q, st]);
-
-  return (
-    <Card className="overflow-hidden" title="Historial" action={
-      <div className="flex w-full gap-2 sm:w-auto">
-        <div className="relative min-w-0 flex-1">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <Input className="h-8 w-full pl-8 sm:w-48" placeholder="Buscar" value={q} onChange={e => setQ(e.target.value)} />
-        </div>
-        <Select className="h-8 min-w-0 flex-1 sm:w-44 sm:flex-none" value={st} onChange={e => setSt(e.target.value)}>
-          <option value="">Todos los estados</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </Select>
-      </div>
-    }>
-      {!list.length ? <Empty>{bets.length ? 'Ninguna apuesta coincide con el filtro' : 'Aún no has registrado apuestas. Pulsa "Nueva apuesta".'}</Empty> : <>
-        <div className="-m-5 divide-y divide-zinc-800/70 lg:hidden">
-          {list.map(b => <BetCard key={b.id} bet={b} onEdit={onEdit} onSettle={onSettle} onShare={onShare} />)}
-        </div>
-        <div className="-m-5 hidden overflow-x-auto lg:block">
-          <table className="w-full">
-            <thead className="bg-zinc-900/60"><tr>
-              {['Fecha', 'Liga', 'Partido', 'Mercado', 'Selección', 'Casa'].map(h => <th key={h} className={th}>{h}</th>)}
-              <th className={th + ' text-right'}>Cuota</th><th className={th + ' text-right'}>Stake</th><th className={th}>Estado</th>
-              <th className={th + ' text-right'}>Beneficio</th><th className={th}></th>
-            </tr></thead>
-            <tbody className="divide-y divide-zinc-800/70">
-              {list.map(b => {
-                const p = betProfit(b);
-                const combo = !!b.legs?.length;
-                const done = combo ? b.legs!.filter(l => l.status !== 'pending').length : 0;
-                return (
-                  <tr key={b.id} className={cn('group hover:bg-zinc-900/40', combo && 'cursor-pointer')} onClick={combo ? () => onEdit(b) : undefined}
-                    title={combo ? 'Abrir la combinada para marcar sus selecciones' : undefined}>
-                    <td className={td + ' whitespace-nowrap text-zinc-400'}>{fmtDate(b.date)}</td>
-                    <td className={td}>{b.league}</td>
-                    {combo ? <>
-                      <td className={td + ' whitespace-nowrap'}>
-                        <span className="flex items-center gap-1.5">
-                          <Badge tone="warning"><Layers size={11} className="mr-1 inline" />Combinada ×{b.legs!.length}</Badge>
-                        </span>
-                      </td>
-                      <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.legs!.length} selecciones{done > 0 && <span className="text-zinc-600"> · {done} resueltas</span>}</td>
-                      <td className={td + ' font-semibold'}><span className="block max-w-[14rem] truncate" title={decEs(b.selection)}>{decEs(b.selection)}</span></td>
-                    </> : <>
-                      <td className={td + ' font-medium'}>{b.event}</td>
-                      <td className={td + ' text-zinc-400'}>{decEs(b.market)}</td>
-                      <td className={td + ' font-semibold'}>{decEs(b.selection)}</td>
-                    </>}
-                    <td className={td + ' whitespace-nowrap text-zinc-400'}>{b.bookmaker}</td>
-                    <td className={td + ' text-right tabular-nums'}>{odd(b.odds)}</td>
-                    <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{money(b.stake, cur)}</td>
-                    <td className={td + ' whitespace-nowrap'}>
-                      <span className="flex items-center gap-1.5"><Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge><AutoMark bet={b} /></span>
-                    </td>
-                    <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (b.status === 'pending' ? 'text-zinc-500' : tone(p))}>
-                      {b.status === 'pending' ? money(b.stake * (b.odds - 1), cur, true) : money(p, cur, true)}
-                    </td>
-                    <td className={td} onClick={e => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        {b.status === 'pending' && !combo && <>
-                          <Button size="icon" variant="success" className="h-7 w-7" title="Ganada" onClick={() => onSettle(b, 'won')}><Check size={14} /></Button>
-                          <Button size="icon" variant="danger" className="h-7 w-7" title="Perdida" onClick={() => onSettle(b, 'lost')}><X size={14} /></Button>
-                        </>}
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Pasar a un amigo" aria-label="Pasar a un amigo" onClick={() => onShare(b)}><Send size={14} /></Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => onEdit(b)}><Pencil size={14} /></Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </>}
-    </Card>
-  );
-}
-
-// Si la apuesta se resuelve sola (sabe su partido y mercado) o ya se resolvió, con lo que pasó en el partido al pasar el ratón.
-// En una combinada puede que sólo algunas selecciones lo sean: las demás se marcan a mano
-function AutoMark({ bet: b }: { bet: Bet }) {
-  const items = b.legs?.length ? b.legs : [b];
-  const auto = items.filter(i => i.ref);
-  if (!auto.length) return null;
-  const texts = items.map(i => i.ref?.settled?.text).filter(Boolean) as string[];
-  const settled = texts.length > 0 && b.status !== 'pending';
-  const title = [
-    settled ? 'Resuelta sola con el resultado del partido' : 'Se resolverá sola cuando acabe el partido',
-    ...texts,
-    auto.length < items.length ? `${items.length - auto.length} selección(es) hay que marcarla(s) a mano` : ''
-  ].filter(Boolean).join('\n');
-  return (
-    <span title={title} className="inline-flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
-      <Zap size={11} className={settled ? 'text-amber-400' : ''} />
-      {settled ? 'resuelta sola' : auto.length < items.length ? `${auto.length} de ${items.length} automáticas` : 'se resuelve sola'}
-    </span>
-  );
-}
-
-// El historial en el móvil: once columnas no caben, así que cada apuesta es una tarjeta
+// Cada apuesta de «En juego» es una tarjeta
 function BetCard({ bet: b, onEdit, onSettle, onShare }: { bet: Bet; onEdit: (b: Bet) => void; onSettle: (b: Bet, s: BetStatus) => void; onShare: (b: Bet) => void }) {
   const cur = useCurrency();
   const p = betProfit(b);
