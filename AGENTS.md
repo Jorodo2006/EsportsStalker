@@ -295,7 +295,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   líneas de tenis, fútbol y MMA y de las de baloncesto que ha calculado algún navegador (`bets.predictions`). El aviso en vivo
   (`alerts:new`) lleva `data.to`, sin el texto. Las suscripciones a notificaciones sólo admiten servicios de push de navegadores
   (`PUSH_HOSTS` en `push.js`): no lo abras a cualquier https, el servidor hace peticiones a esa dirección. `public/sw.js` no
-  guarda nada en caché a propósito.
+  guarda nada en caché a propósito. Pulsar una notificación lleva al partido del aviso: con la app abierta, `sw.js` le pasa el número
+  por mensaje (navegar la pestaña falla si no la controla); si no, la abre con `?aviso=<id>`, que `Alerts.tsx` lee al cargar el módulo,
+  antes de que `startHistory` reescriba la dirección (después ya no está), y la elección de deporte de la primera visita no lo pisa.
 
 ## Especificaciones
 

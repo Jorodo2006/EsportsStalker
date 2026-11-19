@@ -31,6 +31,12 @@ export function useAlerts() {
 const ICON = { drop: TrendingDown, rise: TrendingUp, value: Sparkles } as const;
 const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amber-400' } as const;
 
+// Avisos ya seguidos desde una notificación (compartido por las dos campanas)
+const followed = new Set<string>();
+// El ?aviso=<id> con el que se abre la app desde una notificación. Se lee al cargar, antes de que el enrutador (lib/history.ts)
+// reescriba la dirección con la ruta limpia: después ya no está
+let bootAviso: string | null = (() => { try { return new URL(location.href).searchParams.get('aviso'); } catch { return null; } })();
+
 export function AlertsBell({ className }: { className?: string }) {
   const member = useMember();
   const qc = useQueryClient();
@@ -39,16 +45,24 @@ export function AlertsBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const unread = q.data?.unread ?? 0;
 
-  // La notificación del sistema abre la app con ?aviso=<id>: se enseña la lista (en la primera campana que lo vea: hay dos, la del
-  // móvil y la del menú lateral, y la otra ya no encuentra el parámetro)
+  // Pulsar una notificación del sistema lleva a lo que avisa: la app se abre con ?aviso=<id> o, si ya estaba abierta, el service
+  // worker (public/sw.js) le pasa el número. Se busca el aviso y se abre su partido; sin partido (o si ya no está), la lista
   useEffect(() => {
     if (!member) return;
-    const u = new URL(location.href);
-    if (!u.searchParams.has('aviso')) return;
-    u.searchParams.delete('aviso');
-    history.replaceState(history.state, '', u.pathname + u.search + u.hash);
-    setOpen(true);
-  }, [member]);
+    const follow = async (id: string) => {
+      if (followed.has(id)) return; // hay dos campanas (la del móvil y la del menú lateral): sólo la primera lo sigue
+      followed.add(id);
+      const data = await qc.fetchQuery({ queryKey: ['alerts'], queryFn: () => window.api.alerts.list(), staleTime: 0 }).catch(() => null);
+      const a = data?.list.find(x => x.id === id);
+      if (!a?.open) { setOpen(true); return; }
+      window.api.alerts.read([id]).then(() => qc.invalidateQueries({ queryKey: ['alerts'] })).catch(() => {});
+      openMatch(a);
+    };
+    if (bootAviso) { const id = bootAviso; bootAviso = null; follow(id); }
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'aviso' && typeof e.data.id === 'string') follow(e.data.id); };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, [member]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Abrir la lista es leerla
   useEffect(() => {

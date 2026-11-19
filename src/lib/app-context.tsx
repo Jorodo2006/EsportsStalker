@@ -69,7 +69,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // La dirección con la que se entró: la vuelta de Google trae sus avisos en ella, y startHistory la deja limpia enseguida
   const [boot] = useState(() => { try { return new URL(location.href).searchParams; } catch { return new URLSearchParams(); } });
   const [route, setRoute] = useState<Route>(() => parseRoute(location.pathname, location.search, savedApp() ?? 'football'));
-  const [starting, setStarting] = useState(() => !savedApp() && location.pathname === '/' && !boot.get('google') && !boot.get('login_error'));
+  // Entrando desde una notificación (?aviso=) tampoco: la campana abre su partido y elegir deporte lo pisaría
+  const [starting, setStarting] = useState(() => !savedApp() && location.pathname === '/' && !boot.get('google') && !boot.get('login_error') && !boot.get('aviso'));
   // Partidos de LoL abiertos en esta visita: la dirección sólo lleva el id, y la ficha necesita el partido entero
   const lolEvents = useRef(new Map<string, MatchEvent>());
   const [betDraft, setBetDraft] = useState<BetDraft | null>(null);
