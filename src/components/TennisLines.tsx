@@ -2,7 +2,9 @@
 // líneas de las casas con valor, y por mercado (sus juegos, los del partido, el hándicap, sus aces, sus sets y sus dobles faltas) cómo
 // le fue frente a la línea en sus partidos, lo que espera el modelo y el panel de valor. Las cifras del modelo y de las casas salen
 // del servicio (server/services/tennis/picks.js, playerLines), del mismo cálculo que las recomendaciones del partido; lo puro, de
-// lib/tennis-lines.ts. Sin cuenta se ve sólo el histórico: el modelo y el valor son recomendaciones (gateway/public.js)
+// lib/tennis-lines.ts. Sin cuenta se ve sólo el histórico: el modelo y el valor son recomendaciones (gateway/public.js). Los
+// jugadores de los Challenger (tour 'challenger') tienen sólo el histórico: los Challenger no entran en el modelo de tenis, y sus
+// recomendaciones (al ganador) son las del motor de los Challenger, en la ficha de su partido
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -13,7 +15,7 @@ import { madridDay } from '@/lib/route';
 import { targetOfMatch } from '@/lib/odds-targets';
 import { LINE_MARKETS, MARKET_ORDER, bookLines, hitRate, lineText, mainLine, sideText, splits, suggestedLine, usable, valueOf, wins, type BookSides } from '@/lib/tennis-lines';
 import { verdictOf, type Side, type SideValue } from '@/lib/value';
-import type { TennisLineMarket, TennisLogMatch, TennisMatch, TennisModelMarket, TennisPick, TennisPlayerLines, TennisSurface, Tour } from '@/lib/types';
+import type { SheetTour, TennisLineMarket, TennisLogMatch, TennisMatch, TennisModelMarket, TennisPick, TennisPlayerLines, TennisSurface } from '@/lib/types';
 import { sized, fallbackTo } from '@/lib/img';
 import { useMember } from './AuthGate';
 import { JoinPrompt } from './MemberOnly';
@@ -30,14 +32,15 @@ const lastName = (n: string) => n.split(' ').slice(1).join(' ') || n;
 // Con la línea de cada mercado arriba y abajo de la elegida: la escalera entera son hasta 30 filas
 const LADDER_SPAN = 5;
 
-export function TennisLines({ tour, id, name }: { tour: Tour; id: string; name: string }) {
+export function TennisLines({ tour, id, name }: { tour: SheetTour; id: string; name: string }) {
+  const challenger = tour === 'challenger';
   const member = useMember();
   const { addToSlip, settings, openGame } = useApp();
   const { data: bets = [] } = useBets();
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;
   const log = useQuery({ queryKey: ['tennis', 'gamelog', tour, id], queryFn: () => window.api.tennis.gamelog(tour, id), staleTime: 30 * 60e3, retry: false });
   const lq = useQuery({
-    queryKey: ['tennis', 'playerLines', tour, id], queryFn: () => window.api.tennis.playerLines(tour, id), enabled: member,
+    queryKey: ['tennis', 'playerLines', tour, id], queryFn: () => window.api.tennis.playerLines(tour === 'challenger' ? 'atp' : tour, id), enabled: member && !challenger,
     staleTime: 60e3, refetchInterval: 3 * 60e3, retry: false
   });
   const L: TennisPlayerLines | undefined = lq.data;
@@ -78,7 +81,9 @@ export function TennisLines({ tour, id, name }: { tour: Tour; id: string; name: 
 
   return (
     <div className="flex flex-col gap-4 p-3">
-      <NextMatch L={L} member={member} loading={lq.isLoading} error={lq.error} onOpen={m => openGame(m.id, madridDay(m.date), 'tennis')} />
+      {challenger
+        ? <Card title="Challenger"><p className="text-[13px] text-zinc-400">Los Challenger no entran en el modelo de tenis: sus recomendaciones (al ganador) son las del motor de los Challenger, en la ficha de cada partido. Aquí tienes cómo le fue frente a cada línea, en sus Challenger y en la ATP.</p></Card>
+        : <NextMatch L={L} member={member} loading={lq.isLoading} error={lq.error} onOpen={m => openGame(m.id, madridDay(m.date), 'tennis')} />}
       {ready && !!L!.picks?.length && <ValueLines picks={L!.picks!} match={next!} onAdd={addPick} />}
 
       {!log.data?.found || !list.length ? <Empty>Sin partidos de {name} en TennisMyLife: no hay con qué comparar sus líneas.</Empty> : <>

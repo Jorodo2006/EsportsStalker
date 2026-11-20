@@ -49,7 +49,7 @@ export function TennisMatchStats({ m, onForm }: { m: TennisMatch; onForm?: () =>
   const live = m.state === 'in';
   const q = useQuery({
     queryKey: ['tennis', 'match-stats', m.id, m.state], enabled: m.state !== 'pre',
-    queryFn: () => window.api.tennis.matchStats({ tour: m.tour, date: m.date.slice(0, 10), state: m.state, a: m.a.name, b: m.b.name }),
+    queryFn: () => window.api.tennis.matchStats({ tour: m.level ? 'challenger' : m.tour, date: m.date.slice(0, 10), state: m.state, a: m.a.name, b: m.b.name }),
     staleTime: live ? 30e3 : 10 * 60e3, refetchInterval: live ? 60e3 : false
   });
   const [part, setPart] = useState('total');

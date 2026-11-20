@@ -53,7 +53,22 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 
 - **Por qué esta fuente:** el `robots.txt` de la web de LiveScore prohíbe `/api/` y sus condiciones no se pudieron leer (la página no se carga sin JavaScript). Su servidor de datos no tiene `robots.txt`. **Se decidió usarla el 5/11/2026, a petición del usuario y para uso personal**, a sabiendas de que
   Tennis Abstract y tennis-data.co.uk se descartaron por su `robots.txt`. Las peticiones van sin disfrazar. **Si la app se fuese a vender o a publicar, hay que volver a mirarlo.**
-- **Recomendaciones de su motor, sin fichas:** sin *Forma de los jugadores*, porque las fichas son de ESPN. No hay ranking ni cabezas de serie. Sus recomendaciones son las del motor propio (abajo), no las del modelo de la ATP y la WTA.
+- **Recomendaciones de su motor:** sus recomendaciones son las del motor propio (abajo), no las del modelo de la ATP y la WTA. En la
+  lista no hay ranking ni cabezas de serie.
+- **Fichas y estadísticas** (desde el 20-11-2026): ESPN no tiene a sus jugadores, así que salen de TennisMyLife, que publica los
+  Challenger con las mismas columnas que la ATP (`AAAA_challenger.csv` y los torneos de la semana en `challenger_ongoing_tourneys.csv`).
+  - `tml.js` los carga como un circuito más, `'challenger'`: sus Challenger y también sus partidos de la ATP (los mismos ficheros
+    que `'atp'`, ya en memoria). Sólo cuando alguien abre algo de un Challenger.
+  - Las rutas de la ficha (`/api/tennis/profile`, `/stats` y `/gamelog`) aceptan `challenger` como circuito con el **nombre** del
+    jugador como id (`playerName` en `index.js`). `challengerProfile` arma la ficha con la forma de la de ESPN: país (del código del
+    COI, `countryOf` de `flags.js`), mano, altura y edad de su último partido, su ranking de entonces, el balance y los títulos del
+    año, y sus resultados con el marcador desde su lado.
+  - La media con la que se compara en *Estadísticas* es la de los Challenger, no la mezcla con la ATP.
+  - La ficha del partido tiene *Forma de los jugadores* (la comparación, sus últimos partidos y los enfrentamientos, buscando al
+    rival por las palabras del nombre: LiveScore «Inaki Montes», TennisMyLife «Inaki Montes De La Torre») y las estadísticas del
+    partido de TennisMyLife cuando ya ha acabado (`match-stats` con `tour=challenger`).
+  - En su pestaña *Líneas* sólo está su histórico frente a cada línea: los Challenger no entran en el modelo de tenis.
+  - TennisMyLife va con días de retraso y sólo da la semana del torneo, no el día.
 - **Banderas** (`server/services/tennis/flags.js`, desde el 19-11-2026): las mismas imágenes que las de ESPN, sacadas del país de cada
   jugador. Los días de LiveScore no lo traen; la fase entera sí (`CoNm` «Croatia» y `CoId`, el ISO de tres letras, «HRV»), en la
   misma petición cada 30 min que ya se hacía, y vale también para sus dobles y para la previa de la ATP y la WTA. ESPN usa su propio
@@ -249,8 +264,9 @@ jugador del baloncesto adaptado al tenis.
   - «Líneas con valor» enseña las que pasan la regla común (valor ≥ 2 % y fiabilidad ≥ 55). Si no hay ninguna, las tres que más se
     acercan, no las más probables: esas pagan poco y tienen el peor valor.
   - Sin cuenta se ve sólo el histórico.
-- **Fuera por ahora:** los jugadores de Challenger (no tienen ficha de ESPN) y un modelo de dobles faltas (habría que medirlo con
-  `backtest.js`).
+- **Jugadores de Challenger:** su pestaña tiene sólo el histórico (sin próximo partido, modelo ni valor): los Challenger no entran
+  en el modelo de tenis y sus recomendaciones son las de su motor.
+- **Fuera por ahora:** un modelo de dobles faltas (habría que medirlo con `backtest.js`).
 
 ## Pendiente
 

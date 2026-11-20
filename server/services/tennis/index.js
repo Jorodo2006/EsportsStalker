@@ -122,6 +122,13 @@ async function doublesBetween(from, to) {
 }
 const doublesOn = day => doublesBetween(day, day);
 
+// Los jugadores de los Challenger no tienen ficha de ESPN: sus rutas (circuito 'challenger') llevan su nombre en vez del id
+function playerName(v) {
+  const n = String(v || '').trim();
+  if (!n || n.length > 80 || /[<>{}\\/|]/.test(n)) throw fail('Jugador desconocido');
+  return n;
+}
+
 // El próximo partido de un jugador de ESPN (sin empezar o en juego) en los próximos 7 días: de los mismos marcadores que la lista
 async function nextMatchOf(tour, id) {
   const t = madridDay(Date.now());
@@ -342,7 +349,7 @@ const routes = [
   ['GET', '/api/tennis/search', ({ query: q }) => search(q.q)],
   // Estadísticas de un partido (matchstats.js): de la web de la WTA o, ya acabado, de TennisMyLife. null si aún no hay
   ['GET', '/api/tennis/match-stats', ({ query: q }) => {
-    if (!TOURS[q.tour]) throw fail('Circuito desconocido');
+    if (!TOURS[q.tour] && q.tour !== 'challenger') throw fail('Circuito desconocido');
     const name = v => String(v || '').trim().slice(0, 80);
     if (!name(q.a) || !name(q.b)) throw fail('Faltan los jugadores');
     return matchStats({ tour: q.tour, date: valid(q.date), state: ['pre', 'in', 'post'].includes(q.state) ? q.state : 'post', a: name(q.a), b: name(q.b) });
@@ -350,6 +357,7 @@ const routes = [
   // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
   // Su partido a partido en TennisMyLife (la pestaña Líneas de la ficha): pública, como las estadísticas
   ['GET', '/api/tennis/gamelog/:tour/:id', async ({ params }) => {
+    if (params.tour === 'challenger') return tml.playerGamelog('challenger', playerName(params.id));
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     const a = await getJSON(`${core(params.tour)}/athletes/${params.id}?lang=es&region=es`, 6 * 3600e3);
     return tml.playerGamelog(params.tour, a.displayName);
@@ -364,15 +372,21 @@ const routes = [
     return { next: m, ...(await playerLines(m, side)) };
   }],
   ['GET', '/api/tennis/stats/:tour/:id', async ({ params }) => {
+    if (params.tour === 'challenger') return tml.playerStats('challenger', playerName(params.id));
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     const a = await getJSON(`${core(params.tour)}/athletes/${params.id}?lang=es&region=es`, 6 * 3600e3);
     return tml.playerStats(params.tour, a.displayName);
   }],
   ['GET', '/api/tennis/surface/:tour', ({ params, query: q }) => {
-    if (!TOURS[params.tour]) throw fail('Circuito desconocido');
+    if (!TOURS[params.tour] && params.tour !== 'challenger') throw fail('Circuito desconocido');
     return tml.tournamentSurface(params.tour, q.name, q.city);
   }],
-  ['GET', '/api/tennis/profile/:tour/:id', ({ params }) => {
+  ['GET', '/api/tennis/profile/:tour/:id', async ({ params }) => {
+    if (params.tour === 'challenger') {
+      const p = await tml.challengerProfile(playerName(params.id));
+      if (!p) throw fail('Sin datos de este jugador en TennisMyLife');
+      return p;
+    }
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     return profile(params.tour, params.id);
   }],

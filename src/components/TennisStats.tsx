@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/format';
-import type { TennisStatBlock as Block, TennisStatPeriod, TennisStats as Stats, TennisSurface, Tour } from '@/lib/types';
+import type { SheetTour, TennisStatBlock as Block, TennisStatPeriod, TennisStats as Stats, TennisSurface } from '@/lib/types';
 import { Empty, ErrorBox, Loading, th } from './ui';
 import { KpiStrip, TvBand, TvFrame, TvHeader, TvPortrait, TvRow, TvTabs, surname, tdc } from './viz';
 import { sized, fallbackTo } from '@/lib/img';
@@ -36,7 +36,7 @@ const RETURN: Metric[] = [
 const num = (b: Block, k: keyof Block) => b[k] as number | null;
 const fmt = (m: { pct?: boolean }, v: number | null) => (m.pct ? p1(v) : n1(v));
 
-export const useTennisStats = (tour: Tour, id: string | undefined) => useQuery({
+export const useTennisStats = (tour: SheetTour, id: string | undefined) => useQuery({
   queryKey: ['tennis', 'stats', tour, id], queryFn: () => window.api.tennis.stats(tour, id!), enabled: !!id, staleTime: 30 * 60e3, retry: false
 });
 
@@ -51,7 +51,10 @@ const dominance = (b: Block) => (b.retPtsPct == null || b.servePtsPct == null ||
 const DR_TITLE = 'Ratio de dominio: % de puntos ganados al resto entre % de puntos perdidos al saque. Por encima de 1, gana más puntos de los que cede.';
 const dr = (v: number | null) => (v == null ? '–' : v.toFixed(2).replace('.', ','));
 
-export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: Tour; id: string; name: string; photo: string; credit?: string }) {
+// El circuito como se lee: «Challenger» (sus jugadores se comparan con la media de los Challenger)
+export const tourLabel = (t: SheetTour) => (t === 'challenger' ? 'Challenger' : t.toUpperCase());
+
+export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: SheetTour; id: string; name: string; photo: string; credit?: string }) {
   const q = useTennisStats(tour, id);
   const [key, setKey] = useState<string>();
   const [pick, setPick] = useState<Pick>('all');
@@ -69,8 +72,8 @@ export function TennisStatsPanel({ tour, id, name, photo, credit }: { tour: Tour
   const score = dominance(b);
   const row = (m: Metric) => <TvRow key={m.key} label={m.label} a={num(b, m.key)} b={num(avg, m.key)} aText={fmt(m, num(b, m.key))} bText={fmt(m, num(avg, m.key))} better={m.better} spread={m.spread} muted dim={dim} title={`${m.label}: ${fmt(m, num(b, m.key))}. Media del circuito: ${fmt(m, num(avg, m.key))}`} />;
   const count = (label: string, r: { won: number; lost: number }) => <TvRow key={label} label={label} a={r.won} b={r.lost} aText={n0(r.won)} bText={n0(r.lost)} spread={r.won + r.lost || 1} muted title={`${label}: ${r.won} ganados, ${r.lost} perdidos`} />;
-  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-mono text-xs font-medium text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tour.toUpperCase()}</span></div>;
-  const rivals = ([['Top 10', p.vs.top10], ['Puestos 11 a 50', p.vs.top11to50], ['Resto del ranking', p.vs.rest], ['Grand Slam', p.levels.grandSlam], ['Masters / WTA 1000', p.levels.masters], ['Torneos 250 y 500', p.levels.others]] as const).filter(([, r]) => r.won + r.lost);
+  const heads = <div className="grid grid-cols-2 px-3 pb-0.5 pt-1.5 font-mono text-xs font-medium text-zinc-400"><span className="truncate">{surname(name)}</span><span className="truncate text-right">Media {tourLabel(tour)}</span></div>;
+  const rivals = ([['Top 10', p.vs.top10], ['Puestos 11 a 50', p.vs.top11to50], ['Resto del ranking', p.vs.rest], ['Grand Slam', p.levels.grandSlam], ['Masters / WTA 1000', p.levels.masters], ['Torneos 250 y 500', p.levels.others], ['Challenger', p.levels.challenger ?? { won: 0, lost: 0 }]] as const).filter(([, r]) => r.won + r.lost);
 
   return (
     <>
@@ -153,7 +156,7 @@ const COMPARE: { title: string; rows: Metric[] }[] = [
 
 type Side = { id: string; name: string; flag?: string };
 
-export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a: Side; b: Side; tournament: string; city: string }) {
+export function TennisCompare({ tour, a, b, tournament, city }: { tour: SheetTour; a: Side; b: Side; tournament: string; city: string }) {
   const qa = useTennisStats(tour, a.id), qb = useTennisStats(tour, b.id);
   // Del perfil sólo hace falta la foto: si falla, salen las iniciales
   const fa = useQuery({ queryKey: ['tennis', 'profile', tour, a.id], queryFn: () => window.api.tennis.profile(tour, a.id), staleTime: 30 * 60e3, retry: false });
@@ -189,7 +192,7 @@ export function TennisCompare({ tour, a, b, tournament, city }: { tour: Tour; a:
         <div className="grid min-w-0 grid-cols-[minmax(0,13rem)_1.25rem_auto] items-center gap-x-2 font-score">{line(a, x)}{line(b, y)}</div>
         <div className="hidden min-w-0 flex-1 basis-40 text-right font-score lg:block">
           <div className="truncate text-[17px] font-bold">{tournament}</div>
-          <div className="text-[12px] font-medium text-white/80">{tour.toUpperCase()}{city ? ` · ${city}` : ''}</div>
+          <div className="text-[12px] font-medium text-white/80">{tourLabel(tour)}{city ? ` · ${city}` : ''}</div>
         </div>
       </TvHeader>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2">

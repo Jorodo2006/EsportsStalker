@@ -292,6 +292,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   espera el modelo y sus líneas de las casas (`playerLines` de `picks.js`, `/api/tennis/picks/player`, pide cuenta). `picksFor` y
   `playerLines` comparten el cálculo del partido (`matchContext`): si tocas uno, que sigan dando las mismas cifras
   (`server/test/tenis-lineas.test.js`, con `fixtures/tenis-picks-antes.json`; si cambias el modelo a propósito, regenera ese fichero).
+  Los jugadores de los Challenger también tienen ficha, de TennisMyLife: circuito `'challenger'` en `tml.js` y en las rutas de la
+  ficha, con el **nombre** como id (`challengerProfile`, `playerName`); en *Líneas*, sólo su histórico.
 - **Estadísticas de partido de tenis** (`server/services/tennis/matchstats.js`): WTA de su web oficial (al momento) y, si no, TennisMyLife (días después). ESPN no las tiene. No uses LiveScore para esto: su robots.txt prohíbe `/api/` y se decidió no ampliar su uso ahora que la web es pública (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
 - **CSP con nonce** (`web/cabeceras.conf`, `location = /index.html` de `web/nginx.conf`): nginx pone el nonce de cada petición

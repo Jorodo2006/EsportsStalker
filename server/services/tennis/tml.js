@@ -2,12 +2,17 @@
 // (stats.tennismylife.org/tennis-match-database). Sus condiciones sólo permiten uso personal y no comercial, y no se pueden
 // redistribuir los CSV: se guardan en tennis.cache, nunca en el repo. ESPN no tiene estos datos y la ATP bloquea su web.
 const { query } = require('../../shared/db');
+const { flagOf, countryOf } = require('./flags');
 
 const BASE = 'https://stats.tennismylife.org/data';
 const YEARS = 3;
-const SOURCES = { atp: y => `${y}.csv`, wta: y => `${y}_wta.csv` };
-const ONGOING = { atp: 'ongoing_tourneys.csv', wta: 'wta_ongoing_tourneys.csv' };
-const KEEP = ['tourney_id', 'tourney_name', 'surface', 'indoor', 'tourney_level', 'tourney_date', 'match_num', 'winner_name', 'winner_rank', 'loser_name', 'loser_rank', 'score', 'round', 'minutes',
+// Los ficheros de cada circuito. 'challenger' son los jugadores de los Challenger (sus fichas y las estadísticas de sus partidos,
+// desde noviembre de 2026): sus Challenger y, como también juegan en la ATP, los partidos de la ATP (los mismos ficheros que 'atp',
+// que ya están en memoria). Sólo se cargan cuando alguien abre algo de un Challenger
+const SOURCES = { atp: y => [`${y}.csv`], wta: y => [`${y}_wta.csv`], challenger: y => [`${y}_challenger.csv`, `${y}.csv`] };
+const ONGOING = { atp: ['ongoing_tourneys.csv'], wta: ['wta_ongoing_tourneys.csv'], challenger: ['challenger_ongoing_tourneys.csv', 'ongoing_tourneys.csv'] };
+const KEEP = ['tourney_id', 'tourney_name', 'surface', 'indoor', 'tourney_level', 'tourney_date', 'match_num', 'winner_name', 'winner_rank', 'loser_name', 'loser_rank', 'score', 'best_of', 'round', 'minutes',
+  'winner_ioc', 'winner_hand', 'winner_ht', 'winner_age', 'winner_rank_points', 'loser_ioc', 'loser_hand', 'loser_ht', 'loser_age', 'loser_rank_points',
   'w_ace', 'w_df', 'w_svpt', 'w_1stIn', 'w_1stWon', 'w_2ndWon', 'w_SvGms', 'w_bpSaved', 'w_bpFaced', 'l_ace', 'l_df', 'l_svpt', 'l_1stIn', 'l_1stWon', 'l_2ndWon', 'l_SvGms', 'l_bpSaved', 'l_bpFaced'];
 const SURFACES = ['Hard', 'Clay', 'Grass'];
 const MIN_SURFACE = 5; // con menos partidos no se puede hablar de mejor o peor superficie
@@ -57,8 +62,8 @@ const built = new Map();
 async function dataset(tour) {
   const year = new Date().getFullYear();
   const parts = await Promise.all([
-    ...Array.from({ length: YEARS }, (_, i) => getCsv(SOURCES[tour](year - i), i === 0 ? 6 * 3600e3 : 7 * 24 * 3600e3).catch(e => { if (i === 0 && new Date().getMonth() > 0) throw e; return []; })),
-    getCsv(ONGOING[tour], 30 * 60e3)
+    ...Array.from({ length: YEARS }, (_, i) => SOURCES[tour](year - i).map(f => getCsv(f, i === 0 ? 6 * 3600e3 : 7 * 24 * 3600e3).catch(e => { if (i === 0 && new Date().getMonth() > 0) throw e; return []; }))).flat(),
+    ...ONGOING[tour].map(f => getCsv(f, 30 * 60e3))
   ]);
   const prev = built.get(tour);
   if (prev && prev.parts.length === parts.length && prev.parts.every((p, i) => p === parts[i])) return prev;
@@ -162,7 +167,7 @@ function period(key, label, list, me, tour) {
   return {
     key, label, total: summary(list, me), surfaces, tour, best: ranked[0] || null, worst: ranked.length > 1 ? ranked[ranked.length - 1] : null,
     vs: { top10: vs(1, 10), top11to50: vs(11, 50), rest: vs(51, 99999) },
-    levels: { grandSlam: rec(list.filter(m => m.tourney_level === 'G'), me), masters: rec(list.filter(m => ['M', '1000'].includes(m.tourney_level)), me), others: rec(list.filter(m => ['A', '250', '500'].includes(m.tourney_level)), me) }
+    levels: { grandSlam: rec(list.filter(m => m.tourney_level === 'G'), me), masters: rec(list.filter(m => ['M', '1000'].includes(m.tourney_level)), me), others: rec(list.filter(m => ['A', '250', '500'].includes(m.tourney_level)), me), challenger: rec(list.filter(m => m.tourney_level === 'C'), me) }
   };
 }
 
@@ -177,7 +182,9 @@ async function playerStats(tour, name) {
   const all = data.byName.get(me).filter(played);
   const year = new Date().getFullYear();
   const cut = new Date(Date.now() - 364 * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
-  const pool = data.rows.filter(played);
+  // La media con la que se compara: la del circuito. En 'challenger' se cargan también los partidos de la ATP, pero la media es la de
+  // los Challenger (con la ATP mezclada, cualquiera de los Challenger saldría por debajo de la media en todo)
+  const pool = data.rows.filter(played).filter(m => tour !== 'challenger' || m.tourney_level === 'C');
   const make = (key, label, test) => { const list = all.filter(test); return list.length ? period(key, label, list, me, tourAverages(data, key, pool.filter(test))) : null; };
   const periods = [
     ...Array.from({ length: YEARS }, (_, i) => make(String(year - i), String(year - i), m => m.tourney_date.startsWith(String(year - i)))),
@@ -213,13 +220,60 @@ function gamelogOf(data, me, tour) {
     const oppRank = val(win ? m.loser_rank : m.winner_rank);
     return {
       id: `${m.tourney_id}-${m.match_num}`, date: ymdOf(m.tourney_date), tournament: m.tourney_name, surface: m.surface || null, level: m.tourney_level,
-      round: m.round, bestOf: tour === 'atp' && m.tourney_level === 'G' ? 5 : 3, opp: win ? m.loser_name : m.winner_name, oppRank: oppRank || null,
+      round: m.round, bestOf: num(m.best_of) || (tour !== 'wta' && m.tourney_level === 'G' ? 5 : 3), opp: win ? m.loser_name : m.winner_name, oppRank: oppRank || null,
       win, score: m.score, retired: /RET|DEF|ABD/i.test(m.score), minutes: val(m.minutes) || null,
       gamesWon, gamesLost, setsWon, setsLost, tbWon, tbLost,
       aces: s('ace'), df: s('df'), svpt: s('svpt'), firstIn: s('1stIn'), firstWon: s('1stWon'), secondWon: s('2ndWon'), svGms: s('SvGms'),
       bpFaced: s('bpFaced'), bpSaved: s('bpSaved'), breaks: stats ? num(m[`${o}bpFaced`]) - num(m[`${o}bpSaved`]) : null, oppAces: r('ace')
     };
   }).sort((x, y) => y.date.localeCompare(x.date) || (ROUND[y.round] ?? 3) - (ROUND[x.round] ?? 3));
+}
+
+// ---------- Ficha de un jugador de los Challenger (no la tienen en ESPN) ----------
+// Con la misma forma que la de ESPN (profile de index.js), sacada de sus partidos de TennisMyLife: país, mano, altura y edad de su
+// último partido, su ranking de entonces, el balance y los títulos del año, y sus resultados (el rival se identifica por su nombre)
+const ROUND_ES = {
+  F: 'Final', SF: 'Semifinales', QF: 'Cuartos de final', R16: 'Octavos de final', R32: 'Dieciseisavos de final', R64: '1.ª ronda', R128: '1.ª ronda', RR: 'Fase de grupos',
+  BR: 'Tercer puesto', Q1: 'Previa, 1.ª ronda', Q2: 'Previa, 2.ª ronda', Q3: 'Previa, ronda final', ER: 'Previa'
+};
+// El marcador va desde el ganador: el del que perdió, al revés ("6-4 7-6(5)" → "4-6 6-7(5)")
+const flipScore = s => String(s).split(/\s+/).map(x => x.replace(/^(\d+)-(\d+)/, '$2-$1')).join(' ');
+
+// data: los datos ya cargados (las pruebas); si no, los de los Challenger
+async function challengerProfile(name, data) {
+  data ||= await dataset('challenger');
+  const me = resolve(data, name);
+  if (!me) return null;
+  const rows = gamelogOf(data, me, 'challenger');
+  // Del más reciente al más antiguo, como gamelogOf: en la misma semana, la ronda más avanzada
+  const raw = (data.byName.get(me) || []).filter(played).sort((x, y) => String(y.tourney_date).localeCompare(String(x.tourney_date)) || (ROUND[y.round] ?? 3) - (ROUND[x.round] ?? 3));
+  const own = (r, k) => r[`${norm(r.winner_name) === me ? 'winner' : 'loser'}_${k}`];
+  const latest = k => { for (const r of raw) { const v = own(r, k); if (v !== '' && v != null) return { v, r }; } return null; };
+  const realName = raw[0] ? (norm(raw[0].winner_name) === me ? raw[0].winner_name : raw[0].loser_name) : name;
+  const ioc = latest('ioc')?.v || '', hand = latest('hand')?.v, ht = num(latest('ht')?.v), ageAt = latest('age');
+  const age = ageAt ? Math.floor(num(ageAt.v) + (Date.now() - Date.parse(`${ymdOf(ageAt.r.tourney_date)}T12:00:00Z`)) / (365.25 * 864e5)) : null;
+  const year = new Date().getFullYear();
+  const record = y => {
+    const list = rows.filter(g => g.date.startsWith(String(y)));
+    if (!list.length) return null;
+    const won = list.filter(g => g.win).length;
+    return { won, lost: list.length - won, titles: list.filter(g => g.win && g.round === 'F').length, doublesTitles: 0, prize: 0 };
+  };
+  const ioMap = new Map(raw.map(r => [`${r.tourney_id}-${r.match_num}`, r]));
+  return {
+    id: realName, tour: 'challenger', name: realName, photo: '', photoFrom: '', flag: flagOf(ioc), country: countryOf(ioc),
+    rank: num(latest('rank')?.v) || null, previous: null, points: num(latest('rank_points')?.v) || null,
+    age, birthDate: null, birthPlace: '', height: ht ? `${(ht / 100).toFixed(2)} m` : '', weight: '', hand: hand === 'L' ? 'Zurdo' : hand === 'R' ? 'Diestro' : '',
+    years: null, debut: null, active: true, year, season: record(year), lastSeason: record(year - 1), career: null,
+    matches: rows.slice(0, 60).map(g => {
+      const r = ioMap.get(g.id), oppIoc = r ? r[`${g.win ? 'loser' : 'winner'}_ioc`] : '';
+      return {
+        id: g.id, date: `${g.date}T12:00:00Z`, tournament: g.tournament, major: g.level === 'G', round: ROUND_ES[g.round] || g.round, city: '', win: g.win,
+        score: g.win ? g.score : flipScore(g.score), note: g.retired ? 'Retirada' : '', sets: g.setsWon, games: g.gamesWon,
+        opponent: { id: g.opp, name: g.opp, flag: flagOf(oppIoc), rank: g.oppRank }
+      };
+    })
+  };
 }
 
 async function playerGamelog(tour, name) {
@@ -252,4 +306,4 @@ async function tournamentEdition(tour, name, city) {
 }
 const tournamentSurface = async (tour, name, city) => (await tournamentEdition(tour, name, city))?.surface || null;
 
-module.exports = { playerStats, playerGamelog, gamelogOf, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };
+module.exports = { playerStats, playerGamelog, gamelogOf, challengerProfile, flipScore, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };

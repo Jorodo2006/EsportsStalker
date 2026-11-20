@@ -1,12 +1,13 @@
 // Ficha de un tenista: cabecera con lo esencial y tres pestañas: estadísticas de juego, sus líneas (próximo partido, lo que espera el
-// modelo y cómo le fue frente a cada línea, como el analizador del baloncesto) y últimos resultados (ESPN)
+// modelo y cómo le fue frente a cada línea, como el analizador del baloncesto) y últimos resultados (ESPN). Los de los Challenger
+// (tour 'challenger', con su nombre como id) no están en ESPN: su ficha sale de TennisMyLife (challengerProfile de tml.js)
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { pct } from '@/lib/format';
 import { countryEs } from '@/lib/countries';
-import type { TennisResult, Tour } from '@/lib/types';
-import { TennisStatsPanel } from './TennisStats';
+import type { SheetTour, TennisResult } from '@/lib/types';
+import { TennisStatsPanel, tourLabel } from './TennisStats';
 import { TennisLines } from './TennisLines';
 import { Empty, ErrorBox, Loading, th } from './ui';
 import { FormChips, TvFrame, TvHeader, TvStat, TvTabs, tdc } from './viz';
@@ -23,7 +24,7 @@ function streakOf(list: TennisResult[]) {
 }
 
 export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Rankings' }: {
-  tour: Tour; id: string; onBack: () => void; onPlayer: (id: string) => void; backLabel?: string;
+  tour: SheetTour; id: string; onBack: () => void; onPlayer: (id: string) => void; backLabel?: string;
 }) {
   const { data: p, error, isLoading } = useQuery({
     queryKey: ['tennis', 'profile', tour, id], queryFn: () => window.api.tennis.profile(tour, id), staleTime: 30 * 60e3, retry: false
@@ -40,10 +41,12 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
     </div>
   );
   const diff = p.previous && p.rank ? p.previous - p.rank : 0;
+  // De dónde salen el balance y los resultados: los de los Challenger, de sus partidos de TennisMyLife (ATP y Challenger)
+  const source = tour === 'challenger' ? 'TennisMyLife' : 'ESPN';
   const season = p.season && p.season.won + p.season.lost ? p.season : p.lastSeason;
   const seasonYear = season === p.season ? p.year : p.year - 1;
   const rate = (r: { won: number; lost: number }) => (r.won + r.lost ? pct(r.won / (r.won + r.lost)) : '');
-  const meta = [p.tour.toUpperCase(), countryEs(p.country), p.age ? `${p.age} años` : '', p.height, p.weight, p.hand, p.birthPlace, p.debut ? `Pro desde ${p.debut}` : '', !p.active ? 'Retirado' : ''].filter(Boolean);
+  const meta = [tourLabel(p.tour), countryEs(p.country), p.age ? `${p.age} años` : '', p.height, p.weight, p.hand, p.birthPlace, p.debut ? `Pro desde ${p.debut}` : '', !p.active ? 'Retirado' : ''].filter(Boolean);
   const last = p.matches.slice(0, 10);
 
   return (
@@ -51,13 +54,13 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
       {back}
       <TvFrame>
         <TvHeader
-          media={<><img loading="lazy" decoding="async" src={p.photo || undefined} alt="" className="h-12 w-12 shrink-0 rounded-full bg-black/30 object-cover object-top md:hidden" onError={e => { e.currentTarget.style.display = 'none'; }} />{p.flag && <img loading="lazy" decoding="async" src={p.flag} alt="" className="h-5 w-8 shrink-0 object-cover" />}</>}
+          media={<>{p.photo && <img loading="lazy" decoding="async" src={p.photo} alt="" className="h-12 w-12 shrink-0 rounded-full bg-black/30 object-cover object-top md:hidden" onError={e => { e.currentTarget.style.display = 'none'; }} />}{p.flag && <img loading="lazy" decoding="async" src={p.flag} alt="" className="h-5 w-8 shrink-0 object-cover" />}</>}
           title={p.name} sub={<span title={meta.join(' · ')}>{meta.join(' · ')}</span>}>
           <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:flex-wrap sm:gap-y-1">
             <TvStat label="Ranking" value={p.rank ? `#${p.rank}` : '–'} sub={<>{p.points ? `${p.points.toLocaleString('es-ES')} pts` : ''}{!!diff && <span className="ml-1">{diff > 0 ? `▲${diff}` : `▼${-diff}`}</span>}</>} />
-            {season && <TvStat label={`Temporada ${seasonYear}`} value={`${season.won}-${season.lost}`} sub={rate(season)} title="Balance según ESPN" />}
+            {season && <TvStat label={`Temporada ${seasonYear}`} value={`${season.won}-${season.lost}`} sub={rate(season)} title={`Balance según ${source}`} />}
             {season && <TvStat label={`Títulos ${seasonYear}`} value={season.titles} sub={season.prize ? prize(season.prize) : ''} />}
-            {p.career && <TvStat label="Carrera" value={`${p.career.won}-${p.career.lost}`} sub={rate(p.career)} title="Balance según ESPN" />}
+            {p.career && <TvStat label="Carrera" value={`${p.career.won}-${p.career.lost}`} sub={rate(p.career)} title={`Balance según ${source}`} />}
             {p.career && <TvStat label="Títulos" value={p.career.titles} sub={p.career.prize ? prize(p.career.prize) : ''} />}
           </div>
         </TvHeader>
@@ -71,7 +74,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
           )}
         </div>
 
-      {tab === 'stats' ? <TennisStatsPanel tour={tour} id={id} name={p.name} photo={p.photo} credit={p.photoFrom} /> : tab === 'lines' ? <TennisLines tour={tour} id={id} name={p.name} /> : !p.matches.length ? <div className="p-3"><Empty>Sin partidos individuales recientes en ESPN.</Empty></div> : (
+      {tab === 'stats' ? <TennisStatsPanel tour={tour} id={id} name={p.name} photo={p.photo} credit={p.photoFrom} /> : tab === 'lines' ? <TennisLines tour={tour} id={id} name={p.name} /> : !p.matches.length ? <div className="p-3"><Empty>Sin partidos individuales recientes en {source}.</Empty></div> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
             <thead className="bg-zinc-900/60"><tr><th className={th + ' w-9'} /><th className={th}>Fecha</th><th className={th}>Torneo</th><th className={th}>Ronda</th><th className={th}>Rival</th><th className={th + ' text-right'}>Resultado</th></tr></thead>

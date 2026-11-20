@@ -418,13 +418,15 @@ export interface ChallengerMatchPicks {
 export interface ChallengerDay { fecha: string; peso: number; valorVisible: boolean; modelo: { ultimoPartido: string | null }; partidos: ChallengerMatchPicks[] }
 
 // Ficha de un tenista: datos personales, balance y últimos resultados
+// El circuito de la ficha de un jugador: los de los Challenger no la tienen en ESPN y salen de TennisMyLife, con su nombre como id
+export type SheetTour = Tour | 'challenger';
 export interface TennisRecord { won: number; lost: number; titles: number; doublesTitles: number; prize: number }
 export interface TennisResult {
   id: string; date: string; tournament: string; major: boolean; round: string; city: string; win: boolean; score: string; note: string;
   sets: number; games: number; opponent: { id: string; name: string; flag: string; rank: number | null };
 }
 export interface TennisProfile {
-  id: string; tour: Tour; name: string; photo: string; photoFrom: string; flag: string; country: string; rank: number | null; previous: number | null; points: number | null;
+  id: string; tour: SheetTour; name: string; photo: string; photoFrom: string; flag: string; country: string; rank: number | null; previous: number | null; points: number | null;
   age: number | null; birthDate: string | null; birthPlace: string; height: string; weight: string; hand: string; years: number | null; debut: number | null; active: boolean;
   year: number; season: TennisRecord | null; lastSeason: TennisRecord | null; career: TennisRecord | null; matches: TennisResult[];
 }
@@ -442,7 +444,7 @@ export interface TennisStatBlock {
 export interface TennisWinLoss { won: number; lost: number; winPct: number | null }
 export interface TennisStatPeriod {
   key: string; label: string; total: TennisStatBlock; surfaces: Record<TennisSurface, TennisStatBlock>; tour: Record<TennisSurface | 'all', TennisStatBlock>; best: TennisSurface | null; worst: TennisSurface | null;
-  vs: { top10: TennisWinLoss; top11to50: TennisWinLoss; rest: TennisWinLoss }; levels: { grandSlam: TennisWinLoss; masters: TennisWinLoss; others: TennisWinLoss };
+  vs: { top10: TennisWinLoss; top11to50: TennisWinLoss; rest: TennisWinLoss }; levels: { grandSlam: TennisWinLoss; masters: TennisWinLoss; others: TennisWinLoss; challenger?: TennisWinLoss };
 }
 export interface TennisStats { source: string; updated: string | null; minSurface: number; found: boolean; periods: TennisStatPeriod[] }
 
@@ -648,17 +650,17 @@ export interface Api {
     games(date: string): Promise<TennisMatch[]>;
     doubles(date: string): Promise<TennisMatch[]>; // los dobles del día (ATP, WTA y Challenger), aparte de games
     // Estadísticas de un partido: de la web de la WTA o, ya acabado, de TennisMyLife (null si aún no hay)
-    matchStats(q: { tour: Tour; date: string; state: TennisMatch['state']; a: string; b: string }): Promise<TennisMatchStats | null>;
+    matchStats(q: { tour: SheetTour; date: string; state: TennisMatch['state']; a: string; b: string }): Promise<TennisMatchStats | null>;
     // doubles y doublesLive: los dobles de cada día, aparte (total y live son sólo los individuales)
     days(from: string, n: number): Promise<Record<string, { total: number; live: number; doubles?: number; doublesLive?: number }>>;
     live(): Promise<TennisMatch[]>;
     rankings(tour: Tour): Promise<TennisRank[]>;
     player(tour: Tour, id: string): Promise<TennisMatch[]>;
-    profile(tour: Tour, id: string): Promise<TennisProfile>;
-    stats(tour: Tour, id: string): Promise<TennisStats>;
-    gamelog(tour: Tour, id: string): Promise<TennisGamelog>; // su partido a partido (TennisMyLife)
+    profile(tour: SheetTour, id: string): Promise<TennisProfile>;
+    stats(tour: SheetTour, id: string): Promise<TennisStats>;
+    gamelog(tour: SheetTour, id: string): Promise<TennisGamelog>; // su partido a partido (TennisMyLife)
     playerLines(tour: Tour, id: string): Promise<TennisPlayerLines>; // su próximo partido y sus líneas (pide cuenta)
-    surface(tour: Tour, name: string, city: string): Promise<TennisSurface | null>;
+    surface(tour: SheetTour, name: string, city: string): Promise<TennisSurface | null>;
     picks(date: string, id: string): Promise<TennisPicks>;
     picksDay(date: string): Promise<TennisDayPick[]>;
     picksBoard(date: string): Promise<TennisBoard>;

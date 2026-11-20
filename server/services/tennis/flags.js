@@ -30,4 +30,22 @@ function flagOf(code, name) {
   return BASE + (CODE[c] || c.toLowerCase()) + '.png';
 }
 
-module.exports = { flagOf, CODE, BY_NAME };
+// El país de un código del COI (los de TennisMyLife) en inglés, como lo da ESPN: la interfaz lo pasa al castellano (countryEs, en
+// src/lib/countries.ts). Los que no están se quedan como código
+const COUNTRY = {
+  ALB: 'Albania', AND: 'Andorra', ARG: 'Argentina', ARM: 'Armenia', AUS: 'Australia', AUT: 'Austria', AZE: 'Azerbaijan', BAH: 'Bahamas', BAR: 'Barbados',
+  BEL: 'Belgium', BIH: 'Bosnia-Herzegovina', BLR: 'Belarus', BOL: 'Bolivia', BRA: 'Brazil', BUL: 'Bulgaria', CAN: 'Canada', CHI: 'Chile', CHN: 'China',
+  COL: 'Colombia', CRC: 'Costa Rica', CRO: 'Croatia', CUB: 'Cuba', CYP: 'Cyprus', CZE: 'Czechia', DEN: 'Denmark', DOM: 'Dominican Republic', ECU: 'Ecuador',
+  EGY: 'Egypt', ESA: 'El Salvador', ESP: 'Spain', EST: 'Estonia', FIN: 'Finland', FRA: 'France', GBR: 'Great Britain', GEO: 'Georgia', GER: 'Germany',
+  GRE: 'Greece', GUA: 'Guatemala', HKG: 'Hong Kong', HUN: 'Hungary', INA: 'Indonesia', IND: 'India', IRI: 'Iran', IRL: 'Ireland', ISL: 'Iceland',
+  ISR: 'Israel', ITA: 'Italy', JAM: 'Jamaica', JOR: 'Jordan', JPN: 'Japan', KAZ: 'Kazakhstan', KEN: 'Kenya', KOR: 'South Korea', KSA: 'Saudi Arabia',
+  KUW: 'Kuwait', LAT: 'Latvia', LBN: 'Lebanon', LIB: 'Lebanon', LIE: 'Liechtenstein', LTU: 'Lithuania', LUX: 'Luxembourg', MAR: 'Morocco', MAS: 'Malaysia',
+  MDA: 'Moldova', MEX: 'Mexico', MKD: 'North Macedonia', MLT: 'Malta', MNE: 'Montenegro', MON: 'Monaco', NED: 'Netherlands', NGR: 'Nigeria', NOR: 'Norway',
+  NZL: 'New Zealand', PAK: 'Pakistan', PAN: 'Panama', PAR: 'Paraguay', PER: 'Peru', PHI: 'Philippines', POL: 'Poland', POR: 'Portugal', PUR: 'Puerto Rico',
+  QAT: 'Qatar', ROU: 'Romania', RSA: 'South Africa', RUS: 'Russia', SGP: 'Singapore', SLO: 'Slovenia', SMR: 'San Marino', SRB: 'Serbia', SUI: 'Switzerland',
+  SVK: 'Slovakia', SWE: 'Sweden', THA: 'Thailand', TPE: 'Chinese Taipei', TTO: 'Trinidad & Tobago', TUN: 'Tunisia', TUR: 'Turkey', UAE: 'United Arab Emirates',
+  UKR: 'Ukraine', URU: 'Uruguay', USA: 'USA', UZB: 'Uzbekistan', VEN: 'Venezuela', VIE: 'Vietnam', ZIM: 'Zimbabwe'
+};
+const countryOf = code => COUNTRY[String(code || '').trim().toUpperCase()] || String(code || '').trim();
+
+module.exports = { flagOf, countryOf, CODE, BY_NAME };
