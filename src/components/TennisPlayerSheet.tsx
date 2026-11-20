@@ -1,4 +1,5 @@
-// Ficha de un tenista: cabecera con lo esencial y dos pestañas, estadísticas de juego y últimos resultados (ESPN)
+// Ficha de un tenista: cabecera con lo esencial y tres pestañas: estadísticas de juego, sus líneas (próximo partido, lo que espera el
+// modelo y cómo le fue frente a cada línea, como el analizador del baloncesto) y últimos resultados (ESPN)
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
@@ -6,6 +7,7 @@ import { pct } from '@/lib/format';
 import { countryEs } from '@/lib/countries';
 import type { TennisResult, Tour } from '@/lib/types';
 import { TennisStatsPanel } from './TennisStats';
+import { TennisLines } from './TennisLines';
 import { Empty, ErrorBox, Loading, th } from './ui';
 import { FormChips, TvFrame, TvHeader, TvStat, TvTabs, tdc } from './viz';
 import { sized, fallbackTo } from '@/lib/img';
@@ -26,7 +28,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
   const { data: p, error, isLoading } = useQuery({
     queryKey: ['tennis', 'profile', tour, id], queryFn: () => window.api.tennis.profile(tour, id), staleTime: 30 * 60e3, retry: false
   });
-  const [tab, setTab] = useState<'stats' | 'results'>('stats');
+  const [tab, setTab] = useState<'stats' | 'lines' | 'results'>('stats');
   const streak = useMemo(() => (p?.matches.length ? streakOf(p.matches) : 0), [p]);
   const back = <button onClick={onBack} className="flex w-fit cursor-pointer items-center gap-1.5 text-[13px] text-zinc-400 transition hover:text-zinc-100"><ArrowLeft size={15} />{backLabel}</button>;
   if (isLoading) return <div className="mx-auto flex max-w-6xl flex-col gap-3">{back}<Loading label="Cargando la ficha…" /></div>;
@@ -60,7 +62,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
           </div>
         </TvHeader>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
-          <TvTabs value={tab} onChange={setTab} items={[{ value: 'stats', label: 'Estadísticas' }, { value: 'results', label: `Resultados (${p.matches.length})` }]} />
+          <TvTabs value={tab} onChange={setTab} items={[{ value: 'stats', label: 'Estadísticas' }, { value: 'lines', label: 'Líneas' }, { value: 'results', label: `Resultados (${p.matches.length})` }]} />
           {!!last.length && (
             <div className="flex items-center gap-2" title="Últimos 10 partidos, del más reciente al más antiguo">
               <span className="font-mono text-xs font-medium text-zinc-300">Racha: {streak} {p.matches[0].win ? (streak === 1 ? 'ganado' : 'ganados') : (streak === 1 ? 'perdido' : 'perdidos')}</span>
@@ -69,7 +71,7 @@ export function TennisPlayerSheet({ tour, id, onBack, onPlayer, backLabel = 'Ran
           )}
         </div>
 
-      {tab === 'stats' ? <TennisStatsPanel tour={tour} id={id} name={p.name} photo={p.photo} credit={p.photoFrom} /> : !p.matches.length ? <div className="p-3"><Empty>Sin partidos individuales recientes en ESPN.</Empty></div> : (
+      {tab === 'stats' ? <TennisStatsPanel tour={tour} id={id} name={p.name} photo={p.photo} credit={p.photoFrom} /> : tab === 'lines' ? <TennisLines tour={tour} id={id} name={p.name} /> : !p.matches.length ? <div className="p-3"><Empty>Sin partidos individuales recientes en ESPN.</Empty></div> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
             <thead className="bg-zinc-900/60"><tr><th className={th + ' w-9'} /><th className={th}>Fecha</th><th className={th}>Torneo</th><th className={th}>Ronda</th><th className={th}>Rival</th><th className={th + ' text-right'}>Resultado</th></tr></thead>

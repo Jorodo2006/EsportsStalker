@@ -251,6 +251,8 @@ export const api: Api = {
     player: (tour, id) => get(`/api/tennis/player/${part(tour)}/${part(id)}`),
     profile: (tour, id) => get(`/api/tennis/profile/${part(tour)}/${part(id)}`),
     stats: (tour, id) => get(`/api/tennis/stats/${part(tour)}/${part(id)}`),
+    gamelog: (tour, id) => get(`/api/tennis/gamelog/${part(tour)}/${part(id)}`),
+    playerLines: (tour, id) => get(`/api/tennis/picks/player/${part(tour)}/${part(id)}`),
     surface: (tour, name, city) => get(`/api/tennis/surface/${part(tour)}`, { name, city }),
     picks: (date, id) => get('/api/tennis/picks', { date, id }),
     // Las del día se registran para medir si el modelo acierta (las ve la portada Hoy; la lista de tenis usa el tablero)

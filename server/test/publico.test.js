@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { isPublic, isAdminPath, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT } = require('../services/gateway/public');
 
 test('se abren las lecturas de los deportes y de las cuotas', () => {
-  for (const p of ['/api/esports/schedule', '/api/stats/players', '/api/basket/games', '/api/tennis/match-stats', '/api/tennis/doubles', '/api/football/standings/laliga', '/api/mma/fighter', '/api/search', '/api/settings/public', '/api/public/config']) {
+  for (const p of ['/api/esports/schedule', '/api/stats/players', '/api/basket/games', '/api/tennis/match-stats', '/api/tennis/doubles', '/api/tennis/gamelog/atp/3782', '/api/football/standings/laliga', '/api/mma/fighter', '/api/search', '/api/settings/public', '/api/public/config']) {
     assert.equal(isPublic('GET', p), true, p);
   }
   for (const p of ['/api/odds/match', '/api/odds/board', '/api/odds/history', '/api/football/photos']) assert.equal(isPublic('POST', p), true, p);
@@ -16,7 +16,7 @@ test('lo de cada usuario, las recomendaciones y leer cuotas a mano piden cuenta'
   const closed = [
     ['GET', '/api/bets'], ['POST', '/api/bets'], ['GET', '/api/settings'], ['PUT', '/api/settings'], ['GET', '/api/friends'],
     ['GET', '/api/shared'], ['GET', '/api/friends/3/chat'], ['POST', '/api/odds/jobs'], ['GET', '/api/odds/jobs/abc123'], ['POST', '/api/odds/paste'],
-    ['GET', '/api/tennis/picks'], ['GET', '/api/tennis/picks/board'], ['GET', '/api/tennis/picks/day'], ['GET', '/api/football/picks'],
+    ['GET', '/api/tennis/picks'], ['GET', '/api/tennis/picks/board'], ['GET', '/api/tennis/picks/day'], ['GET', '/api/tennis/picks/player/atp/3782'], ['GET', '/api/football/picks'],
     ['GET', '/api/football/picks/day'], ['GET', '/api/football/picks/lines'], ['GET', '/api/mma/picks'], ['GET', '/api/mma/picks/lines'], ['GET', '/api/challenger/estado'], ['GET', '/api/challenger/recomendaciones'], ['POST', '/api/challenger/escanear'],
     ['GET', '/api/odds/auto/status'], ['GET', '/api/bets/predictions'], ['POST', '/api/auth/password'],
     // Panel de administración: nunca abierto (el gateway además exige ser administrador)

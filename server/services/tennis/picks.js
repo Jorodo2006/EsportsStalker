@@ -266,12 +266,14 @@ function reason(p, c, r) {
   return `Se esperan ${es(exp)} juegos`;
 }
 
-async function picksFor(match) {
-  const m = { ...match, league: match.tournament };
-  if (match.state !== 'pre') return { ready: false, reason: match.state === 'in' ? 'started' : 'finished' };
-  const odds = await client.call('odds', 'POST', '/api/odds/match', { match: { a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'tennis', league: m.tournament }, quiet: true });
-  if (!odds?.markets?.length) return { ready: false, reason: 'noodds' };
+// Las cuotas del partido, sólo leyendo lo guardado (quiet: no pide una lectura nueva)
+const oddsOf = m => client.call('odds', 'POST', '/api/odds/match', { match: { a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'tennis', league: m.tournament }, quiet: true });
 
+// El partido según el modelo: la probabilidad de cada uno (mezclada con la casa si hay cuotas del ganador), el marcador final de
+// todos los resultados posibles y lo que no sale de él (saque, aces). Lo usan las recomendaciones (picksFor) y las líneas del
+// perfil del jugador (playerLines), para que las dos den las mismas cifras. odds: las de oddsOf, o null sin cuotas
+async function matchContext(match, odds) {
+  const m = { ...match, league: match.tournament };
   const tour = m.tour, P = M.paramsOf(tour);
   const st = await stateOf(tour);
   const key = n => { const k = tml.resolve(st.data, n); return k && st.players.has(k) ? k : null; };
@@ -285,7 +287,7 @@ async function picksFor(match) {
   const avg = st.avgOf(M.conditionOf(surface, edition?.indoor));
   const f = M.predict(pa, pb, surface, day, avg, m.bestOf, P);
 
-  const ml = odds.markets.find(l => l.key === 'moneyline|0||');
+  const ml = odds?.markets?.find(l => l.key === 'moneyline|0||');
   const oa = ml?.outcomes.find(o => o.id === 'a');
   const mlMarket = oa && Object.keys(oa.prices).length ? marketProb(ml, oa) : null;
   const minPoints = Math.min(f.ra.points, f.rb.points);
@@ -312,8 +314,14 @@ async function picksFor(match) {
     aceMean: who => x.aces(who).slice(1).reduce((t, v) => t + v, 0)
   };
   const ctx = { m, exp, expA, expB, expSet, f, hold, x };
-  const age = Math.max(0, Date.now() - Math.max(...Object.values(odds.sources).map(s => s.ts || 0)));
+  const age = odds ? Math.max(0, Date.now() - Math.max(...Object.values(odds.sources || {}).map(s => s.ts || 0))) : null;
+  return { m, P, f, w, gap, minPoints, pFinal, mlMarket, sa, sb, dist, setDist, exp, expA, expB, hold, x, ctx, age, surfaceName, edition, ka, kb };
+}
 
+// Todas las líneas de las casas que el modelo sabe calcular, con su probabilidad, su valor y su fiabilidad, menos las que no se
+// recomiendan nunca (sane). c: matchContext del partido con esas cuotas
+function picksOf(c, odds) {
+  const { m, x, dist, setDist, f, w, gap, minPoints, age, surfaceName, ctx } = c;
   const picks = [];
   for (const line of odds.markets) {
     for (const o of line.outcomes) {
@@ -342,16 +350,64 @@ async function picksFor(match) {
   // casi imposible. El resto va a la interfaz, que lo filtra y lo separa por riesgo (src/lib/tennis-picks.ts)
   const sane = x => Math.abs(x.pModel - x.pMarket) <= MAX_DISAGREE && x.price >= MIN_PRICE && x.price <= MAX_PRICE && x.p >= MIN_P && x.ev >= MIN_EV && x.rel.score >= MIN_REL;
   const shown = picks.filter(sane).map(({ _r, ...pick }) => ({ ...pick, why: reason(pick, ctx, _r) }));
-  const classic = classicOf(shown, pFinal);
+  return { shown, considered: picks.length };
+}
 
+const warningsOf = c => {
   const warnings = [];
-  for (const [k, pl] of [[ka, m.a], [kb, m.b]]) if (!k) warnings.push(`Sin histórico de ${pl.name} en el circuito: pesa casi todo la casa`);
-  if (!surfaceName) warnings.push('Superficie del torneo sin confirmar: se usa pista dura');
-  if (age > STALE_MS) warnings.push(`Cuotas de hace ${Math.round(age / 3600e3)} h: actualízalas antes de apostar`);
+  for (const [k, pl] of [[c.ka, c.m.a], [c.kb, c.m.b]]) if (!k) warnings.push(`Sin histórico de ${pl.name} en el circuito: pesa casi todo la casa`);
+  if (!c.surfaceName) warnings.push('Superficie del torneo sin confirmar: se usa pista dura');
+  if (c.age > STALE_MS) warnings.push(`Cuotas de hace ${Math.round(c.age / 3600e3)} h: actualízalas antes de apostar`);
+  return warnings;
+};
+const summaryOf = c => ({ pModel: c.f.pModel, pElo: c.f.pElo, pStats: c.f.pStats, pMarket: c.mlMarket, pFinal: c.pFinal, expectedGames: c.exp, holdA: c.hold.a, holdB: c.hold.b, weight: c.w });
+
+async function picksFor(match) {
+  if (match.state !== 'pre') return { ready: false, reason: match.state === 'in' ? 'started' : 'finished' };
+  const odds = await oddsOf({ ...match, league: match.tournament });
+  if (!odds?.markets?.length) return { ready: false, reason: 'noodds' };
+  const c = await matchContext(match, odds);
+  const { shown, considered } = picksOf(c, odds);
+  const classic = classicOf(shown, c.pFinal);
   return {
-    ready: true, surface: surfaceName, indoor: String(edition?.indoor).toUpperCase() === 'I', bestOf: m.bestOf, oddsAge: age,
-    summary: { pModel: f.pModel, pElo: f.pElo, pStats: f.pStats, pMarket: mlMarket, pFinal, expectedGames: exp, holdA: hold.a, holdB: hold.b, weight: w },
-    picks: shown, ...classic, considered: picks.length, warnings
+    ready: true, surface: c.surfaceName, indoor: String(c.edition?.indoor).toUpperCase() === 'I', bestOf: c.m.bestOf, oddsAge: c.age,
+    summary: summaryOf(c), picks: shown, ...classic, considered, warnings: warningsOf(c)
+  };
+}
+
+// ---------- Las líneas de un jugador en su próximo partido (perfil del tenista, src/components/TennisLines.tsx) ----------
+const halfLines = (from, to) => { const out = []; for (let l = from; l <= to + 1e-9; l += 1) out.push(l); return out; };
+const share = (dist, test) => dist.reduce((t, o) => t + (test(o) ? o.p : 0), 0);
+// Las del partido que no son de ninguno de los dos, pero que también se miran desde un jugador
+const MATCH_FAMILIES = /^(Total de juegos|Total de aces)$/;
+
+// side: 'a' o 'b', el jugador del perfil. Sin cuotas también calcula (con la probabilidad del modelo sin mezclar con la casa): lo
+// esperado y la escalera de cada mercado, con la probabilidad de superar cada línea de medio punto. Con cuotas, además, las
+// recomendaciones de ese partido que son de este jugador o del total del partido: las mismas cifras que su pestaña Recomendaciones
+async function playerLines(match, side) {
+  const odds = await oddsOf({ ...match, league: match.tournament });
+  const withOdds = !!odds?.markets?.length;
+  const c = await matchContext(match, withOdds ? odds : null);
+  const { dist, x, m } = c, five = m.bestOf === 5;
+  const mine = o => (side === 'a' ? o.ga : o.gb), theirs = o => (side === 'a' ? o.gb : o.ga), sets = o => (side === 'a' ? o.x : o.y);
+  const aces = x.aces(side);
+  const ladders = {
+    games: halfLines(4.5, five ? 30.5 : 20.5).map(line => ({ line, p: share(dist, o => mine(o) > line) })),
+    total: halfLines(five ? 25.5 : 16.5, five ? 55.5 : 40.5).map(line => ({ line, p: share(dist, o => o.ga + o.gb > line) })),
+    // El hándicap del jugador: con +3,5 se gana si pierde por 3 juegos o menos, o si gana
+    spread: halfLines(-8.5, 8.5).map(line => ({ line, p: share(dist, o => mine(o) - theirs(o) + line > 0) })),
+    aces: halfLines(0.5, 25.5).map(line => ({ line, p: aces[Math.ceil(line)] ?? 0 })),
+    sets: halfLines(0.5, five ? 2.5 : 1.5).map(line => ({ line, p: share(dist, o => sets(o) > line) }))
+  };
+  const expected = {
+    games: side === 'a' ? c.expA : c.expB, total: c.exp, spread: side === 'a' ? c.expA - c.expB : c.expB - c.expA,
+    aces: x.aceMean(side), sets: dist.reduce((t, o) => t + o.p * sets(o), 0)
+  };
+  const name = m[side].name;
+  const picks = withOdds ? picksOf(c, odds).shown.filter(p => p.who === side || p.family.includes(name) || MATCH_FAMILIES.test(p.family)) : [];
+  return {
+    ready: true, side, surface: c.surfaceName, bestOf: m.bestOf, withOdds, oddsAge: c.age, known: !!(side === 'a' ? c.ka : c.kb),
+    pWin: side === 'a' ? c.pFinal : 1 - c.pFinal, weight: c.w, expected, ladders, picks, warnings: warningsOf(c)
   };
 }
 
@@ -373,4 +429,4 @@ function classicOf(list, pFinal) {
   return { top, easy, hard };
 }
 
-module.exports = { picksFor };
+module.exports = { picksFor, playerLines };

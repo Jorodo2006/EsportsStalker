@@ -6,7 +6,7 @@ const { migrate, query } = require('../../shared/db');
 const { cachedJSON, warmEvery } = require('../../shared/cached');
 const tml = require('./tml');
 const { photoOf } = require('./photos');
-const { picksFor } = require('./picks');
+const { picksFor, playerLines } = require('./picks');
 const { withPoints } = require('./points');
 const { matchStats } = require('./matchstats');
 const ls = require('./livescore');
@@ -121,6 +121,14 @@ async function doublesBetween(from, to) {
   return lists.flat().filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; }).sort((x, y) => new Date(x.date) - new Date(y.date));
 }
 const doublesOn = day => doublesBetween(day, day);
+
+// El próximo partido de un jugador de ESPN (sin empezar o en juego) en los próximos 7 días: de los mismos marcadores que la lista
+async function nextMatchOf(tour, id) {
+  const t = madridDay(Date.now());
+  const list = await between(t, addDays(t, 6));
+  return list.filter(m => m.tour === tour && (m.state === 'pre' || m.state === 'in') && (m.a.id === id || m.b.id === id))
+    .sort((x, y) => (x.state === 'in' ? -1 : 0) - (y.state === 'in' ? -1 : 0) || new Date(x.date) - new Date(y.date))[0] ?? null;
+}
 
 async function between(from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
@@ -340,6 +348,21 @@ const routes = [
     return matchStats({ tour: q.tour, date: valid(q.date), state: ['pre', 'in', 'post'].includes(q.state) ? q.state : 'post', a: name(q.a), b: name(q.b) });
   }],
   // Saque, resto, juegos y superficie (TennisMyLife). El id es el de ESPN: su nombre sirve para buscarlo en esos datos
+  // Su partido a partido en TennisMyLife (la pestaña Líneas de la ficha): pública, como las estadísticas
+  ['GET', '/api/tennis/gamelog/:tour/:id', async ({ params }) => {
+    if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
+    const a = await getJSON(`${core(params.tour)}/athletes/${params.id}?lang=es&region=es`, 6 * 3600e3);
+    return tml.playerGamelog(params.tour, a.displayName);
+  }],
+  // Su próximo partido y lo que el modelo espera de él, con sus líneas de las casas. Bajo /picks: el gateway la cierra sin cuenta
+  ['GET', '/api/tennis/picks/player/:tour/:id', async ({ params }) => {
+    if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
+    const m = await nextMatchOf(params.tour, params.id);
+    if (!m) return { next: null };
+    const side = m.a.id === params.id ? 'a' : 'b';
+    if (m.state !== 'pre') return { next: m, side, ready: false, reason: 'started' };
+    return { next: m, ...(await playerLines(m, side)) };
+  }],
   ['GET', '/api/tennis/stats/:tour/:id', async ({ params }) => {
     if (!TOURS[params.tour] || !/^\d+$/.test(params.id)) throw fail('Jugador desconocido');
     const a = await getJSON(`${core(params.tour)}/athletes/${params.id}?lang=es&region=es`, 6 * 3600e3);

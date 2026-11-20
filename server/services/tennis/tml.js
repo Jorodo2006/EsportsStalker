@@ -187,6 +187,48 @@ async function playerStats(tour, name) {
   return { ...base, found: true, periods };
 }
 
+// ---------- Partido a partido (la pestaña Líneas de la ficha, src/components/TennisLines.tsx) ----------
+// El orden dentro de un torneo: TennisMyLife sólo da la semana (el lunes), no el día de cada partido
+const ROUND = { Q1: -3, Q2: -2, Q3: -1, ER: 0, R128: 1, R64: 2, R32: 3, RR: 3, R16: 4, QF: 5, SF: 6, BR: 6.5, F: 7 };
+const val = v => (v === '' || v == null ? null : num(v));
+
+// Los partidos de un jugador, del más reciente al más antiguo, sin W.O. (no se jugaron). tour: 'atp' o 'wta', para saber si un
+// Grand Slam es a cinco sets. Los juegos, sets y tie-breaks salen del marcador como en addMatch (con una retirada, lo jugado); las
+// estadísticas de saque son null si el partido no las tiene
+function gamelogOf(data, me, tour) {
+  const list = (data.byName.get(me) || []).filter(played);
+  return list.map(m => {
+    const win = norm(m.winner_name) === me, [p, o] = win ? ['w_', 'l_'] : ['l_', 'w_'];
+    let gamesWon = 0, gamesLost = 0, setsWon = 0, setsLost = 0, tbWon = 0, tbLost = 0;
+    for (const set of String(m.score).split(/\s+/)) {
+      const x = set.match(/^(\d+)-(\d+)(?:\((\d+)\))?$/);
+      if (!x) continue;
+      const w = +x[1], l = +x[2]; // el marcador va siempre desde el punto de vista del ganador
+      gamesWon += win ? w : l; gamesLost += win ? l : w;
+      if (Math.max(w, l) >= 6 && w !== l) { if ((w > l) === win) setsWon++; else setsLost++; }
+      if ((w === 7 && l === 6) || (w === 6 && l === 7)) { if ((w > l) === win) tbWon++; else tbLost++; }
+    }
+    const stats = !!num(m.w_svpt) && !!num(m.l_svpt);
+    const s = k => (stats ? val(m[`${p}${k}`]) : null), r = k => (stats ? val(m[`${o}${k}`]) : null);
+    const oppRank = val(win ? m.loser_rank : m.winner_rank);
+    return {
+      id: `${m.tourney_id}-${m.match_num}`, date: ymdOf(m.tourney_date), tournament: m.tourney_name, surface: m.surface || null, level: m.tourney_level,
+      round: m.round, bestOf: tour === 'atp' && m.tourney_level === 'G' ? 5 : 3, opp: win ? m.loser_name : m.winner_name, oppRank: oppRank || null,
+      win, score: m.score, retired: /RET|DEF|ABD/i.test(m.score), minutes: val(m.minutes) || null,
+      gamesWon, gamesLost, setsWon, setsLost, tbWon, tbLost,
+      aces: s('ace'), df: s('df'), svpt: s('svpt'), firstIn: s('1stIn'), firstWon: s('1stWon'), secondWon: s('2ndWon'), svGms: s('SvGms'),
+      bpFaced: s('bpFaced'), bpSaved: s('bpSaved'), breaks: stats ? num(m[`${o}bpFaced`]) - num(m[`${o}bpSaved`]) : null, oppAces: r('ace')
+    };
+  }).sort((x, y) => y.date.localeCompare(x.date) || (ROUND[y.round] ?? 3) - (ROUND[x.round] ?? 3));
+}
+
+async function playerGamelog(tour, name) {
+  const data = await dataset(tour);
+  const me = resolve(data, name);
+  const updated = data.rows.reduce((mx, m) => (m.tourney_date > mx ? m.tourney_date : mx), '');
+  return { source: 'TennisMyLife', updated: updated ? ymdOf(updated) : null, found: !!me, matches: me ? gamelogOf(data, me, tour) : [] };
+}
+
 // Palabras que salen en muchos torneos: "Open" no dice nada, y con ella el Madrid Open parecería el Open de Australia
 const GENERIC = new Set(['open', 'masters', 'tennis', 'championships', 'championship', 'international', 'internationals', 'tournament', 'cup', 'tour', 'grand', 'prix', 'bank', 'the', 'and', 'atp', 'wta', 'presented']);
 const wordsOf = s => norm(s).split(' ').filter(w => w.length >= 3 && !GENERIC.has(w));
@@ -210,4 +252,4 @@ async function tournamentEdition(tour, name, city) {
 }
 const tournamentSurface = async (tour, name, city) => (await tournamentEdition(tour, name, city))?.surface || null;
 
-module.exports = { playerStats, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };
+module.exports = { playerStats, playerGamelog, gamelogOf, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };

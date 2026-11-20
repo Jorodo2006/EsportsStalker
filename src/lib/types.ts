@@ -297,8 +297,29 @@ export interface TennisRank { rank: number; previous: number; points: number; tr
 
 // Recomendaciones de un partido (modelo + cuotas). p, pModel y pMarket van de 0 a 1; ev es el valor esperado por unidad
 export interface TennisPick {
-  id: string; title: string; market: string; selection: string; family: string; side: 'a' | 'b' | null; book: string; price: number; prices: Record<string, number>;
+  id: string; title: string; market: string; selection: string; family: string; side: 'a' | 'b' | null; who?: 'a' | 'b' | null; book: string; price: number; prices: Record<string, number>;
   p: number; pModel: number; pMarket: number; fair: number; ev: number; rel: Reliability; why: string;
+}
+// Un partido de un tenista en TennisMyLife (GET /api/tennis/gamelog), desde su lado. date: el lunes de la semana del torneo (no da
+// el día). Las estadísticas de saque son null si el partido no las tiene; breaks: los que hizo él
+export interface TennisLogMatch {
+  id: string; date: string; tournament: string; surface: TennisSurface | null; level: string; round: string; bestOf: number;
+  opp: string; oppRank: number | null; win: boolean; score: string; retired: boolean; minutes: number | null;
+  gamesWon: number; gamesLost: number; setsWon: number; setsLost: number; tbWon: number; tbLost: number;
+  aces: number | null; df: number | null; svpt: number | null; firstIn: number | null; firstWon: number | null; secondWon: number | null; svGms: number | null;
+  bpFaced: number | null; bpSaved: number | null; breaks: number | null; oppAces: number | null;
+}
+export interface TennisGamelog { source: string; updated: string | null; found: boolean; matches: TennisLogMatch[] }
+// Los mercados del perfil del tenista (pestaña Líneas): sus juegos, los del partido, su hándicap, sus aces, sus sets y sus dobles
+// faltas (de estas sólo el histórico: ni el modelo ni las casas)
+export type TennisLineMarket = 'games' | 'total' | 'spread' | 'aces' | 'sets' | 'df';
+export type TennisModelMarket = Exclude<TennisLineMarket, 'df'>;
+// Su próximo partido y lo que espera el modelo (GET /api/tennis/picks/player): next null si no juega en 7 días; ready false si ya
+// ha empezado. ladders: la probabilidad de superar cada línea (en el hándicap, de cubrirlo); picks: sus líneas de las casas
+export interface TennisPlayerLines {
+  next: TennisMatch | null; side?: 'a' | 'b'; ready?: boolean; reason?: string;
+  surface?: TennisSurface | null; bestOf?: number; withOdds?: boolean; oddsAge?: number | null; known?: boolean; pWin?: number; weight?: number;
+  expected?: Record<TennisModelMarket, number>; ladders?: Record<TennisModelMarket, { line: number; p: number }[]>; picks?: TennisPick[]; warnings?: string[];
 }
 // summary: el partido según el modelo (pModel, pElo, pStats), las casas (pMarket) y la mezcla (pFinal), todo para el jugador a.
 // picks: las líneas de las casas que el servicio no descarta; la interfaz las separa por riesgo (lib/tennis-picks.ts)
@@ -635,6 +656,8 @@ export interface Api {
     player(tour: Tour, id: string): Promise<TennisMatch[]>;
     profile(tour: Tour, id: string): Promise<TennisProfile>;
     stats(tour: Tour, id: string): Promise<TennisStats>;
+    gamelog(tour: Tour, id: string): Promise<TennisGamelog>; // su partido a partido (TennisMyLife)
+    playerLines(tour: Tour, id: string): Promise<TennisPlayerLines>; // su próximo partido y sus líneas (pide cuenta)
     surface(tour: Tour, name: string, city: string): Promise<TennisSurface | null>;
     picks(date: string, id: string): Promise<TennisPicks>;
     picksDay(date: string): Promise<TennisDayPick[]>;

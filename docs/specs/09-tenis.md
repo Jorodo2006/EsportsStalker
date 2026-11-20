@@ -218,6 +218,40 @@ No cuestan ninguna petición nueva.
   uno se abre su ficha (`src/components/TennisPlayerSheet.tsx`), que también se abre desde *Forma de los jugadores*.
   Esa pestaña enseña además los enfrentamientos recientes entre los dos.
 
+## Perfil del tenista: pestaña *Líneas* (`src/components/TennisLines.tsx`, `src/lib/tennis-lines.ts`)
+
+Desde el 20-11-2026, en la ficha de cada jugador de la ATP y la WTA, junto a *Estadísticas* y *Resultados*. Es el analizador de
+jugador del baloncesto adaptado al tenis.
+
+- **Mercados:** sus juegos ganados, los juegos del partido, su hándicap de juegos, sus aces, sus sets ganados y sus dobles faltas.
+  Son las líneas de jugador que dan las casas: «Juegos de X» (Winamax en casi todos los partidos, Betway en la mitad), el hándicap,
+  el total y «gana un set» casi siempre, y los aces sólo en partidos grandes (cuotas guardadas, noviembre de 2026).
+  - Las dobles faltas no las calcula el modelo ni las dan las casas: sólo se enseña su histórico.
+  - El ganador se lee como «más de 1,5 sets» (2,5 a cinco sets).
+- **Su histórico:** `GET /api/tennis/gamelog/:tour/:id` (pública, como `/stats`) devuelve sus partidos de TennisMyLife uno a uno
+  (`gamelogOf` de `tml.js`), con los juegos, sets y tie-breaks desde su lado, sus aces, dobles faltas y breaks, y el ranking del rival.
+  - La fecha es el lunes de la semana del torneo: TennisMyLife no da el día.
+  - Los W.O. no entran. Las retiradas tampoco cuentan para las líneas (`usable`): con medio partido los juegos no dicen nada, y las
+    casas anulan esas apuestas.
+  - Con él salen la gráfica de sus últimos 20 frente a la línea (por superficie, de entrada la del próximo torneo) y los tramos:
+    últimos 10, 52 semanas, misma superficie, contra el top 20 y contra el resto, cuando gana, cuando pierde y a cinco sets.
+- **Su próximo partido:** `GET /api/tennis/picks/player/:tour/:id`, que pide cuenta porque va bajo `/picks`.
+  - Lo busca por su id de ESPN en los próximos 7 días (`nextMatchOf`, los mismos marcadores que la lista).
+  - De ahí sale `playerLines` (`picks.js`): lo que espera el modelo de cada mercado y la escalera de líneas de medio punto, con la
+    probabilidad de superar cada una. Funciona también sin cuotas, con la probabilidad del modelo sola.
+  - Con cuotas, añade sus recomendaciones de ese partido: las suyas y los totales del partido.
+- **Mismas cifras que las recomendaciones:** el cálculo del partido está en `matchContext` y lo comparten `picksFor` y `playerLines`.
+  `server/test/tenis-lineas.test.js` comprueba con un circuito falso que `picksFor` da lo mismo que antes de separarlo, y que las
+  líneas del perfil son las del partido. No se tocó ningún parámetro del modelo.
+- **Valor:**
+  - El panel de valor (`ValuePanel`) sale con las cifras del servicio y el veredicto común de `value.ts`. Sólo en las líneas que dan
+    las casas y que son de Más / Menos (sus juegos, el total y sus aces); en el hándicap y los sets, sus cuotas con su botón.
+  - «Líneas con valor» enseña las que pasan la regla común (valor ≥ 2 % y fiabilidad ≥ 55). Si no hay ninguna, las tres que más se
+    acercan, no las más probables: esas pagan poco y tienen el peor valor.
+  - Sin cuenta se ve sólo el histórico.
+- **Fuera por ahora:** los jugadores de Challenger (no tienen ficha de ESPN) y un modelo de dobles faltas (habría que medirlo con
+  `backtest.js`).
+
 ## Pendiente
 
 - Dobles: sin modelo ni recomendaciones. No hay histórico de dobles reciente y gratuito: el de Sackmann acaba en 2020 y sólo tiene

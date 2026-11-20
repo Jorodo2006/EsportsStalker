@@ -1,0 +1,694 @@
+{
+ "ready": true,
+ "surface": "Hard",
+ "indoor": false,
+ "bestOf": 3,
+ "oddsAge": 3600000,
+ "summary": {
+  "pModel": 0.492394837,
+  "pElo": 0.415584208,
+  "pStats": 0.538520354,
+  "pMarket": 0.608517003,
+  "pFinal": 0.589567456,
+  "expectedGames": 23.547995494,
+  "holdA": 0.801111237,
+  "holdB": 0.752659371,
+  "weight": 0.167347293
+ },
+ "picks": [
+  {
+   "id": "moneyline|0||#a",
+   "title": "Gana Carlos Alpha",
+   "market": "Ganador",
+   "selection": "Carlos Alpha",
+   "family": "Ganador",
+   "side": "a",
+   "who": "a",
+   "book": "Betway",
+   "price": 1.57,
+   "prices": {
+    "Winamax": 1.55,
+    "Betway": 1.57
+   },
+   "p": 0.589567456,
+   "pModel": 0.492394837,
+   "pMarket": 0.608517003,
+   "fair": 1.696158751,
+   "ev": -0.074379094,
+   "rel": {
+    "score": 62,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 49 %, casa 61 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 20,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Elo le da 42 % · +1,3 pts al saque"
+  },
+  {
+   "id": "moneyline|0||#b",
+   "title": "Gana Jannik Beta",
+   "market": "Ganador",
+   "selection": "Jannik Beta",
+   "family": "Ganador",
+   "side": "b",
+   "who": "b",
+   "book": "Winamax",
+   "price": 2.45,
+   "prices": {
+    "Winamax": 2.45,
+    "Betway": 2.4
+   },
+   "p": 0.410432544,
+   "pModel": 0.507605163,
+   "pMarket": 0.391482997,
+   "fair": 2.436453968,
+   "ev": 0.005559732,
+   "rel": {
+    "score": 62,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 51 %, casa 39 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 20,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Elo le da 58 % · −1,3 pts al saque"
+  },
+  {
+   "id": "team_total|0|a|12.5#over",
+   "title": "Alpha: más de 12,5 juegos",
+   "market": "Juegos de Carlos Alpha",
+   "selection": "Más de 12.5",
+   "family": "Juegos de Carlos Alpha",
+   "side": "a",
+   "who": "a",
+   "book": "Betway",
+   "price": 1.83,
+   "prices": {
+    "Winamax": 1.8,
+    "Betway": 1.83
+   },
+   "p": 0.510205517,
+   "pModel": 0.487873932,
+   "pMarket": 0.514691689,
+   "fair": 1.959994486,
+   "ev": -0.066323904,
+   "rel": {
+    "score": 57,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 49 %, casa 51 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 12,3 juegos de Alpha"
+  },
+  {
+   "id": "team_total|0|a|12.5#under",
+   "title": "Alpha: menos de 12,5 juegos",
+   "market": "Juegos de Carlos Alpha",
+   "selection": "Menos de 12.5",
+   "family": "Juegos de Carlos Alpha",
+   "side": null,
+   "who": "a",
+   "book": "Winamax",
+   "price": 1.95,
+   "prices": {
+    "Winamax": 1.95,
+    "Betway": 1.9
+   },
+   "p": 0.489797831,
+   "pModel": 0.512146068,
+   "pMarket": 0.485308311,
+   "fair": 2.041658696,
+   "ev": -0.04489423,
+   "rel": {
+    "score": 57,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 51 %, casa 49 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 12,3 juegos de Alpha"
+  },
+  {
+   "id": "team_total|0|b|10.5#over",
+   "title": "Beta: más de 10,5 juegos",
+   "market": "Juegos de Jannik Beta",
+   "selection": "Más de 10.5",
+   "family": "Juegos de Jannik Beta",
+   "side": "b",
+   "who": "b",
+   "book": "Winamax",
+   "price": 1.85,
+   "prices": {
+    "Winamax": 1.85
+   },
+   "p": 0.526449871,
+   "pModel": 0.622486438,
+   "pMarket": 0.506666667,
+   "fair": 1.89951609,
+   "ev": -0.026067739,
+   "rel": {
+    "score": 51,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 62 %, casa 51 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 11,3 juegos de Beta"
+  },
+  {
+   "id": "team_total|0|b|10.5#under",
+   "title": "Beta: menos de 10,5 juegos",
+   "market": "Juegos de Jannik Beta",
+   "selection": "Menos de 10.5",
+   "family": "Juegos de Jannik Beta",
+   "side": null,
+   "who": "b",
+   "book": "Winamax",
+   "price": 1.9,
+   "prices": {
+    "Winamax": 1.9
+   },
+   "p": 0.47355368,
+   "pModel": 0.377533562,
+   "pMarket": 0.493333333,
+   "fair": 2.111693019,
+   "ev": -0.100248008,
+   "rel": {
+    "score": 51,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 38 %, casa 49 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 11,3 juegos de Beta"
+  },
+  {
+   "id": "total|0||21.5#over",
+   "title": "Más de 21,5 juegos",
+   "market": "Total de juegos",
+   "selection": "Más de 21.5",
+   "family": "Total de juegos",
+   "side": null,
+   "who": null,
+   "book": "Winamax",
+   "price": 1.87,
+   "prices": {
+    "Winamax": 1.87,
+    "Betway": 1.85
+   },
+   "p": 0.510181238,
+   "pModel": 0.544146561,
+   "pMarket": 0.503333333,
+   "fair": 1.96008776,
+   "ev": -0.045961085,
+   "rel": {
+    "score": 57,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 54 %, casa 50 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque"
+  },
+  {
+   "id": "total|0||21.5#under",
+   "title": "Menos de 21,5 juegos",
+   "market": "Total de juegos",
+   "selection": "Menos de 21.5",
+   "family": "Total de juegos",
+   "side": null,
+   "who": null,
+   "book": "Betway",
+   "price": 1.9,
+   "prices": {
+    "Winamax": 1.87,
+    "Betway": 1.9
+   },
+   "p": 0.489822134,
+   "pModel": 0.455873439,
+   "pMarket": 0.496666667,
+   "fair": 2.041557396,
+   "ev": -0.069337946,
+   "rel": {
+    "score": 57,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 46 %, casa 50 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 15,
+      "note": "2 casas"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque"
+  },
+  {
+   "id": "spread|0||-2.5#a",
+   "title": "Carlos Alpha -2,5 juegos",
+   "market": "Hándicap de juegos",
+   "selection": "Carlos Alpha -2.5",
+   "family": "Hándicap de juegos",
+   "side": "a",
+   "who": "a",
+   "book": "Winamax",
+   "price": 1.9,
+   "prices": {
+    "Winamax": 1.9
+   },
+   "p": 0.492605576,
+   "pModel": 0.488985075,
+   "pMarket": 0.493333333,
+   "fair": 2.030021682,
+   "ev": -0.064049406,
+   "rel": {
+    "score": 51,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 49 %, casa 49 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Elo le da 42 % · +1,3 pts al saque"
+  },
+  {
+   "id": "spread|0||-2.5#b",
+   "title": "Jannik Beta +2,5 juegos",
+   "market": "Hándicap de juegos",
+   "selection": "Jannik Beta +2.5",
+   "family": "Hándicap de juegos",
+   "side": "b",
+   "who": "b",
+   "book": "Winamax",
+   "price": 1.85,
+   "prices": {
+    "Winamax": 1.85
+   },
+   "p": 0.507397772,
+   "pModel": 0.511034925,
+   "pMarket": 0.506666667,
+   "fair": 1.970840345,
+   "ev": -0.061314122,
+   "rel": {
+    "score": 51,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 51 %, casa 51 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 15,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Elo le da 58 % · −1,3 pts al saque"
+  },
+  {
+   "id": "wmx|aces-a#over",
+   "title": "Alpha: más de 6,5 aces",
+   "market": "Total de aces C. Alpha (6.5)",
+   "selection": "Más de 6.5",
+   "family": "Aces de Carlos Alpha",
+   "side": "a",
+   "who": "a",
+   "book": "Winamax",
+   "price": 1.75,
+   "prices": {
+    "Winamax": 1.75
+   },
+   "p": 0.52619392,
+   "pModel": 0.522046635,
+   "pMarket": 0.527027027,
+   "fair": 1.900440052,
+   "ev": -0.079160641,
+   "rel": {
+    "score": 52,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 52 %, casa 53 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 16,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque"
+  },
+  {
+   "id": "wmx|aces-a#under",
+   "title": "Alpha: menos de 6,5 aces",
+   "market": "Total de aces C. Alpha (6.5)",
+   "selection": "Menos de 6.5",
+   "family": "Aces de Carlos Alpha",
+   "side": null,
+   "who": null,
+   "book": "Winamax",
+   "price": 1.95,
+   "prices": {
+    "Winamax": 1.95
+   },
+   "p": 0.47380608,
+   "pModel": 0.477953365,
+   "pMarket": 0.472972973,
+   "fair": 2.110568102,
+   "ev": -0.076078143,
+   "rel": {
+    "score": 52,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 48 %, casa 47 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 16,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque"
+  },
+  {
+   "id": "betway|un-set#x2",
+   "title": "Beta gana un set",
+   "market": "Ganará un set",
+   "selection": "Jannik Beta",
+   "family": "Gana un set",
+   "side": "b",
+   "who": "b",
+   "book": "Betway",
+   "price": 1.6,
+   "prices": {
+    "Betway": 1.6
+   },
+   "p": 0.591090988,
+   "pModel": 0.62522228,
+   "pMarket": 0.58411215,
+   "fair": 1.691786917,
+   "ev": -0.054254419,
+   "rel": {
+    "score": 53,
+    "label": "Media",
+    "factors": [
+     {
+      "label": "Datos de los jugadores",
+      "max": 30,
+      "score": 11.944783283,
+      "note": "21 partidos recientes el que menos"
+     },
+     {
+      "label": "Modelo y casa de acuerdo",
+      "max": 35,
+      "score": 14.904827975,
+      "note": "modelo 63 %, casa 58 %"
+     },
+     {
+      "label": "Mercado",
+      "max": 20,
+      "score": 17,
+      "note": "qué tal se calcula este mercado"
+     },
+     {
+      "label": "Cuotas",
+      "max": 15,
+      "score": 9,
+      "note": "1 casa"
+     }
+    ],
+    "warnings": []
+   },
+   "why": "Elo le da 58 % · −1,3 pts al saque"
+  }
+ ],
+ "top": null,
+ "easy": [],
+ "hard": [],
+ "considered": 14,
+ "warnings": []
+}
