@@ -67,6 +67,8 @@ const routes = [
   ['DELETE', '/api/admin/users/:id', ({ req, params, body }) => admin.deleteUser(adminOf(req).id, params.id, body?.confirm)],
   ['GET', '/api/admin/log', ({ req, query: q }) => { adminOf(req); return admin.listLog(q); }],
   ['GET', '/api/admin/auth-events', ({ req, query: q }) => { adminOf(req); return authEvents.list(q); }],
+  // Acierto del modelo: sólo administradores (antes estaba en Mis apuestas, para todos)
+  ['GET', '/api/admin/predictions', ({ req }) => { adminOf(req); return predictions.report(); }],
 
   ['GET', '/api/settings', async ({ req }) => { const u = who(req); return forUi(await store.getSettings(u.id), u.isAdmin); }],
   ['PUT', '/api/settings', async ({ req, body }) => {
@@ -87,7 +89,6 @@ const routes = [
   ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
   // Recomendaciones del modelo, para medir si acierta. No son de nadie: cualquiera con sesión las manda mientras las ve
   ['POST', '/api/bets/predictions', ({ req, body }) => { who(req); return predictions.record(body?.list); }],
-  ['GET', '/api/bets/predictions', ({ req }) => { who(req); return predictions.report(); }],
 
   // ---------- Amigos y apuestas compartidas (friends.js): siempre del usuario de la sesión ----------
   ['GET', '/api/friends', ({ req }) => friends.list(who(req).id)],

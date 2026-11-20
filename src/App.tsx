@@ -171,7 +171,7 @@ export default function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <main ref={mainRef} onScroll={onMainScroll} style={{ '--head': hideHead ? '0px' : `${headH}px` } as React.CSSProperties} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
         <header ref={headRef} className={cn('sticky top-0 z-30 shrink-0 border-b border-zinc-800 bg-zinc-950 px-3 pt-[env(safe-area-inset-top)] transition-transform duration-200 lg:hidden', hideHead && '-translate-y-full')}>
-          <div className="flex h-12 items-center gap-3">
+          <div className="flex h-12 items-center gap-2">
             <Logo />
             {member ? <WalletChip onClick={() => go('bets')} /> : (
               <Button className="ml-auto" onClick={() => askLogin()}>Entrar</Button>
@@ -373,13 +373,13 @@ function WalletChip({ onClick }: { onClick: () => void }) {
   const noBank = !!settings && !settings.initialBankroll;
   return (
     <button onClick={noBank ? () => go('account') : onClick} title={`Beneficio total ${money(w.profit, cur, true)} · en juego ${money(w.inPlay, cur)}`}
-      className="ml-auto flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900">
-      <Wallet size={15} className="text-zinc-400" />
-      <span className="flex flex-col items-start leading-tight">
+      className="ml-auto flex h-9 min-w-0 shrink cursor-pointer items-center gap-2 rounded-md px-2.5 ring-1 ring-inset ring-zinc-800 transition hover:bg-zinc-900">
+      <Wallet size={15} className="hidden shrink-0 text-zinc-400 min-[400px]:block" />
+      <span className="flex min-w-0 flex-col items-start leading-tight">
         <span className="text-[11px] text-zinc-500">{noBank ? 'Cartera' : 'Saldo'}</span>
         {noBank
-          ? <span className="whitespace-nowrap text-[13px] font-medium text-amber-300">Pon tu banca</span>
-          : <span className="whitespace-nowrap text-[13px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>}
+          ? <span className="max-w-full truncate text-[13px] font-medium text-amber-300">Pon tu banca</span>
+          : <span className="max-w-full truncate text-[13px] font-semibold text-zinc-50 tnum">{money(w.balance, cur)}</span>}
       </span>
     </button>
   );

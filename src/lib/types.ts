@@ -84,7 +84,10 @@ export interface PredictionRow {
   sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
 }
-export interface PredictionReport { pending: number; unknown: number; since: string | null; rows: PredictionRow[] }
+// Lo que falta por resolver, por lo que le pasa: por jugar, en juego (menos de 2 h), acabadas esperando resultado y sin poder
+// resolver en 4 días (fuera de las cuentas). oldestWaiting: el partido más antiguo de las que esperan resultado
+export interface PredictionQueue { resolved: number; upcoming: number; playing: number; waiting: number; unknown: number; oldestWaiting: string | null }
+export interface PredictionReport { pending: number; unknown: number; since: string | null; queue: PredictionQueue & { bySport: Partial<Record<Sport, PredictionQueue>> }; rows: PredictionRow[] }
 
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
 export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
@@ -521,6 +524,8 @@ export interface Api {
     deleteUser(id: string, confirm: string): Promise<{ ok: true }>;
     log(p?: { limit?: number; before?: string }): Promise<AdminLogRow[]>;
     authEvents(p?: { kind?: string; limit?: number; before?: string }): Promise<AuthEventRow[]>;
+    // Acierto del modelo: las recomendaciones resueltas de todos los deportes
+    predictions(): Promise<PredictionReport>;
   };
   // Anuncios (cuenta de AdSense) y responsable de la web (aviso legal), del .env del servidor
   publicConfig(): Promise<PublicConfig>;
@@ -531,7 +536,6 @@ export interface Api {
     export(): Promise<string | null>; import(): Promise<number>;
     // Recomendaciones del modelo, para medir si acierta (no son de ningún usuario)
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
-    predictions(): Promise<PredictionReport>;
     // Enviar una apuesta tuya a amigos (sin tu importe ni tus notas; ven cómo va)
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
   };

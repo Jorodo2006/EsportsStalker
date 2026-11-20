@@ -41,11 +41,16 @@ async function record(list) {
   return { saved: rows.length };
 }
 
-// Las que ya deberían haber acabado. resultOf y evaluate son los del resolvedor de apuestas
+// Las que ya deberían haber acabado. resultOf y evaluate son los del resolvedor de apuestas. Primero las que nunca se han intentado
+// y luego las demás, cada una como mucho una vez cada 30 min: antes eran siempre las 800 más antiguas y, si no se podían resolver
+// todavía, tapaban a las nuevas hasta 4 días (con todas las líneas de un partido de baloncesto se llenaba el lote)
+const BATCH = 3000;
 async function settle(resultOf, evaluate, dayOf) {
   const { rows } = await query(`SELECT id, sport, match, key, out, start, event FROM bets.predictions
-    WHERE status = 'pending' AND start < now() - interval '2 hours' ORDER BY start LIMIT 800`);
+    WHERE status = 'pending' AND start < now() - interval '2 hours' AND (tried_at IS NULL OR tried_at < now() - interval '30 minutes')
+    ORDER BY tried_at NULLS FIRST, start LIMIT ${BATCH}`);
   let n = 0;
+  const tried = [];
   for (const r of rows) {
     const ref = { sport: r.sport, match: r.match, key: r.key, out: r.out, start: r.start.toISOString(), event: r.event };
     const R = await resultOf({ ...ref, date: dayOf(r.start) });
@@ -56,10 +61,22 @@ async function settle(resultOf, evaluate, dayOf) {
     } else if (Date.now() - +r.start > 4 * 864e5) {
       // Cuatro días después sin poder resolverla (aplazado, retirada, mercado raro): fuera de las cuentas
       await query(`UPDATE bets.predictions SET status = 'unknown', settled_at = now() WHERE id = $1`, [r.id]);
-    }
+    } else tried.push(r.id);
   }
+  if (tried.length) await query('UPDATE bets.predictions SET tried_at = now() WHERE id = ANY($1::bigint[])', [tried]);
   return n;
 }
+
+// Lo que falta por resolver, separado por qué le pasa: partidos por jugar, en juego (empezaron hace menos de 2 h), acabados
+// esperando resultado y los que no se pudieron resolver en 4 días. Sin separarlo, «32 000 por resolver» no decía nada: casi todo
+// son líneas de baloncesto de partidos que aún no se han jugado
+const QUEUE = `count(*) FILTER (WHERE status IN ('won', 'lost', 'void'))::int AS resolved,
+  count(*) FILTER (WHERE status = 'pending' AND start > now())::int AS upcoming,
+  count(*) FILTER (WHERE status = 'pending' AND start <= now() AND start >= now() - interval '2 hours')::int AS playing,
+  count(*) FILTER (WHERE status = 'pending' AND start < now() - interval '2 hours')::int AS waiting,
+  count(*) FILTER (WHERE status = 'unknown')::int AS unknown,
+  min(start) FILTER (WHERE status = 'pending' AND start < now() - interval '2 hours') AS oldest`;
+const queueOf = r => ({ resolved: r.resolved, upcoming: r.upcoming, playing: r.playing, waiting: r.waiting, unknown: r.unknown, oldestWaiting: r.oldest });
 
 // Las resueltas (como mucho de un año), compactas: la interfaz las agrupa como quiera
 async function report() {
@@ -67,10 +84,11 @@ async function report() {
     SELECT sport, grp, league, book, price::float, first_price::float, p::float, p_model::float, p_market::float, ev::float, rel, status, start, title, event, result
     FROM bets.predictions WHERE status IN ('won', 'lost', 'void') AND start > now() - interval '365 days'
     ORDER BY start DESC LIMIT 20000`);
-  const { rows: [c] } = await query(`SELECT count(*) FILTER (WHERE status = 'pending')::int AS pending,
-    count(*) FILTER (WHERE status = 'unknown')::int AS unknown, min(first_at) AS since FROM bets.predictions`);
+  const { rows: [c] } = await query(`SELECT count(*) FILTER (WHERE status = 'pending')::int AS pending, ${QUEUE}, min(first_at) AS since FROM bets.predictions`);
+  const { rows: per } = await query(`SELECT sport, ${QUEUE} FROM bets.predictions GROUP BY sport`);
   return {
     pending: c.pending, unknown: c.unknown, since: c.since,
+    queue: { ...queueOf(c), bySport: Object.fromEntries(per.map(r => [r.sport, queueOf(r)])) },
     rows: rows.map(r => ({
       sport: r.sport, group: r.grp, league: r.league, book: r.book, price: r.price, firstPrice: r.first_price, p: r.p, pModel: r.p_model,
       pMarket: r.p_market, ev: r.ev, rel: r.rel, status: r.status, start: r.start, title: r.title, event: r.event, result: r.result

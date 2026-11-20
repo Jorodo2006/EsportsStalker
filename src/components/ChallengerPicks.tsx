@@ -5,7 +5,7 @@
 //  - Valor: no se enseña mientras valorVisible sea false (en la fase 0 el modelo no ganó a la cuota de cierre); se registra igual.
 // Salen en la pestaña Recomendaciones de cada Challenger, en la pantalla Recomendaciones del tenis y en las más fiables del día.
 // Fase 4: el riesgo de retirada de cada uno y los avisos físicos (retirada reciente, ranking protegido), que quitan la alta probabilidad.
-// Las dos se registran para medir su acierto por tipo y tramo (Mis apuestas → Acierto del modelo).
+// Las dos se registran para medir su acierto por tipo y tramo (Administración → Acierto del modelo).
 import { useEffect, useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { ChevronRight, Plus } from 'lucide-react';

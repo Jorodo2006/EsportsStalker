@@ -45,7 +45,8 @@ export const setAlertFallback = (f: ((msg: string) => void) | null) => { fallbac
 // service worker (un navegador viejo), el de siempre
 async function show(title: string, body: string, tag?: string) {
   const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready).catch(() => null) : null;
-  if (reg) return reg.showNotification(title, { body, tag, icon: '/icon-192.png', badge: '/favicon-32.png', data: { url: '/' } });
+  // Al pulsarla, public/sw.js lleva a esta dirección: la de la pantalla en la que estaba (con '/' volvía a la portada)
+  if (reg) return reg.showNotification(title, { body, tag, icon: '/icon-192.png', badge: '/favicon-32.png', data: { url: location.pathname + location.search } });
   new Notification(title, { body, tag });
 }
 

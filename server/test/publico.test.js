@@ -21,7 +21,7 @@ test('lo de cada usuario, las recomendaciones y leer cuotas a mano piden cuenta'
     ['GET', '/api/odds/auto/status'], ['GET', '/api/bets/predictions'], ['POST', '/api/auth/password'],
     // Panel de administración: nunca abierto (el gateway además exige ser administrador)
     ['GET', '/api/admin/users'], ['PATCH', '/api/admin/users/3'], ['POST', '/api/admin/users/3/password'], ['DELETE', '/api/admin/users/3'],
-    ['GET', '/api/admin/log'], ['GET', '/api/admin/auth-events'],
+    ['GET', '/api/admin/log'], ['GET', '/api/admin/auth-events'], ['GET', '/api/admin/predictions'],
     // Avisos de cuotas: los de cada usuario y su suscripción a las notificaciones
     ['GET', '/api/alerts'], ['POST', '/api/alerts/read'], ['GET', '/api/alerts/prefs'], ['PUT', '/api/alerts/prefs'], ['PUT', '/api/alerts/watch'],
     ['POST', '/api/alerts/push'], ['POST', '/api/alerts/push/remove'],
@@ -61,6 +61,6 @@ test('AdSense: sin cuenta no hay anuncios; con ella, el ads.txt y los huecos vá
 });
 
 test('isAdminPath: sólo el prefijo /api/admin', () => {
-  for (const p of ['/api/admin', '/api/admin/', '/api/admin/users', '/api/admin/log', '/api/admin/users/3/password']) assert.equal(isAdminPath(p), true, p);
+  for (const p of ['/api/admin', '/api/admin/', '/api/admin/users', '/api/admin/log', '/api/admin/users/3/password', '/api/admin/predictions']) assert.equal(isAdminPath(p), true, p);
   for (const p of ['/api/administrador', '/api/bets', '/api/settings', '/api/auth/me', '/admin']) assert.equal(isAdminPath(p), false, p);
 });

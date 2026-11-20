@@ -101,6 +101,48 @@ servidor (el modelo de baloncesto está escrito para el navegador y portarlo es 
 - Sin apuestas suficientes: mensaje claro de qué falta (p. ej. «hoy sólo hay N apuestas de tenis con cuotas»), sin plan inventado.
 - `PlayNotice` junto al plan. Recuerda las dos últimas cifras en `localStorage` (`try/catch`).
 
+## Cambio del 19-11: cuota objetivo, deportes y tipo (petición de Jordi)
+
+Lo que se pide: «si pido una cuota 2, que el modelo me dé la mejor cuota 2 posible», con uno o varios deportes, en combinada o en simple.
+
+- **Cuota objetivo** en vez de beneficio en euros: 1,50 · 1,75 · 2,00 u «Otra» (más de 1 y como mucho 50; de partida, 2). El beneficio
+  es dinero × (cuota − 1) y se enseña bajo el selector (`targetOf`, `parseOdds`). La cuota se pasa tal cual a `buildPlan` (`odds`): el
+  beneficio va redondeado a céntimos y una línea de 1,75 justa podía quedarse fuera.
+- **Deportes:** baloncesto, tenis, fútbol y MMA, uno o varios (al menos uno). Sólo se piden los elegidos.
+- **Todas las líneas, no sólo dos por partido:** tenis del tablero (`picksBoard`), fútbol y MMA del escáner de líneas (`picksLines`),
+  baloncesto con `useBasketPicks`, el mismo cálculo que su pantalla de recomendaciones (se calcula en el navegador y es lo que más
+  tarda; sólo si se elige). Con la más fiable y la «difícil» de cada partido casi nada llegaba a cuota 2.
+- **Combinada** (`bestCombo`): la combinada de 2 a 8 partidos distintos más probable entre las que llegan a la cuota, eligiendo
+  cualquier línea de cada partido (una por partido, para que sean independientes). Es una mochila por partidos con tramos de cuota
+  del 0,2 % en logaritmos; una prueba la compara con probarlas todas (como mucho un 1 % peor por juntar tramos).
+- **Simple** (`bestSingle`): la sencilla más probable de las que pagan la cuota o más.
+- Si nada llega a la cuota, no se arma nada y se dice la cuota más alta posible. Con baloncesto en el plan se avisa de que es una estimación.
+- «Más probable» es la probabilidad del modelo de cada deporte, que ya mezcla la casa; los filtros de siempre siguen (fiabilidad ≥ 45,
+  valor esperado ≥ −10 %, cuota 1,10–15, próximas 48 h). El reparto de la primera versión (`mode: 'mixed'`) sigue en `plan.ts` y sus
+  pruebas, pero ya no sale en la pantalla.
+- Se recuerdan en el navegador (`plan-inputs`) el dinero, la cuota, el tipo y los deportes.
+- **Varias opciones** (`optionsOf`, hasta `MAX_OPTIONS` = 5): la mejor, y luego la mejor con los partidos que quedan, y así; van de más
+  a menos probable y no comparten partido (opciones distintas de verdad, y se pueden juntar sin que una dependa de otra). Son
+  alternativas, cada una con todo el dinero: la pantalla lo dice («elige una, no las juegues todas»). El riesgo de arriba es el de la 1.
+- **Muy fiable** (petición de Jordi: avisar si alguna lo es, por si el usuario quiere juntarlas): todas sus selecciones con fiabilidad
+  de `VERY_RELIABLE` = 75 o más (la escala del cálculo, en la que «Alta» es 70; la cifra es una decisión). Con dos o más, un recuadro
+  dice qué cuota y qué probabilidad tendría juntarlas (`join`), y que fiable no quiere decir que vaya a salir.
+
+## Cambio del 19-11 (tarde): más fácil de usar, cuándo y qué competiciones (petición de Jordi)
+
+- **Pantalla en pasos** (`PlanSetup`): 1 cuánto (con 10, 20, 50 y 100 € de un toque y «Mi cartera»), 2 a qué cuota (1,50, 1,75, 2, 3 u
+  otra, y lo que se cobra), 3 cuándo empiezan, 4 deportes y competiciones, 5 combinada o simple. Desde `xl`, los pasos a la izquierda y
+  el resultado al lado; en el móvil, un resumen arriba («Tu mejor apuesta ahora») baja al resultado.
+- **Resultado** (`OptionCard.tsx`): la más probable destacada (`BestCard`, con su riesgo, la barra de probabilidad, cuándo empieza
+  cada partido y lo que se cobra) y las demás opciones debajo. El aviso de valor esperado negativo sigue a la vista; el resto de
+  avisos, plegados en «Avisos y cómo se calcula».
+- **Cuándo**: 2, 5, 10, 24 o 48 h (`WINDOWS`, `hours` en `buildPlan`, `isEligible`, `poolStats` y `leaguesOf`). Nunca más de 48 h.
+- **Competiciones**: las de cada deporte con apuestas en la ventana (`leaguesOf`); se guardan las que se quitan (`skipLeagues`, con
+  `leagueKey`), para que una nueva entre sola. Con todas puestas, tocar una deja sólo esa (baloncesto sólo NBA de un toque); «Todas» lo
+  deshace.
+- **Al cupón**: cada opción se lleva al cupón con su mercado y su selección (`market` y `selection` en `PlanPick`). Las que ya estaban
+  no se tocan (pulsar una que está la quitaría). Sigue sin apuntar nada: se apunta desde el cupón, con el importe que ponga el usuario.
+
 ## Entregas
 
 1. **Núcleo y tres deportes:** `plan.ts` con pruebas, adaptadores de tenis, fútbol y MMA, pantalla, navegación (escritorio y móvil), avisos.
@@ -116,7 +158,7 @@ Cada entrega termina con `npm run typecheck` y `npm test` sin errores y probando
 - Los umbrales del índice de riesgo (60 / 35 / 15 %) y el aviso por cuota necesaria mayor de 3.
 - Quinta pestaña en la barra inferior del móvil; icono `Target`; nombre «Plan».
 - Sólo se calcula con lo que ya hay guardado: no se lanzan lecturas de cuotas.
-- No se pasa al cupón en esta versión.
+- ~~No se pasa al cupón en esta versión.~~ Desde el 19-11 sí (ver arriba).
 
 ## Lo que queda al criterio de quien construya
 

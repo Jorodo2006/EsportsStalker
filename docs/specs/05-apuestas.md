@@ -83,17 +83,21 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
   *Apostado* incluye lo pendiente y hay columna *En juego*; beneficio y ROI sólo cuentan las resueltas (sin
   resueltas se ve "—").
   - El estado general es *Auto* (sale de las selecciones) o *Cash out*.
-- **Historial**:
-  - La combinada sale como una fila con la insignia *Combinada ×N*. Ya no se despliega: al pulsarla se abre el formulario para marcar sus selecciones; en Mercado pone cuántas hay resueltas.
-  - Cada selección se marca como ganada, perdida, nula o pendiente desde ahí.
-  - Las simples pendientes se resuelven desde la lista con tres botones: ✓ ganada (verde), ✗ perdida (rojo) y ⊘ nula
-    (azul, se devuelve lo apostado), en la tabla y en *En juego*. En el móvil van en su propia fila y con su nombre. La
-    etiqueta *Nula* también es azul (`STATUS_TONE`): antes era gris, como la de pendiente. Las combinadas no tienen
-    estos botones.
+- **Historial** (`src/views/bets/History.tsx`, `BetRow.tsx`; semanas en `src/lib/bet-weeks.ts`):
+  - Una semana cada vez, la actual al abrir, con sus días y lo que suma cada uno. La barra (`WeekBar`) pasa de semana con
+    las flechas o con el calendario (`WeekPicker`, que marca los días con apuestas) y tiene *Todas las semanas*.
+  - Cada apuesta es una fila (`BetRow`): la selección, el partido, la casa y el importe, el estado y el beneficio; pulsarla
+    abre la edición. La combinada dice cuántas selecciones tiene resueltas, y se marcan (ganada, perdida, nula o pendiente)
+    al editarla.
+  - Las simples pendientes se resuelven desde la lista: ✓ ganada (verde) y ✗ perdida (rojo) a la vista, y *Nula* (se
+    devuelve lo apostado) en el menú «⋯», con *Pasar a un amigo* y *Editar*. En *En juego* van los tres botones; en el
+    móvil, en su propia fila y con su nombre. La etiqueta *Nula* es azul (`STATUS_TONE`), no gris como la de pendiente.
+    Las combinadas no tienen estos botones.
   - Filtros: buscar, estado y **periodo** (`src/lib/bet-period.ts`, con pruebas): todas las fechas, últimos 7 o 30 días,
-    cada año y cada mes con apuestas (sólo salen los que tienen alguna) o entre dos fechas. Con cualquier filtro puesto,
-    encima de la lista sale lo que suman las que quedan (apuestas, apostado, beneficio y ROI) y *Quitar filtros*. Las
-    cifras de arriba, la gráfica y el desglose no cambian con el filtro.
+    cada año y cada mes con apuestas (sólo salen los que tienen alguna) o entre dos fechas. Con cualquier filtro puesto se
+    ve todo el historial agrupado por semanas y, encima, lo que suman las que quedan (apuestas, apostado, beneficio y ROI)
+    con *Quitar filtros*. Elegir una semana en la barra quita los filtros. Las cifras de arriba, la gráfica y el desglose
+    no cambian con el filtro.
 - **Beneficio en unidades**: cada beneficio de *Mis apuestas* (cifras, historial, desglose, gráfica y resumen del filtro)
   lleva entre paréntesis las unidades («+25,00 € (+2,50 u)»), como lo cuentan los tipsters que no enseñan su dinero. La
   unidad es el ajuste de usuario `unitSize` (*Tu cuenta*, junto a la banca) o, si está vacío, el 1 % de la banca inicial
@@ -127,7 +131,7 @@ solas con el resultado del partido.
 
 ## Acierto del modelo (`bets.predictions`, `server/services/bets/predictions.js`)
 
-En Mis apuestas → **Acierto del modelo** se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
+En Administración → **Acierto del modelo** (sólo administradores: `/api/admin/predictions`, `src/views/admin/ModelTab.tsx`) se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la
 app (Recomendaciones, la columna de al lado de la lista, la ficha del partido), `src/lib/predictions.ts` manda al servidor todas las líneas
 que calcula el modelo de baloncesto y las recomendaciones que enseñan tenis, fútbol y MMA (la principal es "la más fiable", que puede no tener valor), con su partido
 y mercado (la misma clave que el `ref` de una apuesta), la probabilidad que enseña la app (`p`) y sus dos partes (modelo y
