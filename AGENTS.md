@@ -153,7 +153,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   para llamar la atención que se admite, y no la conviertas en algo que lata sin fin. MMA enseña las suyas dentro de la lista y
   LoL no tiene.
 - **Tenis · Partidos** (`src/components/TennisList.tsx`): cada torneo en su panel, con el logo del circuito (`tennis-logos.tsx`:
-  ATP y WTA de 2025, en el color del texto; el del Challenger, `public/tennis/atp-challenger.png`), la superficie y la ciudad;
+  ATP y WTA de 2025, en el color del texto; el del Challenger, `public/tennis/atp-challenger.png`; `CircuitBadge` es la placa y
+  `CircuitMark`, la marca pequeña que llevan las recomendaciones para que se vea si son de ATP, WTA o Challenger), la superficie y la ciudad;
+  las banderas de los que no salen de ESPN (Challenger, previas) se sacan del país con `server/services/tennis/flags.js`;
   dentro, sus rondas y una fila por partido. Los que están en juego se quedan en su torneo. Al lado, el partido elegido
   (`TennisSpotlight`) y las más fiables del día.
 - **Sin cuenta** se ve la app (`AuthGate` ya no para en la entrada): partidos, directo, fichas, estadísticas y cuotas, para
@@ -275,6 +277,13 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   aviso: «Qualifying Final» se quedó sin traducir y pasaba por cuadro final. La que ESPN no trae sale de LiveScore; la de los
   Challenger, de los PDF de ProTennisLive (`protennislive.js`, `ptlpdf.js`): no bajes de 5 min por torneo (es lo que dura su caché)
   ni de 8 s entre peticiones, que responde 429; y si cambian sus PDF, ajusta la lectura con `server/test/ptl.test.js`.
+- **Dobles de tenis** (`server/services/tennis/doubles.js`, `GET /api/tennis/doubles`, ids `dbl:…`; `docs/specs/09-tenis.md`):
+  - Van en su propia ruta y no en `/api/tennis/games` a propósito, porque lo que lee esa da por hecho un jugador por lado: lecturas programadas, modelo, motor de los Challenger, buscador. `/days` los cuenta aparte (`doubles`), y sólo los suma la tira de días con el interruptor *Dobles* encendido (lo está de entrada).
+  - Sin modelo ni recomendaciones. Sus cuotas sólo se leen a mano (`doubles` en el partido del trabajo).
+  - La pareja se llama «Nombre Apellido / Nombre Apellido», y ese formato es lo que reconocen como pareja `teamScore` (`equipos.js`), `winamaxFind` (`server/lector/winamaxfind.js`) y `pageFind`, cada uno con su copia. Si cambias cómo se empareja una pareja, cambia los tres y sus pruebas.
+  - Un dobles sin las dos parejas reconocidas no se lee: con el orden supuesto, las cuotas salían cambiadas de lado.
+  - El súper tie-break llega como un set 1-0 con los puntos en `tiebreaks` (`mtb`). La resolución no resuelve sola los juegos del partido ni el tercer set de esos partidos.
+  - Si añades un fichero al lector, ponlo también en el `COPY` de `server/lector/Dockerfile`.
 - **Recomendaciones de tenis** (ATP y WTA): la probabilidad y los descartes están en `server/services/tennis/picks.js`. Qué es la más fiable, las tres listas y los filtros están en `src/lib/tennis-picks.ts`. La pestaña del partido, la pantalla *Recomendaciones* y la banda de la lista usan esas mismas reglas: no las copies en otro sitio. Los Challenger no entran: tienen su propio motor (servicio `challenger`), con sus recomendaciones en `src/components/ChallengerPicks.tsx` (*Alta probabilidad* siempre con «sin ventaja sobre la casa»; *Valor* oculto mientras `VALUE_VISIBLE` de `server/sharpex-tenis/src/picks.js` sea `false`: no lo enseñes sin repetir la fase 0 de su especificación). Detalle en `docs/specs/09-tenis.md`.
 - **Estadísticas de partido de tenis** (`server/services/tennis/matchstats.js`): WTA de su web oficial (al momento) y, si no, TennisMyLife (días después). ESPN no las tiene. No uses LiveScore para esto: su robots.txt prohíbe `/api/` y se decidió no ampliar su uso ahora que la web es pública (`docs/specs/09-tenis.md`).
 - **Modelo de tenis** (`server/services/tennis/model.js`): si tocas algo, repite `backtest.js` antes de darlo por bueno. Mira la tabla de calibración y los juegos medios, no sólo el Brier, y ajusta siempre con un periodo distinto del que evalúas.
@@ -307,7 +316,9 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   líneas de tenis, fútbol y MMA y de las de baloncesto que ha calculado algún navegador (`bets.predictions`). El aviso en vivo
   (`alerts:new`) lleva `data.to`, sin el texto. Las suscripciones a notificaciones sólo admiten servicios de push de navegadores
   (`PUSH_HOSTS` en `push.js`): no lo abras a cualquier https, el servidor hace peticiones a esa dirección. `public/sw.js` no
-  guarda nada en caché a propósito.
+  guarda nada en caché a propósito. Si a alguien no le llegan, *Tu cuenta → Probar* dice qué responde el servicio de push y rehace la
+  suscripción si hace falta; una suscripción hecha con otras claves VAPID se rehace sola al abrir la app (`sameKey`). Sin `PUBLIC_URL`
+  con https ni `VAPID_SUBJECT`, Apple rechaza todos los avisos a los iPhone (detalle en `docs/specs/07-backend.md`).
 
 ## Especificaciones
 

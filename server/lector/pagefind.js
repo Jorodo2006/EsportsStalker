@@ -12,9 +12,21 @@ function pageFind(teams, opts) {
   const keyWords = t => [...new Set([t.name, ...(t.alt || [])].flatMap(x => norm(x).split(' ')).filter(w => w.length >= 5 && !GEN.test(w)))];
   const WA = opts.words ? keyWords(teams[0]) : [], WB = opts.words ? keyWords(teams[1]) : [];
   const has = (txt, list, ws = []) => { const n = ' ' + norm(txt) + ' '; return list.some(x => n.includes(' ' + x + ' ')) || ws.some(w => n.includes(' ' + w + ' ')); };
+  // Dobles de tenis (opts.doubles): los dos apellidos de cada pareja ("Orlando Luz / Rafael Matos"), en cualquier orden y como palabras
+  // enteras, escriba la casa "Luz O./Matos R." o "Matos / Luz". Es la idea de pairScore en server/services/odds/equipos.js, copiada
+  // porque esto corre dentro de la página. Del apellido vale cualquier palabra sin partículas ("Reyes" en "M.A.Reyes-Varela" para
+  // "Miguel Angel Reyes")
+  const PARTICLE = /^(van|von|der|den|del|dos|das|los|las|les)$/;
+  const surnameOf = h => { const w = norm(h).split(' ').slice(1), k = w.filter(x => x.length >= 3 && !PARTICLE.test(x)); return k.length ? k : w.slice(-1); };
+  const surnames = t => String(t.name || '').split('/').map(surnameOf).filter(w => w.length);
+  const hasPair = (txt, t) => {
+    const n = ' ' + norm(txt) + ' ', ss = surnames(t);
+    return ss.length === 2 && ss.every(w => w.some(x => n.includes(' ' + x + ' ')));
+  };
+  const both = t => (opts.doubles ? hasPair(t, teams[0]) && hasPair(t, teams[1]) : has(t, A, WA) && has(t, B, WB));
   const visible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const cands = [...document.querySelectorAll(opts.selector || 'a,div,li,tr,section,article')]
-    .filter(el => { const t = el.innerText || ''; return t.length < 400 && has(t, A, WA) && has(t, B, WB) && visible(el); })
+    .filter(el => { const t = el.innerText || ''; return t.length < 400 && both(t) && visible(el); })
     .sort((x, y) => (x.innerText || '').length - (y.innerText || '').length);
   // Los eventos que hay en un elemento (o en el que lo envuelve), por número: id -> dirección. Un contenedor con dos o más es una
   // lista de partidos, no un partido: con "Utah Jazz" en una fila y "Lakers" en la siguiente cumplía los dos nombres, y su primer

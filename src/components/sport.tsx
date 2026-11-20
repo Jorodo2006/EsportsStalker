@@ -191,7 +191,7 @@ export function StateFilterBar({ value, onChange, counts, above, children }: {
           <div className="ml-auto hidden flex-wrap items-center gap-2 lg:flex">{children}</div>
         </div>
       </div>
-      {!!children && <div className="flex w-full items-center gap-2 lg:hidden">{children}</div>}
+      {!!children && <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 lg:hidden">{children}</div>}
     </>
   );
 }
@@ -248,7 +248,9 @@ export function LiveSection({ count, children }: { count: number; children: Reac
 
 // games y points: los juegos del set y los puntos del juego en curso (tenis en juego); serving: saca él; color: el del equipo, de fondo en el marcador grande; plate: su escudo necesita una placa clara para verse
 // alt: el nombre corto ("Knicks", "Atlético"), que sale cuando el entero no cabe en la tarjeta
-export interface RowTeam { name: string; short?: string; alt?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean }
+// badge: lo que pone el hueco del escudo sin imagen (si no, el principio de short o del nombre); noFav: sin estrella de favoritos
+// (una pareja de dobles: el buscador, que es con lo que se encuentran los favoritos, no tiene dobles)
+export interface RowTeam { name: string; short?: string; alt?: string; logo?: string; score?: string | number | null; win?: boolean; lose?: boolean; games?: number | null; points?: string | null; serving?: boolean; color?: string; plate?: boolean; badge?: string; noFav?: boolean }
 
 // El nombre entero si cabe y, si no, el corto: «Knicks» se lee mejor que «New York Kn…». Mide el entero con una copia
 // invisible del mismo tamaño de letra cada vez que cambia el ancho de la tarjeta
@@ -367,11 +369,11 @@ export function Scoreboard({ competition, detail, a, b, state, center, centerSub
   const lead = state !== 'pre' && isFinite(sa) && isFinite(sb) && sa !== sb ? (sa > sb ? 'a' : 'b') : null;
   const side = (t: RowTeam, which: 'a' | 'b') => (
     <div className={cn('relative flex w-full min-w-0 flex-col items-center gap-1.5 text-center sm:w-auto sm:flex-row sm:gap-3', which === 'a' ? 'sm:flex-row sm:justify-self-start sm:text-left' : 'sm:flex-row-reverse sm:justify-self-end sm:text-right')}>
-      <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.short || t.name} size={44} /></span>
+      <span className={cn('shrink-0', t.plate && 'rounded-lg bg-white/90 p-1')}><TeamLogo src={t.logo} name={t.badge || t.short || t.name} size={44} /></span>
       <div className="min-w-0 max-w-full">
         <div className={cn('flex min-w-0 items-center justify-center gap-0.5', which === 'a' ? 'sm:justify-start' : 'sm:flex-row-reverse sm:justify-start')}>
           <span className="line-clamp-2 text-sm font-semibold tracking-tight sm:text-xl" title={t.name}>{t.name}</span>
-          <FavStar name={t.name} logo={t.logo} className="absolute -right-1 -top-1.5 sm:static" />
+          {!t.noFav && <FavStar name={t.name} logo={t.logo} className="absolute -right-1 -top-1.5 sm:static" />}
         </div>
         {t.short && t.short !== t.name && <div className="hidden text-xs text-zinc-500 sm:block">{t.short}</div>}
       </div>

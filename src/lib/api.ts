@@ -37,11 +37,15 @@ const get = (path: string, params?: Record<string, unknown>) => {
 };
 const part = encodeURIComponent;
 
-type MatchRef = { a?: TeamRef; b?: TeamRef; start?: string; sport?: string; league?: string; event?: string };
+type MatchRef = { a?: TeamRef; b?: TeamRef; start?: string; sport?: string; league?: string; event?: string; doubles?: boolean };
 const team = (t?: TeamRef) => ({ name: t?.name, code: t?.code, ...(t?.alt?.length ? { alt: t.alt } : {}) });
 // sport y league: el lector de Docker busca el partido en la sección de ese deporte
 // event: el cartel de MMA ("UFC 334: …"), con el que el lector encuentra el grupo del evento en Betway
-const matchOf = (m?: MatchRef) => ({ a: team(m?.a), b: team(m?.b), start: m?.start, ...(m?.sport ? { sport: m.sport, league: m.league } : {}), ...(m?.event ? { event: m.event } : {}) });
+// doubles: un dobles de tenis, que el lector busca en los torneos de dobles de las casas
+const matchOf = (m?: MatchRef) => ({
+  a: team(m?.a), b: team(m?.b), start: m?.start, ...(m?.sport ? { sport: m.sport, league: m.league } : {}), ...(m?.event ? { event: m.event } : {}),
+  ...(m?.doubles ? { doubles: true } : {})
+});
 
 function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
@@ -147,7 +151,8 @@ export const api: Api = {
     setPrefs: p => call('PUT', '/api/alerts/prefs', p),
     watch: list => call('PUT', '/api/alerts/watch', { list }),
     subscribe: subscription => call('POST', '/api/alerts/push', { subscription }),
-    unsubscribe: endpoint => call('POST', '/api/alerts/push/remove', { endpoint })
+    unsubscribe: endpoint => call('POST', '/api/alerts/push/remove', { endpoint }),
+    testPush: endpoint => call('POST', '/api/alerts/push/test', { endpoint })
   },
   shared: {
     inbox: () => get('/api/shared'),
@@ -238,6 +243,7 @@ export const api: Api = {
   },
   tennis: {
     games: date => get('/api/tennis/games', { date }),
+    doubles: date => get('/api/tennis/doubles', { date }),
     matchStats: q => get('/api/tennis/match-stats', q),
     days: (from, n) => get('/api/tennis/days', { from, n }),
     live: () => get('/api/tennis/live'),

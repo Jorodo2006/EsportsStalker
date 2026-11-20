@@ -6,7 +6,7 @@ const client = require('../../shared/client');
 
 const round2 = x => Math.round(x * 100) / 100;
 
-const { norm, teamScore, orient } = require('./equipos');
+const { norm, teamScore, orient, isPairName } = require('./equipos');
 const { mentions } = require('../../shared/fighters');
 
 // ---------- Nombres de mercado ----------
@@ -708,7 +708,10 @@ function marketsInto(book, imp, match) {
 function intoBook(book, match, imp) {
   const football = book.sport === 'football', mma = book.sport === 'mma';
   if (imp.book === 'winamax') {
-    const o = orient(match.a, match.b, imp.home, imp.away) || { swapped: false, score: 0 };
+    const found = orient(match.a, match.b, imp.home, imp.away);
+    // Dobles: sin reconocer las dos parejas no se lee. Con el orden supuesto (el de abajo) las cuotas podían salir cambiadas de lado
+    if (!found && isPairName(match.a?.name)) return 0;
+    const o = found || { swapped: false, score: 0 };
     // En MMA un combate cambiado (sustituto, otra pelea) no se lee como el de la app: los dos luchadores tienen que ser los mismos
     if (mma) {
       const direct = mentions(match.a.name, imp.home) && mentions(match.b.name, imp.away);

@@ -3,6 +3,9 @@
 // LiveScore, sin documentar. El robots.txt de su web prohíbe /api/: se usa por decisión expresa del usuario, para uso personal, sin
 // disfrazar las peticiones (docs/specs/09-tenis.md). Nada se guarda en tennis.cache.
 
+const { pairOf, withMtb } = require('./doubles');
+const { flagOf } = require('./flags');
+
 const API = 'https://prod-public-api.livescore.com/v1/api/app';
 const LIVE_TTL = 15e3;
 const DAY_TTL = 5 * 60e3;
@@ -25,7 +28,11 @@ function feed(path, ttl) {
       return v;
     } catch (e) {
       // Si falla, lo último que se leyó sigue valiendo para la lista; los puntos no se enseñan sin fecha reciente (ver changed)
-      if (hit) { mem.set(path, { ...hit, running: null }); return hit.v; }
+      if (hit?.v != null) { mem.set(path, { ...hit, running: null }); return hit.v; }
+      // Sin nada leído antes, se borra la entrada para que la siguiente consulta lo vuelva a pedir. Antes se quedaba guardada la
+      // promesa fallida: un corte en la primera petición del día (al arrancar el contenedor el 19-11-2026) dejó sin Challenger ese
+      // día y el siguiente hasta reiniciar, devolviendo el mismo error al momento y sin volver a preguntar
+      mem.delete(path);
       throw e;
     }
   })();
@@ -89,7 +96,7 @@ function stateOf(e) {
 function playerOf(t, side, e, sets, done) {
   const me = side === 0 ? 0 : 1, words = String(t.Nm).split(/\s+/), last = words.slice(1).join(' ') || t.Nm, short = `${words[0][0]}. ${last}`;
   return {
-    id: `ls${t.ID}`, name: t.Nm, short, flag: '', country: t.CoNm || '', seed: null, rank: null,
+    id: `ls${t.ID}`, name: t.Nm, short, flag: flagOf(t.CoId, t.CoNm), country: t.CoNm || '', seed: null, rank: null,
     sets: sets.map(s => s[me]),
     setWins: sets.map((s, i) => (i < sets.length - 1 || done) && s[me] > s[1 - me]),
     tiebreaks: sets.map((_, i) => num(e[`Tr${me + 1}S${i + 1}T`])),
@@ -112,11 +119,32 @@ function matchOf(st, e, extra = {}) {
   };
 }
 
+// El país de cada jugador (nombre en inglés y código ISO: "Spain", "ESP"): los días no lo traen y la fase entera sí. Se pide una vez
+// por torneo cada 30 min, y es la misma petición para los individuales y los dobles (van en la misma fase)
+const stageFeed = st => feed(`/stage/tennis/${st.Ccd}/${st.Scd}/0?MD=1`, 30 * 60e3);
+function countriesIn(events) {
+  const out = new Map();
+  for (const e of events) for (const t of [...(e.T1 || []), ...(e.T2 || [])]) if (t.CoNm || t.CoId) out.set(String(t.ID), { name: t.CoNm || '', code: t.CoId || '' });
+  return out;
+}
+async function stageCountries(stages) {
+  const out = new Map();
+  await Promise.all([...stages].map(st => stageFeed(st).then(j => { for (const [k, v] of countriesIn(j?.Stages?.[0]?.Events || [])) out.set(k, v); }).catch(() => {})));
+  return out;
+}
+// El país y la bandera de un jugador que no los trae
+const withCountry = (p, c) => { if (!c) return; p.country ||= c.name; p.flag ||= flagOf(c.code, c.name); };
+
 // days: 'AAAAMMDD' en UTC. Sólo hoy y ayer cambian de verdad
-async function challengers(days) {
+// Los días enteros (todo el tenis de cada uno): los individuales y los dobles de los Challenger salen de las mismas peticiones
+function dayFeeds(days) {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10).replace(/-/g, '');
-  const feeds = await Promise.all(days.map(d => feed(`/date/tennis/${d}/0?MD=1`, d === today || d === yesterday ? LIVE_TTL : DAY_TTL).catch(err => { console.error(`[tennis] LiveScore ${d}:`, err.message); return null; })));
+  return Promise.all(days.map(d => feed(`/date/tennis/${d}/0?MD=1`, d === today || d === yesterday ? LIVE_TTL : DAY_TTL).catch(err => { console.error(`[tennis] LiveScore ${d}:`, err.message); return null; })));
+}
+
+async function challengers(days) {
+  const feeds = await dayFeeds(days);
   const seen = new Set(), out = [], stages = new Map();
   for (const j of feeds) {
     for (const st of j?.Stages || []) {
@@ -130,16 +158,8 @@ async function challengers(days) {
       }
     }
   }
-  // El país de cada jugador: los días no lo traen y la fase entera sí (una petición por torneo cada 30 min)
-  const country = new Map();
-  await Promise.all([...stages.values()].map(st => feed(`/stage/tennis/${st.Ccd}/${st.Scd}/0?MD=1`, 30 * 60e3)
-    .then(j => { for (const e of j?.Stages?.[0]?.Events || []) for (const t of [...(e.T1 || []), ...(e.T2 || [])]) if (t.CoNm) country.set(String(t.ID), t.CoNm); })
-    .catch(() => {})));
-  return out.map(({ m, ids }) => {
-    m.a.country ||= country.get(ids[0]) || '';
-    m.b.country ||= country.get(ids[1]) || '';
-    return m;
-  });
+  const country = await stageCountries(stages.values());
+  return out.map(({ m, ids }) => { withCountry(m.a, country.get(ids[0])); withCountry(m.b, country.get(ids[1])); return m; });
 }
 
 // ---------- La previa de los torneos ATP y WTA ----------
@@ -152,11 +172,10 @@ const isTour = st => /^(ATP|WTA)/.test(st.Cnm) && !/challenger|125|ITF/i.test(st
 // alto), y con todas se sabe cuál es la 1.ª, la 2.ª… y la final; un día suelto sólo trae una. También trae el país de cada jugador,
 // que los días no traen. null si no se ha podido pedir: entonces sólo se dice "Previa"
 async function qualiStage(st) {
-  const j = await feed(`/stage/tennis/${st.Ccd}/${st.Scd}/0?MD=1`, 30 * 60e3);
+  const j = await stageFeed(st);
   const events = j?.Stages?.[0]?.Events || [];
   const digits = [...new Set(events.map(e => String(e.ErnInf)[0]).filter(d => /\d/.test(d)))].sort();
-  const country = new Map(events.flatMap(e => [...(e.T1 || []), ...(e.T2 || [])]).filter(t => t.CoNm).map(t => [String(t.ID), t.CoNm]));
-  return digits.length ? { digits, country } : null;
+  return digits.length ? { digits, country: countriesIn(events) } : null;
 }
 const qualiRound = (stage, e) => {
   const n = stage ? stage.digits.indexOf(String(e.ErnInf)[0]) + 1 : 0;
@@ -179,7 +198,7 @@ async function qualifying(days) {
           id: `lsq:${e.Eid}`, tour: /^WTA/.test(st.Cnm) ? 'wta' : 'atp', level: undefined, tournamentId: `lsq:${st.Sid}`,
           round: qualiRound(stage, e), source: 'LiveScore'
         });
-        for (const [p, t] of [[m.a, e.T1[0]], [m.b, e.T2[0]]]) p.country ||= stage?.country.get(String(t.ID)) || '';
+        for (const [p, t] of [[m.a, e.T1[0]], [m.b, e.T2[0]]]) withCountry(p, stage?.country.get(String(t.ID)));
         out.push(m);
       }
     }
@@ -206,4 +225,39 @@ async function mainTour(days) {
   return out;
 }
 
-module.exports = { liveAtp, challengers, mainTour, qualifying };
+// ---------- Los dobles de los Challenger ----------
+// Van en la misma fase que los individuales ("Metz, France"), con dos jugadores en T1 y T2, y salen de los mismos días: ni una
+// petición más. La previa de dobles no la hay. El país de cada uno sale de la fase entera, como en los individuales; los puntos del
+// juego no se traen
+const doubles = st => (st.Events || []).filter(e => e.T1?.length === 2 && e.T2?.length === 2);
+function doublesOf(st, e, country = new Map()) {
+  const { state, status } = stateOf(e), sets = setsOf(e), done = e.Eps === 'FT';
+  const one = t => { const c = country.get(String(t.ID)); return { name: t.Nm, country: t.CoNm || c?.name || '', flag: flagOf(t.CoId || c?.code, t.CoNm || c?.name) }; };
+  const side = (ts, me) => pairOf(`dbl:ls${ts.map(t => t.ID).join('-')}`, ts.map(one), {
+    sets: sets.map(s => s[me]), setWins: sets.map((s, i) => (i < sets.length - 1 || done) && s[me] > s[1 - me]),
+    tiebreaks: sets.map((_, i) => num(e[`Tr${me + 1}S${i + 1}T`])), winner: e.Ewt === me + 1
+  });
+  return withMtb({
+    id: `dbl:ch:${e.Eid}`, tour: 'atp', level: 'challenger', tournament: st.Snm, tournamentId: String(st.Sid), major: false, date: dateOf(e.Esd),
+    state, status, round: roundOf(st, e), court: '', city: '', bestOf: 3, note: '', a: side(e.T1, 0), b: side(e.T2, 1), doubles: true
+  });
+}
+
+async function challengerDoubles(days) {
+  const seen = new Set(), found = [], stages = new Map();
+  for (const j of await dayFeeds(days)) {
+    for (const st of j?.Stages || []) {
+      if (st.Cnm !== 'ATP Challenger' || QUALI.test(st.Snm)) continue;
+      for (const e of doubles(st)) {
+        if (seen.has(e.Eid) || e.Eps === 'Canc.') continue;
+        seen.add(e.Eid);
+        stages.set(`${st.Ccd}/${st.Scd}`, st);
+        found.push([st, e]);
+      }
+    }
+  }
+  const country = await stageCountries(stages.values());
+  return found.map(([st, e]) => doublesOf(st, e, country));
+}
+
+module.exports = { liveAtp, challengers, challengerDoubles, mainTour, qualifying };

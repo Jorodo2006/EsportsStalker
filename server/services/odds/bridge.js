@@ -179,6 +179,8 @@ async function newJob(match, source = 'manual', focus) {
   // event: el cartel ("UFC 334: Gane vs. Hokit"), con el que el lector encuentra el grupo del evento en Betway
   const m = { a: team(match.a), b: team(match.b), ...(['basket', 'tennis', 'football', 'mma'].includes(match.sport) ? { sport: match.sport, league: String(match.league || ''), ...(match.sport === 'mma' && match.event ? { event: String(match.event).slice(0, 120) } : {}) } : {}) };
   if (typeof focus === 'string' && focus.trim()) m.focus = focus.trim().slice(0, 160);
+  // Dobles de tenis: el lector busca entonces en los torneos de dobles de las casas (winamaxfind.js, rankTennisGroups en runner.js)
+  if (match.sport === 'tennis' && match.doubles === true) m.doubles = true;
   const { rows } = await query(`INSERT INTO odds.jobs (id, match_key, match, source, books, steps, start) VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb, $7) RETURNING *`,
     [id, keyOf(m), JSON.stringify(m), source, BOOKS, JSON.stringify(steps), match.start || null]);
   const job = toJob(rows[0]);

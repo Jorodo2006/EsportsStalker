@@ -225,3 +225,21 @@ test('fútbol, jugadores: remates, paradas y faltas con sus estadísticas', () =
   assert.equal(evs('Realiza 1 o más remates', 'Breel Embolo', null), null); // sin estadísticas, a mano
   assert.equal(evs('Realiza 1 o más remates', 'Cedric Itten', st), null); // no jugó
 });
+
+// Dobles con super tie-break (server/services/tennis/doubles.js): 4-6 7-6 y el tie-break 10-7, que llega como un set 1-0
+const dobles = {
+  sport: 'tennis', label: 'Arneodo / Willis 4-6 7-6 1-0 Karol / Paris', unit: 'juegos', winner: 'a', doubles: true, mtb: true,
+  names: ['Romain Arneodo / Marcus Willis', 'Milos Karol / Joshua Paris'], sets: [[4, 7, 1], [6, 6, 0]],
+  score: p => (p === 0 ? [12, 12] : p === 21 ? [4, 6] : p === 22 ? [7, 6] : p === 23 ? [1, 0] : p === 24 ? 'unplayed' : null)
+};
+test('dobles con super tie-break: ganador y dos primeros sets solos; juegos y tercer set, a mano', () => {
+  assert.equal(ev('moneyline|0||', 'a', dobles), 'won');
+  assert.equal(ev('moneyline|21||', 'b', dobles), 'won');
+  assert.equal(ev('total|21||9.5', 'over', dobles), 'won');
+  assert.equal(ev('total|0||22.5', 'over', dobles), null); // cada casa cuenta el tie-break a su manera
+  assert.equal(ev('spread|0||-1.5', 'a', dobles), null);
+  assert.equal(ev('moneyline|23||', 'a', dobles), null);
+  assert.equal(evaluate({ key: 'wmx|Gana al menos un set Karol / Paris|', selection: 'Sí', out: '0' }, dobles), null);
+  // Sin super tie-break, el total de juegos de un dobles sí se resuelve solo
+  assert.equal(ev('total|0||20.5', 'over', { ...dobles, mtb: false, score: p => (p === 0 ? [12, 9] : null) }), 'won');
+});

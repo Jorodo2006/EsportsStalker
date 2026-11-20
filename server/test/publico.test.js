@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { isPublic, isAdminPath, anonymousAllowed, publicSettings, publicConfig, adsTxt, LIMIT } = require('../services/gateway/public');
 
 test('se abren las lecturas de los deportes y de las cuotas', () => {
-  for (const p of ['/api/esports/schedule', '/api/stats/players', '/api/basket/games', '/api/tennis/match-stats', '/api/football/standings/laliga', '/api/mma/fighter', '/api/search', '/api/settings/public', '/api/public/config']) {
+  for (const p of ['/api/esports/schedule', '/api/stats/players', '/api/basket/games', '/api/tennis/match-stats', '/api/tennis/doubles', '/api/football/standings/laliga', '/api/mma/fighter', '/api/search', '/api/settings/public', '/api/public/config']) {
     assert.equal(isPublic('GET', p), true, p);
   }
   for (const p of ['/api/odds/match', '/api/odds/board', '/api/odds/history', '/api/football/photos']) assert.equal(isPublic('POST', p), true, p);

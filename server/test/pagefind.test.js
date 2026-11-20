@@ -90,3 +90,17 @@ test('con words encuentra "Rigas Zelli" por "Riga Zelli", y sigue sin cruzar par
   assert.match(run([ev(1, 'Rigas Zelli', 'Kalev Cramo')], true), /event\/1$/);
   assert.equal(run([ev(1, 'Rigas Zelli', 'Otro Equipo'), ev(2, 'Alguien Mas', 'Kalev Cramo')], true), null);
 });
+
+// Dobles de tenis (opts.doubles): Betway puede escribir las parejas a su manera; tienen que estar los dos apellidos de cada una
+test('dobles: encuentra la fila con las dos parejas y no la de otra con un solo jugador en común', () => {
+  const body = el('div', {},
+    ev(1, 'Arevalo M./Zeballos H.', 'Luz O./Matos R.'),
+    ev(2, 'Luz O./Matos R.', 'Pavic M./Arevalo M.'),
+    ev(3, 'Marcelo Arevalo', 'Orlando Luz'));
+  globalThis.document = { querySelectorAll: sel => [body, ...body.querySelectorAll(sel)].filter(e => e.matches(sel)) };
+  globalThis.window = { scrollBy: () => {} };
+  try {
+    const teams = [{ name: 'Marcelo Arevalo / Mate Pavic', alt: [] }, { name: 'Orlando Luz / Rafael Matos', alt: [] }];
+    assert.match(pageFind(teams, { ...OPTS, doubles: true }), /event\/2$/);
+  } finally { delete globalThis.document; delete globalThis.window; }
+});

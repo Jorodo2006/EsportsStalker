@@ -53,7 +53,13 @@ ESPN no los trae (de la ATP sólo el torneo principal). Salen de la API de la ap
 
 - **Por qué esta fuente:** el `robots.txt` de la web de LiveScore prohíbe `/api/` y sus condiciones no se pudieron leer (la página no se carga sin JavaScript). Su servidor de datos no tiene `robots.txt`. **Se decidió usarla el 5/11/2026, a petición del usuario y para uso personal**, a sabiendas de que
   Tennis Abstract y tennis-data.co.uk se descartaron por su `robots.txt`. Las peticiones van sin disfrazar. **Si la app se fuese a vender o a publicar, hay que volver a mirarlo.**
-- **Recomendaciones de su motor, sin fichas:** sin *Forma de los jugadores*, porque las fichas son de ESPN. No hay banderas, ranking ni cabezas de serie. Sus recomendaciones son las del motor propio (abajo), no las del modelo de la ATP y la WTA.
+- **Recomendaciones de su motor, sin fichas:** sin *Forma de los jugadores*, porque las fichas son de ESPN. No hay ranking ni cabezas de serie. Sus recomendaciones son las del motor propio (abajo), no las del modelo de la ATP y la WTA.
+- **Banderas** (`server/services/tennis/flags.js`, desde el 19-11-2026): las mismas imágenes que las de ESPN, sacadas del país de cada
+  jugador. Los días de LiveScore no lo traen; la fase entera sí (`CoNm` «Croatia» y `CoId`, el ISO de tres letras, «HRV»), en la
+  misma petición cada 30 min que ya se hacía, y vale también para sus dobles y para la previa de la ATP y la WTA. ESPN usa su propio
+  código, casi siempre el del COI (`cro`, `ger`, `sui`) pero no siempre (Rumanía `rom`, Serbia `ser`): la tabla `CODE` traduce, y los
+  PDF de ProTennisLive, que ya dan el del COI, pasan casi tal cual. Gran Bretaña llega como `NON`: va por el nombre. Cada código se
+  comprobó contra el CDN de ESPN (un código que no existe da 404 y queda el hueco).
 - **Motor propio (servicio `challenger`, `server/sharpex-tenis`):** Elo con saque y resto, actividad y factor local, con el histórico de Sackmann y TennisMyLife, en `/api/challenger`. En la app (`src/components/ChallengerPicks.tsx`): pestaña *Recomendaciones* de cada Challenger, el circuito *Challenger* de la pantalla *Recomendaciones*, *Las más fiables del día* y la columna del partido elegido, con `GET /api/challenger/recomendaciones?fecha=`. Salen *Alta probabilidad* (siempre con «sin ventaja sobre la casa») y *Valor*, que está oculto mientras la fase 0 no diga que el modelo gana a la cuota de cierre (`docs/superpowers/specs/2026-11-19-motor-challenger-v2-design.md`). `GET /api/challenger/comparar?fecha=AAAA-MM-DD` da, para cada Challenger del día, la probabilidad del modelo, la superficie (por la ciudad del torneo) y las cuotas de apertura y de cierre de cada casa con la probabilidad del mercado sin margen: con los resultados, dirá si el modelo gana a la casa antes de enseñar picks.
 - **Cuotas:** son decenas al día, así que no se leen como el resto del tenis. Sólo los del cuadro final, dos veces (`scheduler.js`, ajuste `challengerOddsEnabled`, *Ajustes → Cuotas automáticas → Leer los Challenger*): una hasta 12 h antes y la de cierre, a 20 min de la hora prevista; si sigue sin empezar, otra cada 40 min hasta 5 h después (las horas de LiveScore son aproximadas). Unas 50-75 lecturas al día. También se pueden pedir con *Actualizar cuotas*, si las casas los tienen.
 - **Códigos:** `Eps` es el estado (`NS`, `S1`-`S5`, `FT`, `Ret.`, `W.O.`, `Canc.`, que no se enseña). `ErnInf` es la ronda: `4xxx` dieciseisavos, `5xxx` octavos, `6xxx` cuartos, `7xxx` semifinales y `final`, deducidos contando los partidos de cada código. En la ATP y la WTA la previa va en el nombre de la fase (`: Qualification`).
@@ -157,6 +163,42 @@ No hay ninguna fuente permitida que dé las de la ATP al acabar: la web de la AT
 las tiene, pero su robots.txt prohíbe `/api/` y se decidió (noviembre de 2026, con la web ya pública) no ampliar su uso para esto.
 Sin estadísticas, el panel lo dice y lleva a *Forma de los jugadores*.
 
+## Dobles (`server/services/tennis/doubles.js`, `GET /api/tennis/doubles?date=`)
+
+Desde el 19-11-2026. Salen de lo mismo que ya se pedía: los grupos `mens-doubles` y `womens-doubles` (y los mixtos) del marcador de
+ESPN para la ATP y la WTA, y los partidos de dos jugadores por lado de las fases de los Challenger de LiveScore (`challengerDoubles`).
+No cuestan ninguna petición nueva.
+
+- **Ruta aparte a propósito.** No entran en `/api/tennis/games` ni `/live`, porque lo que lee esas rutas da por hecho un
+  jugador por lado: las lecturas programadas, el modelo y las recomendaciones, el motor de los Challenger, el buscador y los avisos.
+  `/days` los cuenta aparte (`doubles` y `doublesLive` de cada día; `total` y `live` siguen siendo los individuales).
+- **Forma:** la de un partido individual, con `doubles: true` e id `dbl:<atp|wta|ch>:<id>`. Cada lado es una pareja con la forma de
+  un jugador:
+  - `name`: «Orlando Luz / Rafael Matos», que es la clave de sus cuotas;
+  - `short`: «Luz / Matos», que es lo que sale en las filas;
+  - `players`: los dos jugadores.
+
+  Una pareja por saber (sin sus dos jugadores en ESPN) no sale.
+- **Súper tie-break:** en los dobles que no son de Grand Slam, el tercer set es un tie-break a 10.
+  - ESPN lo da como un set 1-0 con los puntos (`1(10)` / `0(4)`) y LiveScore como un set de 10-7; se deja todo como ESPN (`fixMtb`), con `mtb: true`.
+  - En la ficha sale como «Súper tie-break».
+  - La resolución (`settle.js`) sólo resuelve sola el ganador y los dos primeros sets: los juegos del partido y el tercer set de esos partidos van a mano, porque cada casa cuenta el tie-break a su manera.
+  - Los mercados propios de Winamax (`wmx|`) de un dobles, siempre a mano.
+- **Cuotas, sólo a mano** (*Actualizar cuotas*): el programador nunca los ve, y `odds-window.ts` lo dice.
+  - El partido del trabajo lleva `doubles`, y el lector busca en los torneos de dobles: en Winamax, «CH75 Sydney, Dobles» o «ATP - Finals, Dobles» (la ciudad y «dobles»); en Betway, sólo los enlaces de dobles (`rankTennisGroups`).
+  - Betway no tenía los dobles de los Challenger en noviembre de 2026; Winamax sí.
+- **Emparejar parejas:** se parte por la barra el nombre de la casa («Luz O. / Matos R.», «Matos/Luz»), y cada mitad tiene que casar con un jugador distinto de la pareja, en cualquier orden.
+  - Está en `teamScore` (`server/services/odds/equipos.js`), `winamaxFind` (`server/lector/winamaxfind.js`) y `pageFind`. Los dos últimos corren dentro de la página y llevan su copia.
+  - Sólo cuenta como pareja un nombre con « / » y nombre y apellido a cada lado, para no tocar «Bodø/Glimt».
+  - Un individual de tenis no casa con un nombre con barra: antes, Pavic-Luz se habría quedado con el dobles de los dos.
+  - Si no se reconocen las dos parejas, la lectura de Winamax no se guarda: con el orden supuesto, las cuotas salían cambiadas de lado.
+- **Interfaz:**
+  - interruptor *Dobles* (`tennis-doubles`), con un panel por torneo detrás de los individuales de su nivel. Encendido de entrada
+    desde el 19-11-2026: apagado, nadie lo encontraba y parecía que no había dobles. La tira de días los suma sólo si está encendido;
+  - en las filas, las dos banderas de la pareja;
+  - la ficha sólo tiene *Marcador* y *Cuotas*;
+  - un enlace a `/tenis/partido/dbl:…` abre la ficha aunque el interruptor esté apagado.
+
 ## Cuotas
 
 - Winamax: deporte 5; si el partido no está en la portada, se buscan los torneos por la palabra más larga del nombre del
@@ -178,7 +220,8 @@ Sin estadísticas, el panel lo dice y lleva a *Forma de los jugadores*.
 
 ## Pendiente
 
-- Dobles: no se muestran.
+- Dobles: sin modelo ni recomendaciones. No hay histórico de dobles reciente y gratuito: el de Sackmann acaba en 2020 y sólo tiene
+  la ATP, y TennisMyLife no tiene dobles (comprobado el 19-11-2026).
 
 ## Recomendaciones (`server/services/tennis/model.js` y `picks.js`, `src/lib/tennis-picks.ts`, `src/components/TennisPicks.tsx`)
 
@@ -194,6 +237,10 @@ Las tres usan el mismo tablero:
 - **Orden:** por probabilidad (por defecto) o por valor.
 - **Contenido:** la más fiable y tres listas.
 - **Al pulsar:** una recomendación de la pantalla abre su partido, y la cuota la manda al cupón.
+- **De qué circuito es** (desde el 19-11-2026; `CircuitBadge` y `CircuitMark` de `src/components/tennis-logos.tsx`): el tablero de
+  varios partidos se titula «ATP y WTA» (o sólo el que haya) con sus logos, como el de los Challenger debajo con el suyo. Cada
+  recomendación lleva el logo de su circuito delante del partido, también en *Las más fiables del día*, y el filtro de circuito
+  enseña los logos. Antes las dos secciones se parecían tanto que no se veía de cuál era cada recomendación.
 
 Rutas:
 

@@ -14,7 +14,34 @@ const within1 = (x, y) => {
 };
 const words = s => bare(s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
+// ---------- Dobles de tenis ----------
+// Nuestras parejas se llaman "Orlando Luz / Rafael Matos" (server/services/tennis/doubles.js): " / " con espacios y nombre y apellido
+// a cada lado. Sólo eso cuenta como pareja, para no tocar equipos con barra de otros deportes ("Bodø/Glimt"). Las casas las escriben
+// a su manera ("Luz O. / Matos R.", "Matos/Luz"): se parte su nombre por la barra y cada mitad tiene que casar con un jugador
+// distinto, en cualquier orden, con las reglas de un jugador. Así una pareja con un solo jugador en común no pasa por la nuestra.
+// La misma idea está en server/lector/winamaxfind.js y pagefind.js, que corren dentro de la página y no pueden importar esto
+const PAIR_NAME = /^\S+(?: \S+)+ \/ \S+(?: \S+)+$/;
+const isPairName = s => PAIR_NAME.test(String(s || '').trim());
+const halves = s => String(s || '').split('/').map(x => x.trim()).filter(Boolean);
+const playerRef = full => {
+  const w = String(full).trim().split(/\s+/), last = w.slice(1).join(' ');
+  return { name: full, alt: [last, `${w[0][0]}. ${last}`, `${last} ${w[0][0]}`] };
+};
+// Un jugador de la pareja contra una mitad del nombre de la casa: basta una palabra de su apellido, sin partículas ("Reyes" en
+// "M.A.Reyes-Varela" para "Miguel Angel Reyes", "Trotter" en "J.Trotter" para "James Kent Trotter": Winamax en noviembre de 2026),
+// o las reglas de un jugador. Tienen que casar las dos mitades de las dos parejas: por casualidad, casi imposible
+const PARTICLE = /^(van|von|der|den|del|dos|das|los|las|les)$/;
+const surnameWords = full => { const w = words(full).slice(1), k = w.filter(x => x.length >= 3 && !PARTICLE.test(x)); return k.length ? k : w.slice(-1); };
+const playerScore = (full, half) => (surnameWords(full).some(w => words(half).includes(w)) ? 1 : teamScore(playerRef(full), half));
+function pairScore(target, name) {
+  const mine = halves(target.name), theirs = halves(name);
+  if (mine.length !== 2 || theirs.length !== 2) return 0;
+  const [p, q] = mine, [x, y] = theirs;
+  return Math.max(Math.min(playerScore(p, x), playerScore(q, y)), Math.min(playerScore(p, y), playerScore(q, x)));
+}
+
 function teamScore(target, name) {
+  if (isPairName(target?.name)) return pairScore(target, name);
   const n = norm(name);
   if (!n) return 0;
   let best = 0;
@@ -48,4 +75,4 @@ function orient(a, b, home, away) {
   return { swapped: swapped > direct, score: Math.max(direct, swapped) };
 }
 
-module.exports = { norm, teamScore, orient };
+module.exports = { norm, teamScore, orient, isPairName };

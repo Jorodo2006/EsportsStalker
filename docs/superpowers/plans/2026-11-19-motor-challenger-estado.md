@@ -71,7 +71,9 @@ funcionamiento del motor, en [`server/sharpex-tenis/README.md`](../../../server/
    - si *Valor* se enseña (`VALUE_VISIBLE`);
    - el peso de la mezcla (`PICKS.w`).
 
-   Con una semana hay mucho margen: 103 de los 155 partidos tenían una sola casa.
+   Con una semana hay mucho margen: 103 de los 155 partidos tenían una sola casa. En diciembre no hay Challenger (de 2022 a 2025,
+   el último torneo empezó la última semana de noviembre y el siguiente, entre el 30 de diciembre y el 5 de enero): con las cuotas de
+   noviembre, las 4 semanas se juntan hacia mediados de enero y las 6, hacia finales de enero.
 2. Mirar en *Acierto del modelo* cómo van «Challenger · Alta probabilidad» por tramo.
 3. Fuente para los tiempos muertos médicos. Primero sólo guardarlos; peso cuando haya 3-6 meses medidos.
 4. Confirmar la regla de Betway para las retiradas en su reglamento de España.
@@ -79,7 +81,7 @@ funcionamiento del motor, en [`server/sharpex-tenis/README.md`](../../../server/
 
 ## Cómo repetir las mediciones
 
-Los datos del motor están en el volumen de Docker `challenger` (en local, `esportsstalker_challenger`). Desde la raíz del repo, en Git
+Los datos del motor están en el volumen de Docker `challenger`, que se llama `<proyecto>_challenger`: `sharpex_challenger` si el `.env` fija `COMPOSE_PROJECT_NAME=sharpex` (lo recomendado) o, si no, el nombre de la carpeta (`esportsstalker_challenger`). Míralo con `docker volume ls`. Desde la raíz del repo, en Git
 Bash (en Windows, `MSYS_NO_PATHCONV=1` para que no cambie las rutas):
 
 ```bash
@@ -88,12 +90,12 @@ docker compose up -d --build gateway challenger tennis
 curl -X POST .../api/challenger/actualizar   # con sesión de administrador, o se reentrena solo cada día
 
 # Validación del modelo (fases 1 y 2): pesos ajustados con el año anterior a --desde
-MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node -v esportsstalker_challenger:/data:ro \
+MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node -v sharpex_challenger:/data:ro \
   -v "$PWD/server/sharpex-tenis:/motor:ro" sharpex-server --max-old-space-size=2000 \
   /motor/bin/sharpex-tenis.js validar --datos /data/datos --desde 2024-01-01 --pesos --variables actividad,local
 
 # Riesgo de retirada (fase 4)
-MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node -v esportsstalker_challenger:/data:ro \
+MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node -v sharpex_challenger:/data:ro \
   -v "$PWD/server/sharpex-tenis:/motor:ro" sharpex-server --max-old-space-size=2500 \
   /motor/scripts/medir-retiradas.mjs /data/datos
 ```

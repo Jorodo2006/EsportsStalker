@@ -110,6 +110,7 @@ const routes = [
   ['PUT', '/api/alerts/watch', ({ req, body }) => alerts.setWatch(who(req).id, body?.list)],
   ['POST', '/api/alerts/push', ({ req, body }) => push.subscribe(who(req).id, body?.subscription)],
   ['POST', '/api/alerts/push/remove', ({ req, body }) => push.unsubscribe(who(req).id, body?.endpoint)],
+  ['POST', '/api/alerts/push/test', ({ req, body }) => push.test(who(req).id, body?.endpoint)],
   // Los manda odds tras cada lectura (sólo por la red interna: el gateway no reparte /internal)
   ['POST', '/internal/alerts/odds', ({ body }) => alerts.fromOdds(body)]
 ];

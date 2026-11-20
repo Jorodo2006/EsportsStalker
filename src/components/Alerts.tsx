@@ -119,8 +119,10 @@ export function WatchSync() {
     ...(l.ref?.match ? { id: l.ref.match } : {}), ...(l.live.match.start ? { date: l.live.match.start } : {})
   }] : [])), [slip]);
   const sig = JSON.stringify(list);
-  // Al entrar, la suscripción de este navegador a las notificaciones pasa a ser de este usuario
-  useEffect(() => { if (member) resyncPush(); }, [member]);
+  // Al entrar, la suscripción de este navegador a las notificaciones pasa a ser de este usuario y, si se hizo con otra clave del
+  // servidor, se rehace (la clave llega con la lista de avisos, la misma consulta que la campana)
+  const key = useAlerts().data?.push.key;
+  useEffect(() => { if (member && key) resyncPush(key); }, [member, key]);
   useEffect(() => {
     if (!member) return;
     const t = setTimeout(() => { window.api.alerts.watch(list).catch(() => {}); }, 1500);

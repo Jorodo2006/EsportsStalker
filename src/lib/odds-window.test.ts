@@ -19,6 +19,10 @@ describe('aheadHours', () => {
     expect(aheadHours({ sport: 'tennis', qualifying: true }, {})).toBeNull();
     expect(aheadHours({ sport: 'basket' }, { oddsAutoEnabled: false })).toBeNull();
   });
+  it('los dobles, nunca: ni siquiera los de un Challenger (sólo a mano)', () => {
+    expect(aheadHours({ sport: 'tennis', doubles: true }, {})).toBeNull();
+    expect(aheadHours({ sport: 'tennis', challenger: true, doubles: true }, {})).toBeNull();
+  });
 });
 
 describe('textos', () => {
@@ -36,5 +40,11 @@ describe('textos', () => {
   });
   it('en baloncesto avisa de que las líneas de jugador salen el mismo día', () => {
     expect(oddsExplanation(inHours(30), { sport: 'basket' }, {}, {}).join(' ')).toMatch(/mismo día/);
+  });
+  it('en un dobles dice que no se lee solo y cómo pedirlas', () => {
+    expect(cardNote(inHours(5), { sport: 'tennis', doubles: true }, {})).toBe('Sin cuotas');
+    const t = oddsExplanation(inHours(5), { sport: 'tennis', doubles: true }, {}, {}).join(' ');
+    expect(t).toContain('Los dobles no se leen solos.');
+    expect(t).toContain('Actualizar cuotas');
   });
 });

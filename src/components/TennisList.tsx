@@ -10,7 +10,7 @@ import { countryEs } from '@/lib/countries';
 import type { TennisMatch, TennisPlayer, TennisSurface } from '@/lib/types';
 import { sized, fallbackTo } from '@/lib/img';
 import { LiveDot } from './sport';
-import { AtpLogo, ChallengerLogo, WtaLogo } from './tennis-logos';
+import { CircuitBadge, type Circuit } from './tennis-logos';
 import { oddBtn, panelCls } from './ui';
 import { useApp } from '@/lib/app-context';
 import { cardNote } from '@/lib/odds-window';
@@ -27,18 +27,15 @@ const pct = (v: number) => `${Math.round(v * 100)} %`;
 export const SURFACE: Record<TennisSurface, { label: string; color: string }> = {
   Hard: { label: 'Pista dura', color: '#5f84cc' }, Clay: { label: 'Tierra batida', color: '#c8743f' }, Grass: { label: 'Hierba', color: '#67ad53' }
 };
-// Circuito del torneo: su logo en una placa a la izquierda de la cabecera, y su nombre. El del Challenger es apaisado y,
-// entero, a este tamaño no se lee: se enseña sólo su placa verde con "ATP" (el nombre del circuito ya va al lado)
-const circuitOf = (m: TennisMatch) => (m.level ? 'ATP Challenger' : m.major ? `Grand Slam · ${m.tour.toUpperCase()}` : m.tour.toUpperCase());
-function TourBadge({ m, small }: { m: TennisMatch; small?: boolean }) {
-  return (
-    <span title={circuitOf(m)} className={cn('grid shrink-0 place-items-center rounded-md bg-zinc-900 ring-1 ring-inset ring-zinc-800', small ? 'h-6 w-10' : 'h-8 w-[52px]')}>
-      {m.level ? <ChallengerLogo className={cn('rounded object-cover object-[4%_50%]', small ? 'h-[22px] w-[34px]' : 'h-[30px] w-[46px]')} />
-        : m.tour === 'wta' ? <WtaLogo className={cn('text-zinc-50', small ? 'h-2.5' : 'h-3.5')} />
-          : <AtpLogo className={cn('text-zinc-50', small ? 'h-2.5' : 'h-3.5')} />}
-    </span>
-  );
-}
+// Circuito del torneo: su logo en una placa a la izquierda de la cabecera (CircuitBadge, en tennis-logos.tsx), y su nombre
+const circuitOf = (m: TennisMatch) => (m.level ? 'ATP Challenger' : m.major ? `Grand Slam · ${m.tour.toUpperCase()}` : m.tour.toUpperCase()) + (m.doubles ? ' · Dobles' : '');
+// Dobles: en las filas, los apellidos de la pareja ("Luz / Matos"), que es lo que cabe en 375 px; el nombre entero va en el title
+export const rowName = (p: TennisPlayer) => (p.players ? p.short : p.name);
+// El país (o los dos de la pareja, sin repetir) en español
+export const countriesOf = (p: TennisPlayer) => (p.players ? [...new Set(p.players.map(x => countryEs(x.country)).filter(Boolean))].join(' / ') : countryEs(p.country));
+// El circuito de un partido, para su logo
+export const circuitKey = (m: TennisMatch): Circuit => (m.level ? 'challenger' : m.tour);
+const TourBadge = ({ m, small }: { m: TennisMatch; small?: boolean }) => <CircuitBadge circuit={circuitKey(m)} size={small ? 'sm' : 'lg'} title={circuitOf(m)} />;
 
 // La superficie del torneo sale de TennisMyLife (la misma consulta que la ficha del partido). Los Challenger no la tienen
 export function useSurface(m: TennisMatch) {
@@ -49,11 +46,15 @@ export function useSurface(m: TennisMatch) {
   return q.data ? SURFACE[q.data] : null;
 }
 
-// Sin bandera (los Challenger de LiveScore no la traen) queda el hueco, para que los nombres sigan alineados
-function Flag({ p, big }: { p: TennisPlayer; big?: boolean }) {
+// La bandera del jugador o, en los dobles, la de cada uno de la pareja. Sin bandera queda el hueco (un país que ESPN no tiene),
+// para que los nombres sigan alineados
+export function Flag({ p, big }: { p: TennisPlayer; big?: boolean }) {
   const cls = big ? 'h-4 w-6' : 'h-3 w-[18px]';
-  if (!p.flag) return <span aria-hidden className={cn('shrink-0', cls)} />;
-  return <img src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" loading="lazy" decoding="async" className={cn('shrink-0 rounded-[2px] object-cover', cls)} />;
+  const one = (src: string, key?: number) => src
+    ? <img key={key} src={sized(src, 24)} onError={fallbackTo(src)} alt="" loading="lazy" decoding="async" className={cn('shrink-0 rounded-[2px] object-cover', cls)} />
+    : <span key={key} aria-hidden className={cn('shrink-0', cls)} />;
+  if (p.players) return <span className="flex shrink-0 gap-0.5" title={countriesOf(p)}>{p.players.map((x, i) => one(x.flag, i))}</span>;
+  return one(p.flag);
 }
 
 // ---------- Torneo ----------
@@ -118,7 +119,7 @@ function MatchRow({ m, odds, active, onClick, onOdd }: { m: TennisMatch; odds: O
       <div className="flex h-7 min-w-0 items-center gap-2 lg:h-[22px]">
         <Flag p={p} />
         <span className={cn('min-w-0 flex-1 truncate text-[13px]', p.winner ? 'font-semibold text-zinc-50' : lost ? 'text-zinc-500' : 'text-zinc-100')} title={p.name}>
-          {p.name}{p.seed ? <span className="ml-1 text-[11px] text-zinc-500">({p.seed})</span> : null}
+          {rowName(p)}{p.seed ? <span className="ml-1 text-[11px] text-zinc-500">({p.seed})</span> : null}
         </span>
         {pts?.server === side && <span title="Saca" aria-label="Saca" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
         {st !== 'pre' && Array.from({ length: n }, (_, i) => (
@@ -175,11 +176,11 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
   const member = useMember();
   const board = useQuery({
     queryKey: ['tennis', 'board', date], queryFn: () => window.api.tennis.picksBoard(date), staleTime: 60_000, retry: false,
-    enabled: member && st === 'pre' && !m.level
+    enabled: member && st === 'pre' && !m.level && !m.doubles
   });
   const top = board.data?.matches.find(x => x.m.id === m.id)?.top ?? null;
-  // En los Challenger, la de alta probabilidad de su motor aparte (sin ventaja sobre la casa)
-  const chTop = useChallengerTop(m.id, date, member && st === 'pre' && !!m.level);
+  // En los Challenger, la de alta probabilidad de su motor aparte (sin ventaja sobre la casa). Los dobles no tienen recomendaciones
+  const chTop = useChallengerTop(m.id, date, member && st === 'pre' && !!m.level && !m.doubles);
   const n = Math.max(m.a.sets.length, m.b.sets.length);
   const pts = st === 'live' ? m.points ?? null : null;
   // Lo que dan las casas a cada uno, quitando su margen
@@ -195,7 +196,7 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
         <Flag p={p} big />
         <span className="min-w-0 flex-1">
           <span className={cn('block truncate text-[15px] leading-5', p.winner ? 'font-semibold text-zinc-50' : lost ? 'text-zinc-500' : 'font-medium text-zinc-50')}>{p.name}</span>
-          <span className="block truncate text-[11px] leading-4 text-zinc-500">{[p.rank ? `n.º ${p.rank}` : '', p.seed ? `cabeza de serie ${p.seed}` : '', countryEs(p.country)].filter(Boolean).join(' · ') || ' '}</span>
+          <span className="block truncate text-[11px] leading-4 text-zinc-500">{[p.rank ? `n.º ${p.rank}` : '', p.seed ? `cabeza de serie ${p.seed}` : '', countriesOf(p)].filter(Boolean).join(' · ') || ' '}</span>
         </span>
         {pts?.server === side && <span title="Saca" className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />}
         {st !== 'pre' && Array.from({ length: n }, (_, i) => (
@@ -233,7 +234,7 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
                 <button key={s} onClick={() => onOpen('odds')} title="Comparar las cuotas de las casas"
                   className={cn('flex h-10 min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md px-3 text-sm transition',
                     best ? 'bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/35 hover:bg-amber-500/20' : 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700')}>
-                  <span className="min-w-0 truncate text-xs font-medium opacity-80">{p.name.split(' ').pop()}</span>
+                  <span className="min-w-0 truncate text-xs font-medium opacity-80">{p.players ? p.short : p.name.split(' ').pop()}</span>
                   <span className="font-score font-semibold tnum">{odd(odds[s])}</span>
                 </button>
               );
@@ -249,7 +250,7 @@ export function TennisSpotlight({ m, odds, date, onOpen }: { m: TennisMatch; odd
       {!(odds && pa != null) && st === 'pre' && (
         <button onClick={() => onOpen('odds')} title="Ver por qué todavía no hay cuotas"
           className="flex w-full cursor-pointer items-center justify-center border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500 transition hover:bg-zinc-900/70">
-          {cardNote(m.date, { sport: 'tennis', challenger: m.level === 'challenger', qualifying: /^previa/i.test(m.round || '') }, settings)}
+          {cardNote(m.date, { sport: 'tennis', challenger: m.level === 'challenger', qualifying: /^previa/i.test(m.round || ''), doubles: !!m.doubles }, settings)}
         </button>
       )}
 

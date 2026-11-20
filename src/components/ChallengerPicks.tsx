@@ -18,6 +18,7 @@ import { ReliabilityMeter } from './ValuePanel';
 import { today } from './sport';
 import { Empty, ErrorBox, Loading } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, surname } from './viz';
+import { CircuitBadge, CircuitMark } from './tennis-logos';
 
 const p0 = (v: number) => `${Math.round(v * 100)} %`;
 const signed = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1).replace('.', ',')} %`;
@@ -42,8 +43,9 @@ function Tag({ m, a }: { m: ChallengerMatchPicks; a: ChallengerAviso }) {
   const names = (m.quien?.[a] ?? []).map(s => surname(m[s])).join(', ');
   return <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', PHYSICAL.includes(a) ? 'bg-rose-500/10 text-rose-300' : 'bg-zinc-800 text-zinc-300')}>{AVISO[a]}{names ? `: ${names}` : ''}</span>;
 }
-const RETIRE_NOTE = 'Si uno se retira, Winamax anula la apuesta al ganador y devuelve lo apostado (en los Challenger no hay Garantía Abandono), y Betway también según las comparativas (sin confirmar en su reglamento): el valor esperado ya lo tiene en cuenta.';
-const VALUE_NOTE = 'Valor: oculto. En la fase 0 (155 Challengers de noviembre de 2026) lo que el modelo veía como valor no ganó a la cuota de cierre. Se sigue calculando y midiendo en Acierto del modelo.';
+// En palabras del usuario: nada de «fase 0» ni de pantallas que no ve (Acierto del modelo es del administrador)
+const RETIRE_NOTE = 'Si un jugador se retira, Winamax anula la apuesta al ganador y devuelve lo apostado (en los Challenger no hay Garantía Abandono); en Betway lo damos por igual, sin haberlo confirmado en su reglamento. El valor esperado ya lo tiene en cuenta.';
+const VALUE_NOTE = 'Valor: de momento no se enseña. Con las cuotas de 155 Challengers de noviembre de 2026, lo que el modelo veía como valor no ganó a la cuota de cierre. Se sigue midiendo antes de enseñarlo.';
 const DISCLAIMER = 'Alta probabilidad no es una apuesta segura ni rentable: sin ventaja sobre la casa, a la larga se pierde de media su margen. La probabilidad mezcla el modelo de los Challenger con las casas, y las casas pesan más.';
 
 export const challengerQuery = (date: string) => ({
@@ -62,10 +64,15 @@ function useLogChallenger(days: (ChallengerDay | undefined)[]) {
   }, [stamp]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+// Con ref, para que el servidor la resuelva sola al acabar el partido, y live, para que el cupón pueda actualizar la cuota
+// (como las recomendaciones de baloncesto y MMA). Sin ellas, una apuesta de aquí había que resolverla a mano
+const ML = 'moneyline|0||';
 const usePickAdd = () => {
   const { addToSlip } = useApp();
   return (m: ChallengerMatchPicks, p: ChallengerPick) => addToSlip({
-    sport: 'tennis', status: 'pending', league: m.torneo, event: `${m.a} vs ${m.b}`, market: 'Ganador', selection: p.jugador, bookmaker: p.casa, odds: p.cuota
+    sport: 'tennis', status: 'pending', league: m.torneo, event: `${m.a} vs ${m.b}`, market: 'Ganador', selection: p.jugador, bookmaker: p.casa, odds: p.cuota,
+    ref: { sport: 'tennis', match: m.id, start: m.fecha, key: ML, out: p.lado },
+    live: { match: { a: { name: m.a, code: '' }, b: { name: m.b, code: '' }, start: m.fecha, sport: 'tennis', league: m.torneo }, key: ML, out: p.lado }
   });
 };
 
@@ -75,7 +82,7 @@ function PickRow({ m, p, withMatch, onOpen, onAdd }: { m: ChallengerMatchPicks; 
   const text = <>
     <span className="block truncate text-[14px] font-semibold text-zinc-50">Gana {p.jugador}</span>
     <span className="block truncate text-[11px] text-zinc-400">
-      {withMatch && <span className="text-zinc-300"><span className="tnum">{hhmm(m.fecha)}</span> · {surname(m.a)} - {surname(m.b)} · </span>}
+      {withMatch && <span className="text-zinc-300"><CircuitMark circuit="challenger" className="mr-1.5" /><span className="tnum">{hhmm(m.fecha)}</span> · {surname(m.a)} - {surname(m.b)} · </span>}
       {p.tipo === 'probabilidad' ? `Alta probabilidad · ${TRAMO[p.tramo]} · sin ventaja sobre la casa` : `Valor · ${TRAMO[p.tramo]}`}
     </span>
   </>;
@@ -108,7 +115,7 @@ function ChallengerPicksPanelInner({ id, date, onOdds }: { id: string; date: str
   if (q.error) return <ErrorBox error={q.error} />;
   const day = q.data;
   const m = day?.partidos.find(x => x.id === id);
-  if (!day || !m) return <Empty>Las recomendaciones son para antes de empezar: el motor de los Challenger sólo mira los partidos que no han empezado.</Empty>;
+  if (!day || !m) return <Empty>El motor de los Challenger sólo recomienda partidos del cuadro final que aún no han empezado: los de la previa no entran.</Empty>;
   const shown = m.picks.filter(p => p.visible && (p.tipo === 'probabilidad' || day.valorVisible));
   const alta = shown.filter(p => p.tipo === 'probabilidad'), valor = shown.filter(p => p.tipo === 'valor');
   const aFav = (m.final ?? m.modelo ?? 0.5) >= 0.5;
@@ -170,7 +177,7 @@ export function ChallengerBoard({ days, until, onOpen }: { days: string[]; until
   if (err) return <ErrorBox error={err} />;
   return (
     <TvFrame>
-      <TvHeader title="Challenger" sub={`${r.list.length} partidos sin empezar · ${r.conCuotas} con cuotas · motor de los Challenger`}>
+      <TvHeader title="Challenger" sub={`${r.list.length} partidos sin empezar · ${r.conCuotas} con cuotas · motor de los Challenger`} media={<CircuitBadge circuit="challenger" />}>
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           <TvStat label="Alta probabilidad" value={r.alta.length} sub="sin ventaja sobre la casa" />
         </div>
@@ -178,7 +185,9 @@ export function ChallengerBoard({ days, until, onOpen }: { days: string[]; until
       <TvBand aside={r.alta.length || undefined}>Alta probabilidad</TvBand>
       {r.alta.length
         ? r.alta.map(x => <PickRow key={x.m.id + x.p.lado} m={x.m} p={x.p} withMatch onOpen={() => onOpen(x.m.id, x.day)} onAdd={() => add(x.m, x.p)} />)
-        : <p className="px-4 py-3 text-[13px] text-zinc-300">{r.conCuotas ? 'Ninguna llega al nivel: hace falta un 75 % o más, estar de acuerdo con la casa y no regalar su margen.' : 'Todavía no hay cuotas de los Challenger de estos días. El lector las trae el día del partido.'}</p>}
+        : <p className="px-4 py-3 text-[13px] text-zinc-300">{!r.list.length
+          ? 'No quedan Challenger del cuadro final por empezar en estos días. Los partidos salen la víspera, con el orden de juego.'
+          : r.conCuotas ? 'Ninguna llega al nivel: hace falta un 75 % o más, estar de acuerdo con la casa y no regalar su margen.' : 'Todavía no hay cuotas de los Challenger de estos días. El lector las trae el día del partido.'}</p>}
       <TvBand aside={valorVisible ? r.valor.length || undefined : undefined}>Valor</TvBand>
       {valorVisible
         ? (r.valor.length ? r.valor.map(x => <PickRow key={x.m.id + x.p.lado + 'v'} m={x.m} p={x.p} withMatch onOpen={() => onOpen(x.m.id, x.day)} onAdd={() => add(x.m, x.p)} />) : <p className="px-4 py-3 text-[13px] text-zinc-300">Ninguna con valor.</p>)
@@ -197,13 +206,13 @@ export function ChallengerBestRows({ date, max = 3, onOpen }: { date: string; ma
     .sort((a, b) => b.p.p - a.p.p).slice(0, max);
   if (!best.length) return null;
   return <>
-    <TvBand>Challenger · alta probabilidad</TvBand>
+    <TvBand><CircuitMark circuit="challenger" className="mr-2" />Challenger · alta probabilidad</TvBand>
     {best.map(({ m, p }) => (
       <button key={m.id + p.lado} onClick={() => onOpen(m.id, date)} title={`Modelo ${p0(p.pModelo)}, casa ${p0(p.pCasa)}. Sin ventaja sobre la casa`}
         className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition hover:bg-zinc-800/40">
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-zinc-50">Gana {p.jugador}</span>
-          <span className="block truncate text-xs text-zinc-500"><span className="tnum">{hhmm(m.fecha)}</span> · {surname(m.a)} - {surname(m.b)} · sin ventaja sobre la casa</span>
+          <span className="block truncate text-xs text-zinc-500"><CircuitMark circuit="challenger" className="mr-1.5" /><span className="tnum">{hhmm(m.fecha)}</span> · {surname(m.a)} - {surname(m.b)} · sin ventaja sobre la casa</span>
         </span>
         <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-[var(--tv-mark)] tnum">{p0(p.p)}</span><span className="block text-[11px] text-zinc-500">prob.</span></span>
         <span className="w-11 shrink-0 text-right"><span className="block text-[15px] font-semibold leading-5 text-zinc-50 tnum">{odd(p.cuota)}</span><span className="block text-[11px] text-zinc-500">cuota</span></span>

@@ -92,7 +92,9 @@ async function footballResult(ref) {
 }
 
 async function tennisResult(ref) {
-  const m = (await gamesAround('tennis', '/api/tennis/games', ref.start, ref.date)).find(x => x.id === ref.match);
+  // Los dobles (id "dbl:…") van en su propia ruta: server/services/tennis/doubles.js
+  const doubles = /^dbl:/.test(String(ref.match || ''));
+  const m = (await gamesAround('tennis', doubles ? '/api/tennis/doubles' : '/api/tennis/games', ref.start, ref.date)).find(x => x.id === ref.match);
   if (!m || m.state !== 'post') return null;
   if (/retir|w\.?o\.?|walkover|abandon/i.test(`${m.status} ${m.note}`)) return null; // cada casa lo paga a su manera: a mano
   const sa = m.a.sets || [], sb = m.b.sets || [];
@@ -105,7 +107,9 @@ async function tennisResult(ref) {
   return {
     sport: 'tennis', label: `${m.a.name} ${sa.map((x, i) => `${x}-${sb[i]}`).join(' ')} ${m.b.name}`, score, unit: 'juegos',
     winner: m.a.winner ? 'a' : m.b.winner ? 'b' : null,
-    names: [m.a.name, m.b.name], sets: [sa, sb]
+    names: [m.a.name, m.b.name], sets: [sa, sb],
+    // mtb: el tercer set fue un super tie-break (llega como un set 1-0, ver evaluate)
+    doubles, mtb: !!m.mtb
   };
 }
 
@@ -241,7 +245,8 @@ function evaluateTennis(title, sel, R) {
 function evaluate(ref, R) {
   const parts = ref.key.split('|');
   const type = parts[0], out = ref.out;
-  if (type === 'wmx') return R.sport === 'tennis' ? evaluateTennis(parts[1], ref.selection, R) : evaluateFootballPlayer(parts[1], ref.selection, R, ref.stats);
+  // Los mercados propios de Winamax de un dobles, a mano: comparan nombres de un jugador ("A. Nagel y D. Lajovic") y cuentan sets a cero
+  if (type === 'wmx') return R.sport === 'tennis' ? (R.doubles ? null : evaluateTennis(parts[1], ref.selection, R)) : evaluateFootballPlayer(parts[1], ref.selection, R, ref.stats);
   if (type === 'player') {
     if (R.sport !== 'basket') return null;
     const [, stat, who, l] = parts, line = Number(l), f = PLAYER_STAT[stat];
@@ -267,6 +272,9 @@ function evaluate(ref, R) {
     return { status: overUnder(v, line, out), text: `${es(v)} ${type === 'corners' ? 'córners' : 'tarjetas'}` };
   }
   if (R.sport === 'mma') return R.fight && !fightMatches(ref.event, R.fight) ? null : evaluateMma(type, parts[2], line, out, R);
+  // Dobles con super tie-break: cada casa lo cuenta a su manera (como un juego, como un set…), así que lo que depende de los juegos del
+  // partido o del tercer set se resuelve a mano. El ganador del partido y los dos primeros sets, solos. 23: el 3.er set (21-25)
+  if (R.mtb && (period === 23 || (period === 0 && type !== 'moneyline'))) return null;
   const sc = R.score(period);
   if (sc === 'unplayed') return { status: 'void', text: 'Ese set no se jugó' };
   if (!sc || sc.some(v => !isFinite(v))) return null;

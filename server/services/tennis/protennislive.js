@@ -17,6 +17,7 @@
 const { query } = require('../../shared/db');
 const client = require('../../shared/client');
 const { pdfItems, parseDraw, parseEntries, parseOrder } = require('./ptlpdf');
+const { flagOf } = require('./flags');
 
 const BASE = 'https://www.protennislive.com/posting';
 const MIN_GAP = 8e3, MAX_GAP = 60e3, PAUSE_429 = 5 * 60e3;
@@ -320,7 +321,7 @@ const short = p => `${p.first ? `${p.first[0]}. ` : ''}${p.last}`;
 function playerOf(p, me, score, winner) {
   const sets = score ? score.sets.map(s => (me === winner ? s : [s[1], s[0]])) : [];
   return {
-    id: `ptl:${norm(p.name).replace(/ /g, '-')}`, name: p.name, short: short(p), flag: '', country: p.country || '', seed: p.seed ?? null, rank: null,
+    id: `ptl:${norm(p.name).replace(/ /g, '-')}`, name: p.name, short: short(p), flag: flagOf(p.country), country: p.country || '', seed: p.seed ?? null, rank: null,
     entry: p.entry || null,
     sets: sets.map(s => s[0]), setWins: sets.map(s => s[0] > s[1]),
     // El PDF da los puntos del que pierde el desempate; el que lo gana hizo 7, o dos más si se alargó

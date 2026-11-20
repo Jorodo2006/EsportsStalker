@@ -40,10 +40,20 @@ export function firstTime(id: string) {
 let fallback: ((msg: string) => void) | null = null;
 export const setAlertFallback = (f: ((msg: string) => void) | null) => { fallback = f; };
 
+// Desde el service worker (public/sw.js), como los avisos de cuotas: en Android `new Notification` falla («Illegal constructor») y
+// en el iPhone, con la app en la pantalla de inicio, la vía que documenta Apple es showNotification del service worker. Si no hay
+// service worker (un navegador viejo), el de siempre
+async function show(title: string, body: string, tag?: string) {
+  const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready).catch(() => null) : null;
+  if (reg) return reg.showNotification(title, { body, tag, icon: '/icon-192.png', badge: '/favicon-32.png', data: { url: '/' } });
+  new Notification(title, { body, tag });
+}
+
 export function alert(kind: AlertKind, title: string, body: string, tag?: string) {
   if (!alertPrefs()[kind]) return;
   if (canNotify() && Notification.permission === 'granted') {
-    try { new Notification(title, { body, tag }); return; } catch { /* algunos móviles sólo dejan desde un service worker */ }
+    show(title, body, tag).catch(() => fallback?.(`${title}: ${body}`));
+    return;
   }
   fallback?.(`${title}: ${body}`);
 }

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { movesOf } = require('../services/odds/moves');
 const { targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue } = require('../services/bets/alerts');
-const { cleanSub } = require('../services/bets/push');
+const { cleanSub, failureOf } = require('../services/bets/push');
 
 const prev = new Map([
   ['moneyline|0||\u0000a', { price: 2.1 }],
@@ -74,4 +74,13 @@ test('suscripciones: sólo servicios de push de los navegadores', () => {
   assert.strictEqual(cleanSub({ endpoint: 'https://bets:4003/internal/settings', keys }), null);
   assert.strictEqual(cleanSub({ endpoint: 'http://fcm.googleapis.com/fcm/send/abc', keys }), null);
   assert.strictEqual(cleanSub({ endpoint: 'https://fcm.googleapis.com.evil.com/x123456789', keys }), null);
+});
+
+test('push: el motivo del rechazo, de Apple (JSON) y de Google (texto), para la prueba de Tu cuenta y el registro', () => {
+  // Así llegan los errores de web-push (WebPushError: statusCode, body)
+  assert.deepStrictEqual(failureOf({ statusCode: 410, body: '{"reason":"Unregistered"}', message: 'Received unexpected response code' }), { status: 410, reason: 'Unregistered' });
+  assert.deepStrictEqual(failureOf({ statusCode: 403, body: '{"reason":"BadJwtToken"}' }), { status: 403, reason: 'BadJwtToken' });
+  assert.deepStrictEqual(failureOf({ statusCode: 403, body: 'the key in the authorization header does not correspond to the sender ID' }), { status: 403, reason: 'the key in the authorization header does not correspond to the sender ID' });
+  // Sin respuesta del servicio (la red): el mensaje del error
+  assert.deepStrictEqual(failureOf(new Error('getaddrinfo ENOTFOUND web.push.apple.com')), { status: 0, reason: 'getaddrinfo ENOTFOUND web.push.apple.com' });
 });

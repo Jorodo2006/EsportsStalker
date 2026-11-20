@@ -24,6 +24,7 @@ import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { ChallengerBestRows, ChallengerBoard, challengerQuery } from './ChallengerPicks';
 import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
+import { CircuitBadge, CircuitMark } from './tennis-logos';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
 const PREFS = 'tennis-picks';
@@ -104,11 +105,14 @@ export function useUpcomingTennis() {
   };
 }
 
+// En el filtro de circuito, cada uno con su logo: los de la ATP y la WTA ya son su nombre; el Challenger, su placa verde y el nombre
+const tourTab = (c: Circuit) => (c === 'challenger' ? <><CircuitMark circuit="challenger" />Challenger</> : <CircuitMark circuit={c} className="h-2.5" />);
+
 function RangeFilters({ u }: { u: ReturnType<typeof useUpcomingTennis> }) {
   return (
     <div className={cn(panel, 'flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-2.5')}>
       <TvTabs value={u.range} onChange={u.pickRange} items={[{ value: NEXT, label: 'Próximas 24 h' }, ...u.days.map(d => ({ value: d, label: dayName(d) }))]} />
-      <TvTabs value={u.tour} onChange={u.pickTour} items={[{ value: 'all' as const, label: 'Todos' }, ...u.tours]} />
+      <TvTabs value={u.tour} onChange={u.pickTour} items={[{ value: 'all' as const, label: 'Todos' }, ...u.tours.map(t => ({ value: t.value, label: tourTab(t.value), title: t.label }))]} />
       {u.tour !== 'challenger' && <Select aria-label="Partido" className="h-7 w-full text-xs sm:w-72 lg:h-7 lg:text-xs" value={u.matchId} onChange={e => u.pickMatch(e.target.value)}>
         <option value="">Todos los partidos con cuotas ({u.byTour.length})</option>
         {u.byTour.map(x => <option key={x.m.id} value={x.m.id}>{vsOf(x.m)}, {when(x.m.date)}</option>)}
@@ -151,10 +155,10 @@ function EvChip({ pick, long }: { pick: TennisPick; long?: boolean }) {
   );
 }
 
-// El partido (si hay varios), lo que le falta al modelo y el motivo
+// El partido (si hay varios, con el logo de su circuito: en la misma lista van la ATP y la WTA), lo que le falta al modelo y el motivo
 function Context({ pick, oneMatch }: { pick: TennisBoardPick; oneMatch: boolean }) {
   return <>
-    {!oneMatch && <span className="text-zinc-300">{vsOf(pick.match.m)}, {when(pick.match.m.date)} · </span>}
+    {!oneMatch && <span className="text-zinc-300"><CircuitMark circuit={pick.match.m.tour} className="mr-1.5" />{vsOf(pick.match.m)}, {when(pick.match.m.date)} · </span>}
     {pick.warn && <span className="text-amber-300">{pick.warn} · </span>}
     {pick.why}
   </>;
@@ -269,7 +273,7 @@ function BestRows({ best, onOpen }: { best: TennisBoardPick[]; onOpen?: (x: Tenn
       <button key={p.match.m.id} onClick={() => onOpen?.(p.match)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition hover:bg-zinc-800/40">
         <span className="min-w-0 flex-1">
           <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{p.title}</span>
-          <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(p.match.m.date)}</span> · {vsOf(p.match.m)}</span>
+          <span className="block truncate text-xs text-zinc-500"><CircuitMark circuit={p.match.m.tour} className="mr-1.5 text-zinc-300" /><span className="tnum">{esTime(p.match.m.date)}</span> · {vsOf(p.match.m)}</span>
         </span>
         <PickNums p={p.p} ev={p.ev} good={hasValue(p)} />
         <PickOddText price={p.price} book={p.book} />
@@ -320,6 +324,10 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
   const best = useMemo(() => (split ? dayBest(matches, minOdds, 6) : []), [split, matches, minOdds]);
 
   const youngest = matches.length ? Math.min(...matches.map(x => x.oddsAge)) : null;
+  // Con varios partidos, la cabecera dice de qué circuitos son, con sus logos, como la de los Challenger debajo (ChallengerBoard):
+  // antes las dos se llamaban casi igual y no se veía dónde acababa una y empezaba la otra
+  const tours = (['atp', 'wta'] as const).filter(t => matches.some(x => x.m.tour === t));
+  const heading = tours.length === 1 ? tours[0].toUpperCase() : 'ATP y WTA';
   const sub = one
     ? [one.surface ? SURFACE[one.surface] : 'Superficie sin confirmar', one.indoor ? 'bajo techo' : '', `al mejor de ${one.bestOf}`, `cuotas ${ago(one.oddsAge)}`].filter(Boolean).join(' · ')
     : [`${matches.length} de ${matches.length + noOdds.length} partidos con cuotas`, youngest != null ? `cuotas ${ago(youngest)}` : ''].filter(Boolean).join(' · ');
@@ -361,7 +369,8 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
 
   const main = (
       <TvFrame>
-        <TvHeader title={<PicksTitle />} sub={sub}>
+        <TvHeader title={<PicksTitle>{one ? 'Recomendaciones' : heading}</PicksTitle>} sub={sub}
+          media={!one && <span className="flex shrink-0 gap-1.5">{tours.map(t => <CircuitBadge key={t} circuit={t} />)}</span>}>
           {one ? <MatchStats x={one} /> : (
             <>
             <p className="w-full text-xs text-zinc-400 sm:hidden">{A.count} opciones · {A.withValue} con valor</p>

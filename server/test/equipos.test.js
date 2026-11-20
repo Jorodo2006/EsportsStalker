@@ -25,3 +25,35 @@ test('y no se emparejan con otro partido', () => {
   assert.equal(orient(riga, derthona, 'BAXI Manresa', 'PAOK'), null);
   assert.equal(orient(riga, derthona, 'Derthona Basket', 'Cedevita Olimpija'), null);
 });
+
+// Dobles de tenis: nuestras parejas ("Marcelo Arevalo / Mate Pavic", server/services/tennis/doubles.js) contra como las escriben las casas
+const arevaloPavic = { name: 'Marcelo Arevalo / Mate Pavic', code: '', alt: ['Arevalo / Pavic'] };
+const luzMatos = { name: 'Orlando Luz / Rafael Matos', code: '', alt: ['Luz / Matos'] };
+
+test('dobles: la pareja casa con sus dos apellidos en cualquier orden y con la inicial delante o detrás', () => {
+  for (const n of ['Arevalo M. / Pavic M.', 'Pavic/Arevalo', 'M. Pavic / M. Arevalo', 'Marcelo Arevalo / Mate Pavic']) assert.ok(teamScore(arevaloPavic, n) >= 0.8, n);
+  const o = orient(arevaloPavic, luzMatos, 'Luz O. / Matos R.', 'Pavic M. / Arevalo M.');
+  assert.ok(o && o.swapped, 'la casa las tiene al revés: se da la vuelta');
+});
+
+test('dobles: una pareja con un solo jugador en común no es la nuestra, ni un individual', () => {
+  assert.equal(teamScore(arevaloPavic, 'Arevalo M. / Zeballos H.'), 0);
+  assert.equal(teamScore(arevaloPavic, 'Mate Pavic'), 0);
+  assert.equal(orient(arevaloPavic, luzMatos, 'Arevalo M. / Zeballos H.', 'Luz O. / Matos R.'), null);
+});
+
+test('un equipo con barra en el nombre no se toma por una pareja', () => {
+  // Como antes de los dobles: sin barra en la casa también casa (como pareja daría 0)
+  assert.ok(teamScore({ name: 'Bodø/Glimt', code: 'BOD' }, 'Bodo/Glimt') >= 0.8);
+  assert.ok(teamScore({ name: 'Bodø/Glimt', code: 'BOD' }, 'Bodø Glimt') >= 0.8);
+});
+
+test('dobles: apellidos compuestos y segundos nombres, como los escribe Winamax (noviembre de 2026)', () => {
+  const reyes = { name: 'Miguel Angel Reyes / Reese Stalder' }, trotter = { name: 'James Kent Trotter / Justin Boulais' };
+  const o = orient(reyes, trotter, 'M.A.Reyes-Varela / R.Stalder', 'J.Boulais / J.Trotter');
+  assert.ok(o && !o.swapped && o.score >= 1.9);
+  assert.ok(teamScore({ name: 'Nuria Brancaccio / Guiomar Maristany Zuleta De Reales' }, 'N.Brancaccio / G.Maristany Zuleta de Reales') >= 0.9);
+  assert.ok(teamScore({ name: 'Bruno Oliveira / Nicolas Rodrigues' }, 'B.Oliveira (2002) / N.Rodrigues') >= 0.9);
+  // Una partícula sola no empareja ("van" de otro jugador)
+  assert.equal(teamScore({ name: 'Botic van de Zandschulp / Tim Puetz' }, 'J.Van Lottum / T.Puetz'), 0);
+});

@@ -2,17 +2,18 @@
 // que server/services/odds/scheduler.js: si cambian allí, cambian aquí.
 // - Con las lecturas lejanas encendidas (oddsFarEnabled), todo hasta 48 h antes; si no, hasta oddsAutoHours (tenis, fútbol y
 //   MMA: 3 h como mucho)
-// - Challenger: sólo el cuadro final, desde 12 h antes. Las previas del tenis no se leen solas
+// - Challenger: sólo el cuadro final, desde 12 h antes. Las previas y los dobles del tenis no se leen solos (los dobles no llegan
+//   al programador: van en /api/tennis/doubles)
 import type { Settings, Sport } from './types';
 
 const FAR_HOURS = 48, CROWDED_NEAR_HOURS = 3, CHALLENGER_HOURS = 12;
 const CROWDED: Sport[] = ['tennis', 'football', 'mma'];
 
-export type OddsKind = { sport: Sport; challenger?: boolean; qualifying?: boolean };
+export type OddsKind = { sport: Sport; challenger?: boolean; qualifying?: boolean; doubles?: boolean };
 
 // Horas antes del partido desde las que se leen solas, o null si no se leen solas
 export function aheadHours(k: OddsKind, s?: Partial<Settings> | null): number | null {
-  if (s?.oddsAutoEnabled === false || k.qualifying) return null;
+  if (s?.oddsAutoEnabled === false || k.qualifying || k.doubles) return null;
   if (k.challenger) return s?.challengerOddsEnabled === false ? null : CHALLENGER_HOURS;
   if (s?.oddsFarEnabled !== false) return FAR_HOURS;
   const hours = Math.min(48, Math.max(1, Number(s?.oddsAutoHours) || 6));
@@ -48,7 +49,7 @@ export function oddsExplanation(start: string | undefined, k: OddsKind, s: Parti
   } else if (from != null) {
     lines.push('Todavía no se han leído: el lector las trae solo, cada pocas horas y cada pocos minutos en las últimas 3 horas.');
   } else {
-    lines.push(k.qualifying ? 'Las previas no se leen solas.' : 'Las lecturas automáticas están apagadas en los ajustes.');
+    lines.push(k.doubles ? 'Los dobles no se leen solos.' : k.qualifying ? 'Las previas no se leen solas.' : 'Las lecturas automáticas están apagadas en los ajustes.');
   }
   if (k.sport === 'basket') lines.push('Las líneas de jugador (puntos, rebotes…) las casas suelen sacarlas el mismo día del partido.');
   lines.push('Si las quieres ya, pulsa Actualizar cuotas: tarda un minuto.');

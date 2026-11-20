@@ -11,7 +11,7 @@ import { Button, Card, Field, Input, PageHeader, TeamLogo } from '@/components/u
 import { Toggle } from '@/components/sport';
 import { useFavorites } from '@/components/Favorites';
 import { alertPrefs, askPermission, notifyPermission, setAlertPrefs, type AlertKind } from '@/lib/notify';
-import { disablePush, enablePush, isIosBrowser, pushState, type PushState } from '@/lib/push';
+import { disablePush, enablePush, isIosBrowser, pushState, testPush, type PushState } from '@/lib/push';
 import { useAlerts } from '@/components/Alerts';
 import type { OddsAlertKind, OddsAlertPrefs } from '@/lib/types';
 
@@ -160,6 +160,28 @@ function AccountCard({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
+// Lo que dice la prueba de avisos, en palabras del usuario: quién lo ha aceptado o rechazado y qué tocar. Si el servicio de push lo
+// acepta y no sale, ya no es Sharpex sino el móvil (permiso, entrega programada o un modo Concentración)
+const PUSH_SERVICE: [RegExp, string][] = [[/push\.apple\.com$/, 'Apple'], [/googleapis\.com$/, 'Google'], [/mozilla\.com$/, 'Mozilla'], [/notify\.windows\.com$/, 'Windows']];
+const isIphone = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+function pushTestText(r: Awaited<ReturnType<typeof testPush>>): { ok: boolean; text: string } {
+  if (!r) return { ok: false, text: 'Este dispositivo no está apuntado: activa «Con la app cerrada».' };
+  const who = PUSH_SERVICE.find(([re]) => re.test(r.host))?.[1] ?? 'El servicio de avisos';
+  const fixed = r.repaired ? ' La suscripción de este dispositivo no valía y la he rehecho.' : '';
+  if (r.ok) {
+    return {
+      ok: true,
+      text: `${who} lo ha aceptado: tiene que salirte «Prueba de Sharpex».${fixed} Si no sale, lo frena el móvil: ${isIphone()
+        ? 'en Ajustes → Notificaciones → Sharpex, activa Permitir notificaciones, Bloqueo, Centro y Banners, con Entrega inmediata (no Resumen programado), y mira que ningún modo Concentración la silencie.'
+        : 'mira los ajustes de notificaciones del sistema y del navegador.'}`
+    };
+  }
+  // Sin código, no hubo respuesta del servicio: falló antes, en el servidor o en la red
+  const why = r.missing ? 'el servidor no tiene apuntado este dispositivo'
+    : r.status ? `${who} no lo acepta (${[r.status, r.reason].filter(Boolean).join(' ')})` : `no se ha podido mandar a ${who} (${r.reason || 'sin respuesta'})`;
+  return { ok: false, text: `No ha llegado: ${why}.${fixed} Desactiva y vuelve a activar «Con la app cerrada»${isIphone() ? '; si sigue igual, borra Sharpex de la pantalla de inicio y vuelve a añadirla desde Safari' : ''}.` };
+}
+
 // Avisos de cuotas: los detecta el servidor (server/services/bets/alerts.js) y salen en la campana. Qué tipos, en el servidor (valen en
 // todos tus dispositivos); recibirlos con la app cerrada, en cada navegador o móvil (src/lib/push.ts)
 function OddsAlertsCard() {
@@ -169,7 +191,16 @@ function OddsAlertsCard() {
   const alerts = useAlerts();
   const [push, setPush] = useState<PushState>('off');
   const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState<{ ok: boolean; text: string } | 'running' | null>(null);
   useEffect(() => { pushState().then(setPush); }, []);
+  async function runTest() {
+    const key = alerts.data?.push.key;
+    if (!key || test === 'running') return;
+    setTest('running');
+    try { setTest(pushTestText(await testPush(key))); }
+    catch (e) { setTest({ ok: false, text: (e as Error).message }); }
+    finally { setPush(await pushState()); qc.invalidateQueries({ queryKey: ['alerts'] }); }
+  }
   const ITEMS: [OddsAlertKind, string, string][] = [
     ['drop', 'Caídas de cuota', 'Cuando una cuota de tus apuestas pendientes, de tu cupón o del partido de un favorito baja un 10 % o más de una lectura a otra: suele ser dinero entrando o una noticia.'],
     ['rise', 'Subidas de cuota', 'Lo mismo cuando sube: si tienes apostado, el mercado se va en contra.'],
@@ -214,6 +245,17 @@ function OddsAlertsCard() {
           </div>
           {push === 'on' || push === 'off' ? <Toggle on={push === 'on'} onChange={v => !busy && togglePush(v)} label="" /> : null}
         </div>
+        {push === 'on' && (
+          <div className="flex flex-col gap-1.5 pt-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-xs text-zinc-500">
+                {test === 'running' ? 'En unos segundos llega un aviso de prueba: sal a la pantalla de inicio o bloquea el móvil para verlo como los demás.' : '¿No te llegan? Manda uno de prueba a este dispositivo.'}
+              </div>
+              <Button size="sm" variant="secondary" disabled={test === 'running'} onClick={runTest}>{test === 'running' ? 'Probando…' : 'Probar'}</Button>
+            </div>
+            {test && test !== 'running' && <p role="status" className={cn('text-xs leading-relaxed', test.ok ? 'text-emerald-400' : 'text-rose-300')}>{test.text}</p>}
+          </div>
+        )}
       </div>
     </Card>
   );

@@ -16,8 +16,12 @@ export const targetOfFootball = (m: Pick<FootballMatch, 'id' | 'home' | 'away' |
   match: { a: teamRef(m.home), b: teamRef(m.away), start: m.date, sport: 'football', league: m.league }
 });
 
-// El partido para el lector, el comparador y el cupón
+// El partido para el lector, el comparador y el cupón. En un dobles, a y b son las parejas ("Orlando Luz / Rafael Matos"): ese
+// nombre es la clave de sus cuotas y lo que reconoce el lector como pareja (server/services/odds/equipos.js)
 export const targetOfMatch = (m: TennisMatch): OddsTarget => ({
   id: m.id, done: m.state === 'post', sport: 'tennis', event: `${m.a.name} vs ${m.b.name}`, league: m.tournament,
-  match: { a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'tennis', league: m.tournament }
+  match: {
+    a: { name: m.a.name, code: '', alt: m.a.alt }, b: { name: m.b.name, code: '', alt: m.b.alt }, start: m.date, sport: 'tennis', league: m.tournament,
+    ...(m.doubles ? { doubles: true } : {})
+  }
 });

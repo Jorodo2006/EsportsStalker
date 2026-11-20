@@ -264,6 +264,20 @@ como notificación del sistema aunque la app esté cerrada (Web Push).
   admiten servicios de push de navegadores (`PUSH_HOSTS`), porque el servidor hace peticiones a esa dirección. Las caducadas
   (404/410) se borran. Necesita https (o localhost) y, en el iPhone, la app en la pantalla de inicio. El Chromium de código
   abierto (el del lector) no puede suscribirse: no lleva las claves de Google; Chrome, Edge, Firefox y Safari sí.
+- **Cuando no llegan** (20-11-2026, un iPhone 13 no recibía nada y otro iPhone sí):
+  - **Probar** en *Tu cuenta* (`POST /api/alerts/push/test`, `testPush` de `src/lib/push.ts`): manda un aviso sólo a ese
+    dispositivo, si es del usuario, 5 s después (para que dé tiempo a salir de la app), y dice qué respondió el servicio de push.
+    Si lo rechaza o el servidor no lo tenía, rehace la suscripción y prueba otra vez. Si lo acepta y no sale, el freno está en el
+    móvil (permiso, *Resumen programado*, un modo Concentración), y lo dice. Una prueba cada 10 s por usuario.
+  - **Suscripción con otra clave:** si cambian las claves VAPID (otras en el `.env`, `bets.vapid` vacía en otra base de datos), el
+    navegador sigue dando por buena la suscripción vieja y el servicio de push lo rechaza todo. `sameKey` lo detecta al abrir la
+    app (`resyncPush`) y la rehace; antes `enablePush` reutilizaba la que hubiera, así que ni apagar el interruptor la arreglaba siempre.
+  - **Contacto VAPID:** Apple rechaza la firma entera (403 BadJwtToken) con `mailto:avisos@sharpex.invalid`, el de reserva sin
+    `PUBLIC_URL`; con una dirección https o un correo de verdad, no (comprobado contra `web.push.apple.com`). El servicio lo avisa
+    al arrancar.
+  - El registro dice el servicio, el código y el motivo (`push (web.push.apple.com): 403 BadJwtToken`).
+  - Los *Avisos* del navegador (apuestas resueltas, recomendaciones fuertes, bajas; `src/lib/notify.ts`) salen por el service
+    worker (`showNotification`), como los de cuotas: `new Notification` falla en Android y no es la vía de Apple en el iPhone.
 - **CSP**: `worker-src 'self'` para `sw.js`, que nginx sirve sin caché.
 
 ## Rendimiento de la web

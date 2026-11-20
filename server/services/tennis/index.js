@@ -11,6 +11,7 @@ const { withPoints } = require('./points');
 const { matchStats } = require('./matchstats');
 const ls = require('./livescore');
 const ptl = require('./protennislive');
+const { espnDoubles } = require('./doubles');
 const { hits, queryOf } = require('../../shared/search');
 
 const TOURS = { atp: 'ATP', wta: 'WTA' };
@@ -77,8 +78,10 @@ async function ranks(tour) {
 
 // Partidos individuales de los torneos que salen en el marcador de ESPN (trae el torneo entero). 20 s: los puntos del juego sólo se
 // enseñan si los juegos cuadran con los de ESPN, y con más caché desaparecerían un buen rato al acabar cada juego
+// Los marcadores de unos días: traen a la vez individuales y dobles, así que los dobles (doubles.js) no cuestan peticiones nuevas
+const boardsOf = (tour, days, ttl = 20e3) => Promise.all(days.map(d => getJSON(`${site(tour)}/scoreboard?dates=${d}`, ttl)));
 async function matches(tour, days, ttl = 20e3) {
-  const [rk, ...boards] = await Promise.all([ranks(tour).catch(() => []), ...days.map(d => getJSON(`${site(tour)}/scoreboard?dates=${d}`, ttl))]);
+  const [rk, boards] = await Promise.all([ranks(tour).catch(() => []), boardsOf(tour, days, ttl)]);
   const rankById = Object.fromEntries(rk.map(r => [r.id, r]));
   const seen = new Set(), out = [];
   for (const j of boards) {
@@ -103,6 +106,21 @@ async function matches(tour, days, ttl = 20e3) {
   }
   return out;
 }
+
+// Los dobles de unos días (de from a to, en hora de España): ATP y WTA de ESPN y los Challenger de LiveScore, de los mismos
+// marcadores y días que los individuales (ninguna petición más). Aparte de /api/tennis/games a propósito (doubles.js explica por
+// qué). Si una fuente falla, salen los de la otra
+async function doublesBetween(from, to) {
+  const a = dayStart(from), b = dayStart(addDays(to, 1));
+  const days = []; for (let d = addDays(from, -1); d <= to; d = addDays(d, 1)) days.push(d);
+  const fmt = { roundEs, statusEs };
+  const lists = await Promise.all([
+    ...Object.keys(TOURS).map(t => boardsOf(t, days.map(ymd)).then(bs => espnDoubles(bs, t, fmt)).catch(e => { console.error(`[tennis] dobles ${t}:`, e.message); return []; })),
+    ls.challengerDoubles(days.map(ymd)).catch(e => { console.error('[tennis] dobles Challenger:', e.message); return []; })
+  ]);
+  return lists.flat().filter(m => { const t = new Date(m.date).getTime(); return t >= a && t < b; }).sort((x, y) => new Date(x.date) - new Date(y.date));
+}
+const doublesOn = day => doublesBetween(day, day);
 
 async function between(from, to) {
   const a = dayStart(from), b = dayStart(addDays(to, 1));
@@ -347,13 +365,18 @@ const routes = [
     .map(({ m, top, hard }) => ({ id: m.id, tour: m.tour, tournament: m.tournament, round: m.round, date: m.date, a: m.a, b: m.b, top, hard: hard[0] ?? null }))
     .sort((x, y) => y.top.p - x.top.p)],
   ['GET', '/api/tennis/games', async ({ query: q }) => withPoints(await withChallengers(await withQualifying(await between(valid(q.date), valid(q.date)), q.date, q.date), q.date, q.date))],
+  // Los dobles del día (doubles.js): sólo para la lista, la ficha, las cuotas a mano y la resolución de sus apuestas
+  ['GET', '/api/tennis/doubles', ({ query: q }) => doublesOn(valid(q.date))],
   ['GET', '/api/tennis/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));
     const to = addDays(from, n - 1);
-    const list = await withChallengers(await withQualifying(await between(from, to), from, to), from, to);
+    const [list, pairs] = await Promise.all([withChallengers(await withQualifying(await between(from, to), from, to), from, to), doublesBetween(from, to)]);
     const out = {};
-    for (let i = 0; i < n; i++) out[addDays(from, i)] = { total: 0, live: 0 };
+    // Los dobles, aparte: la tira de días los suma sólo con su interruptor encendido, y el resto (el próximo día con partidos, el
+    // deporte con más partidos de la primera visita) cuenta como antes
+    for (let i = 0; i < n; i++) out[addDays(from, i)] = { total: 0, live: 0, doubles: 0, doublesLive: 0 };
     for (const m of list) { const d = out[madridDay(new Date(m.date).getTime())]; if (d) { d.total++; if (m.state === 'in') d.live++; } }
+    for (const m of pairs) { const d = out[madridDay(new Date(m.date).getTime())]; if (d) { d.doubles++; if (m.state === 'in') d.doublesLive++; } }
     return out;
   }],
   ['GET', '/api/tennis/live', async () => { const t = madridDay(Date.now()), y = addDays(t, -1); return withPoints((await withChallengers(await withQualifying(await between(y, t), y, t), y, t)).filter(m => m.state === 'in')); }],

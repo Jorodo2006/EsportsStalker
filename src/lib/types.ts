@@ -64,6 +64,8 @@ export interface FriendRow extends Friend { unread: number; last: string | null;
 export type OddsAlertKind = 'drop' | 'rise' | 'value';
 export interface OddsAlert { id: string; kind: OddsAlertKind; sport: Sport | ''; title: string; body: string; open: { sport: Sport; id?: string; date?: string } | null; created: string; read: boolean }
 export interface AlertsList { list: OddsAlert[]; unread: number; push: { key: string | null; devices: number } }
+// status y reason: lo que respondió el servicio de push (Apple, Google…) si no lo aceptó; gone: dio el dispositivo por caducado
+export interface PushTestResult { ok: boolean; missing?: boolean; gone?: boolean; status?: number; reason?: string }
 export type OddsAlertPrefs = Record<OddsAlertKind, boolean>;
 // Lo del cupón que vigila el servidor: el partido con los nombres del comparador, la clave del mercado y la selección
 export interface OddsWatch { sport: Sport; a: string; b: string; key: string; out: string; id?: string; date?: string }
@@ -263,6 +265,8 @@ export interface TennisPlayer {
   id: string; name: string; short: string; flag: string; country: string; seed: number | null; rank: number | null;
   sets: number[]; setWins: boolean[]; tiebreaks: (number | null)[]; winner: boolean; alt: string[];
   entry?: string | null; // Challenger: cómo entró al cuadro, de ProTennisLive ('PR' ranking protegido, 'WC', 'Q'…)
+  // Dobles: el lado es una pareja (name "Orlando Luz / Rafael Matos", short "Luz / Matos") y aquí van sus dos jugadores
+  players?: { name: string; short: string; flag: string; country: string }[];
 }
 // Estadísticas de un jugador en un partido (server/services/tennis/matchstats.js); null si la fuente no lo da
 export interface TennisStatSide {
@@ -280,6 +284,9 @@ export interface TennisMatch {
   points?: TennisPoints | null; // sólo en juego, si cuadra con los juegos de ESPN
   level?: 'challenger'; // ATP Challenger (LiveScore): sin modelo, recomendaciones ni fichas de jugador
   fixed?: string; // el rival de ESPN no cuadraba con LiveScore y se ha cambiado (checkRivals en el servicio): qué daba cada uno
+  // Dobles (server/services/tennis/doubles.js, id "dbl:…"): sin modelo, recomendaciones ni fichas, y sus cuotas sólo se leen a mano.
+  // mtb: el tercer set es un super tie-break (llega como un set 1-0 con los puntos en tiebreaks)
+  doubles?: true; mtb?: true;
 }
 // Puntos del juego en curso: "15", "40", "AD"; en el tie-break, los que lleven. at: cuándo cambiaron por última vez (ms); source: de dónde salen
 export interface TennisPoints { a: string; b: string; server: 'a' | 'b' | null; tiebreak: boolean; at: number; source: string }
@@ -544,6 +551,8 @@ export interface Api {
     watch(list: OddsWatch[]): Promise<{ n: number }>;
     subscribe(subscription: PushSubscriptionJSON): Promise<{ ok: boolean }>;
     unsubscribe(endpoint: string): Promise<{ ok: boolean }>;
+    // Un aviso de prueba sólo a este dispositivo: lo que dijo su servicio de push (missing: el servidor no lo tiene apuntado)
+    testPush(endpoint: string): Promise<PushTestResult>;
   };
   shared: {
     inbox(): Promise<{ unseen: number; list: SharedBet[] }>;
@@ -612,9 +621,11 @@ export interface Api {
   };
   tennis: {
     games(date: string): Promise<TennisMatch[]>;
+    doubles(date: string): Promise<TennisMatch[]>; // los dobles del día (ATP, WTA y Challenger), aparte de games
     // Estadísticas de un partido: de la web de la WTA o, ya acabado, de TennisMyLife (null si aún no hay)
     matchStats(q: { tour: Tour; date: string; state: TennisMatch['state']; a: string; b: string }): Promise<TennisMatchStats | null>;
-    days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
+    // doubles y doublesLive: los dobles de cada día, aparte (total y live son sólo los individuales)
+    days(from: string, n: number): Promise<Record<string, { total: number; live: number; doubles?: number; doublesLive?: number }>>;
     live(): Promise<TennisMatch[]>;
     rankings(tour: Tour): Promise<TennisRank[]>;
     player(tour: Tour, id: string): Promise<TennisMatch[]>;

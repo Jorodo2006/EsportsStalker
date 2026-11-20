@@ -10,6 +10,7 @@ const APP = process.env.GATEWAY_URL || 'http://gateway:47365';
 const { focusGroups } = require('./foco');
 const { blocked } = require('./red');
 const { pageFind } = require('./pagefind'); // se ejecuta dentro de la página: ver pagefind.js
+const { winamaxFind } = require('./winamaxfind'); // ídem
 const LECTOR = process.env.LECTOR_FILE || '/lector-src/marcador.js';
 const POLL = 5e3; // en local no cuesta nada, y así un "Actualizar cuotas" empieza enseguida
 const JOB_MAX = 4 * 60e3; // una lectura normal tarda de 10 a 40 s
@@ -77,81 +78,7 @@ const snapshotOf = () => ({
   html: document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<svg[\s\S]*?<\/svg>/gi, '').slice(0, 4000000)
 });
 
-// ---------- funciones que se ejecutan dentro de la página (copiadas de la extensión) ----------
-// cfg: { cat } la categoría de LoL, o { sport, tours } un deporte y qué torneos mirar si no está en la portada
-function winamaxFind(teams, cfg) {
-  const s = window.PRELOADED_STATE;
-  if (!s) return null;
-  const norm = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const strip = x => norm(x).replace(/\b(e ?sports?|gaming|team|club|academy|bc|bk|kk|fc|basket(ball)?)\b/g, ' ').replace(/\s+/g, ' ').trim();
-  const al = t => [...new Set([t.name, t.code, ...(t.alt || [])].flatMap(x => [norm(x), strip(x)]).filter(x => x && x.length >= 2))];
-  // Errata de una letra en el apellido con la misma inicial ("Charlie Radke" por "Charles Radtke"): las casas no escriben igual
-  const near = (x, y) => {
-    if (Math.abs(x.length - y.length) > 1) return false;
-    let i = 0;
-    while (i < x.length && i < y.length && x[i] === y[i]) i++;
-    return x.slice(i + 1) === y.slice(i + 1) || x.slice(i) === y.slice(i + 1) || x.slice(i + 1) === y.slice(i);
-  };
-  const fuzzy = (name, t) => {
-    const wn = norm(name).split(' ').filter(Boolean), ln = wn[wn.length - 1];
-    return [t.name, ...(t.alt || [])].some(full => {
-      const wt = norm(full).split(' ').filter(Boolean), lt = wt[wt.length - 1];
-      return wt.length >= 2 && wn.length >= 2 && wt[0][0] === wn[0][0] && lt.length >= 5 && ln.length >= 5 && lt !== ln && near(lt, ln);
-    });
-  };
-  // MMA: nombre y apellido (o su inicial); el apellido solo no basta ("Silva", "Rodriguez" son de muchos luchadores)
-  const wordsOf = s => norm(s).split(' ').filter(Boolean);
-  const dist = (a, b) => {
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    return d[a.length][b.length];
-  };
-  const strictEq = (name, t) => {
-    const nw = wordsOf(name), tw = wordsOf(t.name);
-    if (!nw.length || !tw.length) return false;
-    if (tw.length === 1) return nw.join('').includes(tw[0]);
-    const ln = tw[tw.length - 1], fn = tw[0];
-    return nw.some(x => x === ln || (ln.length >= 5 && x.length >= 5 && dist(x, ln) <= 1)) && nw.some(x => x.startsWith(fn) || fn.startsWith(x) || (fn.length >= 6 && x.length >= 6 && dist(fn, x) <= 2));
-  };
-  // Una palabra distintiva en común ("Zelli" en "Rigas Zelli" y "Riga Zelli"); sólo en baloncesto (en tenis los nombres de pila se
-  // repiten) y sólo vale si el otro equipo también coincide (pick)
-  const GEN = /^(basket|basketball|baloncesto|club|sporting|united|city|calcio|futbol|football|tennis|esports?)$/;
-  const shares = (name, t) => { const ws = new Set(norm(name).split(' ').filter(w => w.length >= 5 && !GEN.test(w))); return [t.name, ...(t.alt || [])].some(x => norm(x).split(' ').some(w => ws.has(w))); };
-  const eq = (name, t) => { if (cfg.sport === 117) return strictEq(name, t); const n = norm(name), st = strip(name); return al(t).some(x => x === n || x === st || (x.length > 3 && (n.includes(x) || x.includes(n)))) || fuzzy(name, t) || (cfg.sport === 2 && shares(name, t)); };
-  const pick = matches => {
-    for (const m of Object.values(matches || {})) {
-      if (!m || !m.competitor1Name || (cfg.sport && m.sportId !== cfg.sport)) continue;
-      const a = m.competitor1Name, b = m.competitor2Name;
-      if ((eq(a, teams[0]) && eq(b, teams[1])) || (eq(a, teams[1]) && eq(b, teams[0]))) return String(m.matchId);
-    }
-    return null;
-  };
-  const hit = pick(s.matches);
-  if (hit) return hit;
-  const rx = cfg.tours ? new RegExp(cfg.tours, 'i') : null;
-  const tours = cfg.cat ? ((s.categories && s.categories[cfg.cat] && s.categories[cfg.cat].tournaments) || [])
-    : ((s.sports && s.sports[cfg.sport] && s.sports[cfg.sport].categories) || [])
-      .flatMap(c => (s.categories && s.categories[c] && s.categories[c].tournaments) || [])
-      .filter(t => rx && rx.test((s.tournaments && s.tournaments[t] && s.tournaments[t].tournamentName) || '')).slice(0, 12);
-  if (!tours.length) return 'no';
-  return new Promise(resolve => {
-    const state = {};
-    const merge = (t, x) => { for (const k of Object.keys(x)) { const v = x[k]; if (v && typeof v === 'object' && !Array.isArray(v)) { if (!t[k] || typeof t[k] !== 'object' || Array.isArray(t[k])) t[k] = {}; merge(t[k], v); } else t[k] = v; } };
-    let sent = false, quiet = null, over = false;
-    const ws = new WebSocket('wss://sports-eu-west-3.winamax.es/uof-sports-server/socket.io/?language=ES&version=3.72.0&embed=false&EIO=3&transport=websocket');
-    const done = () => { if (over) return; over = true; try { ws.close(); } catch (_) {} resolve(pick(state.matches) || 'no'); };
-    const send = () => { if (sent) return; sent = true; tours.forEach(t => ws.send('42' + JSON.stringify(['m', { route: 'tournament:' + t }]))); quiet = setTimeout(done, 2500); };
-    setTimeout(done, 12000);
-    ws.onmessage = ev => {
-      const d = String(ev.data);
-      if (d.charAt(0) === '0') setTimeout(send, 800);
-      else if (d === '40') send();
-      else if (d.slice(0, 2) === '42') { try { const x = JSON.parse(d.slice(2)); if (x[0] === 'm' && x[1]) merge(state, x[1]); } catch (_) {} if (sent) { clearTimeout(quiet); quiet = setTimeout(done, 1500); } }
-    };
-    ws.onerror = done;
-  });
-}
+// Las funciones que se ejecutan dentro de la página (copiadas de la extensión) están en winamaxfind.js y pagefind.js
 
 // ---------- cada casa ----------
 const BOOKS = {
@@ -279,9 +206,15 @@ const SPORT_CFG = {
     wm: 2, tours: job => WINAMAX_TOURS[job.match.league] || 'nba|euro',
     bw: job => (BETWAY_LISTS[job.match.league] ? 'grp/basketball/' + BETWAY_LISTS[job.match.league] : null), bwCat: 'cat/basketball'
   },
-  // Tenis: el torneo va en league ("Rolex Paris Masters"); se buscan sus torneos por la palabra más larga del nombre
+  // Tenis: el torneo va en league ("Rolex Paris Masters"); se buscan sus torneos por la palabra más larga del nombre. Los dobles
+  // tienen sus propios torneos en Winamax ("CH75 Sydney, Dobles", "ATP - Finals, Dobles"): la ciudad (antes de la coma, "Sydney,
+  // Australia") o la palabra más larga, y "dobles"
   tennis: {
-    wm: 5, tours: job => (String(job.match.league || '').split(/[^A-Za-z]+/).sort((a, b) => b.length - a.length)[0] || 'atp|wta'),
+    wm: 5, tours: job => {
+      const league = String(job.match.league || '');
+      const word = (job.match.doubles ? league.split(',')[0] : league).split(/[^A-Za-z]+/).sort((a, b) => b.length - a.length)[0];
+      return job.match.doubles ? `(${word || 'atp|wta'}).*dobles` : word || 'atp|wta';
+    },
     bw: () => null, bwCat: 'cat/tennis'
   },
   // Fútbol: la competición va en league con el id de la app ("laliga", "premier"…)
@@ -307,14 +240,16 @@ const cfgOf = job => SPORT_CFG[job.match.sport] || SPORT_CFG.basket;
 // Betway cambió su portada de tenis (noviembre de 2026): ya sólo enseña tres "Eventos populares", y el resto de partidos están en
 // la página de cada torneo ("Ligas principales": grp/tennis/wta/wta-finals, grp/tennis/challenger/sydney---australia…). Se
 // prueban los torneos de esa portada, primero los que más se parecen al del partido ("FAGE WTA Finals Indian Wells" → WTA Finals),
-// sin los de dobles y como mucho 4: si no, en 3 días encontró 1 de 35 partidos
+// sin los de dobles y como mucho 4: si no, en 3 días encontró 1 de 35 partidos. Para un dobles, al revés: sólo los de dobles (en los
+// Challenger Betway no los tiene: en la página de Sídney, en noviembre de 2026, sólo estaban los individuales)
 const tennisGroupLinks = () => [...document.querySelectorAll('a[href*="/sports/grp/tennis/"]')]
   .map(a => ({ href: a.getAttribute('href'), text: a.innerText || '' }));
-function rankTennisGroups(links, league) {
+function rankTennisGroups(links, league, doubles = false) {
   const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const words = new Set(norm(league).split(/[^a-z]+/).filter(w => w.length >= 4 && !['open', 'tour', 'tennis', 'presented'].includes(w)));
   const score = l => norm(`${l.text} ${l.href}`).split(/[^a-z]+/).filter(w => words.has(w)).length;
-  const unique = [...new Map((links || []).filter(l => l.href && !/dobles|doubles/i.test(l.href + l.text)).map(l => [l.href, l])).values()];
+  const isDoubles = l => /dobles|doubles/i.test(l.href + l.text);
+  const unique = [...new Map((links || []).filter(l => l.href && isDoubles(l) === !!doubles).map(l => [l.href, l])).values()];
   return unique.map(l => ({ href: l.href, s: score(l) })).sort((a, b) => b.s - a.s).slice(0, 4).map(l => l.href);
 }
 
@@ -324,7 +259,7 @@ const BASKET_BOOKS = {
     let id = (String(job.urls.winamax || '').match(/match\/(\d+)/) || [])[1];
     const page = await openTab(ctx, id ? `https://www.winamax.es/apuestas-deportivas/match/${id}` : `https://www.winamax.es/apuestas-deportivas/sports/${cfgOf(job).wm}`);
     if (!id) {
-      id = await until(page, winamaxFind, [[job.match.a, job.match.b], { sport: cfgOf(job).wm, tours: cfgOf(job).tours(job) }], 20000);
+      id = await until(page, winamaxFind, [[job.match.a, job.match.b], { sport: cfgOf(job).wm, tours: cfgOf(job).tours(job), doubles: !!job.match.doubles }], 20000);
       if (!id || id === 'no') throw new Error('No encuentro el partido en Winamax');
       await goTo(page, `https://www.winamax.es/apuestas-deportivas/match/${id}`);
     }
@@ -338,14 +273,14 @@ const BASKET_BOOKS = {
     let ev = (String(job.urls.betway || '').match(/event\/(\d+)/) || [])[1], page;
     if (!ev) {
       const teams = [job.match.a, job.match.b];
-      const opts = { href: 'a[href*="/sports/event/"]', selector: '[data-eventid],a[href*="/sports/event/"],div,li,article', scroll: true, words: (job.match.sport || 'basket') === 'basket' };
+      const opts = { href: 'a[href*="/sports/event/"]', selector: '[data-eventid],a[href*="/sports/event/"],div,li,article', scroll: true, words: (job.match.sport || 'basket') === 'basket', doubles: !!job.match.doubles };
       const look = async ms => (String((await until(page, pageFind, [teams, opts], ms)) || '').match(/event\/(\d+)/) || [])[1];
       const list = cfgOf(job).bw(job);
       page = await openTab(ctx, `https://betway.es/es/es/sports/${list || cfgOf(job).bwCat}`);
       ev = await look(12000);
       if (!ev && list) { await goTo(page, `https://betway.es/es/es/sports/${cfgOf(job).bwCat}`); ev = await look(10000); }
       if (!ev && job.match.sport === 'tennis') {
-        for (const href of rankTennisGroups(await run(page, tennisGroupLinks), job.match.league)) {
+        for (const href of rankTennisGroups(await run(page, tennisGroupLinks), job.match.league, !!job.match.doubles)) {
           say('buscando', 'Buscando en los torneos…');
           await goTo(page, `https://betway.es${href}`);
           ev = await look(8000);

@@ -25,7 +25,8 @@ export const matchOfGame = (g: BasketGame) => ({
 // Lo que necesita el comparador de cualquier deporte: el partido para el lector y cómo apuntarlo en el cupón
 export interface OddsTarget {
   id: string; done: boolean; sport: Sport; event: string; league: string;
-  match: { a: TeamRef; b: TeamRef; start?: string; sport: Sport; league?: string; event?: string };
+  // doubles: un dobles de tenis; el lector lo busca en los torneos de dobles de las casas, y no se lee solo
+  match: { a: TeamRef; b: TeamRef; start?: string; sport: Sport; league?: string; event?: string; doubles?: boolean };
 }
 export const targetOfGame = (g: BasketGame): OddsTarget => ({
   id: g.id, done: g.state === 'post', sport: 'basket', event: `${g.away.abbr} @ ${g.home.abbr}`, league: LEAGUE_NAME[g.league], match: matchOfGame(g)
@@ -125,7 +126,7 @@ export function SportOdds({ target }: { target: OddsTarget }) {
       {isLoading ? <Loading label="Cargando cuotas…" /> : error ? <ErrorBox error={error} /> : !data?.markets.length ? (
         <Empty>
           <span className="block font-medium text-zinc-200">Todavía no hay cuotas de este partido</span>
-          {oddsExplanation(target.match.start, { sport: target.sport, challenger: target.id.startsWith('ch:') }, settings, data?.sources).map(t => <span key={t} className="mt-1.5 block">{t}</span>)}
+          {oddsExplanation(target.match.start, { sport: target.sport, challenger: target.id.startsWith('ch:'), doubles: !!target.match.doubles }, settings, data?.sources).map(t => <span key={t} className="mt-1.5 block">{t}</span>)}
         </Empty>
       ) : <>
         <div className="flex flex-wrap gap-1">
