@@ -12,16 +12,18 @@ self.addEventListener('push', e => {
   }));
 });
 
-// Al pulsarla se va a lo que avisa. Si la app está abierta en alguna pestaña, se le pasa el aviso por mensaje y se pone delante: la
-// app abre su partido sin recargar (navegar la pestaña falla si no la controla este service worker, p. ej. tras recargar con
-// Ctrl+Mayús+R, y entonces sólo se ponía delante). Si no hay ninguna, se abre con ?aviso=<id>, que la app lee al arrancar
+// Al pulsarla se va a lo que avisa. La dirección ya es la del partido (/futbol/partido/…?dia=…&aviso=<id>, urlOf en
+// server/services/bets/alerts.js). Si la app está abierta en alguna pestaña (mejor la que se ve), se le pasa por mensaje y se pone
+// delante: la app abre el partido sin recargar (navegar la pestaña falla si no la controla este service worker, p. ej. tras
+// recargar con Ctrl+Mayús+R, y entonces sólo se ponía delante). Si no hay ninguna, se abre en esa dirección
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = new URL(e.notification.data?.url || '/', self.location.origin);
   const id = url.searchParams.get('aviso');
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    const open = list.find(c => new URL(c.url).origin === self.location.origin);
-    if (open && id) { open.postMessage({ type: 'aviso', id }); return open.focus(); }
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(all => {
+    const list = all.filter(c => new URL(c.url).origin === self.location.origin);
+    const open = list.find(c => c.focused) || list.find(c => c.visibilityState === 'visible') || list[0];
+    if (open && id) { open.postMessage({ type: 'aviso', id, path: url.pathname + url.search }); return open.focus(); }
     if (open) return open.navigate(url.href).then(c => (c || open).focus()).catch(() => open.focus());
     return self.clients.openWindow(url.href);
   }));

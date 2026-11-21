@@ -7,6 +7,7 @@ import { Bell, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import { resyncPush } from '@/lib/push';
+import { parseRoute } from '@/lib/route';
 import type { OddsAlert, OddsWatch, Sport } from '@/lib/types';
 import { useMember } from './AuthGate';
 import { Button, Dialog, Empty } from './ui';
@@ -34,8 +35,10 @@ const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amb
 // Avisos ya seguidos desde una notificación (compartido por las dos campanas)
 const followed = new Set<string>();
 // El ?aviso=<id> con el que se abre la app desde una notificación. Se lee al cargar, antes de que el enrutador (lib/history.ts)
-// reescriba la dirección con la ruta limpia: después ya no está
+// reescriba la dirección con la ruta limpia: después ya no está. Las notificaciones de ahora ya abren en la dirección del partido
+// (bootAt: sólo queda marcarlo leído); las de antes llegaban a «/» y hay que buscar el aviso para saber adónde ir
 let bootAviso: string | null = (() => { try { return new URL(location.href).searchParams.get('aviso'); } catch { return null; } })();
+const bootAt = typeof location !== 'undefined' && location.pathname !== '/';
 
 export function AlertsBell({ className }: { className?: string }) {
   const member = useMember();
@@ -45,21 +48,39 @@ export function AlertsBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const unread = q.data?.unread ?? 0;
 
-  // Pulsar una notificación del sistema lleva a lo que avisa: la app se abre con ?aviso=<id> o, si ya estaba abierta, el service
-  // worker (public/sw.js) le pasa el número. Se busca el aviso y se abre su partido; sin partido (o si ya no está), la lista
+  // Pulsar una notificación del sistema lleva a lo que avisa. La notificación trae la dirección del partido: con la app cerrada se
+  // abre ya en ella; si estaba abierta, el service worker (public/sw.js) le pasa el número y la dirección, y se va directa, sin
+  // esperar a nada. Sólo las notificaciones de antes (a «/», sin dirección) buscan el aviso para saber su partido
   useEffect(() => {
     if (!member) return;
-    const follow = async (id: string) => {
+    const markRead = (id: string) => window.api.alerts.read([id]).then(() => qc.invalidateQueries({ queryKey: ['alerts'] })).catch(() => {});
+    const follow = async (id: string, path?: string) => {
       if (followed.has(id)) return; // hay dos campanas (la del móvil y la del menú lateral): sólo la primera lo sigue
       followed.add(id);
+      setOpen(false);
+      const to = path && path.startsWith('/') && !path.startsWith('//') ? new URL(path, location.origin) : null;
+      if (to && to.pathname !== '/') {
+        const r = parseRoute(to.pathname, to.search, 'football');
+        if (r.view === 'matches') {
+          if (r.match) openGame(r.match, r.day, r.app);
+          else openList(r.app, r.day);
+          markRead(id);
+          return;
+        }
+      }
       const data = await qc.fetchQuery({ queryKey: ['alerts'], queryFn: () => window.api.alerts.list(), staleTime: 0 }).catch(() => null);
       const a = data?.list.find(x => x.id === id);
       if (!a?.open) { setOpen(true); return; }
-      window.api.alerts.read([id]).then(() => qc.invalidateQueries({ queryKey: ['alerts'] })).catch(() => {});
+      markRead(id);
       openMatch(a);
     };
-    if (bootAviso) { const id = bootAviso; bootAviso = null; follow(id); }
-    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'aviso' && typeof e.data.id === 'string') follow(e.data.id); };
+    if (bootAviso) {
+      const id = bootAviso; bootAviso = null;
+      if (bootAt) { followed.add(id); markRead(id); } else follow(id);
+    }
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'aviso' && typeof e.data.id === 'string') follow(e.data.id, typeof e.data.path === 'string' ? e.data.path : undefined);
+    };
     navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
   }, [member]); // eslint-disable-line react-hooks/exhaustive-deps
