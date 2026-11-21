@@ -12,6 +12,7 @@ import { CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, OddsL
 import { Button, ErrorBox, Loading, Select } from '@/components/ui';
 import MatchDetail from './MatchDetail';
 import { FavoritesStrip } from '@/components/Favorites';
+import { MyBetsLive } from '@/components/MyBetsLive';
 import { cardNote } from '@/lib/odds-window';
 
 const stateOf = (m: MatchEvent): MatchState => (m.state === 'inProgress' ? 'live' : m.state === 'completed' ? 'post' : 'pre');
@@ -99,6 +100,7 @@ export default function MatchesView() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
+      <MyBetsLive />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={counts} />} value={filter} onChange={setFilter} counts={stateCounts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); savePref('lol-odds', v); }} label="Cuotas" />

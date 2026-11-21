@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { movesOf } = require('../services/odds/moves');
-const { targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue } = require('../services/bets/alerts');
+const { targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue, urlOf } = require('../services/bets/alerts');
 const { cleanSub, failureOf } = require('../services/bets/push');
 
 const prev = new Map([
@@ -83,4 +83,16 @@ test('push: el motivo del rechazo, de Apple (JSON) y de Google (texto), para la 
   assert.deepStrictEqual(failureOf({ statusCode: 403, body: 'the key in the authorization header does not correspond to the sender ID' }), { status: 403, reason: 'the key in the authorization header does not correspond to the sender ID' });
   // Sin respuesta del servicio (la red): el mensaje del error
   assert.deepStrictEqual(failureOf(new Error('getaddrinfo ENOTFOUND web.push.apple.com')), { status: 0, reason: 'getaddrinfo ENOTFOUND web.push.apple.com' });
+});
+
+test('la notificación lleva a la dirección del partido (la de src/lib/route.ts), con el día en España', () => {
+  assert.strictEqual(urlOf(40, { sport: 'football', id: 'laliga:401882805', date: '2026-11-20T23:30Z' }), '/futbol/partido/laliga:401882805?dia=2026-11-21&aviso=40');
+  assert.strictEqual(urlOf(7, { sport: 'basket', id: '401810123', date: '2026-11-21T01:00Z' }), '/baloncesto/partido/401810123?dia=2026-11-21&aviso=7');
+  // Sin partido, o de LoL: la lista de su día
+  assert.strictEqual(urlOf(8, { sport: 'tennis', date: '2026-11-21T10:00Z' }), '/tenis?dia=2026-11-21&aviso=8');
+  assert.strictEqual(urlOf(9, { sport: 'lol', id: '1129', date: '2026-11-21T10:00Z' }), '/lol?dia=2026-11-21&aviso=9');
+  // Sin nada que abrir, o algo raro: la portada, como antes
+  assert.strictEqual(urlOf(10, null), '/?aviso=10');
+  assert.strictEqual(urlOf(11, { sport: 'x', id: '1' }), '/?aviso=11');
+  assert.strictEqual(urlOf(12, { sport: 'mma', id: 'ufc:1/../x' }), '/mma/partido/ufc:1%2F..%2Fx?aviso=12');
 });

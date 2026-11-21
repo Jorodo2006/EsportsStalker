@@ -43,6 +43,21 @@ function statusEs(s) {
   if (only) return only.label.replace(/^p/, 'P');
   return ({ postponed: 'Aplazado', canceled: 'Suspendido', cancelled: 'Suspendido', delayed: 'Retrasado', suspended: 'Interrumpido', 'in progress': 'En juego', scheduled: '', tbd: '' })[t.toLowerCase()] ?? t;
 }
+// NBA Cup: ESPN lo pone en la nota del partido («NBA Cup - Group Play», «NBA Cup - Quarterfinals», «NBA Cup - Semifinals»,
+// «NBA Cup Championship»). La misma regla que cupKind de src/lib/basket-context.ts. El modelo lo usa para la fiabilidad de las
+// eliminatorias (docs/specs/08-baloncesto.md: medido, en la fase de grupos se juega igual que en la liga)
+function cupOf(note) {
+  const n = String(note || '').toLowerCase();
+  if (!/\bnba cup\b|in-season tournament/.test(n)) return null;
+  return /group/.test(n) ? 'group' : 'ko';
+}
+const CUP_ROUND = [[/quarter/, 'Cuartos'], [/semi/, 'Semifinal'], [/championship|final/, 'Final'], [/group/, 'Fase de grupos']];
+function cupRound(note) {
+  if (!cupOf(note)) return '';
+  const n = String(note).toLowerCase();
+  const r = CUP_ROUND.find(([re]) => re.test(n));
+  return `NBA Cup${r ? ` · ${r[1]}` : ''}`;
+}
 const headshot = (lg, id) => `https://a.espncdn.com/i/headshots/${lg}/players/full/${id}.png`;
 
 function parseGamelog(json, season) {
@@ -68,7 +83,9 @@ function parseGamelog(json, season) {
         const get = n => (col(n) >= 0 ? e.stats[col(n)] : undefined);
         const min = num(get('minutes'));
         if (!min) continue; // no jugó
+        const cup = cupOf(meta.eventNote);
         out.push({
+          ...(cup ? { cup } : {}),
           id: e.eventId, date: meta.gameDate || null, season, type,
           home: meta.atVs ? meta.atVs !== '@' : null,
           opp: meta.opponent?.abbreviation || '?', team: meta.team?.abbreviation || null, teamId: meta.team?.id || null,
@@ -84,8 +101,10 @@ function parseGamelog(json, season) {
 }
 
 // Partidos de unos días de EE. UU. (AAAAMMDD). ESPN no acepta rangos en la NBA: un día por petición
+// 20 s, como el tenis: es el marcador de la lista y de «Tus apuestas» (antes 60 s, y con lo que se sirve caducado mientras se
+// renueva, un canasto tardaba hasta 2 min en verse)
 async function games(lg, days) {
-  const lists = await Promise.all(days.map(d => getJSON(`${site(lg)}/scoreboard?dates=${d}`, 60e3)));
+  const lists = await Promise.all(days.map(d => getJSON(`${site(lg)}/scoreboard?dates=${d}`, 20e3)));
   return lists.flatMap(j => j.events || []).map(ev => {
     const comp = ev.competitions?.[0] || {};
     const side = ha => {
@@ -96,10 +115,15 @@ async function games(lg, days) {
       };
     };
     const st = ev.status?.type?.state;
+    // NBA Cup (ronda en la ficha) y pista neutral (semifinales y final de la Cup en Las Vegas, partidos en otros países): ahí el
+    // modelo no cuenta ventaja de jugar en casa
+    const note = (comp.notes || []).map(n => n?.headline).find(Boolean) || '';
+    const cup = cupOf(note), round = cupRound(note);
     return {
       id: `${lg}:${ev.id}`, league: lg, date: ev.date, state: st === 'in' ? 'in' : st === 'post' ? 'post' : 'pre',
       status: statusEs(ev.status?.type?.shortDetail), clock: st === 'in' ? statusEs(ev.status?.type?.shortDetail) : '',
-      home: side('home'), away: side('away')
+      home: side('home'), away: side('away'),
+      ...(round ? { round } : {}), ...(cup ? { cup } : {}), ...(comp.neutralSite ? { neutral: true } : {})
     };
   });
 }
@@ -277,11 +301,11 @@ function boxLeaders(roster, logs) {
   return { avg, leaders };
 }
 
-module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs, statusEs };
+module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs, statusEs, cupOf, cupRound };
 
 // Estadísticas de un partido: jugadores de cada equipo, totales y puntos por cuarto
 async function boxscore(lg, eventId) {
-  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 30e3);
+  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 15e3); // las cifras de los jugadores en juego (líneas de «Tus apuestas»)
   const comps = j.header?.competitions?.[0]?.competitors || [];
   const toNum = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   const teams = (j.boxscore?.players || []).map(t => {

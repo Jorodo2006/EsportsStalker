@@ -144,9 +144,11 @@ export interface PointProjection {
 const widen = (variance: number, neff: number) => POINT_PARAMS.sdScale * Math.sqrt(variance * (1 + 2 / Math.max(neff, 1)));
 
 // La media de la liga más lo que el equipo anota por encima de ella y lo que el rival encaja por encima de ella, y la ventaja de
-// jugar en casa a medias entre los dos. Devuelve null si alguno no tiene partidos.
-export function projectGame(d: BasketLeagueGames, awayId: string, homeId: string, period: PointPeriod = 'game', before?: string, season = d.currentSeason): PointProjection | null {
-  const base = leagueBase(d, period, before);
+// jugar en casa a medias entre los dos (nada en pista neutral: semifinales y final de la NBA Cup, partidos en otros países).
+// Devuelve null si alguno no tiene partidos.
+export function projectGame(d: BasketLeagueGames, awayId: string, homeId: string, period: PointPeriod = 'game', before?: string, season = d.currentSeason, neutral = false): PointProjection | null {
+  const lb = leagueBase(d, period, before);
+  const base = lb && neutral ? { ...lb, hca: 0 } : lb;
   const rowsAway = teamRows(d, awayId, period, before), rowsHome = teamRows(d, homeId, period, before);
   if (!base || !rowsAway.length || !rowsHome.length) return null;
   const a = sample(rowsAway, season), b = sample(rowsHome, season);

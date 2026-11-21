@@ -51,7 +51,7 @@ function flush() {
 
 // Baloncesto: la clave del mercado es la misma del comparador de cuotas, con la que se resuelven las apuestas
 export function basketPrediction(p: BasketPick): PredictionIn | null {
-  const base = { sport: 'basket' as const, match: p.game.id, start: p.game.date, event: `${p.game.away.abbr} @ ${p.game.home.abbr}`, league: p.game.league.toUpperCase(), out: p.side, title: p.title, book: p.book, price: p.price, p: p.p, pModel: p.pModel, pMarket: p.pMarket, ev: p.ev, rel: p.rel.score };
+  const base = { sport: 'basket' as const, match: p.game.id, start: p.game.date, event: `${p.game.away.abbr} @ ${p.game.home.abbr}`, league: p.game.cup ? 'NBA Cup' : p.game.league.toUpperCase(), out: p.side, title: p.title, book: p.book, price: p.price, p: p.p, pModel: p.pModel, pMarket: p.pMarket, ev: p.ev, rel: p.rel.score };
   if (p.kind === 'player' && p.who && p.marketKey) {
     const label = BASKET_MARKETS[p.marketKey].label;
     return { ...base, key: `player|${label}|${p.who.name.toLowerCase()}|${p.line}`, group: label };

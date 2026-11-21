@@ -26,6 +26,20 @@ const pctOf = c => `${c > 0 ? '+' : '−'}${Math.round(Math.abs(c) * 100)} %`;
 const madridDay = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 const SPORT_NAME = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
 
+// La dirección a la que lleva la notificación: la del partido (la misma forma que hrefOf de src/lib/route.ts), o la lista de su
+// día si no tiene partido o es de LoL (su ficha necesita el partido entero). Con ?aviso=<id> para que la app lo marque como leído.
+// Antes era siempre /?aviso=<id> y la app tenía que buscar el aviso al arrancar para saltar al partido: si la sesión o la lista
+// tardaban, se quedaba en la portada
+const SPORT_SLUG = { lol: 'lol', basket: 'baloncesto', tennis: 'tenis', football: 'futbol', mma: 'mma' };
+function urlOf(id, open) {
+  const slug = SPORT_SLUG[open?.sport];
+  if (!slug) return `/?aviso=${id}`;
+  const day = open.date && !isNaN(Date.parse(open.date)) ? madridDay(new Date(open.date)) : null;
+  const q = new URLSearchParams({ ...(day ? { dia: day } : {}), aviso: String(id) });
+  const path = open.id && open.sport !== 'lol' ? `/${slug}/partido/${encodeURIComponent(String(open.id)).replace(/%3A/gi, ':')}` : `/${slug}`;
+  return `${path}?${q}`;
+}
+
 // ---------- Quién tiene que enterarse (funciones puras, con pruebas en server/test/avisos.test.js) ----------
 
 // ¿El texto del partido de una apuesta ("UTAH @ LAC", "Albacete - Celta", "Alcaraz vs Sinner") nombra a este equipo?
@@ -137,7 +151,7 @@ async function deliver(userId, a, { repeatMs = REPEAT_MS } = {}) {
   // Sólo el aviso de que hay algo nuevo, sin el texto: el gateway se lo manda sólo a ese usuario (data.to)
   notify('alerts:new', { to: String(userId) });
   const today = (await query(`SELECT count(*)::int AS n FROM bets.alerts WHERE user_id = $1 AND created_at > now() - interval '1 day'`, [userId])).rows[0].n;
-  if (today <= PUSH_PER_DAY) push.send(userId, { title: a.title, body: a.body, tag: a.dedupe, url: `/?aviso=${rows[0].id}` }).catch(() => {});
+  if (today <= PUSH_PER_DAY) push.send(userId, { title: a.title, body: a.body, tag: a.dedupe, url: urlOf(rows[0].id, a.open) }).catch(() => {});
   return true;
 }
 
@@ -248,4 +262,4 @@ function startAlerts() {
   setInterval(() => query(`DELETE FROM bets.alerts WHERE created_at < now() - interval '${KEEP_DAYS} days'`).catch(() => {}), 6 * 3600e3);
 }
 
-module.exports = { fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue };
+module.exports = { fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, urlOf, cleanWatch, cleanPrefs, isValue };

@@ -457,6 +457,8 @@ export interface BasketSide { id: string; abbr: string; name: string; logo: stri
 export interface BasketGame {
   id: string; league: BasketLeagueId; date: string; state: 'pre' | 'in' | 'post'; status: string; clock: string; round?: string;
   home: BasketSide; away: BasketSide;
+  // NBA: partido de la NBA Cup (fase de grupos o eliminatoria) y pista neutral (sin ventaja de campo: Las Vegas, otros países)
+  cup?: 'group' | 'ko'; neutral?: boolean;
 }
 export interface BasketRosterPlayer { id: string; name: string; pos: string; jersey: string; headshot: string; injury: string | null }
 // Clasificación y ficha de equipo
@@ -485,6 +487,7 @@ export interface BasketLogGame {
   id: string; date: string; season: number; type: 'reg' | 'post' | 'pre'; home: boolean | null; opp: string;
   team: string | null; teamId: string | null; result: string; score: string;
   min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number;
+  cup?: 'group' | 'ko'; // NBA Cup: fase de grupos o eliminatoria (de eventNote de ESPN; los registros guardados antes no lo llevan)
 }
 export interface BasketGamelog { currentSeason: number; games: BasketLogGame[] }
 // Un partido reciente de su equipo que no jugó, con el motivo (sólo NBA y WNBA)

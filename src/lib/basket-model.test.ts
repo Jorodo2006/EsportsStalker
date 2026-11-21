@@ -1,6 +1,7 @@
 // Modelo de props de baloncesto: que las pantallas den lo mismo y que los ajustes medidos (PROJ) hagan lo que dicen
 import { describe, expect, it } from 'vitest';
-import { PROJ, analyze, playerLines, project, scanLine, type BasketCtx } from './basket-model';
+import { PROJ, analyze, gameExtras, playerLines, project, scanLine, type BasketCtx } from './basket-model';
+import { cupKind } from './basket-context';
 import { freshKeyOuts, matesOut, withAndWithout } from './basket-mates';
 import type { BasketLogGame, BasketTeamLogs, MarketLine, MatchOdds } from './types';
 
@@ -131,5 +132,30 @@ describe('líneas de un jugador en las casas (playerLines)', () => {
   it('una abreviatura que puede ser otro jugador del partido no se usa', () => {
     const odds = oddsOf([['D. Mitchell', 'Puntos', 24.5, 1.9, 1.9, 'Betway'], ['Davion Mitchell', 'Puntos', 9.5, 1.85, 1.95, 'Winamax']]);
     expect(playerLines(odds, 'Donovan Mitchell').Puntos).toBeUndefined();
+  });
+});
+
+describe('NBA Cup y pista neutral', () => {
+  it('reconoce la nota de ESPN', () => {
+    expect(cupKind('NBA Cup - Group Play')).toBe('group');
+    expect(cupKind('NBA Cup - Quarterfinals')).toBe('ko');
+    expect(cupKind('NBA Cup - Semifinals')).toBe('ko');
+    expect(cupKind('NBA Cup Championship')).toBe('ko');
+    expect(cupKind('NBA Mexico City Game 2025')).toBeNull();
+    expect(cupKind('East 1st Round - Game 1')).toBeNull();
+    expect(cupKind(undefined)).toBeNull();
+  });
+  it('en pista neutral nadie juega en casa; la Cup pasa al contexto', () => {
+    expect(gameExtras({ neutral: true, cup: 'ko' }, true)).toEqual({ home: null, cup: 'ko' });
+    expect(gameExtras({}, false)).toEqual({ home: false });
+    expect(gameExtras(null, true)).toEqual({ home: true });
+  });
+  it('la fase de grupos no cambia nada y la eliminatoria baja la fiabilidad, no la proyección', () => {
+    const g = games(20, 40, { pts: 20, min: 32 }, { pts: 19, min: 31 });
+    const odds = { over: 1.9, under: 1.9 };
+    const base = analyze(g, 'pts', 19.5, odds, ctx)!, group = analyze(g, 'pts', 19.5, odds, { ...ctx, cup: 'group' })!, ko = analyze(g, 'pts', 19.5, odds, { ...ctx, cup: 'ko' })!;
+    expect(group.rel.score).toBe(base.rel.score);
+    expect(ko.mu).toBe(base.mu);
+    expect(ko.rel.score).toBeLessThan(base.rel.score);
   });
 });
