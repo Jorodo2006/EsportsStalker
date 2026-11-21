@@ -496,4 +496,14 @@ test('avisos físicos: de quién son, sin alta probabilidad, y el valor con la r
   assert.deepEqual(hurt.who, { retirada_reciente: ['b'], ranking_protegido: ['a'] });
   assert.ok(hurt.retirada.total > ok.retirada.total);
   assert.equal(hurt.picks.some((x) => x.tipo === 'probabilidad'), false);
+  // Sólo el rival (B) con el aviso: A sigue teniendo su alta probabilidad, con el riesgo de B en el valor esperado
+  const rival = picksOfMatch({ pred: pred(factors({ recentRet: [false, true], retire: [RETIRE.base, RETIRE.base * RETIRE.recent] })), market });
+  assert.deepEqual(rival.who, { retirada_reciente: ['b'] });
+  const alta = rival.picks.filter((x) => x.tipo === 'probabilidad');
+  assert.equal(alta.length, 1);
+  assert.equal(alta[0].side, 'a');
+  close(alta[0].ev, evWithRetirement(alta[0].p, 1.25, rival.retirada.total, 'anula'), 1e-12);
+  // Y si el aviso es del favorito (A), no
+  const fav = picksOfMatch({ pred: pred(factors({ recentRet: [true, false], retire: [RETIRE.base * RETIRE.recent, RETIRE.base] })), market });
+  assert.equal(fav.picks.some((x) => x.tipo === 'probabilidad'), false);
 });

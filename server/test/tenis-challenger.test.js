@@ -44,6 +44,21 @@ test('ficha de un jugador de Challenger: país, mano, altura y ranking de su úl
   assert.equal(await tml.challengerProfile('Nadie Conocido', { rows, byName }), null);
 });
 
+test('cara a cara de TennisMyLife: sólo los partidos entre los dos, del más reciente al más antiguo y desde el primero', async () => {
+  const rows = [
+    row({ tourney_id: '2025-404', tourney_date: '20250303', tourney_name: 'Indian Wells', tourney_level: 'M', winner_name: 'Ana Uno', winner_ioc: 'ESP', loser_name: 'Bea Dos', loser_ioc: 'FRA', score: '6-4 6-4' }),
+    row({ tourney_id: '2026-337', tourney_date: '20261019', tourney_name: 'Viena', tourney_level: 'A', winner_name: 'Bea Dos', winner_ioc: 'FRA', loser_name: 'Ana Uno', loser_ioc: 'ESP', score: '7-6(3) 2-1 RET' }),
+    row({ tourney_id: '2026-352', tourney_date: '20261026', winner_name: 'Ana Uno', loser_name: 'Otra Persona', score: '6-0 6-0' })
+  ];
+  const byName = new Map();
+  for (const m of rows) for (const n of [m.winner_name, m.loser_name]) { const k = tml.norm(n); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(m); }
+  const h = await tml.headToHead('atp', 'Ana Uno', 'Bea Dos', { rows, byName });
+  assert.equal(h.found, true);
+  assert.deepEqual(h.matches.map(x => [x.tournament, x.win, x.score, x.note, x.level]), [['Viena', false, '6-7(3) 1-2 RET', 'Retirada', 'A'], ['Indian Wells', true, '6-4 6-4', '', 'M']]);
+  assert.match(h.matches[0].opponent.flag, /\/fra\.png$/);
+  assert.equal((await tml.headToHead('atp', 'Ana Uno', 'Nadie Conocido', { rows, byName })).found, false);
+});
+
 test('marcador al revés y países del COI', () => {
   assert.equal(tml.flipScore('6-4 7-6(5) 2-1 RET'), '4-6 6-7(5) 1-2 RET');
   assert.equal(countryOf('GER'), 'Germany');

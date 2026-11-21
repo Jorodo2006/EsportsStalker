@@ -266,7 +266,7 @@ async function history(tour, id) {
     const over = new Date(ev.endDate || 0).getTime() < Date.now();
     return (await matches(tour, [ymd(String(ev.date).slice(0, 10))], over ? 6 * 3600e3 : 5 * 60e3)).filter(m => comps.has(m.id));
   }));
-  return lists.flatMap(r => (r.status === 'fulfilled' ? r.value : [])).flatMap(m => {
+  const list = lists.flatMap(r => (r.status === 'fulfilled' ? r.value : [])).flatMap(m => {
     const me = m.a.id === id ? m.a : m.b.id === id ? m.b : null, rival = me === m.a ? m.b : m.a;
     if (!me || m.state !== 'post' || !rival.name) return []; // dobles, byes y partidos sin jugar no están en el cuadro individual
     return [{
@@ -275,6 +275,11 @@ async function history(tour, id) {
       opponent: { id: rival.id, name: rival.name, flag: rival.flag, rank: rival.rank }
     }];
   }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  // La superficie de cada torneo, de TennisMyLife como la de la lista (ESPN no la da): una vez por torneo, y sin ella si no se sabe
+  const key = x => `${x.tournament}|${x.city}`;
+  const surfaces = new Map(await Promise.all([...new Map(list.map(x => [key(x), x])).values()].map(async x =>
+    [key(x), await tml.tournamentSurface(tour, x.tournament, x.city).catch(() => null)])));
+  return list.map(x => ({ ...x, surface: surfaces.get(key(x)) ?? null }));
 }
 
 async function profile(tour, id) {
@@ -380,6 +385,11 @@ const routes = [
   ['GET', '/api/tennis/surface/:tour', ({ params, query: q }) => {
     if (!TOURS[params.tour] && params.tour !== 'challenger') throw fail('Circuito desconocido');
     return tml.tournamentSurface(params.tour, q.name, q.city);
+  }],
+  // Cara a cara de los últimos años (TennisMyLife), por los nombres: lo usa la pestaña Forma de los jugadores con lo de ESPN
+  ['GET', '/api/tennis/h2h/:tour', ({ params, query: q }) => {
+    if (!TOURS[params.tour] && params.tour !== 'challenger') throw fail('Circuito desconocido');
+    return tml.headToHead(params.tour, playerName(q.a), playerName(q.b));
   }],
   ['GET', '/api/tennis/profile/:tour/:id', async ({ params }) => {
     if (params.tour === 'challenger') {

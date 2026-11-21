@@ -239,6 +239,30 @@ const ROUND_ES = {
 // El marcador va desde el ganador: el del que perdió, al revés ("6-4 7-6(5)" → "4-6 6-7(5)")
 const flipScore = s => String(s).split(/\s+/).map(x => x.replace(/^(\d+)-(\d+)/, '$2-$1')).join(' ');
 
+// Partidos del partido a partido (gamelogOf) como los del perfil de ESPN, desde el jugador: el marcador, desde él; la bandera
+// del rival, de su país en esa fila
+function resultsOf(data, me, rows) {
+  const ioMap = new Map((data.byName.get(me) || []).map(r => [`${r.tourney_id}-${r.match_num}`, r]));
+  return rows.map(g => {
+    const r = ioMap.get(g.id), oppIoc = r ? r[`${g.win ? 'loser' : 'winner'}_ioc`] : '';
+    return {
+      id: g.id, date: `${g.date}T12:00:00Z`, tournament: g.tournament, major: g.level === 'G', level: g.level || '', surface: g.surface, round: ROUND_ES[g.round] || g.round, city: '', win: g.win,
+      score: g.win ? g.score : flipScore(g.score), note: g.retired ? 'Retirada' : '', sets: g.setsWon, games: g.gamesWon,
+      opponent: { id: g.opp, name: g.opp, flag: flagOf(oppIoc), rank: g.oppRank }
+    };
+  });
+}
+
+// Cara a cara de los años que carga dataset (YEARS), desde a. El perfil de ESPN sólo trae los últimos torneos de cada uno y se
+// quedaba en 0-0 entre jugadores que se han enfrentado muchas veces. data: los datos ya cargados (las pruebas)
+async function headToHead(tour, a, b, data) {
+  data ||= await dataset(tour);
+  const me = resolve(data, a), rival = resolve(data, b), since = String(new Date().getFullYear() - YEARS + 1);
+  if (!me || !rival || me === rival) return { found: false, since, matches: [] };
+  const rows = gamelogOf(data, me, tour).filter(g => norm(g.opp) === rival).sort((x, y) => y.date.localeCompare(x.date));
+  return { found: true, since, matches: resultsOf(data, me, rows) };
+}
+
 // data: los datos ya cargados (las pruebas); si no, los de los Challenger
 async function challengerProfile(name, data) {
   data ||= await dataset('challenger');
@@ -259,20 +283,12 @@ async function challengerProfile(name, data) {
     const won = list.filter(g => g.win).length;
     return { won, lost: list.length - won, titles: list.filter(g => g.win && g.round === 'F').length, doublesTitles: 0, prize: 0 };
   };
-  const ioMap = new Map(raw.map(r => [`${r.tourney_id}-${r.match_num}`, r]));
   return {
     id: realName, tour: 'challenger', name: realName, photo: '', photoFrom: '', flag: flagOf(ioc), country: countryOf(ioc),
     rank: num(latest('rank')?.v) || null, previous: null, points: num(latest('rank_points')?.v) || null,
     age, birthDate: null, birthPlace: '', height: ht ? `${(ht / 100).toFixed(2)} m` : '', weight: '', hand: hand === 'L' ? 'Zurdo' : hand === 'R' ? 'Diestro' : '',
     years: null, debut: null, active: true, year, season: record(year), lastSeason: record(year - 1), career: null,
-    matches: rows.slice(0, 60).map(g => {
-      const r = ioMap.get(g.id), oppIoc = r ? r[`${g.win ? 'loser' : 'winner'}_ioc`] : '';
-      return {
-        id: g.id, date: `${g.date}T12:00:00Z`, tournament: g.tournament, major: g.level === 'G', round: ROUND_ES[g.round] || g.round, city: '', win: g.win,
-        score: g.win ? g.score : flipScore(g.score), note: g.retired ? 'Retirada' : '', sets: g.setsWon, games: g.gamesWon,
-        opponent: { id: g.opp, name: g.opp, flag: flagOf(oppIoc), rank: g.oppRank }
-      };
-    })
+    matches: resultsOf(data, me, rows.slice(0, 60))
   };
 }
 
@@ -306,4 +322,4 @@ async function tournamentEdition(tour, name, city) {
 }
 const tournamentSurface = async (tour, name, city) => (await tournamentEdition(tour, name, city))?.surface || null;
 
-module.exports = { playerStats, playerGamelog, gamelogOf, challengerProfile, flipScore, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };
+module.exports = { playerStats, playerGamelog, gamelogOf, challengerProfile, headToHead, flipScore, tournamentSurface, tournamentEdition, dataset, resolve, parseCsv, norm, SURFACES };

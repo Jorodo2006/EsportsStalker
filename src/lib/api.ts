@@ -250,6 +250,7 @@ export const api: Api = {
     rankings: tour => get(`/api/tennis/rankings/${part(tour)}`),
     player: (tour, id) => get(`/api/tennis/player/${part(tour)}/${part(id)}`),
     profile: (tour, id) => get(`/api/tennis/profile/${part(tour)}/${part(id)}`),
+    h2h: (tour, a, b) => get(`/api/tennis/h2h/${part(tour)}`, { a, b }),
     stats: (tour, id) => get(`/api/tennis/stats/${part(tour)}/${part(id)}`),
     gamelog: (tour, id) => get(`/api/tennis/gamelog/${part(tour)}/${part(id)}`),
     playerLines: (tour, id) => get(`/api/tennis/picks/player/${part(tour)}/${part(id)}`),

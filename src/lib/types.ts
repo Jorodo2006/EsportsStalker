@@ -424,6 +424,8 @@ export interface TennisRecord { won: number; lost: number; titles: number; doubl
 export interface TennisResult {
   id: string; date: string; tournament: string; major: boolean; round: string; city: string; win: boolean; score: string; note: string;
   sets: number; games: number; opponent: { id: string; name: string; flag: string; rank: number | null };
+  // La superficie del torneo (null si no se sabe) y, en los de TennisMyLife, su nivel ('C' Challenger, 'A' ATP, 'G' Grand Slam…)
+  surface?: TennisSurface | null; level?: string;
 }
 export interface TennisProfile {
   id: string; tour: SheetTour; name: string; photo: string; photoFrom: string; flag: string; country: string; rank: number | null; previous: number | null; points: number | null;
@@ -657,6 +659,8 @@ export interface Api {
     rankings(tour: Tour): Promise<TennisRank[]>;
     player(tour: Tour, id: string): Promise<TennisMatch[]>;
     profile(tour: SheetTour, id: string): Promise<TennisProfile>;
+    // Cara a cara de los últimos tres años (TennisMyLife, desde el año since), por los nombres y desde a; found: false si no encuentra a alguno
+    h2h(tour: SheetTour, a: string, b: string): Promise<{ found: boolean; since: string; matches: TennisResult[] }>;
     stats(tour: SheetTour, id: string): Promise<TennisStats>;
     gamelog(tour: SheetTour, id: string): Promise<TennisGamelog>; // su partido a partido (TennisMyLife)
     playerLines(tour: Tour, id: string): Promise<TennisPlayerLines>; // su próximo partido y sus líneas (pide cuenta)

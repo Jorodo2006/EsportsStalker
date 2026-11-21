@@ -228,10 +228,19 @@ No cuestan ninguna petición nueva.
 
 - *Partidos*: tira de días, filtro por estado, interruptores *Previa* (oculta la previa por defecto) y *Cuotas*,
   partidos agrupados por torneo (los Grand Slam primero). En juego, cada fila enseña sets ganados, juegos del set y puntos del juego. La ficha tiene marcador grande (sets ganados) y las pestañas
-  *Marcador* (set a set con tie-breaks, puntos del juego y quién saca), *Cuotas* y *Forma de los jugadores* (ranking y últimos partidos).
+  *Marcador* (set a set con tie-breaks, puntos del juego y quién saca), *Cuotas* y *Forma de los jugadores*.
+- *Forma de los jugadores* (`src/components/TennisRecent.tsx`, arriba, y la comparación de estadísticas debajo), como en las apps de
+  resultados: selector con cada jugador y el cara a cara (H2H) en medio; los partidos, agrupados por torneo (circuito, superficie y
+  ciudad en la cabecera) y, en cada fila, la fecha y la ronda, los dos jugadores con su bandera (el ganador en negrita), los juegos de
+  cada set, los sets ganados y la G o la P del jugador elegido; cinco por página. Los de cada jugador salen de su perfil
+  (`/api/tennis/profile`, ESPN o TennisMyLife), que ahora trae la superficie de cada torneo (`surface`) y, en los de TennisMyLife,
+  su nivel (`level`: 'C' es Challenger). El cara a cara junta lo de los dos perfiles con los tres años de TennisMyLife
+  (`GET /api/tennis/h2h/:tour?a=&b=`, `headToHead` de `tml.js`, por los nombres), sin repetir el mismo partido (mismo marcador y
+  fechas a menos de 16 días: TennisMyLife pone el lunes de la semana del torneo). Antes sólo miraba los últimos torneos de ESPN y
+  salía 0-0 entre jugadores que se habían enfrentado muchas veces.
 - *Jugadores*: rankings de la ATP y la WTA con buscador por nombre o país y la subida o bajada de cada jugador. Al pulsar
-  uno se abre su ficha (`src/components/TennisPlayerSheet.tsx`), que también se abre desde *Forma de los jugadores*.
-  Esa pestaña enseña además los enfrentamientos recientes entre los dos.
+  uno se abre su ficha (`src/components/TennisPlayerSheet.tsx`), que también se abre desde *Forma de los jugadores* (el nombre de
+  cualquier jugador de sus filas).
 
 ## Perfil del tenista: pestaña *Líneas* (`src/components/TennisLines.tsx`, `src/lib/tennis-lines.ts`)
 

@@ -34,6 +34,8 @@ export const VALUE_VISIBLE = false;
 // también la anula según las comparativas, sin confirmar en su reglamento de España. 'paga': la da por ganada al que sigue
 export const RETIRE_RULE = { winamax: 'anula', betway: 'anula' };
 const ruleOf = (book) => RETIRE_RULE[String(book ?? '').toLowerCase()] ?? 'anula';
+// Los avisos físicos: el del tiempo muerto médico (tmo_reciente) aún no tiene fuente
+const PHYSICAL = ['retirada_reciente', 'tmo_reciente', 'ranking_protegido'];
 
 /** Valor esperado con la regla de la casa: si anula, con una retirada se recupera lo apostado (ni se gana ni se pierde). */
 export function evWithRetirement(p, price, r, rule = 'anula') {
@@ -110,8 +112,9 @@ export function picksOfMatch({ pred, market, surfaceKnown = true }, o = PICKS) {
   const base = { pModel, pMarket, pFinal, gap, rel, avisos, who, retirada };
   if (pred.lowData) return { ...base, picks: [], excluded: 'pocos_datos' };
   if (gap > o.maxGap) return { ...base, picks: [], excluded: 'discrepancia' };
-  // Avisos físicos (retirada reciente, tiempo muerto médico, ranking protegido): llegan en la fase 4. Con uno, no hay alta probabilidad
-  const physical = avisos.some((a) => ['retirada_reciente', 'tmo_reciente', 'ranking_protegido'].includes(a));
+  // Avisos físicos (retirada reciente, tiempo muerto médico, ranking protegido): sin alta probabilidad para quien lo tiene. El
+  // de su rival no la quita: su riesgo de retirada ya está en el valor esperado (con la regla de la casa) y, si se retira, gana
+  const physicalOf = (side) => PHYSICAL.some((a) => who[a]?.includes(side));
   const picks = [];
   for (const side of ['a', 'b']) {
     const { price, book } = market.best[side];
@@ -123,7 +126,7 @@ export function picksOfMatch({ pred, market, surfaceKnown = true }, o = PICKS) {
     const ev = evWithRetirement(p, price, retirada.total, ruleOf(book));
     const pick = { tramo: tramo.id, side, p, pModel: pm, pMarket: pc, ev, price, book, rel: rel.score, avisos };
     if (ev >= tramo.valor && rel.score >= o.relValor) picks.push({ ...pick, tipo: 'valor', visible: VALUE_VISIBLE });
-    if (tramo.alta != null && p >= tramo.alta && rel.score >= o.relAlta && ev >= o.altaMinEv && gap < o.altaMaxGap && !physical) {
+    if (tramo.alta != null && p >= tramo.alta && rel.score >= o.relAlta && ev >= o.altaMinEv && gap < o.altaMaxGap && !physicalOf(side)) {
       picks.push({ ...pick, tipo: 'probabilidad', visible: true });
     }
   }

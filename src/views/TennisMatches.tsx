@@ -19,10 +19,9 @@ import { TennisDayPicks, TennisPicksPage, TennisPicksPanel } from '@/components/
 import { Flag, TennisSpotlight, TournamentGroup, countriesOf } from '@/components/TennisList';
 import { ChallengerPicksPanel } from '@/components/ChallengerPicks';
 import { TennisCompare } from '@/components/TennisStats';
+import { TennisRecent } from '@/components/TennisRecent';
 import { SheetScroll, DayStrip, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
-import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
-import { sized, fallbackTo } from '@/lib/img';
-import { Panel, panel } from '@/components/viz';
+import { Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui';
 import { FavoritesStrip } from '@/components/Favorites';
 import { TennisMatchStats } from '@/components/TennisMatchStats';
 
@@ -250,84 +249,13 @@ function Sets({ m }: { m: TennisMatch }) {
 
 // Los de los Challenger se identifican por su nombre: su ficha sale de TennisMyLife (circuito 'challenger')
 const asSheet = (tour: SheetTour, p: TennisPlayer) => (tour === 'challenger' ? { ...p, id: p.name } : p);
-// El mismo jugador escrito por dos fuentes: LiveScore «Inaki Montes» y TennisMyLife «Inaki Montes De La Torre»
-const words = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]+/g, ' ').split(/s+/).filter(Boolean);
-const samePlayer = (x: string, y: string) => { const a = words(x), b = words(y); return !!a.length && !!b.length && (a.every(w => b.includes(w)) || b.every(w => a.includes(w))); };
-
-// Lo que lleva cada jugador en los torneos en juego (su camino y los últimos resultados) y su ranking
+// La forma de los dos: sus últimos partidos y el cara a cara (arriba, que es lo que se busca) y sus estadísticas comparadas
 function Form({ m, tour, onPlayer }: { m: TennisMatch; tour: SheetTour; onPlayer: (id: string) => void }) {
   const a = asSheet(tour, m.a), b = asSheet(tour, m.b);
   return (
     <div className="flex flex-col gap-2.5">
+      <TennisRecent tour={tour} a={a} b={b} current={m.id} onPlayer={onPlayer} />
       <TennisCompare tour={tour} a={a} b={b} tournament={m.tournament} city={m.city} />
-      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">{[a, b].map(p => <PlayerForm key={p.id} tour={tour} p={p} current={m.id} onPlayer={onPlayer} />)}</div>
-      <HeadToHead m={m} tour={tour} a={a} b={b} />
-    </div>
-  );
-}
-
-// Enfrentamientos recientes entre los dos, de los partidos que ESPN (o TennisMyLife, en los Challenger) da del primero
-function HeadToHead({ m, tour, a, b }: { m: TennisMatch; tour: SheetTour; a: TennisPlayer; b: TennisPlayer }) {
-  const q = useQuery({ queryKey: ['tennis', 'profile', tour, a.id], queryFn: () => window.api.tennis.profile(tour, a.id), staleTime: 30 * 60e3, retry: false });
-  const list = (q.data?.matches ?? []).filter(x => (tour === 'challenger' ? samePlayer(x.opponent.name, b.name) : x.opponent.id === b.id) && x.id !== m.id);
-  if (q.isLoading || q.error) return null;
-  return (
-    <Panel title={`Enfrentamientos recientes${list.length ? `: ${m.a.name} ${list.filter(x => x.win).length} - ${list.filter(x => !x.win).length} ${m.b.name}` : ''}`}>
-      {!list.length ? <p className="px-3.5 py-2 text-[13px] text-zinc-400">Sin enfrentamientos recientes.</p> : (
-        <div className="divide-y divide-white/10 px-3.5">
-          {list.map(x => (
-            <div key={x.id} className="flex h-7 items-center gap-3 text-[13px]">
-              <span className="w-20 shrink-0 text-xs text-zinc-500">{new Date(x.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
-              <span className="min-w-0 flex-1 truncate">{x.tournament}, {x.round}</span>
-              <span className="font-score tnum text-zinc-300">{x.score}</span>
-              <span className="w-32 truncate text-right font-medium text-amber-300">Gana {x.win ? m.a.name : m.b.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-// Sus últimos partidos, sean de cuando sean: antes eran sólo los de los últimos 10 días, y quien llegaba a las ATP Finals tras
-// dos semanas sin jugar salía con «Sin partidos». Salen del perfil de ESPN (la misma consulta que los enfrentamientos)
-const FORM_N = 8;
-function PlayerForm({ tour, p, current, onPlayer }: { tour: SheetTour; p: TennisPlayer; current: string; onPlayer: (id: string) => void }) {
-  const q = useQuery({ queryKey: ['tennis', 'profile', tour, p.id], queryFn: () => window.api.tennis.profile(tour, p.id), staleTime: 30 * 60e3, retry: false });
-  const done = (q.data?.matches ?? []).filter(x => x.id !== current).slice(0, FORM_N);
-  const wins = done.filter(x => x.win).length;
-  // TennisMyLife (los Challenger) sólo da la semana del torneo, no el día
-  const ago = (iso: string) => {
-    if (tour === 'challenger') return `semana del ${new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '')}`;
-    const d = Math.round((Date.now() - +new Date(iso)) / 864e5); return d <= 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`;
-  };
-  return (
-    <div className={cn(panel, 'overflow-hidden')}>
-      <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-900 px-3.5 py-2 text-zinc-50">
-        {p.flag && <img loading="lazy" decoding="async" src={sized(p.flag, 24)} onError={fallbackTo(p.flag)} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />}
-        <div className="min-w-0 flex-1">
-          <button onClick={() => onPlayer(p.id)} title="Ver su ficha" className="block max-w-full cursor-pointer truncate text-[15px] font-semibold hover:text-amber-400">{p.name}</button>
-        </div>
-        {p.rank && <div className="font-mono text-[13px] font-bold text-zinc-400">#{p.rank}</div>}
-      </div>
-      {q.isLoading ? <div className="px-4"><Loading /></div> : !done.length ? <div className="px-3.5 py-2.5 text-[13px] text-zinc-500">{tour === 'challenger' ? 'TennisMyLife' : 'ESPN'} no tiene sus partidos anteriores.</div> : <>
-        <div className="flex items-center justify-between gap-2 px-3.5 pt-2 text-[11px] text-zinc-500">
-          <span>Últimos {done.length}: <span className="font-semibold text-zinc-300">{wins} ganados</span></span>
-          <span className="flex gap-0.5" aria-hidden>{done.slice().reverse().map(x => <span key={x.id} className={cn('h-2 w-2 rounded-sm', x.win ? 'bg-emerald-500' : 'bg-rose-500')} />)}</span>
-        </div>
-        <div className="divide-y divide-zinc-800/60">
-          {done.map(x => (
-            <div key={x.id} className="flex items-center gap-2.5 px-3.5 py-1.5 text-[13px]">
-              <Badge tone={x.win ? 'success' : 'danger'}>{x.win ? 'G' : 'P'}</Badge>
-              <div className="min-w-0 flex-1">
-                <div className="truncate">vs {x.opponent.name}{x.opponent.rank ? <span className="text-xs text-zinc-500"> · n.º {x.opponent.rank}</span> : null}</div>
-                <div className="truncate text-xs text-zinc-500">{x.tournament}{x.round ? `, ${x.round}` : ''} · {ago(x.date)}</div>
-              </div>
-              <span className="font-score tnum text-zinc-300">{x.score}{x.note ? <span className="text-xs text-zinc-500"> {x.note}</span> : null}</span>
-            </div>
-          ))}
-        </div>
-      </>}
     </div>
   );
 }

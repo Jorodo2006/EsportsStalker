@@ -31,7 +31,7 @@ funcionamiento del motor, en [`server/sharpex-tenis/README.md`](../../../server/
 3. **Mezcla con la casa** (`src/picks.js`): `σ(0,20 · logit modelo + 0,80 · logit casa sin margen)`; el peso sale de la fase 0.
 4. **Salidas** (`picksOfMatch`), por tramos de cuota (baja 1,15-1,60, media 1,60-2,50, alta 2,50-6,00):
    - ***Alta probabilidad*** (se enseña): 75 % o más, fiabilidad de 65 o más, valor de −3 % o más, modelo y casa a menos de 5 puntos
-     y sin avisos físicos. Siempre dice «sin ventaja sobre la casa».
+     y sin avisos físicos del jugador elegido (el del rival no la quita). Siempre dice «sin ventaja sobre la casa».
    - ***Valor*** (**oculto**, `VALUE_VISIBLE = false`): valor del +3/+4/+7 % según el tramo. Se calcula y se registra, pero no se
      enseña porque en la fase 0 el modelo no ganó a la cuota de cierre.
 5. **Riesgo de retirada** (`retirementRisk` en `src/form.js`): 1,67 % por jugador, ×1,5 si se retiró en los últimos 90 días y ×2,2

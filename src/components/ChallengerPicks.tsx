@@ -37,6 +37,12 @@ const WHY: Record<NonNullable<ChallengerMatchPicks['descartado']>, string> = {
   ninguna: 'Ninguna llega al nivel: hace falta un 75 % o más, estar de acuerdo con la casa y no regalar su margen.'
 };
 const PHYSICAL: ChallengerAviso[] = ['retirada_reciente', 'ranking_protegido', 'tmo_reciente'];
+// Sin alta probabilidad por un aviso físico del favorito: el del rival no la quita (su riesgo ya está en el valor esperado)
+function physicalWhy(m: ChallengerMatchPicks) {
+  const fav = m.final == null ? null : m.final >= 0.5 ? 'a' : 'b';
+  if (!fav || !PHYSICAL.some(a => m.quien?.[a]?.includes(fav))) return null;
+  return `${surname(m[fav])} tiene un aviso físico (una retirada reciente o el ranking protegido) y a quien lo tiene no se le da alta probabilidad. Si el aviso es sólo de su rival, sí puede salir.`;
+}
 const p1 = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')} %`;
 // La etiqueta de un aviso con su jugador ("Retirada reciente: Kwon"); las físicas en rojo
 function Tag({ m, a }: { m: ChallengerMatchPicks; a: ChallengerAviso }) {
@@ -142,7 +148,7 @@ function ChallengerPicksPanelInner({ id, date, onOdds }: { id: string; date: str
       <TvBand>Alta probabilidad</TvBand>
       {alta.length ? alta.map(p => <PickRow key={p.lado + p.tipo} m={m} p={p} onAdd={() => add(m, p)} />) : (
         <div className="px-4 py-3 text-[13px] text-zinc-300">
-          {m.descartado && m.descartado !== 'ninguna' ? WHY[m.descartado] : m.avisos.some(a => PHYSICAL.includes(a)) ? 'Con un aviso físico (una retirada reciente o el ranking protegido de uno de los dos) no se da alta probabilidad.' : WHY.ninguna}
+          {m.descartado && m.descartado !== 'ninguna' ? WHY[m.descartado] : physicalWhy(m) ?? WHY.ninguna}
           {m.descartado === 'sin_cuotas' && <button onClick={onOdds} className="ml-2 cursor-pointer text-amber-400 hover:underline">Ir a Cuotas</button>}
         </div>
       )}

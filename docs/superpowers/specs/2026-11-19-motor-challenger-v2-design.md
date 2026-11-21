@@ -105,7 +105,7 @@ resolución automática de la app las retiradas ya se resuelven a mano.
 
 - Las dos: jugadores con datos suficientes, fiabilidad del cálculo ≥ 55 (≥ 65 en *Alta probabilidad*) y sin discrepar de la casa
   más de 20 puntos.
-- *Alta probabilidad*, además: valor esperado ≥ −3 %, modelo y casa a menos de 5 puntos y ningún aviso físico.
+- *Alta probabilidad*, además: valor esperado ≥ −3 %, modelo y casa a menos de 5 puntos y ningún aviso físico del jugador elegido.
 - En el sistema:
 
 ```
@@ -153,7 +153,9 @@ tasas de 2021-2023 y la comprobación en 2024-2026. Se retira alguno en el 3,6-3
   las comparativas, sin confirmar en su reglamento de España. Con la apuesta anulada, una retirada devuelve lo apostado: el valor
   esperado es `(1 − r) · (p · cuota − 1)`, con r el riesgo de los dos.
 - **Avisos físicos:** `retirada_reciente` (en los últimos 90 días) y `ranking_protegido`, con de qué jugador es cada uno (`who`).
-  Con uno, no hay *Alta probabilidad*. El modelo guarda la fecha de la última retirada de cada jugador (`lastRet`); el 19-11-2026,
+  Quien tiene uno no puede salir en *Alta probabilidad*; su rival, sí (decidido el 21-11-2026: si se retira, gana su rival, y su
+  riesgo ya resta en el valor esperado con la regla de la casa). Antes, uno de cualquiera de los dos quitaba la del partido entero.
+  El modelo guarda la fecha de la última retirada de cada jugador (`lastRet`); el 19-11-2026,
   2.982 jugadores tienen una y 84 en los últimos 90 días.
 - **Ranking protegido en directo:** del cuadro final de cada Challenger en ProTennisLive (`mds.pdf`, `parseEntries` en
   `server/services/tennis/ptlpdf.js`), que marca con PR a quien entra con él (en Champaign, noviembre de 2026: Patrick Maloney).
