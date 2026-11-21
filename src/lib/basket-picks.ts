@@ -2,7 +2,7 @@
 // separa por perfil de riesgo. Dentro de cada perfil manda el valor, no la probabilidad: una cuota de 1,11 muy probable no da dinero.
 // Funciones puras: components/BasketPicks.tsx pide los datos y lo enseña. Es una estimación: no hay cuotas históricas de baloncesto
 // con las que comprobar si a la larga se gana dinero.
-import { BASKET_MARKETS, fmtLine, missedByPlayer, playerLines, playerOut, scanLine, type BasketMarket } from './basket-model';
+import { BASKET_MARKETS, fmtLine, gameExtras, missedByPlayer, playerLines, playerOut, scanLine, type BasketMarket } from './basket-model';
 import { POINT_PERIODS, analyzePoints, pointLines, projectGame, type PointKind, type PointPeriod, type PointProjection } from './basket-teams';
 import { outsText, withOuts, type TeamOuts } from './basket-absences';
 import { gameCtx, teamGamesOf } from './basket-context';
@@ -64,7 +64,7 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
     const injury = statusOf(p.id, p.injury) ?? null;
     if (playerOut(injury, missed.get(p.id) ?? 0)) continue;
     const mates = fresh.filter(m => m.id !== p.id).map(m => m.name);
-    const ctx = { currentSeason: data.currentSeason, home: side === 'home', opp: opp.abbr, injury, matesOut: mates, ...gameCtx(p.games, sched, game.date, team.id) };
+    const ctx = { currentSeason: data.currentSeason, ...gameExtras(game, side === 'home'), opp: opp.abbr, injury, matesOut: mates, ...gameCtx(p.games, sched, game.date, team.id) };
     for (const k of Object.keys(BASKET_MARKETS) as BasketMarket[]) {
       const M = BASKET_MARKETS[k];
       for (const l of lines[M.label] ?? []) {
@@ -94,7 +94,7 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
 export function teamPicks(game: BasketGame, d: BasketLeagueGames, odds: MatchOdds, outsOf?: (P: PointProjection) => { away: TeamOuts; home: TeamOuts }): BasketPick[] {
   const out: BasketPick[] = [];
   for (const per of POINT_PERIODS) {
-    const P0 = projectGame(d, game.away.id, game.home.id, per.id, game.date);
+    const P0 = projectGame(d, game.away.id, game.home.id, per.id, game.date, undefined, game.neutral);
     if (!P0) continue;
     const outs = outsOf?.(P0);
     const P = outs ? withOuts(P0, outs.away, outs.home) : P0;

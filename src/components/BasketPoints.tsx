@@ -280,7 +280,7 @@ export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: M
   const logsB = useQuery({ queryKey: ['basket', 'teamLogs', game.league, game.home.id], queryFn: () => window.api.basket.teamLogs(game.league, game.home.id), staleTime: 15 * 60e3, retry: 1, enabled: upcoming });
   const inj = useQuery({ queryKey: ['basket', 'injuries'], queryFn: () => window.api.basket.injuries(), staleTime: 10 * 60e3, enabled: upcoming && game.league === 'nba' });
   // Sólo lo anterior al partido: en uno ya jugado no se cuenta a sí mismo
-  const P0 = useMemo(() => (d ? projectGame(d, game.away.id, game.home.id, period, game.date) : null), [d, game.away.id, game.home.id, game.date, period]);
+  const P0 = useMemo(() => (d ? projectGame(d, game.away.id, game.home.id, period, game.date, undefined, game.neutral) : null), [d, game.away.id, game.home.id, game.date, period, game.neutral]);
   const outs = useMemo(() => {
     if (!P0 || !upcoming) return { away: NO_OUTS, home: NO_OUTS };
     const statusOf = (id: string, roster: string | null | undefined) => (game.league === 'nba' ? inj.data?.find(x => x.playerId === id)?.status : null) || roster;

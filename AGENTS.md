@@ -253,7 +253,7 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   en la última lectura llega en `sources` (`bridge.lastJob`) y se enseña en la pestaña de cuotas.
 - **Escáner de líneas y puntos de equipo** (`scanLine` en `src/lib/basket-model.ts`, `src/lib/basket-teams.ts`): el escáner debe dar la misma probabilidad que el analizador, y los parámetros de los puntos están ajustados con datos (cifras y límites en `docs/specs/08-baloncesto.md`). No guardes logs de ESPN enteros en la caché: pesan 700 KB cada uno (`remember` y `bulk` en `cache.js`).
 - **Proyección de baloncesto** (`PROJ` en `src/lib/basket-model.ts`: lo que vale la temporada pasada, minutos altos, varianza): medida con `scripts/calib-basket.ts` en líneas de toda la escalera, no sólo en la proyección. Si la tocas, repítela y compara el sesgo de 26-27 y la log-loss por temporada (`docs/specs/08-baloncesto.md`). De baloncesto se guardan en `bets.predictions` todas las líneas calculadas, no sólo las de valor: así se puede medir el peso frente a la casa sin sesgo.
-- **B2B y vuelta de baja en el modelo** (`gameCtx` en `src/lib/basket-context.ts`, `CTX_FACTORS` en `basket-model.ts`): los factores están medidos con `scripts/backtest-basket.ts`. Si tocas el modelo, repítelo (ajuste y comprobación con periodos distintos) y mira la calibración. El contexto tiene que calcularse igual en el analizador, el escáner y las recomendaciones, también las bajas de compañeros (`matesOut` de `src/lib/basket-mates.ts`), que no cambian la proyección, sólo bajan la fiabilidad de los "menos".
+- **B2B y vuelta de baja en el modelo** (`gameCtx` en `src/lib/basket-context.ts`, `CTX_FACTORS` en `basket-model.ts`): los factores están medidos con `scripts/backtest-basket.ts`. Si tocas el modelo, repítelo (ajuste y comprobación con periodos distintos) y mira la calibración. El contexto tiene que calcularse igual en el analizador, el escáner y las recomendaciones, también las bajas de compañeros (`matesOut` de `src/lib/basket-mates.ts`), que no cambian la proyección, sólo bajan la fiabilidad de los "menos". La NBA Cup (`cup` del partido, de la nota de ESPN) y la pista neutral (`neutral`) entran por `gameExtras` en los tres sitios: en la fase de grupos se rinde igual que en la liga (medido) y no cambia nada; la eliminatoria sólo baja la fiabilidad; en pista neutral no hay ventaja de campo (props y `projectGame`). Cifras en `docs/specs/08-baloncesto.md`.
 - **Bajas en los puntos de equipo** (`src/lib/basket-absences.ts`): la proyección resta el 5 % de lo que anotan los habituales que
   faltan, sólo con bajas de 20 puntos o más, porque es lo único que mejoró la proyección con partidos que no se usaron para ajustar
   (`scripts/backtest-puntos.ts`, cifras en `docs/specs/08-baloncesto.md`). Parece poco (GS sin Curry: −1), pero restar todo lo que
@@ -325,9 +325,12 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   líneas de tenis, fútbol y MMA y de las de baloncesto que ha calculado algún navegador (`bets.predictions`). El aviso en vivo
   (`alerts:new`) lleva `data.to`, sin el texto. Las suscripciones a notificaciones sólo admiten servicios de push de navegadores
   (`PUSH_HOSTS` en `push.js`): no lo abras a cualquier https, el servidor hace peticiones a esa dirección. `public/sw.js` no
-  guarda nada en caché a propósito. Pulsar una notificación lleva al partido del aviso: con la app abierta, `sw.js` le pasa el número
-  por mensaje (navegar la pestaña falla si no la controla); si no, la abre con `?aviso=<id>`, que `Alerts.tsx` lee al cargar el módulo,
-  antes de que `startHistory` reescriba la dirección (después ya no está), y la elección de deporte de la primera visita no lo pisa.
+  guarda nada en caché a propósito. Pulsar una notificación lleva al partido del aviso: la notificación ya trae su dirección
+  (`/futbol/partido/<id>?dia=…&aviso=<id>`, `urlOf` en `alerts.js`, la misma forma que `hrefOf` de `src/lib/route.ts`: si cambias
+  una, cambia la otra). Con la app abierta, `sw.js` le pasa el número y la dirección por mensaje a la pestaña que se ve (navegar la
+  pestaña falla si no la controla) y la app va directa; si no, la abre en esa dirección. `?aviso=<id>` lo lee `Alerts.tsx` al cargar
+  el módulo, antes de que `startHistory` reescriba la dirección, para marcarlo leído. Las notificaciones viejas (a `/?aviso=<id>`)
+  siguen funcionando buscando el aviso.
   Si a alguien no le llegan, *Tu cuenta → Probar* dice qué responde el servicio de push y rehace la suscripción si hace falta; una
   suscripción hecha con otras claves VAPID se rehace sola al abrir la app (`sameKey`). Sin `PUBLIC_URL` con https ni `VAPID_SUBJECT`,
   Apple rechaza todos los avisos a los iPhone (detalle en `docs/specs/07-backend.md`).

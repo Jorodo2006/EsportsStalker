@@ -33,7 +33,15 @@ export type BasketMarket = keyof typeof BASKET_MARKETS;
 // El contexto del partido (descanso, vuelta tras baja) sale de gameCtx en basket-context.ts, igual en todas las pantallas
 // matesOut: compañeros importantes de baja desde hace poco (basket-mates.ts). No cambian la proyección (no está medido cuánto),
 // pero bajan la fiabilidad de los "menos": la proyección sale de partidos en los que ellos jugaban
-export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null; matesOut?: string[] }
+// cup: partido de la NBA Cup. En la fase de grupos no cambia nada (medido: se rinde igual que en la liga). En la eliminatoria
+// baja la fiabilidad, sin tocar la proyección: en 25-26 salió algo menos de lo proyectado (PRA −4,7 % ±6,7, 122 partidos de
+// jugador), sin significación ni otro periodo para comprobarlo (docs/specs/08-baloncesto.md). En pista neutral home va a null
+export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null; matesOut?: string[]; cup?: 'group' | 'ko' }
+
+// Lo que el partido le añade al contexto del modelo: NBA Cup y pista neutral (sin ventaja de campo). Igual en el analizador, el
+// escáner y las recomendaciones
+export const gameExtras = (game: { cup?: 'group' | 'ko'; neutral?: boolean } | null | undefined, home: boolean | null) =>
+  ({ home: game?.neutral ? null : home, ...(game?.cup ? { cup: game.cup } : {}) });
 
 // Cuánto cambia lo que hace un jugador con el cansancio y al volver de una baja, por mercado, frente a lo que ya proyecta
 // el modelo. Medido con scripts/backtest-basket.ts (ajuste: temporada 25-26 hasta enero; comprobación: el resto); 1 = no
@@ -179,6 +187,7 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: Li
   if (P.wMin > 0 && Math.abs(P.last5Min - P.wMin) / P.wMin > 0.18)
     penalties.push({ pts: 8, warning: `Cambio de rol: ${P.last5Min.toFixed(1)} min en los últimos 5 frente a ${P.wMin.toFixed(1)} de media` });
   if (P.usedPreseason) penalties.push({ pts: 15, warning: 'La muestra incluye partidos de pretemporada' });
+  if (ctx.cup === 'ko') penalties.push({ pts: 10, warning: 'Eliminatoria de la NBA Cup: hay muy pocos partidos así para saber cómo rinden (la temporada pasada, algo menos de lo proyectado, sin confirmar)' });
   const far = sides.find(s => s.gap != null && tooFar(s.pModel, s.pModel - s.gap));
   if (far) penalties.push({ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(far.pModel * 100)} % frente a ${Math.round((far.pModel - far.gap!) * 100)} %): lo normal es que ella sepa algo que él no` });
   const relFactors = [

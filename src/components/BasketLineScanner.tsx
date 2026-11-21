@@ -8,7 +8,7 @@ import { cn, odd, pct } from '@/lib/format';
 import { injuryEs } from '@/lib/basket-labels';
 import { gameCtx, teamGamesOf } from '@/lib/basket-context';
 import { freshKeyOuts, matesOut } from '@/lib/basket-mates';
-import { BASKET_MARKETS, fmtLine, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
+import { BASKET_MARKETS, fmtLine, gameExtras, missedByPlayer, parseLine, playerLines, playerOut, scanLine, type BasketMarket } from '@/lib/basket-model';
 import { LEAN_EV, SIDE_LABEL, type Side } from '@/lib/value';
 import type { BasketGame, BasketInjury, BasketSide, BasketTeamLogs } from '@/lib/types';
 import { LEAGUE_NAME, badInjury, esTime, type Picked } from './BasketAnalyzer';
@@ -87,7 +87,7 @@ export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGa
       const statusOf = (id: string, roster: string | null | undefined) => (t.game.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
       const fresh = freshKeyOuts(matesOut(data, t.team.id, '', t.game.date, statusOf, gameMinutes(t.game.league)));
       for (const p of data.players) {
-        const ctx = { currentSeason: data.currentSeason, home: t.home, opp: t.opp.abbr, injury: statusOf(p.id, p.injury) ?? null, matesOut: fresh.filter(m => m.id !== p.id).map(m => m.name), ...gameCtx(p.games, sched, t.game.date, t.team.id) };
+        const ctx = { currentSeason: data.currentSeason, ...gameExtras(t.game, t.home), opp: t.opp.abbr, injury: statusOf(p.id, p.injury) ?? null, matesOut: fresh.filter(m => m.id !== p.id).map(m => m.name), ...gameCtx(p.games, sched, t.game.date, t.team.id) };
         const book = linesOf.get(`${t.game.id}:${p.id}`)?.[BASKET_MARKETS[market].label] ?? [];
         const exact = book.find(b => b.line === L);
         const r = scanLine(p.games, market, L, side, ctx, { over: exact?.over, under: exact?.under, books: exact ? Object.values(exact.books) : undefined });

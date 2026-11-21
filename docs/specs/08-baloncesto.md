@@ -430,8 +430,32 @@ Para repetir la prueba:
 
 ```bash
 docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(key, value) FROM basket.cache WHERE key LIKE 'log:nba:%'" > <temporal>/logs.json
-npx esbuild scripts/backtest-basket.ts --bundle --platform=node --outfile=<temporal>/bt.cjs && node <temporal>/bt.cjs <temporal>/logs.json
+npx esbuild scripts/backtest-basket.ts --bundle --platform=node --outfile=<temporal>/bt.cjs && node <temporal>/bt.cjs <temporal>/logs.json [notas.json]
 ```
+
+### NBA Cup y pista neutral (noviembre de 2026)
+
+ESPN marca los partidos de la NBA Cup en la nota del partido (`eventNote` del registro del jugador, `notes[].headline` del
+calendario): «NBA Cup - Group Play», «NBA Cup - Quarterfinals», «NBA Cup - Semifinals», «NBA Cup Championship». El servicio lo
+guarda como `cup` (`group` / `ko`, `cupOf` en `espn.js`; en la interfaz, `cupKind`) y la ficha enseña la ronda («NBA Cup ·
+Cuartos»). Los partidos en pista neutral (`neutralSite`: semifinales y final en Las Vegas, partidos en México, Europa…) llevan
+`neutral`.
+
+¿Se juega distinto? Con la misma prueba (los registros guardados antes no llevan `cup`; se le pasó un segundo JSON con las
+notas de ESPN de un jugador por equipo y temporada: 88 partidos de grupos y 7 de eliminatoria):
+
+| Partidos | Ajuste (25-26 hasta enero) | Comprobación (26-27) | Brier de «Más» frente a la liga de las mismas semanas |
+|---|---|---|---|
+| Fase de grupos | PRA +1,0 % ±3,7, minutos +0,4 % (liga: +0,5 %) | PRA +2,3 % ±4,4, minutos +1,2 % (liga: +1,0 %) | 0,2499 frente a 0,2481; 0,2463 frente a 0,2449 |
+| Eliminatoria | PRA −4,7 % ±6,7, minutos −2,0 % (122 partidos de jugador) | todavía no se ha jugado | 0,2472 |
+
+**En la fase de grupos se rinde igual que en la liga** (cuentan para la clasificación y las estadísticas): ni la proyección ni
+la fiabilidad cambian. El modelo acierta un poco menos en los dos periodos, pero dentro del ruido (±0,0024). **En la
+eliminatoria** sale algo menos, sin significación y sin otro periodo para comprobarlo: no se toca la proyección, sólo se
+bajan 10 puntos de fiabilidad con su aviso (`cup` en `BasketCtx`). **En pista neutral no hay ventaja de campo**: `gameExtras`
+pone `home` a null en los props y `projectGame(…, neutral)` quita la ventaja de casa en los puntos de equipo. Eso no es una
+medida, es lo que significa una pista neutral. Tras los cuartos y las semifinales de diciembre de 2026 hay que repetir la
+prueba: si la eliminatoria vuelve a salir por debajo, pasará a ser un factor de `CTX_FACTORS`.
 
 Debajo de "En las casas", la tabla del analizador enseña la cuota de cada casa por línea (Más y Menos), con la que paga
 más resaltada cuando las dos la tienen (`playerLines` guarda `books` con las cuotas de cada casa).

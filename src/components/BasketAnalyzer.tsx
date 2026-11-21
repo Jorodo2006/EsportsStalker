@@ -62,7 +62,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
   useEffect(() => {
     if (!game || !teamId) return;
     const home = game.home.id === teamId;
-    setVenue(home ? 'home' : 'away');
+    setVenue(game.neutral ? '' : home ? 'home' : 'away'); // pista neutral: nadie juega en casa
     setOpp(home ? game.away.abbr : game.home.abbr);
   }, [game?.id, teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,7 +83,7 @@ export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { pl
     (id, roster) => (player.league === 'nba' ? injuries.find(i => i.playerId === id)?.status : null) || roster, gameMinutes(player.league)),
   [mateLogs.data, teamId, player.id, player.league, game?.date, injuries]);
   const freshNames = freshKeyOuts(mates).map(m => m.name);
-  const ctx: BasketCtx | null = log.data ? { currentSeason: log.data.currentSeason, home: venue === '' ? null : venue === 'home', opp: opp || null, injury, matesOut: freshNames, ...gctx } : null;
+  const ctx: BasketCtx | null = log.data ? { currentSeason: log.data.currentSeason, home: venue === '' ? null : venue === 'home', opp: opp || null, injury, matesOut: freshNames, ...gctx, ...(game?.cup ? { cup: game.cup } : {}) } : null;
 
   // Líneas de este jugador y mercado que ya han leído las casas (si el partido tiene cuotas)
   const casa = useMemo(() => playerLines(odds, player.name)[BASKET_MARKETS[market].label] ?? [], [odds, player.name, market]);

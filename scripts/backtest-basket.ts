@@ -6,14 +6,18 @@
 // Datos: los registros de jugadores de la caché del servicio basket (no se piden a ESPN), en un JSON { clave: partidos }:
 //   docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(key, value) FROM basket.cache WHERE key LIKE 'log:nba:%'" > logs.json
 //   npx esbuild scripts/backtest-basket.ts --bundle --platform=node --outfile=<temporal>/bt.cjs && node <temporal>/bt.cjs logs.json
+// Los registros guardados desde noviembre de 2026 llevan `cup` (partido de la NBA Cup). Para los anteriores se puede pasar un
+// segundo JSON { idPartido: eventNote de ESPN } (lo que trae el gamelog de ESPN en events[id].eventNote)
 import { readFileSync } from 'node:fs';
 import { BASKET_MARKETS, analyze, project, type BasketCtx, type BasketMarket } from '../src/lib/basket-model';
-import { gameCtx } from '../src/lib/basket-context';
+import { cupKind, gameCtx } from '../src/lib/basket-context';
 import type { BasketLogGame } from '../src/lib/types';
 
 const file = process.argv[2];
 if (!file) { console.error('Uso: node bt.cjs logs.json'); process.exit(1); }
 const raw = JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, '')) as Record<string, BasketLogGame[]>;
+const notes = (process.argv[3] ? JSON.parse(readFileSync(process.argv[3], 'utf8')) : {}) as Record<string, string>;
+const cupOf = (g: BasketLogGame) => g.cup ?? cupKind(notes[g.id]);
 
 // Partidos de cada jugador, de las dos temporadas, sin repetir
 const byPlayer = new Map<string, BasketLogGame[]>();
@@ -34,7 +38,7 @@ for (const games of byPlayer.values()) for (const g of games) {
 
 const MARKETS: BasketMarket[] = ['pts', 'reb', 'ast', 'fg3m', 'pra', 'pr', 'pa', 'ra', 'stl', 'blk', 'tov'];
 const SPLIT = +new Date('2026-02-01'); // antes: para ajustar; después (y la temporada 26-27): para comprobar
-type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; muCtx: number; pBase: number; pCtx: number; line: number };
+type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; cup: 'group' | 'ko' | null; cupWeeks: boolean; muCtx: number; pBase: number; pCtx: number; line: number };
 const rows: Row[] = [];
 
 for (const games of byPlayer.values()) {
@@ -56,7 +60,7 @@ for (const games of byPlayer.values()) {
       if (!A || !Ac || !Pc) continue;
       rows.push({
         fit: +new Date(g.date) < SPLIT && g.season === 2026, m, y: BASKET_MARKETS[m].f(g), mu: P.mu, min: g.min, projMin: P.projMin,
-        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line
+        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, cup: cupOf(g), cupWeeks: /-(11|12)-/.test(g.date.slice(4, 8)) && g.date.slice(5, 10) <= '12-20', muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line
       });
     }
   }
@@ -77,7 +81,8 @@ for (const part of [true, false]) {
   const groups: [string, (r: Row) => boolean][] = [
     ['todos', () => true], ['B2B', r => r.b2b], ['B2B fuera', r => r.b2b && r.away], ['B2B en casa', r => r.b2b && !r.away],
     ['1 día de descanso', r => r.rest === 1], ['2 días', r => r.rest === 2], ['3 o más', r => r.rest >= 3 && r.rest < 9],
-    ['vuelta: 1.º partido', r => r.back === 1], ['vuelta: 2.º', r => r.back === 2], ['vuelta: 3.º', r => r.back === 3]
+    ['vuelta: 1.º partido', r => r.back === 1], ['vuelta: 2.º', r => r.back === 2], ['vuelta: 3.º', r => r.back === 3],
+    ['NBA Cup: grupos', r => r.cup === 'group'], ['NBA Cup: eliminatoria', r => r.cup === 'ko'], ['liga (sin Cup)', r => !r.cup]
   ];
   console.log('grupo'.padEnd(22), 'minutos'.padEnd(26), MARKETS.map(m => m.padEnd(26)).join(''));
   for (const [name, f] of groups) {
@@ -92,7 +97,8 @@ for (const part of [true, false]) {
     return `Brier ${(b / rs.length).toFixed(5)} · log-loss ${(l / rs.length).toFixed(5)}`;
   };
   console.log('\nProbabilidad de "Más" (sin contexto → con contexto):');
-  for (const [name, f] of [['todos', () => true], ['B2B', (r: Row) => r.b2b], ['vuelta (1.º-3.º)', (r: Row) => r.back > 0]] as [string, (r: Row) => boolean][]) {
+  for (const [name, f] of [['todos', () => true], ['B2B', (r: Row) => r.b2b], ['vuelta (1.º-3.º)', (r: Row) => r.back > 0], ['NBA Cup: grupos', (r: Row) => r.cup === 'group'], ['NBA Cup: eliminatoria', (r: Row) => r.cup === 'ko'],
+    ['liga, mismas semanas', (r: Row) => !r.cup && r.cupWeeks]] as [string, (r: Row) => boolean][]) {
     const rs = R.filter(f);
     console.log(`  ${name.padEnd(18)} ${score(rs, r => r.pBase)}  →  ${score(rs, r => r.pCtx)}  (n ${rs.length})`);
   }

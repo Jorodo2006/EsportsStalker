@@ -9,6 +9,14 @@ export const nyDay = (iso: string) => {
   return Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
 };
 
+// Partido de la NBA Cup según la nota de ESPN («NBA Cup - Group Play», «NBA Cup - Quarterfinals», «NBA Cup Championship»).
+// Lo mismo en el servidor (cupOf de server/services/basket/espn.js) y en la prueba con partidos pasados
+export function cupKind(note: string | null | undefined): 'group' | 'ko' | null {
+  const n = String(note || '').toLowerCase();
+  if (!/\bnba cup\b|in-season tournament/.test(n)) return null;
+  return /group|grupo/.test(n) ? 'group' : 'ko';
+}
+
 export interface GameCtx {
   rest?: number; // noches libres desde su último partido de la temporada (0 = B2B)
   b2b?: boolean;

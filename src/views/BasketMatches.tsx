@@ -131,7 +131,7 @@ export default function BasketMatches() {
             {byLeague.map(({ id, list }) => {
               const meta = leagues.data?.find(l => l.id === id);
               return (
-                <CompetitionBlock key={id} id={sectionId(LEAGUE_NAME[id])} name={LEAGUE_NAME[id]} sub={[meta?.country, list[0]?.round].filter(Boolean).join(', ')} logo={meta?.logo}
+                <CompetitionBlock key={id} id={sectionId(LEAGUE_NAME[id])} name={LEAGUE_NAME[id]} sub={[meta?.country, list.every(g => g.round === list[0]?.round) ? list[0]?.round : ''].filter(Boolean).join(', ')} logo={meta?.logo}
                   count={list.length} open={!closed.has(id)} onToggle={() => toggle(id)}>
                   {list.map(g => card(g))}
                 </CompetitionBlock>

@@ -35,6 +35,8 @@ const STALE_MS = 6 * 3600e3;
 const PAGE = 5;
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
 const eventOf = (g: BasketGame) => `${g.away.abbr} @ ${g.home.abbr}`;
+// Sólo se enseña: lo que se apunta en la apuesta sigue siendo eventOf (el resolvedor y los avisos leen ese texto)
+const cupTag = (g: BasketGame) => (g.cup ? ' (NBA Cup)' : '');
 const newest = (o?: MatchOdds) => Math.max(0, ...Object.values(o?.sources ?? {}).map(s => s.ts || 0));
 const hasPlayers = (o?: MatchOdds) => !!o?.markets.some(m => m.key.startsWith('player|'));
 const hasTeams = (o?: MatchOdds) => !!o?.markets.some(m => /^(total|team_total)\|/.test(m.key));
@@ -147,7 +149,7 @@ function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
       <button onClick={() => onOpen(pick)} title={tip(pick)} className="block w-full cursor-pointer text-left font-score text-[15px] font-semibold leading-[18px] text-white">{pick.title}</button>
       <div className="mt-1 flex items-center gap-2.5">
         <button onClick={() => onOpen(pick)} title={tip(pick)} className="line-clamp-2 min-w-0 flex-1 cursor-pointer text-left text-[11px] leading-[14px] text-zinc-400">
-          {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
+          {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}{cupTag(pick.game)}, {esTime(pick.game.date)} · </span>}
           {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
           {pick.why}
         </button>
@@ -178,7 +180,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
       <button onClick={() => onOpen(pick)} title={tip(pick)} className="col-span-2 min-w-0 cursor-pointer text-left md:col-span-1">
         <div className="font-score text-[26px] font-bold leading-[28px] text-white md:text-[30px] md:leading-[32px]">{pick.title}</div>
         <div className="mt-1.5 text-[13px] text-zinc-300">
-          {!oneGame && <>{eventOf(pick.game)}, {esTime(pick.game.date)} · </>}
+          {!oneGame && <>{eventOf(pick.game)}{cupTag(pick.game)}, {esTime(pick.game.date)} · </>}
           {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
           {pick.why}
         </div>
@@ -236,7 +238,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
     </div>
   );
 
-  const sub = [oneGame ? LEAGUE_NAME[games[0].league] : `${games.length - q.noOdds.length} de ${games.length} partidos con cuotas`, book !== 'all' ? `sólo ${book}` : '', q.age != null ? `cuotas ${ago(q.age)}` : ''].filter(Boolean).join(' · ');
+  const sub = [oneGame ? (games[0].round ? `${LEAGUE_NAME[games[0].league]} · ${games[0].round}` : LEAGUE_NAME[games[0].league]) : `${games.length - q.noOdds.length} de ${games.length} partidos con cuotas`, book !== 'all' ? `sólo ${book}` : '', q.age != null ? `cuotas ${ago(q.age)}` : ''].filter(Boolean).join(' · ');
   const props = { oneGame, onOpen, onAdd: add };
   return (
     <div className="flex flex-col gap-2.5">
@@ -310,7 +312,7 @@ function BasketDayPicksInner({ games, injuries, onOpen, onAll }: { games: Basket
         <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-2.5 border-b border-white/10 px-3 py-2 text-left transition hover:bg-white/[.05]">
           <span className="min-w-0 flex-1">
             <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-white">{p.title}</span>
-            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]}</span>
+            <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}{cupTag(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]}</span>
           </span>
           <PickNums p={p.p} ev={p.ev} good={hasValue(p)} />
           <PickOddText price={p.price} book={p.book} />
