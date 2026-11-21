@@ -1,7 +1,7 @@
 // Baloncesto · Partidos: igual que en LoL. Tira de días (hora de España), filtro por estado, partidos agrupados por
 // competición (en pantallas anchas, las más fiables del día al lado) y, al pulsar uno, su ficha completa: marcador grande, estadísticas, cuotas, plantillas y valor de jugador.
 import { useCardOdd } from '@/lib/card-odds';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarX, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/format';
@@ -29,6 +29,9 @@ import { AdSlot } from '@/components/AdSlot';
 import { useMedia } from '@/lib/use-media';
 import { sized, fallbackTo } from '@/lib/img';
 import { FavoritesStrip } from '@/components/Favorites';
+import { MyBetsLive } from '@/components/MyBetsLive';
+import { clearFocus, focusedPlayer } from '@/lib/focus-player';
+import { findPlayer } from '@/lib/bet-track';
 import { cardNote } from '@/lib/odds-window';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
@@ -118,6 +121,7 @@ export default function BasketMatches() {
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
       {modes}
+      <MyBetsLive />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); try { localStorage.setItem('basket-odds', v ? '1' : '0'); } catch { /* sin almacenamiento */ } }} label="Cuotas" />
@@ -177,7 +181,10 @@ type Tab = 'stats' | 'odds' | 'picks' | 'points' | 'lines' | 'h2h' | 'teams' | '
 function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injuries: BasketInjury[]; from?: BasketPick | null; onClose: () => void }) {
   const { openBet } = useApp();
   const st = stateOf(game);
-  const [tab, setTab] = useState<Tab>(from ? (from.who ? 'value' : 'points') : st === 'pre' ? 'picks' : 'stats');
+  // Abierto desde «Tus apuestas» con una línea de jugador: directo a sus estadísticas en el partido (lib/focus-player.ts)
+  const [focus] = useState(() => focusedPlayer(game.id));
+  useEffect(() => clearFocus(game.id), [game.id]);
+  const [tab, setTab] = useState<Tab>(focus ? 'stats' : from ? (from.who ? 'value' : 'points') : st === 'pre' ? 'picks' : 'stats');
   const odds = useBasketOdds(game);
   const [player, setPlayer] = useState<Picked | null>(from?.who ? pickedOf(from) : null);
   const [teamPick, setTeamPick] = useState<BasketPick | null>(from && !from.who ? from : null);
@@ -213,7 +220,7 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {st === 'pre' && <RestStrip game={game} />}
-      {tab === 'stats' ? <GameStats game={game} onPick={pick} /> : tab === 'odds' ? <BasketOdds game={game} />
+      {tab === 'stats' ? <GameStats game={game} onPick={pick} focus={focus} /> : tab === 'odds' ? <BasketOdds game={game} />
         : tab === 'picks' ? <BasketPicksBoard games={[game]} injuries={injuries} onOpen={openPick} onOdds={() => setTab('odds')} />
         : tab === 'points' ? <GamePoints key={teamPick?.id} game={game} odds={odds.data} initial={teamPick?.period && teamPick.pointKind ? { period: teamPick.period, kind: teamPick.pointKind, line: teamPick.line } : undefined} />
           : tab === 'lines' ? <BasketLineScanner games={[game]} injuries={injuries} onPick={p => { setPlayer(p); setTab('value'); }} />
@@ -293,7 +300,7 @@ export function Roster({ game, side, injuries, current, onPick }: {
 const STAT_COLS: [keyof BoxTeam['totals'], string][] = [['min', 'MIN'], ['pts', 'PTS'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'ROB'], ['blk', 'TAP'], ['tov', 'PÉR'], ['fg', 'TC'], ['fg3', 'T3'], ['ft', 'TL'], ['pm', '+/-']];
 const pctOf = (s: string) => { const [m, a] = s.split('-').map(Number); return a ? Math.round((m / a) * 100) : null; };
 
-function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: string; name: string }, teamId: string) => void }) {
+function GameStats({ game, onPick, focus }: { game: BasketGame; onPick: (p: { id: string; name: string }, teamId: string) => void; focus?: string | null }) {
   const st = stateOf(game);
   const box = useQuery({
     queryKey: ['basket', 'box', game.id], queryFn: () => window.api.basket.boxscore(game.id),
@@ -310,7 +317,7 @@ function GameStats({ game, onPick }: { game: BasketGame; onPick: (p: { id: strin
       {played && <BasketFlow game={game} colorA={themeOf(game.away.id)?.mark ?? '#a1a1aa'} colorB={themeOf(game.home.id)?.mark ?? '#f59e0b'} />}
       {played && <Compare teams={teams} />}
       {!played && <Empty>El partido aún no ha empezado: las estadísticas salen en cuanto arranque. Mientras, mira las cuotas o el valor de los jugadores.</Empty>}
-      {teams.filter(t => t.players.length).map(t => <BoxTable key={t.side} team={t} game={game} onPick={p => onPick(p, t.id)} />)}
+      {teams.filter(t => t.players.length).map(t => <BoxTable key={t.side} team={t} game={game} onPick={p => onPick(p, t.id)} focus={focus} />)}
       {!!box.data!.series.length && <Series series={box.data!.series} />}
     </div>
   );
@@ -409,9 +416,10 @@ const sortValue = (p: BoxTeam['players'][number], k: StatKey) => {
 // Tabla de anotadores de un equipo: titulares primero; pulsar un jugador abre su partido (tiros y estadísticas, como en
 // fútbol), y desde ahí el valor de sus líneas. Pulsar una columna ordena por ella de más a menos; otra vez, de menos a más;
 // y otra, vuelta al orden de titulares
-function BoxTable({ team, game, onPick }: { team: BoxTeam; game: BasketGame; onPick: (p: { id: string; name: string }) => void }) {
+function BoxTable({ team, game, onPick, focus }: { team: BoxTeam; game: BasketGame; onPick: (p: { id: string; name: string }) => void; focus?: string | null }) {
   const [sort, setSort] = useState<{ k: StatKey; dir: 'desc' | 'asc' } | null>(null);
-  const [sel, setSel] = useState<BoxTeam['players'][number] | null>(null);
+  // El jugador de la apuesta con la que se abrió el partido, si es de este equipo: su partido abierto
+  const [sel, setSel] = useState<BoxTeam['players'][number] | null>(() => (focus ? findPlayer(team.players, focus) : null));
   const byDefault = team.players.slice().sort((x, y) => Number(y.starter) - Number(x.starter) || y.min - x.min);
   // Los que no jugaron van siempre al final, ordenes como ordenes
   const list = sort

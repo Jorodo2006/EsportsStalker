@@ -20,6 +20,7 @@ import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, Matche
 import { esTime } from '@/components/football';
 import { Button, ErrorBox, Loading } from '@/components/ui';
 import { FavoritesStrip } from '@/components/Favorites';
+import { MyBetsLive } from '@/components/MyBetsLive';
 import { stateOf } from './football/shared';
 import { MatchHeader } from './football/MatchHeader';
 import { Timeline } from './football/Timeline';
@@ -126,6 +127,7 @@ export default function FootballMatches() {
     <div className="flex min-w-0 flex-col gap-5">
       <MatchesTitle date={date} />
       {modes}
+      <MyBetsLive />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={showOdds} onChange={v => { setShowOdds(v); saveFlag('football-odds', v); }} label="Cuotas" />

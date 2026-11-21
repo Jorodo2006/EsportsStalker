@@ -24,6 +24,7 @@ import { Badge, Button, Empty, ErrorBox, Loading, td, th } from '@/components/ui
 import { sized, fallbackTo } from '@/lib/img';
 import { Panel, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
+import { MyBetsLive } from '@/components/MyBetsLive';
 import { TennisMatchStats } from '@/components/TennisMatchStats';
 
 const stateOf = (m: TennisMatch): MatchState => (m.state === 'in' ? 'live' : m.state);
@@ -134,6 +135,7 @@ export default function TennisMatches() {
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} />
       {modes}
+      <MyBetsLive />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={dayCounts} />} value={filter} onChange={setFilter} counts={counts}>
         <Toggle on={quali} onChange={v => { setQuali(v); savePref('tennis-quali', v); }} label="Previa" />

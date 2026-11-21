@@ -129,6 +129,21 @@ solas con el resultado del partido.
 - En el historial, cada apuesta con `ref` lleva la marca *se resuelve sola* / *resuelta sola* (al pasar el ratón, el
   resultado). Pruebas en `server/test/resolver.test.js`.
 
+## Seguir las apuestas en juego (`src/components/MyBetsLive.tsx`, `src/lib/bet-track.ts`)
+
+- Arriba de *Partidos* de cada deporte, «Tus apuestas»: las pendientes con `ref` cuyo partido empieza en las próximas 24 h o
+  empezó hace menos de 12 h, de los cinco deportes (primero las que se están jugando; de una combinada, cada selección
+  pendiente). Las apuntadas a mano sin partido no salen: no se sabe qué seguir.
+- Cómo va cada una sale de `trackOf` (`bet-track.ts`, pruebas en `bet-track.test.ts`), que lee la misma clave de mercado que
+  `settle.js`: barra con la cifra frente a la línea en las líneas de jugador de baloncesto, los totales y los totales de equipo
+  (y los goleadores de Winamax en fútbol); quién va por delante en ganador, hándicap, doble oportunidad, empate no válido y
+  ambos marcan. Es sólo para mirar: la resolución sigue siendo la del servidor. Lo que no sabe seguir no enseña nada.
+- Los datos son las listas del día de cada deporte con las mismas claves de consulta que sus pantallas, y la ficha de
+  baloncesto (`['basket','box',id]`) sólo para las líneas de jugador y los periodos, desde que empieza el partido.
+- Pulsar una abre su partido. Si es una línea de jugador de baloncesto, la ficha se abre en *Estadísticas* con el partido de
+  ese jugador (`BasketPlayerGameDialog`): el jugador se pasa con `focusPlayer` (`src/lib/focus-player.ts`), no por la dirección,
+  y caduca a los 15 s. Se busca en la ficha con `findPlayer`, el mismo criterio que la resolución.
+
 ## Acierto del modelo (`bets.predictions`, `server/services/bets/predictions.js`)
 
 En Administración → **Acierto del modelo** (sólo administradores: `/api/admin/predictions`, `src/views/admin/ModelTab.tsx`) se mide si las recomendaciones aciertan, se apuesten o no. Mientras se ven en la

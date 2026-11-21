@@ -18,6 +18,7 @@ import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, Matche
 import { Badge, Button, ErrorBox, Loading } from '@/components/ui';
 import { Panel, TvFrame, TvHeader, panel } from '@/components/viz';
 import { FavoritesStrip } from '@/components/Favorites';
+import { MyBetsLive } from '@/components/MyBetsLive';
 import { cardNote } from '@/lib/odds-window';
 
 const stateOf = (f: MmaFight): MatchState => (f.state === 'in' ? 'live' : f.state);
@@ -91,6 +92,7 @@ export default function MmaFights() {
   return (
     <div className="flex flex-col gap-5">
       <MatchesTitle date={date} title="Combates" />
+      <MyBetsLive />
       <FavoritesStrip />
       <StateFilterBar above={<DayStrip value={date} onChange={setDate} counts={days.data} />} value={filter} onChange={setFilter} counts={counts}>
         {ORGS.map(o => <Toggle key={o.id} on={orgs[o.id]} onChange={v => setOrg(o.id, v)} label={o.label} />)}
