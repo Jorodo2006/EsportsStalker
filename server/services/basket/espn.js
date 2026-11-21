@@ -101,8 +101,10 @@ function parseGamelog(json, season) {
 }
 
 // Partidos de unos días de EE. UU. (AAAAMMDD). ESPN no acepta rangos en la NBA: un día por petición
+// 20 s, como el tenis: es el marcador de la lista y de «Tus apuestas» (antes 60 s, y con lo que se sirve caducado mientras se
+// renueva, un canasto tardaba hasta 2 min en verse)
 async function games(lg, days) {
-  const lists = await Promise.all(days.map(d => getJSON(`${site(lg)}/scoreboard?dates=${d}`, 60e3)));
+  const lists = await Promise.all(days.map(d => getJSON(`${site(lg)}/scoreboard?dates=${d}`, 20e3)));
   return lists.flatMap(j => j.events || []).map(ev => {
     const comp = ev.competitions?.[0] || {};
     const side = ha => {
@@ -303,7 +305,7 @@ module.exports = { LEAGUES, games, roster, injuries, search, gamelog, teamLogs, 
 
 // Estadísticas de un partido: jugadores de cada equipo, totales y puntos por cuarto
 async function boxscore(lg, eventId) {
-  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 30e3);
+  const j = await getJSON(`${site(lg)}/summary?event=${eventId}`, 15e3); // las cifras de los jugadores en juego (líneas de «Tus apuestas»)
   const comps = j.header?.competitions?.[0]?.competitors || [];
   const toNum = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   const teams = (j.boxscore?.players || []).map(t => {

@@ -111,8 +111,11 @@ export function MyBetsLive() {
 
   const refs = rows.flatMap(r => r.legs.map(l => l.ref)).filter(r => r.start && r.sport !== 'lol');
   const lists = [...new Map(refs.map(r => [listId(r), r])).values()];
+  // ¿Alguna en juego ahora? Por la hora (el estado llega con la propia consulta): empezada hace menos de 4 h
+  const anyLive = refs.some(r => { const t = +new Date(r.start!); return t < Date.now() && t > Date.now() - 4 * 3600e3; });
   const listQs = useQueries({
-    queries: lists.map(r => ({ ...listQuery(r.sport, madridDay(r.start!), /^dbl:/.test(r.match))!, staleTime: 15_000, refetchInterval: 30_000 }))
+    // Cada 15 s mientras se juega alguna, y al volver a la app (en el móvil, al desbloquear); si no, cada minuto
+    queries: lists.map(r => ({ ...listQuery(r.sport, madridDay(r.start!), /^dbl:/.test(r.match))!, staleTime: 10_000, refetchInterval: anyLive ? 15_000 : 60_000, refetchOnWindowFocus: true }))
   });
   const games = new Map<string, BasketGame | FootballMatch | TennisMatch | MmaFight>();
   lists.forEach((r, i) => { for (const g of (listQs[i]?.data ?? []) as { id: string }[]) games.set(`${r.sport}|${g.id}`, g as never); });
@@ -127,7 +130,7 @@ export function MyBetsLive() {
   const boxQs = useQueries({
     queries: boxIds.map(id => {
       const live = (games.get(`basket|${id}`) as BasketGame | undefined)?.state === 'in';
-      return { queryKey: ['basket', 'box', id], queryFn: () => window.api.basket.boxscore(id), refetchInterval: live ? 20_000 : false as const, staleTime: live ? 15_000 : 3600e3 };
+      return { queryKey: ['basket', 'box', id], queryFn: () => window.api.basket.boxscore(id), refetchInterval: live ? 15_000 : false as const, staleTime: live ? 10_000 : 3600e3, refetchOnWindowFocus: live };
     })
   });
   const boxes = new Map(boxIds.map((id, i) => [id, boxQs[i]?.data]));
