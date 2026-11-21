@@ -19,7 +19,7 @@ export function PickNums({ p, ev, good }: { p: number; ev: number; good: boolean
       <span className={label}>prob.</span>
     </span>
     <span className="w-[52px] shrink-0 text-right" title="Valor esperado por cada euro apostado con esta probabilidad y esta cuota. Si es negativo, a la larga gana la casa">
-      <span className={cn('block font-score text-[13px] font-semibold leading-5 tnum', good ? 'text-[var(--tv-mark)]' : ev > 0 ? 'text-zinc-200' : 'text-zinc-500')}>{signed(ev)}</span>
+      <span className={cn('block whitespace-nowrap font-score text-[13px] font-semibold leading-5 tnum', good ? 'text-[var(--tv-mark)]' : ev > 0 ? 'text-zinc-200' : 'text-zinc-500')}>{signed(ev)}</span>
       <span className={label}>valor</span>
     </span>
   </>;

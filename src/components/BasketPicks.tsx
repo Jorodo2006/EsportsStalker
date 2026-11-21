@@ -11,7 +11,8 @@ import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, p
 import { VERDICT_LABEL } from '@/lib/value';
 import { teamOuts } from '@/lib/basket-absences';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
-import type { BasketGame, BasketInjury, MatchOdds } from '@/lib/types';
+import type { BasketGame, BasketInjury, BasketSide, MatchOdds } from '@/lib/types';
+import { sized } from '@/lib/img';
 import type { Side } from '@/lib/value';
 import { LEAGUE_NAME, esTime } from './BasketAnalyzer';
 import { matchOfGame, targetOfGame } from './BasketOdds';
@@ -140,22 +141,61 @@ export const usePickAdd = () => {
 
 const tip = (p: BasketPick) => `${p.market}: ${p.selection}. Modelo ${p0(p.pModel)}${p.pMarket != null ? `, casa ${p0(p.pMarket)}` : ''}. Fiabilidad ${p.rel.score}/100. Cuota justa ${odd(p.fair)}`;
 
+// La cara de cada recomendación, para que se vea de quién es y que se puede pulsar: la foto del jugador con el escudo de su equipo
+// en la esquina (sin foto, sus iniciales) o, en las de puntos, el escudo del equipo (los dos en las del total del partido)
+const initials = (name: string) => { const w = name.split(/\s+/).filter(Boolean); return ((w[0]?.[0] ?? '') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
+function PickFace({ pick, big }: { pick: BasketPick; big?: boolean }) {
+  const [broken, setBroken] = useState(false);
+  const g = pick.game;
+  const logo = (t: BasketSide, cls: string) => (t.logo ? <img src={sized(t.logo, 40)} alt="" loading="lazy" decoding="async" className={cn('shrink-0 object-contain', cls)} /> : null);
+  const circle = cn('relative grid shrink-0 place-items-center rounded-full bg-zinc-800 ring-1 ring-inset ring-white/10', big ? 'h-14 w-14 md:h-16 md:w-16' : 'h-10 w-10');
+  if (!pick.who) {
+    if (pick.pointKind === 'home' || pick.pointKind === 'away') return <span className={circle}>{logo(g[pick.pointKind], big ? 'h-9 w-9' : 'h-6 w-6')}</span>;
+    return <span className={circle}><span className="flex items-center -space-x-1">{logo(g.away, big ? 'h-7 w-7' : 'h-[18px] w-[18px]')}{logo(g.home, big ? 'h-7 w-7' : 'h-[18px] w-[18px]')}</span></span>;
+  }
+  const team = g.home.id === pick.who.teamId ? g.home : g.away.id === pick.who.teamId ? g.away : null;
+  const photo = !broken && pick.who.headshot;
+  return (
+    <span className={circle}>
+      <span className="absolute inset-0 grid place-items-center overflow-hidden rounded-full">
+        {photo ? <img src={sized(photo, big ? 64 : 40)} onError={() => setBroken(true)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
+          : <span className={cn('font-score font-semibold text-zinc-300', big ? 'text-lg' : 'text-[13px]')}>{initials(pick.who.name)}</span>}
+      </span>
+      {team?.logo && <span className={cn('absolute -bottom-0.5 -right-0.5 grid place-items-center rounded-full bg-zinc-950 ring-1 ring-zinc-800', big ? 'h-6 w-6' : 'h-[18px] w-[18px]')}>{logo(team, big ? 'h-4 w-4' : 'h-3 w-3')}</span>}
+    </span>
+  );
+}
+// Que se vea que la recomendación se abre: su análisis (el del jugador o el de los puntos del partido)
+const OpenHint = ({ pick, big }: { pick: BasketPick; big?: boolean }) => (
+  <span className={cn('mt-1 flex items-center gap-0.5 whitespace-nowrap font-medium text-amber-400 group-hover:underline', big ? 'text-xs' : 'text-[11px] leading-[14px]')}>
+    {pick.who ? 'Pulsa para ver su análisis' : 'Pulsa para ver el análisis'}<ChevronRight size={big ? 14 : 12} className="shrink-0" />
+  </span>
+);
+
 function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
   const good = hasValue(pick);
   return (
-    <div className="px-3 py-2 transition hover:bg-white/[.04]">
-      <button onClick={() => onOpen(pick)} title={tip(pick)} className="block w-full cursor-pointer text-left font-score text-[15px] font-semibold leading-[18px] text-white">{pick.title}</button>
-      <div className="mt-1 flex items-center gap-2.5">
-        <button onClick={() => onOpen(pick)} title={tip(pick)} className="line-clamp-2 min-w-0 flex-1 cursor-pointer text-left text-[11px] leading-[14px] text-zinc-400">
-          {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
-          {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
-          {pick.why}
-        </button>
-        <PickNums p={pick.p} ev={pick.ev} good={good} />
-        <RefreshOdds match={matchOfGame(pick.game)} focus={playerKeyOf(pick)} />
-        <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
+    <div className="px-3 py-2.5 transition hover:bg-white/[.04]">
+      <button onClick={() => onOpen(pick)} title={tip(pick)} className="group flex w-full cursor-pointer items-start gap-2.5 text-left">
+        <PickFace pick={pick} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{pick.title}</span>
+          <span className="mt-0.5 line-clamp-2 text-[11px] leading-[14px] text-zinc-400">
+            {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}, {esTime(pick.game.date)} · </span>}
+            {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
+            {pick.why}
+          </span>
+          <OpenHint pick={pick} />
+        </span>
+      </button>
+      <div className="mt-2 flex items-center justify-between gap-2.5">
+        <span className="flex items-center gap-2.5"><PickNums p={pick.p} ev={pick.ev} good={good} /></span>
+        <span className="flex items-center gap-1.5">
+          <RefreshOdds match={matchOfGame(pick.game)} focus={playerKeyOf(pick)} />
+          <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
+        </span>
       </div>
-      <div className="mt-1 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
+      <div className="mt-1.5 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
   );
 }
@@ -175,13 +215,17 @@ function PickList({ title, hint, list, oneGame, onOpen, onAdd }: { title: string
 function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-      <button onClick={() => onOpen(pick)} title={tip(pick)} className="col-span-2 min-w-0 cursor-pointer text-left md:col-span-1">
-        <div className="font-score text-[26px] font-bold leading-[28px] text-white md:text-[30px] md:leading-[32px]">{pick.title}</div>
-        <div className="mt-1.5 text-[13px] text-zinc-300">
-          {!oneGame && <>{eventOf(pick.game)}, {esTime(pick.game.date)} · </>}
-          {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
-          {pick.why}
-        </div>
+      <button onClick={() => onOpen(pick)} title={tip(pick)} className="group col-span-2 flex min-w-0 cursor-pointer items-start gap-3.5 text-left md:col-span-1">
+        <PickFace pick={pick} big />
+        <span className="min-w-0 flex-1">
+          <span className="block font-score text-[26px] font-bold leading-[28px] text-white transition group-hover:text-amber-300 md:text-[30px] md:leading-[32px]">{pick.title}</span>
+          <span className="mt-1.5 block text-[13px] text-zinc-300">
+            {!oneGame && <>{eventOf(pick.game)}, {esTime(pick.game.date)} · </>}
+            {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
+            {pick.why}
+          </span>
+          <OpenHint pick={pick} big />
+        </span>
       </button>
       <div className="text-center" title={`Modelo ${p0(pick.pModel)}${pick.pMarket != null ? `, casa ${p0(pick.pMarket)}` : ''}`}>
         <div className="font-score text-[44px] font-bold leading-[42px] text-[var(--tv-mark)] tnum">{p0(pick.p)}</div>
@@ -307,14 +351,15 @@ function BasketDayPicksInner({ games, injuries, onOpen, onAll }: { games: Basket
     <TvFrame>
       <TvBand>Las mejores de las próximas 24 h</TvBand>
       {list.map(p => (
-        <button key={p.id} onClick={() => onOpen(p)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-2.5 border-b border-white/10 px-3 py-2 text-left transition hover:bg-white/[.05]">
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-white">{p.title}</span>
+        <button key={p.id} onClick={() => onOpen(p)} title={tip(p)}
+          className="group grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 border-b border-white/10 px-3 py-2.5 text-left transition hover:bg-white/[.05]">
+          <span className="row-span-2 self-center"><PickFace pick={p} /></span>
+          <span className="min-w-0">
+            <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{p.title}</span>
             <span className="block truncate text-[11px] text-zinc-400">{eventOf(p.game)}, {esTime(p.game.date)} · {VERDICT_LABEL[pickVerdict(p)]}</span>
           </span>
-          <PickNums p={p.p} ev={p.ev} good={hasValue(p)} />
-          <PickOddText price={p.price} book={p.book} />
-          <ChevronRight size={14} className="shrink-0 text-zinc-500" />
+          <span className="flex items-center gap-2.5"><PickNums p={p.p} ev={p.ev} good={hasValue(p)} /><PickOddText price={p.price} book={p.book} /></span>
+          <span className="col-span-2 col-start-2"><OpenHint pick={p} /></span>
         </button>
       ))}
       <button onClick={onAll} className="w-full cursor-pointer py-1.5 text-xs text-zinc-400 hover:text-zinc-100">Ver todas las recomendaciones</button>
