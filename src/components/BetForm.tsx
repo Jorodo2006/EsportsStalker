@@ -7,6 +7,7 @@ import type { BetDraft, BetLeg, BetRef, BetStatus, LegStatus, MatchOdds, Schedul
 import { Badge, Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
 import { MatchPicker, matchName } from './MatchPicker';
 import { OptionInput, type Option } from './OptionInput';
+import { GamePicker, MarketHint, PlayersList } from './GamePicker';
 
 // Todos los mercados habituales de LoL en las casas, con los mismos nombres que usa el comparador de cuotas
 const MAP_MARKETS = ['Ganador', 'Hándicap de kills', 'Total de kills', 'Kills par / impar', 'Kills de equipo', 'Primera sangre',
@@ -42,6 +43,8 @@ const FOOTBALL_MARKETS: Option[] = ['1X2', 'Doble oportunidad', 'Empate no váli
 const BOOKS = ['Winamax', 'Betway'];
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Qué se escribe en la selección: el equipo o jugador del mercado
+const selHint = (sport?: BetLeg['sport']) => sport === 'football' ? 'Liverpool, Más de 2.5, o el jugador' : sport === 'basket' ? 'LAL, Más de 220.5' : sport === 'tennis' || sport === 'mma' ? 'El jugador, Más de 22.5' : 'G2';
 const LEG_LABEL: Record<LegStatus, string> = { pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula' };
 // Botones para marcar cada selección de la combinada (el color del activo es el de su estado)
 const LEG_ICON: Record<LegStatus, typeof Check> = { pending: Clock, won: Check, lost: X, void: Ban };
@@ -94,7 +97,7 @@ export function BetFormDialog() {
   // Fuera de LoL no hay calendario de lolesports para elegir el partido: se escribe a mano
   const free = (f.sport || 'lol') !== 'lol';
   const foot = f.sport === 'football';
-  const sportNow = (f.sport || 'lol') as BetLeg['sport'];
+  const sportNow = (f.sport || 'lol') as NonNullable<BetLeg['sport']>;
   const marketsFor = (event: string, sport = f.sport): Option[] => {
     if (sport === 'basket') return [...BASKET_MARKETS, ...usedMarkets];
     if (sport === 'tennis') return [...TENNIS_MARKETS, ...usedMarkets];
@@ -207,12 +210,14 @@ export function BetFormDialog() {
                     <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 ">
                       <div className="col-span-6 sm:col-span-3">
                         {(l.sport || 'lol') !== 'lol'
-                          ? <Input list="dl-events" placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : 'LAL @ BOS'} value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                          ? <GamePicker sport={l.sport!} day={f.date || today()} placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : l.sport === 'tennis' ? 'Carlos Alcaraz - Jannik Sinner' : 'LAL @ BOS'}
+                            value={l.event} onChange={v => setLeg(i, { event: v })} onPick={g => setLeg(i, { event: g.event, league: g.league })} />
                           : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
                             onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
                       </div>
                       <div className="col-span-6 sm:col-span-3"><OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} /></div>
-                      <Input className="col-span-6 sm:col-span-3" placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
+                      <Input className="col-span-6 sm:col-span-3" list={`dl-pl-${i}`} placeholder={selHint(l.sport)} value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
+                      {(l.sport || 'lol') !== 'lol' && <PlayersList id={`dl-pl-${i}`} sport={l.sport!} day={f.date || today()} event={l.event} />}
                       <div className="col-span-5 flex gap-1 sm:col-span-2">
                         {(Object.keys(LEG_LABEL) as LegStatus[]).map(v => {
                           const Icon = LEG_ICON[v];
@@ -226,6 +231,7 @@ export function BetFormDialog() {
                         })}
                       </div>
                       <Button type="button" size="icon" variant="ghost" title="Quitar" disabled={legs.length <= 2} onClick={() => setLegs(legs.filter((_, j) => j !== i))}><X size={15} /></Button>
+                      <MarketHint sport={l.sport || 'lol'} event={l.event} market={l.market} selection={l.selection} />
                     </div>
                   ))}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -237,14 +243,17 @@ export function BetFormDialog() {
             ) : <>
               <Field label="Partido">
                 {free
-                  ? <Input required list="dl-events" placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''} onChange={set('event')} />
+                  ? <GamePicker required sport={sportNow} day={f.date || today()} placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''}
+                    onChange={v => setF(p => ({ ...p, event: v }))} onPick={g => setF(p => ({ ...p, event: g.event, league: g.league }))} />
                   : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
                     onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
               </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
-                <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
+                <Field label="Selección"><Input required list="dl-pl-s" placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
               </div>
+              {free && <PlayersList id="dl-pl-s" sport={sportNow} day={f.date || today()} event={f.event || ''} />}
+              {!ref && <MarketHint sport={sportNow} event={f.event || ''} market={f.market || ''} selection={f.selection || ''} />}
             </>}
             {when}
             <Field label="Notas"><textarea rows={2} className={inputCls + ' h-auto py-2'} value={f.notes || ''} onChange={set('notes')} /></Field>

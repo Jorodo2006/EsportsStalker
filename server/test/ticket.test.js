@@ -420,3 +420,25 @@ test('una selección sin partido se enlaza por el texto, y sólo si no hay dudas
   assert.strictEqual(guessRef({ ...leg, market: 'Mercado raro', selection: 'Algo' }, games, '2026-11-22'), null); // mercado que no se reconoce
   assert.strictEqual(guessRef({ ...leg, event: 'Racing Santander - Osasuna' }, games, '2026-11-22'), null); // sólo un equipo: no
 });
+
+// Mercados de jugador escritos a mano y los que enseña el usuario (marketAliases)
+test('un mercado de jugador escrito a mano se enlaza con el jugador de la selección', () => {
+  const { playerMarketOf, understands } = require('../services/bets/ticket');
+  assert.strictEqual(playerMarketOf('Realiza 1 remate'), 'Realiza 1 o más remates');
+  assert.strictEqual(playerMarketOf('1+ remates a puerta'), 'Realiza 1 o más remates a puerta');
+  assert.strictEqual(playerMarketOf('Más de 0.5 faltas cometidas'), 'Comete 1 o más faltas');
+  assert.strictEqual(playerMarketOf('Comete 1 o más faltas'), 'Comete 1 o más faltas');
+  assert.strictEqual(playerMarketOf('Total de goles'), null);
+  const games = [gameOf('football', { id: 'f9', leagueName: 'Premier League', date: '2026-11-22T16:30Z', home: club('Liverpool', 'Liverpool'), away: club('Manchester United', 'Man United') })];
+  const leg = { event: 'Liverpool - Manchester United', market: 'Comete 1 o más faltas', selection: 'Florian Wirtz' };
+  assert.deepStrictEqual(guessRef(leg, games, '2026-11-22'), { sport: 'football', match: 'f9', key: 'wmx|Comete 1 o más faltas|', out: 'yes', start: '2026-11-22T16:30Z', guessed: true });
+  assert.strictEqual(guessRef({ ...leg, market: 'Realiza 1 remate', selection: 'Joshua Zirkzee' }, games, '2026-11-22')?.key, 'wmx|Realiza 1 o más remates|');
+  // Lo que no se entiende, hasta que el usuario lo enseña
+  const odd = { ...leg, market: 'Chuta al palo', selection: 'Joshua Zirkzee' };
+  assert.strictEqual(guessRef(odd, games, '2026-11-22'), null);
+  assert.deepStrictEqual(understands('football', odd, {}), { known: false, market: null });
+  const taught = { 'chuta al palo': 'Realiza 1 o más remates' };
+  assert.strictEqual(guessRef(odd, games, '2026-11-22', taught)?.key, 'wmx|Realiza 1 o más remates|');
+  assert.deepStrictEqual(understands('football', odd, taught), { known: true, market: 'Realiza 1 o más remates' });
+  assert.strictEqual(understands('football', { event: 'Liverpool - Manchester United', market: 'Total de goles', selection: 'Más de 2.5' }, {}).known, true);
+});

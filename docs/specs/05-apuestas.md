@@ -37,6 +37,19 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 - la gráfica de evolución (todo, 30 días o 7 días);
 - el desglose por casa y por liga.
 
+## Partido y mercado escritos a mano
+
+- Fuera de LoL, el campo *Partido* del formulario enseña los partidos del día de la apuesta de ese deporte (`GamePicker`), con el
+  nombre que lee la resolución (`gameOf` de `server/services/bets/ticket.js`): baloncesto «AWY @ HOM», fútbol «Local - Visitante»,
+  tenis «A - B» y MMA «A vs B». La *Selección* sugiere los jugadores del partido: la alineación en fútbol (sale una hora antes),
+  las plantillas en baloncesto y los dos rivales en tenis y MMA.
+- La resolución enlaza la apuesta por el texto (`guessRef`); en fútbol también los mercados de jugador con el jugador en la
+  selección («Realiza 1 remate» + «Joshua Zirkzee» → `wmx|Realiza 1 o más remates|`, `playerMarketOf`). Al guardar se lanza una
+  pasada a los 3 s.
+- Si la app no entiende el mercado (`POST /api/bets/understand`), `MarketHint` lo avisa bajo la selección y deja elegir qué es.
+  Se guarda en el ajuste de usuario `marketAliases` ({ texto sin acentos: mercado de la app }, como mucho 200) y vale para las
+  siguientes apuestas de ese usuario.
+
 ## Combinadas
 
 - **Guardado.** `normalizeBet` lee `legs`, que puede llegar como array o como texto JSON desde el CSV. Si hay 2 o más

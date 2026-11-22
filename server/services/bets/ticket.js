@@ -133,13 +133,30 @@ function footballPlayer(t, sub) {
   const n = m[2] ? Number(m[2]) : Math.floor(num(m[4])) + 1; // «Más de 2.5» = 3 o más
   const what = `${m[3] || m[5] || ''} ${sub || ''}`.toLowerCase();
   if (!(n >= 1) || who.length < 4 || /^jugador$/i.test(who)) return null;
-  if (/paradas/.test(what)) return { who, title: `Realiza ${n} o más paradas` };
-  if (/(remates|tiros) a puerta/.test(what)) return { who, title: `Realiza ${n} o más remates a puerta` };
-  if (/remates|tiros/.test(what)) return { who, title: `Realiza ${n} o más remates` };
-  if (/faltas (cometidas|concedidas)/.test(what)) return { who, title: `Comete ${n} o más faltas` };
-  if (/faltas recibidas/.test(what)) return { who, title: `Recibe ${n} o más faltas` };
-  if (/goles|marca/.test(what)) return { who, title: n === 1 ? 'Goleador' : `Marca ${n} goles o más` };
+  const title = playerTitle(n, what);
+  return title ? { who, title } : null;
+}
+// Qué estadística de jugador es y cuántas: el título que entiende la resolución (FOOTBALL_COUNT de settle.js)
+function playerTitle(n, what) {
+  if (/paradas/.test(what)) return `Realiza ${n} o más paradas`;
+  if (/(remates?|tiros?) a puerta/.test(what)) return `Realiza ${n} o más remates a puerta`;
+  if (/remates?|tiros?/.test(what)) return `Realiza ${n} o más remates`;
+  if (/faltas? (cometidas?|concedidas?)|comete/.test(what)) return `Comete ${n} o más faltas`;
+  if (/faltas? recibidas?|recibe .*faltas?/.test(what)) return `Recibe ${n} o más faltas`;
+  if (/goles?|marca/.test(what)) return n === 1 ? 'Goleador' : `Marca ${n} goles o más`;
   return null;
+}
+// Un mercado de jugador escrito a mano, sin el nombre (va en la selección): «Realiza 1 remate», «1+ remates a puerta», «Más de 0.5
+// faltas cometidas», «Comete 1 o más faltas», «Goleador», «Tarjeta» → su título; si no es de jugador, null
+function playerMarketOf(text) {
+  const t = plain(text);
+  if (!t || /\b(total|equipo|equipos|ambos|partido|handicap)\b/.test(t)) return null;
+  if (/^(goleador|marca (en cualquier momento|un gol)|anytime)/.test(t)) return 'Goleador';
+  if (/tarjeta|amonestad/.test(t)) return 'El jugador recibe una o más tarjetas';
+  const over = /mas de (\d+(?: \d+)?)/.exec(t); // plain() deja «0.5» en «0 5»
+  const n = over ? Math.floor(num(over[1].replace(' ', '.'))) + 1 : Number((/(\d+)/.exec(t) || [])[1] || 1);
+  if (!(n >= 1 && n <= 20)) return null;
+  return playerTitle(n, t);
 }
 
 // El texto de una selección → { key, out, market, selection } con las claves de odds.js, o null si no se reconoce.
@@ -382,14 +399,40 @@ function linkTicket(t, games, now = Date.now()) {
 // Una apuesta guardada sin partido (apuntada a mano, o desde un sitio que no lo guardaba) → su ref, si el texto lo dice sin dudas:
 // los dos equipos de un solo partido en «evento» y un mercado que se reconoce en «mercado + selección». Lo usa la resolución
 // (settle.js) para seguirla y resolverla; ante la duda, null. date: el día de la apuesta (para elegir entre dos cruces iguales)
-function guessRef(item, games, date) {
+// aliases: lo que el usuario enseñó que significa un mercado que no se reconocía ({ texto: mercado de la app }, aliasOf)
+function guessRef(item, games, date, aliases) {
   const at = date ? +new Date(`${date}T12:00:00Z`) : Date.now();
   const found = findGames([String(item.event || '')], games, at).filter(f => !f.partial);
   if (found.length !== 1) return null;
   const f = found[0];
-  const mk = marketOf(`${item.market || ''} ${item.selection || ''}`.trim(), f.G, f.A, f.B);
-  if (!mk || mk.key.startsWith('wmx|')) return null; // los de jugador miran la selección, que aquí es otra cosa
-  return { sport: f.G.sport, match: f.G.id, key: mk.key, out: mk.out, start: f.G.start, guessed: true };
+  const mk = readMarket(item, f.G, f.A, f.B, aliases);
+  return mk ? { sport: f.G.sport, match: f.G.id, key: mk.key, out: mk.out, start: f.G.start, guessed: true } : null;
 }
 
-module.exports = { guessRef, parseTicket, linkTicket, marketOf, gameOf, findGames, aliasesOf, mentions, periodOf };
+// La clave con la que se guarda un mercado enseñado: sin acentos ni mayúsculas
+const aliasKey = s => plain(s).slice(0, 80);
+const aliasOf = (market, aliases) => (aliases && aliases[aliasKey(market)]) || market;
+// Mercado y selección escritos a mano → { key, out }, o null si no se entiende. Primero lo que el usuario enseñó (aliases)
+function readMarket(item, G, A, B, aliases) {
+  const market = aliasOf(String(item.market || ''), aliases), sel = cleanName(item.selection);
+  // Fútbol, de jugador: el mercado sin el nombre y el jugador en la selección («Comete 1 o más faltas» + «Florian Wirtz»)
+  if (G.sport === 'football') {
+    const p = playerMarketOf(market);
+    if (p && sel.length >= 4 && !/^(s[ií]|no|m[aá]s de|menos de)\b/i.test(sel) && !mentions(A, sel) && !mentions(B, sel)) return { key: `wmx|${p}|`, out: 'yes', market: p };
+  }
+  const mk = marketOf(`${market} ${sel}`.trim(), G, A, B);
+  return mk && !mk.key.startsWith('wmx|') ? mk : null; // los de jugador miran la selección, que aquí es otra cosa
+}
+
+// ¿Se entiende lo que se ha escrito en el formulario? Con un partido hecho del propio texto del evento («Liverpool - Manchester
+// United»): sirve para avisar mientras se escribe, no para enlazar. null si aún no hay partido o mercado que mirar
+function understands(sport, item, aliases) {
+  const parts = String(item.event || '').split(/\s+(?:-|vs\.?|@|–)\s+/i).map(s => s.trim()).filter(Boolean);
+  if (parts.length !== 2 || !String(item.market || '').trim() || !['football', 'tennis', 'mma'].includes(sport)) return null;
+  const side = name => ({ name, alt: [] });
+  const G = { sport, id: '', a: side(parts[0]), b: side(parts[1]) };
+  const mk = readMarket(item, G, aliasesOf(G.a, sport), aliasesOf(G.b, sport), aliases);
+  return { known: !!mk, market: mk ? mk.market : null };
+}
+
+module.exports = { understands, aliasKey, playerMarketOf, guessRef, parseTicket, linkTicket, marketOf, gameOf, findGames, aliasesOf, mentions, periodOf };

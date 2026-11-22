@@ -169,6 +169,7 @@ export const api: Api = {
     recordPredictions: list => call('POST', '/api/bets/predictions', { list }),
     share: (id, to, note) => call('POST', `/api/bets/${part(id)}/share`, { to, note }),
     scan: image => call('POST', '/api/bets/scan', { image }),
+    understand: q => call('POST', '/api/bets/understand', q),
     export: async () => {
       const name = `apuestas-${new Date().toISOString().slice(0, 10)}.csv`;
       download(name, toCsv(await get('/api/bets')));

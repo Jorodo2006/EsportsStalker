@@ -365,10 +365,10 @@ async function guessBasket(item, date) {
 // ---------- la pasada ----------
 let running = false;
 const GUESS = { football: '/api/football/games', tennis: '/api/tennis/games', mma: '/api/mma/games' };
-async function guessByText(item, date, sport) {
+async function guessByText(item, date, sport, aliases) {
   if (!item.event) return null;
   const games = (await gamesAround(sport, GUESS[sport], null, date)).map(g => ticket.gameOf(sport, g)).filter(Boolean);
-  return ticket.guessRef(item, games, date);
+  return ticket.guessRef(item, games, date, aliases);
 }
 
 async function run() {
@@ -384,6 +384,12 @@ async function run() {
     return results.get(k);
   };
   let changed = 0;
+  // Los mercados que ha enseñado cada usuario (marketAliases), uno por pasada
+  const taught = new Map();
+  const aliasesOf = userId => {
+    if (!taught.has(userId)) taught.set(userId, store.getSettings(userId).then(s => s.marketAliases || {}).catch(() => ({})));
+    return taught.get(userId);
+  };
   try {
     const { rows } = await query(`SELECT id, user_id FROM bets.bets WHERE status = 'pending' AND user_id IS NOT NULL ORDER BY date LIMIT 500`);
     for (const r of rows) {
@@ -401,7 +407,7 @@ async function run() {
         // Fútbol, tenis y MMA sin partido (apuntadas a mano, o de un sitio que no lo guardaba): por el texto, con las reglas del
         // lector de tickets. Se guarda al momento, sin esperar al final, para que salga en «Tus apuestas» mientras se juega
         if (!it.ref && GUESS[sport]) {
-          const g = await guessByText(it, bet.date, sport).catch(() => null);
+          const g = await guessByText(it, bet.date, sport, await aliasesOf(r.user_id)).catch(() => null);
           if (g) { it.ref = g; touched = true; }
         }
         if (!it.ref || it.ref.settled) continue;

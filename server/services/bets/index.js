@@ -14,6 +14,15 @@ const admin = require('./admin');
 const push = require('./push');
 const scan = require('./scan');
 const internal = require('../../shared/internal');
+const ticket = require('./ticket');
+
+// Una apuesta apuntada a mano se enlaza a su partido en la pasada del resolvedor: tras guardar se lanza una enseguida (una para
+// varias seguidas) para que salga ya en «Tus apuestas», sin esperar a la de cada 5 min
+let settleSoon = null;
+function soonSettle() {
+  if (settleSoon) return;
+  settleSoon = setTimeout(() => { settleSoon = null; settle.run().catch(() => {}); }, 3000);
+}
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
 // A quien no es administrador tampoco le llegan las claves comunes
@@ -83,10 +92,15 @@ const routes = [
   ['GET', '/internal/settings', async () => ({ ...(await store.getSettings(null)), ...env.settings() })],
 
   ['GET', '/api/bets', ({ req }) => store.listBets(who(req).id)],
-  ['POST', '/api/bets', ({ req, body }) => store.saveBet(who(req).id, body || {})],
+  ['POST', '/api/bets', async ({ req, body }) => { const bet = await store.saveBet(who(req).id, body || {}); soonSettle(); return bet; }],
   ['DELETE', '/api/bets/:id', ({ req, params }) => store.deleteBet(who(req).id, params.id)],
   ['POST', '/api/bets/import', ({ req, body }) => store.importBets(who(req).id, body?.list)],
   // Leer la captura de un ticket de la casa y devolverla como borrador enlazado a su partido (scan.js); no guarda nada
+  // ¿Entiende la app el mercado escrito en el formulario? (para pedir que se lo enseñen si no). No guarda nada
+  ['POST', '/api/bets/understand', async ({ req, body }) => {
+    const s = await store.getSettings(who(req).id);
+    return ticket.understands(String(body?.sport || ''), { event: body?.event, market: body?.market, selection: body?.selection }, s.marketAliases);
+  }],
   ['POST', '/api/bets/scan', ({ req, body }) => scan.scan(who(req).id, body?.image)],
   // Comprobar ya los resultados (sin esperar a la pasada de cada 5 min). Pide sesión, como todo /api; devuelve cuántas cambiaron
   ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
