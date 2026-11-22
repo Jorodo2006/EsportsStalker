@@ -168,9 +168,10 @@ solas con el resultado del partido.
 ## Seguir las apuestas en juego (`src/components/MyBetsLive.tsx`, `src/lib/bet-track.ts`)
 
 - Arriba de *Partidos* de cada deporte, «Tus apuestas»: las pendientes con `ref` cuyo partido empieza en las próximas 24 h o
-  empezó hace menos de 12 h, sólo del deporte que se ve (primero las que se están jugando; de una combinada, cada selección
-  pendiente de ese deporte: una de tenis y fútbol sale en los dos, cada uno con lo suyo). Las apuntadas a mano sin partido
-  no salen: no se sabe qué seguir.
+  empezó hace menos de 12 h, sólo del deporte que se ve (primero las que se están jugando). Una combinada sale entera
+  en cada deporte con alguna selección suya por jugarse: todas sus selecciones, también las de otros deportes (con el
+  deporte delante) y las ya resueltas (acertada, fallada, nula), y arriba cuántas van acertadas y cuántas van bien ahora. Una de
+  tenis y fútbol sale en los dos. Las apuntadas a mano sin partido no salen: no se sabe qué seguir.
 - Cómo va cada una sale de `trackOf` (`bet-track.ts`, pruebas en `bet-track.test.ts`), que lee la misma clave de mercado que
   `settle.js`: barra con la cifra frente a la línea en las líneas de jugador de baloncesto, los totales y los totales de equipo
   (y los goleadores de Winamax en fútbol); quién va por delante en ganador, hándicap, doble oportunidad, empate no válido y
