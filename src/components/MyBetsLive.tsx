@@ -1,4 +1,4 @@
-// «Tus apuestas» arriba de Partidos: las pendientes de hoy (de los cinco deportes, primero las que se están jugando) y cómo van,
+// «Tus apuestas» arriba de Partidos: las pendientes de hoy del deporte que se ve (primero las que se están jugando) y cómo van,
 // con una barra para las líneas (puntos de un jugador, totales) y quién va por delante en el resto (lib/bet-track.ts). Pulsar
 // una abre su partido y, si es de un jugador de baloncesto, sus estadísticas en ese partido (lib/focus-player.ts).
 // Sólo las apuestas que saben su partido (ref, las que salen del cupón); las apuntadas a mano sin partido no se pueden seguir.
@@ -13,7 +13,6 @@ import { madridDay } from '@/lib/route';
 import type { BasketBox, BasketGame, Bet, BetLeg, BetRef, FootballMatch, MmaFight, Sport, TennisMatch } from '@/lib/types';
 import { Card } from './ui';
 
-const SPORT_NAME: Record<Sport, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
 // Desde 24 h antes del partido hasta 12 h después (por si tarda en resolverse)
 const BEFORE = 24 * 3600e3, AFTER = 12 * 3600e3;
 const sum = (xs: number[]) => xs.reduce((s, x) => s + (Number(x) || 0), 0);
@@ -98,16 +97,17 @@ export function MyBetsLive() {
   const cur = useCurrency();
   const bets = useBets();
 
-  // Las pendientes con algún partido de hoy; de una combinada, todas sus selecciones con partido
+  // Las pendientes con algún partido de hoy de este deporte; de una combinada, sus selecciones con partido de este deporte (una
+  // que mezcla tenis y fútbol sale en los dos, cada uno con lo suyo)
   const rows = useMemo<Row[]>(() => {
     const now = Date.now();
     return (bets.data ?? []).filter(b => b.status === 'pending').flatMap(b => {
       const legs: Leg[] = b.legs?.length
-        ? b.legs.filter(l => l.ref && l.status === 'pending').map(l => ({ event: l.event, market: l.market, selection: l.selection, odds: l.odds, ref: l.ref! }))
-        : b.ref ? [{ event: b.event, market: b.market, selection: b.selection, odds: b.odds, ref: b.ref }] : [];
+        ? b.legs.filter(l => l.ref && l.status === 'pending' && l.ref.sport === app).map(l => ({ event: l.event, market: l.market, selection: l.selection, odds: l.odds, ref: l.ref! }))
+        : b.ref?.sport === app ? [{ event: b.event, market: b.market, selection: b.selection, odds: b.odds, ref: b.ref }] : [];
       return legs.some(l => inWindow(l.ref, now)) ? [{ bet: b, legs }] : [];
     });
-  }, [bets.data]);
+  }, [bets.data, app]);
 
   const refs = rows.flatMap(r => r.legs.map(l => l.ref)).filter(r => r.start && r.sport !== 'lol');
   const lists = [...new Map(refs.map(r => [listId(r), r])).values()];
@@ -147,12 +147,12 @@ export function MyBetsLive() {
 
   if (!rows.length) return null;
 
-  // Primero lo que se está jugando, luego lo que empieza antes; las del deporte que se ve, delante a igualdad
+  // Primero lo que se está jugando, luego lo que empieza antes
   const rank = (r: Row) => {
     const snaps = r.legs.map(l => snapOf(l.ref));
     const live = snaps.some(s => s?.live.state === 'in');
     const next = Math.min(...r.legs.map(l => +new Date(l.ref.start ?? 0)));
-    return (live ? 0 : 1e15) + next + (r.bet.sport === app ? 0 : 1);
+    return (live ? 0 : 1e15) + next;
   };
   const list = rows.slice().sort((a, b) => rank(a) - rank(b));
   const shown = list.slice(0, 8);
@@ -180,7 +180,7 @@ export function MyBetsLive() {
                 </div>
               )}
               {legs.map((l, i) => (
-                <LegRow key={i} leg={l} snap={snapOf(l.ref)} other={l.ref.sport !== app} onOpen={() => open(l)}
+                <LegRow key={i} leg={l} snap={snapOf(l.ref)} onOpen={() => open(l)}
                   stake={combo ? null : money(bet.stake, cur)} />
               ))}
             </div>
@@ -206,7 +206,7 @@ function when(ref: BetRef) {
   return today ? `Hoy ${time}` : `${d.toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'Europe/Madrid' })} ${time}`;
 }
 
-function LegRow({ leg, snap, other, stake, onOpen }: { leg: Leg; snap: Snap | null; other: boolean; stake: string | null; onOpen: () => void }) {
+function LegRow({ leg, snap, stake, onOpen }: { leg: Leg; snap: Snap | null; stake: string | null; onOpen: () => void }) {
   const t: Track | null = trackOf(leg.ref, snap?.live, leg.selection);
   const state = snap?.live.state;
   const player = leg.ref.sport === 'basket' && !!playerOf(leg.ref);
@@ -218,7 +218,7 @@ function LegRow({ leg, snap, other, stake, onOpen }: { leg: Leg; snap: Snap | nu
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-zinc-50">{decEs(leg.selection)}</span>
           <span className="block truncate text-xs text-zinc-500">
-            {[other && SPORT_NAME[leg.ref.sport], decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : leg.odds > 1 ? odd(leg.odds) : null].filter(Boolean).join(' · ')}
+            {[decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : leg.odds > 1 ? odd(leg.odds) : null].filter(Boolean).join(' · ')}
           </span>
         </span>
         <span className="max-w-[45%] shrink-0 text-right text-xs tnum">
