@@ -6,8 +6,8 @@ import { AlertTriangle, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { injuryEs } from '@/lib/basket-labels';
-import { BASKET_MARKETS, parseLine } from '@/lib/basket-model';
-import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { parseLine } from '@/lib/basket-model';
+import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerKeyOf, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import { VERDICT_LABEL } from '@/lib/value';
 import { teamOuts } from '@/lib/basket-absences';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
@@ -127,7 +127,6 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
 }
 
 // La clave del comparador de una línea de jugador (las de equipo no la llevan: se leen enteras)
-const playerKeyOf = (p: BasketPick) => (p.kind === 'player' && p.who && p.marketKey ? `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}` : undefined);
 
 export const usePickAdd = () => {
   const { addToSlip } = useApp();

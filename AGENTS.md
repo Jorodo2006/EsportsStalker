@@ -310,7 +310,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
 - **Cupón al día** (`src/lib/slip-live.ts`, con sus pruebas): cada selección lleva `live` (el partido como lo pide el comparador,
   la clave del mercado y la selección; sólo vive en el cupón, no se guarda en la apuesta). Al entrar se compara con la última
   lectura y «Actualizar cuotas» lanza el lector; si la línea ya no está, se avisa. Si añades otro sitio que mande cuotas al cupón,
-  ponle `live` (`OddsTarget.match` o `src/lib/odds-targets.ts`), o esa selección no se podrá actualizar. En las recomendaciones,
+  ponle `live` (`OddsTarget.match` o `src/lib/odds-targets.ts`), o esa selección no se podrá actualizar, y `ref` (partido, clave y
+  selección), o la apuesta no saldrá en «Tus apuestas» ni se resolverá sola (pasaba con las recomendaciones de fútbol y tenis y el plan). En las recomendaciones,
   `RefreshOdds` (`src/components/RefreshOdds.tsx`) lee el partido de esa fila y vuelve a pedir cuotas y recomendaciones. Va uno
   a uno a propósito: no pongas un botón que lea todos los partidos del día, serían decenas de lecturas y las casas pueden bloquear.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no

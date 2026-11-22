@@ -45,4 +45,14 @@ describe('adaptadores', () => {
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({ sport: 'basket', match: 'basket:g1', event: 'Golden State Warriors @ Dallas Mavericks', league: 'NBA', rel: 60, start: '2026-11-19T01:00:00Z' });
   });
+  // Al cupón con su partido y mercado: así la apuesta sale en «Tus apuestas» y se resuelve sola (antes iba sin ref)
+  it('cada opción lleva su ref: el partido y la clave del mercado', () => {
+    const row = { id: 'f1', leagueName: 'LaLiga', date: '2026-11-18T19:00:00Z', home: { name: 'Real' }, away: { name: 'Betis' }, pick: pk('total|0||2.5#over') };
+    expect(fromFootballLines([row] as unknown as FootballLineRow[])[0].ref).toEqual({ sport: 'football', match: 'f1', key: 'total|0||2.5', out: 'over', start: '2026-11-18T19:00:00Z' });
+    // Sin «clave#selección», sin ref
+    expect(fromFootballLines([{ ...row, pick: pk('x') }] as unknown as FootballLineRow[])[0].ref).toBeUndefined();
+    const game = { id: 'g1', league: 'nba', date: '2026-11-19T01:00:00Z', away: { name: 'A' }, home: { name: 'B' } };
+    const player = { id: 'p', kind: 'player', marketKey: 'pts', who: { name: 'Stephen Curry' }, line: 24.5, side: 'over', game, title: '', price: 1.9, p: 0.5, ev: 0, rel: { score: 60 } };
+    expect(fromBasket([player] as unknown as BasketPick[])[0].ref).toEqual({ sport: 'basket', match: 'g1', key: 'player|Puntos|stephen curry|24.5', out: 'over', start: '2026-11-19T01:00:00Z' });
+  });
 });

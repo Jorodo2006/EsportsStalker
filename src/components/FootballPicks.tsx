@@ -27,12 +27,13 @@ export const madridDay = (iso: string) => new Date(iso).toLocaleDateString('sv-S
 
 export function useFootballAdd() {
   const { addToSlip } = useApp();
-  // Con el partido como lo pide el comparador y la clave del mercado (id = clave#selección), el cupón puede volver a leer la cuota
+  // Con el partido como lo pide el comparador y la clave del mercado (id = clave#selección), el cupón puede volver a leer la cuota;
+  // con su ref, la apuesta sale en «Tus apuestas» y el servidor la resuelve sola (sin ella había que resolverla a mano)
   return (m: Pick<FootballMatch, 'id' | 'league' | 'leagueName' | 'date' | 'home' | 'away'>, p: FootballPick) => {
     const [key, out] = p.id.split('#');
     addToSlip({
       sport: 'football', league: m.leagueName, event: `${m.home.name} - ${m.away.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price, status: 'pending',
-      ...(key && out ? { live: { match: targetOfFootball(m).match, key, out } } : {})
+      ...(key && out ? { ref: { sport: 'football' as const, match: m.id, key, out, start: m.date }, live: { match: targetOfFootball(m).match, key, out } } : {})
     });
   };
 }

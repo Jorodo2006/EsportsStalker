@@ -65,7 +65,7 @@ export function TennisLines({ tour, id, name }: { tour: SheetTour; id: string; n
     const [key, out] = p.id.split('#');
     addToSlip({
       sport: 'tennis', status: 'pending', league: next.tournament, event: `${next.a.name} vs ${next.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price,
-      ...(key && out ? { live: { match: targetOfMatch(next).match, key, out } } : {})
+      ...(key && out ? { ref: { sport: 'tennis' as const, match: next.id, key, out, start: next.date }, live: { match: targetOfMatch(next).match, key, out } } : {})
     });
   };
 

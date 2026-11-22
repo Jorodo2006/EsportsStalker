@@ -29,7 +29,8 @@ function useToCoupon() {
     for (const l of t.legs) {
       const market = l.market || l.title, selection = l.selection || l.title;
       if (has(l.event, market, selection)) continue;
-      addToSlip({ sport: l.sport, league: l.league, event: l.event, market, selection, odds: l.price, bookmaker: l.book, status: 'pending' });
+      // Con su ref (partido y mercado), la apuesta sale en «Tus apuestas» y se resuelve sola
+      addToSlip({ sport: l.sport, league: l.league, event: l.event, market, selection, odds: l.price, bookmaker: l.book, status: 'pending', ...(l.ref ? { ref: l.ref } : {}) });
       n++;
     }
     toast(!n ? 'Ya estaban en el cupón' : t.legs.length > 1 ? `En el cupón: elige «Combinada» y pon el importe` : 'En el cupón: pon el importe');

@@ -172,3 +172,6 @@ export function arrangePicks(all: BasketPick[], f: PickFilters) {
 // Las mejores de todos los partidos, para la banda de la lista: sólo las que salen rentables y sin repetir jugador
 export const bestPicks = (all: BasketPick[], minOdds: number, n: number) =>
   diversify(all.filter(x => x.price >= minOdds && worthTop(x)).sort((a, b) => score(b) - score(a)), 1).slice(0, n);
+
+// La clave de mercado de una línea de jugador (la de odds.js y settle.js), para llevarla al cupón con su ref; las de equipo no la llevan
+export const playerKeyOf = (p: BasketPick) => (p.kind === 'player' && p.who && p.marketKey ? `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}` : undefined);
