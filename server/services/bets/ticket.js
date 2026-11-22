@@ -378,4 +378,17 @@ function linkTicket(t, games, now = Date.now()) {
   return { book: t.book, kind: t.kind, draft, legs: legs.map(({ linked, text, game, why }) => ({ linked, text, game: game || null, why: why || null })), warnings };
 }
 
-module.exports = { parseTicket, linkTicket, marketOf, gameOf, findGames, aliasesOf, mentions, periodOf };
+// Una apuesta guardada sin partido (apuntada a mano, o desde un sitio que no lo guardaba) → su ref, si el texto lo dice sin dudas:
+// los dos equipos de un solo partido en «evento» y un mercado que se reconoce en «mercado + selección». Lo usa la resolución
+// (settle.js) para seguirla y resolverla; ante la duda, null. date: el día de la apuesta (para elegir entre dos cruces iguales)
+function guessRef(item, games, date) {
+  const at = date ? +new Date(`${date}T12:00:00Z`) : Date.now();
+  const found = findGames([String(item.event || '')], games, at).filter(f => !f.partial);
+  if (found.length !== 1) return null;
+  const f = found[0];
+  const mk = marketOf(`${item.market || ''} ${item.selection || ''}`.trim(), f.G, f.A, f.B);
+  if (!mk || mk.key.startsWith('wmx|')) return null; // los de jugador miran la selección, que aquí es otra cosa
+  return { sport: f.G.sport, match: f.G.id, key: mk.key, out: mk.out, start: f.G.start, guessed: true };
+}
+
+module.exports = { guessRef, parseTicket, linkTicket, marketOf, gameOf, findGames, aliasesOf, mentions, periodOf };

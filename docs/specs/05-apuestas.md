@@ -115,6 +115,9 @@ solas con el resultado del partido.
 - **Apuestas sin `ref`** (las de antes o las de recomendaciones de equipo): si son de baloncesto y llevan los textos
   que pone la app ("CHA @ BKN" + "Total de puntos" + "Más de 212.5", "Asistencias · Naji Marshall" + "Más de 2.5",
   "Ganador", "Hándicap", "Puntos de X", con periodo) se reconocen por el texto (`guessBasket`, `ref.guessed`).
+  Las de fútbol, tenis y MMA, con las reglas del lector de tickets (`guessRef` de `ticket.js`): los dos equipos de un solo
+  partido en el evento y un mercado que se reconoce en mercado + selección; si no, nada. El `ref` se guarda en cuanto se
+  reconoce, sin esperar al final, para que la apuesta salga en directo en «Tus apuestas».
 - **Cuándo**: cada 5 minutos, o al pulsar *Comprobar resultados* en Mis apuestas (`POST /api/bets/settle`). Cada
   partido se pide una vez por pasada, al servicio de su deporte por su API (regla 6).
 - **Qué sabe resolver**: ganador (1X2 en fútbol), hándicap, totales y puntos/goles/juegos de cada uno, del partido y por

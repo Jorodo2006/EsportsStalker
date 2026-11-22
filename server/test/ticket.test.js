@@ -2,7 +2,7 @@
 // («B05 Celtics», «19 cuarto», «Gananciss», un 8 leído como 6). Las referencias de los tickets son inventadas.
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseTicket, linkTicket, gameOf, periodOf } = require('../services/bets/ticket');
+const { parseTicket, linkTicket, gameOf, periodOf, guessRef } = require('../services/bets/ticket');
 
 const team = (name, abbr) => ({ name, abbr, alt: [] });
 const nba = (id, away, home, date) => gameOf('basket', { id, league: 'nba', date, away, home });
@@ -408,4 +408,14 @@ Imp: Ganancias
   assert.deepStrictEqual([r.draft.ref.match, r.draft.ref.key, r.draft.ref.out, r.draft.market], ['f3', 'moneyline|0||', 'a', 'Resultado']);
   const draw = linkTicket(parseTicket(text.replace('Y Barcelona 2.00', 'Y Empate 3.40')), games, NOW);
   assert.deepStrictEqual([draw.draft.ref.key, draw.draft.ref.out, draw.draft.odds], ['moneyline|0||', 'x', 3.4]);
+});
+
+// Apuestas guardadas sin partido (apuntadas a mano o desde un sitio que no lo guardaba): la resolución las enlaza por el texto
+test('una selección sin partido se enlaza por el texto, y sólo si no hay dudas', () => {
+  const games = [...MORE, gameOf('football', { id: 'f4', leagueName: 'LaLiga', date: '2026-11-22T14:15Z', home: club('Racing Santander', 'Racing'), away: club('Real Sociedad', 'Real Sociedad') })];
+  const leg = { event: 'Racing Santander - Real Sociedad', market: 'Total de goles', selection: 'Más de 2.5' };
+  assert.deepStrictEqual(guessRef(leg, games, '2026-11-22'), { sport: 'football', match: 'f4', key: 'total|0||2.5', out: 'over', start: '2026-11-22T14:15Z', guessed: true });
+  assert.deepStrictEqual(guessRef({ event: 'Racing Santander - Real Sociedad', market: 'Resultado', selection: 'Real Sociedad' }, games, '2026-11-22')?.out, 'b');
+  assert.strictEqual(guessRef({ ...leg, market: 'Mercado raro', selection: 'Algo' }, games, '2026-11-22'), null); // mercado que no se reconoce
+  assert.strictEqual(guessRef({ ...leg, event: 'Racing Santander - Osasuna' }, games, '2026-11-22'), null); // sólo un equipo: no
 });
