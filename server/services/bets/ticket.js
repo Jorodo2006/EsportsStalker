@@ -214,7 +214,11 @@ function marketOf(text, G, A, B, sub = '') {
     if (side) return { key: `team_total|${period}|${side}|${line}`, out: over ? 'over' : 'under', market: `${pre}${unit[0].toUpperCase() + unit.slice(1)} de ${label(side === 'a' ? G.a : G.b)}`, selection: `${over ? 'Más' : 'Menos'} de ${fmtLine(line)}` };
     return { key: `total|${period}||${line}`, out: over ? 'over' : 'under', market: `${pre}Total de ${unit}`, selection: `${over ? 'Más' : 'Menos'} de ${fmtLine(line)}` };
   }
-  if (/ganador|resultado|1x2|gana el partido/i.test(t) || sideIn(t)) {
+  // bet365 pone sólo el equipo («Barcelona 2.00») y el mercado debajo («Resultado final»): se mira con el subtítulo. Lo de
+  // descanso/final o empate no válido, no: es otro mercado
+  const ctx = sub ? `${t} ${sub}` : t;
+  if (/descanso\s*\/\s*final|sin empate|doble oportunidad/i.test(ctx)) return null;
+  if (/ganador|resultado|1x2|gana el partido/i.test(ctx) || sideIn(t)) {
     if (G.sport === 'football' && /\bempate\b/i.test(t.replace(/sin empate/i, ''))) return { key: 'moneyline|0||', out: 'x', market: 'Resultado', selection: 'Empate' };
     const side = sideIn(t.replace(/^.*(ganador|resultado)[^a-z]*/i, '')) || sideIn(t);
     if (side) return { key: `moneyline|${period}||`, out: side, market: G.sport === 'football' && !period ? 'Resultado' : `${pre}Ganador`, selection: label(side === 'a' ? G.a : G.b) };
@@ -288,13 +292,16 @@ function parseTicket(text) {
   const stripBullet = l => l.replace(/^(?:\S|[^\p{L}\s.']\S|\S[^\p{L}\s.'])\s+(?=\p{Lu})/u, '');
   // bet365 también pone sólo «Más de 4.5» y el mercado debajo («Total de goles»). Winamax tiene líneas así (la selección bajo el
   // mercado), así que eso sólo cuenta en los de bet365
+  // …y también sólo el equipo y la cuota («Barcelona 2.00», con «Resultado final» debajo). El marcador de abajo («Barcelona 3»)
+  // no lleva decimales, y el importe, el €
+  const endsInOdds = l => book === 'bet365' && /\s\d{1,3}[.,]\d{2}$/.test(l) && !/€|crear apuesta/i.test(l);
   const bareOu = l => book === 'bet365' && /^(?:\S{1,2}\s+)?(m[aá]s|menos) de \d+(?:[.,]\d+)?(?:\s+\d{1,3}[.,]\d{2})?$/i.test(l);
   if (book === 'bet365' || lines.some(isLeg365)) {
     // El subtítulo puede repetir el título con otras palabras («Ambos equipos recibirán 2 o más tarjetas»): se reconoce porque
     // empieza igual, y no cuenta como otra selección
     const first3 = l => plain(stripBullet(l)).split(' ').slice(0, 3).join(' ');
     for (let i = 0; i < lines.length; i++) {
-      const title = l => isLeg365(l) || bareOu(l);
+      const title = l => isLeg365(l) || bareOu(l) || endsInOdds(l);
       if (!title(lines[i])) continue;
       const t = stripBullet(lines[i]), next = lines[i + 1], at = i;
       let sub = '';

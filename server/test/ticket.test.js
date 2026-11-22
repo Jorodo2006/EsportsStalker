@@ -391,3 +391,21 @@ Imp:
 5,00€ 10,50€`);
   assert.deepStrictEqual([r.draft.ref.match, r.draft.ref.key, r.draft.ref.out, r.draft.selection], ['f2', 'cards_both|0||2', 'yes', 'Sí']);
 });
+
+test('bet365, sólo el equipo y la cuota con «Resultado final» debajo: ganador (y el empate)', () => {
+  const games = [...MORE, gameOf('football', { id: 'f3', leagueName: 'LaLiga', date: '2026-11-22T13:00Z', home: club('Barcelona', 'Barcelona'), away: club('Villarreal', 'Villarreal') })];
+  const text = `20,00€ Simple
+Y Barcelona 2.00
+
+Resultado final
+“| Barcelona 3
+ff villarreal 2
+Imp: Ganancias
+20,00€ 40,00€ (Y) 40,00€ Ganancias`;
+  const r = linkTicket(parseTicket(text), games, NOW);
+  assert.strictEqual(r.draft.stake, 20);
+  assert.strictEqual(r.draft.odds, 2);
+  assert.deepStrictEqual([r.draft.ref.match, r.draft.ref.key, r.draft.ref.out, r.draft.market], ['f3', 'moneyline|0||', 'a', 'Resultado']);
+  const draw = linkTicket(parseTicket(text.replace('Y Barcelona 2.00', 'Y Empate 3.40')), games, NOW);
+  assert.deepStrictEqual([draw.draft.ref.key, draw.draft.ref.out, draw.draft.odds], ['moneyline|0||', 'x', 3.4]);
+});
