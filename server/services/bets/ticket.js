@@ -351,7 +351,8 @@ function linkTicket(t, games, now = Date.now()) {
     // Su partido: el que está justo encima en el ticket (Winamax) o, si no hay, el de debajo (bet365 lo pone al final)
     const above = found.filter(f => f.at <= l.at).at(-1), below = found.find(f => f.at > l.at);
     const f = above || below || (found.length === 1 ? found[0] : null);
-    const odds = t.kind === 'builder' ? (n === 0 ? t.odds || 1 : 1) : l.odds || (t.legs.length === 1 ? t.odds : null) || 1;
+    // «Crear apuesta»: una cuota para todas, la de la apuesta (las selecciones, sin cuota: 0). Una que no se ha leído, también 0
+    const odds = t.kind === 'builder' ? 0 : l.odds || (t.legs.length === 1 ? t.odds : null) || 0;
     if (!f) return { leg: { event: '', league: '', market: l.text, selection: '', odds, status: 'pending' }, linked: false, text: l.text, why: 'No encuentro el partido entre los de esos días' };
     const mk = marketOf(l.text, f.G, f.A, f.B, l.sub);
     const base = { event: f.G.event, league: f.G.league, odds, status: 'pending', sport: f.G.sport };
@@ -363,7 +364,7 @@ function linkTicket(t, games, now = Date.now()) {
   // se puede subir días después
   const start = legs.map(x => x.leg.ref?.start).find(Boolean);
   const date = new Date(t.placedAt ?? (start ? +new Date(start) : now)).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
-  const notes = t.kind === 'builder' ? `Crear apuesta de ${t.book || 'la casa'}: cuota conjunta ${String(t.odds).replace('.', ',')} (va en la primera selección)` : '';
+  const notes = t.kind === 'builder' ? `Crear apuesta de ${t.book || 'la casa'}` : '';
   const common = { date, bookmaker: t.book, stake: t.stake ?? 0, notes, ...(t.cashout ? { status: 'cashout', cashout: t.cashout } : { status: 'pending', cashout: 0 }) };
   let draft;
   if (legs.length === 1 && t.kind !== 'builder') {

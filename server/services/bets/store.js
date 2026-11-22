@@ -246,7 +246,7 @@ function normalizeBet(b) {
     selection: text(l.selection, 'selection'), odds: odds(l.odds, 'La cuota'), status: LEG_STATUSES.includes(l.status) ? l.status : 'pending',
     sport: sportOf(l.sport ?? b.sport), ...withRef(l.ref, sportOf(l.sport ?? b.sport))
   })).filter(l => l.selection || l.event) : [];
-  if (legs.length >= 2) return normalizeCombo(b, legs, money, text);
+  if (legs.length >= 2) return normalizeCombo(b, legs, money, text, odds);
   return {
     id: b.id ? text(b.id, 'id') : crypto.randomUUID(),
     date: day(b.date),
@@ -267,8 +267,12 @@ function normalizeBet(b) {
 
 // Combinada: la cuota es el producto de las selecciones (las nulas cuentan 1) y el estado sale de ellas:
 // una perdida → perdida; todas resueltas → ganada (o nula si todas son nulas). El cash out se respeta.
-function normalizeCombo(b, legs, money, text) {
-  const odds = Math.round(legs.reduce((p, l) => p * (l.status === 'void' ? 1 : l.odds || 1), 1) * 100) / 100;
+// La cuota de una combinada: si todas las selecciones tienen la suya, su producto (y una nula cuenta como 1, como en las casas);
+// si alguna no la tiene (0: «Crear apuesta», cuota mejorada, apuntada sólo con la total), la total que se manda
+function normalizeCombo(b, legs, money, text, oddsOf) {
+  const product = Math.round(legs.reduce((p, l) => p * (l.status === 'void' ? 1 : l.odds || 1), 1) * 100) / 100;
+  const given = b.odds == null || b.odds === '' ? 0 : oddsOf(b.odds, 'La cuota');
+  const odds = legs.every(l => l.odds > 1) || !(given > 1) ? product : Math.round(given * 100) / 100;
   let status = 'pending';
   if (legs.some(l => l.status === 'lost')) status = 'lost';
   else if (legs.every(l => l.status !== 'pending')) status = legs.every(l => l.status === 'void') ? 'void' : 'won';

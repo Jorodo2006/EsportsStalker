@@ -41,7 +41,9 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 
 - **Guardado.** `normalizeBet` lee `legs`, que puede llegar como array o como texto JSON desde el CSV. Si hay 2 o más
   selecciones válidas, se llama a `normalizeCombo`, que recalcula siempre en el backend:
-  - **cuota** = producto de las cuotas de las selecciones; las nulas cuentan como 1;
+  - **cuota** = producto de las cuotas de las selecciones; las nulas cuentan como 1. Si alguna selección no tiene la suya (0:
+    una «Crear apuesta», una cuota mejorada, o apuntada sólo con la total), vale la total que se manda. El formulario pide en
+    las combinadas una sola «Cuota total»: si no es el producto de las de las selecciones, las manda sin cuota;
   - **estado**:
     - `lost` si alguna selección está perdida;
     - `pending` si alguna sigue pendiente;

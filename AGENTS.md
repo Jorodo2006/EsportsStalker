@@ -315,7 +315,8 @@ Más detalle en [`docs/specs/01-arquitectura.md`](docs/specs/01-arquitectura.md)
   `RefreshOdds` (`src/components/RefreshOdds.tsx`) lee el partido de esa fila y vuelve a pedir cuotas y recomendaciones. Va uno
   a uno a propósito: no pongas un botón que lea todos los partidos del día, serían decenas de lecturas y las casas pueden bloquear.
 - **Combinadas**: la cuota y el estado se recalculan en `server/services/bets/store.js` (`normalizeCombo`) a partir de las selecciones; no
-  confíes en lo que mande el renderer.
+  confíes en lo que mande el renderer. La única excepción: si alguna selección va sin cuota (0, «Crear apuesta» o cuota mejorada), la
+  cuota es la total que se manda; el formulario pide una sola «Cuota total» en las combinadas.
 - **Resolución automática** (`server/services/bets/settle.js`): depende de que las claves de mercado del comparador
   (`odds.js`) y los nombres de estadística de jugador no cambien; si cambias una, ajusta `evaluate` y repite `npm test`
   (`resolver.test.js`). Ante la duda, que devuelva `null` (se resuelve a mano): una apuesta mal resuelta mueve dinero.

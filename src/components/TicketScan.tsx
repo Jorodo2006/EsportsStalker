@@ -125,7 +125,7 @@ function Result({ r, cur, dup, saving, onSave, onEdit, onAgain }: {
                 <span className="block text-xs text-zinc-500">{[l.market && decEs(l.market), info?.game ?? l.event].filter(Boolean).join(' · ')}</span>
                 {!info?.linked && info?.why && <span className="block text-xs text-rose-300">{info.why}</span>}
               </span>
-              {r.kind !== 'builder' && <span className="shrink-0 text-sm text-zinc-300 tnum">{odd(l.odds ?? 0)}</span>}
+              {(l.odds ?? 0) > 1 && <span className="shrink-0 text-sm text-zinc-300 tnum">{odd(l.odds!)}</span>}
             </li>
           );
         })}

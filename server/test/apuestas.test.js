@@ -52,6 +52,16 @@ test('combinada: lo que mande el cliente no cambia la cuota ni el estado', () =>
   assert.equal(b.status, 'pending');
 });
 
+test('combinada con una sola cuota («Crear apuesta», cuota mejorada): si alguna selección no tiene la suya, vale la total', () => {
+  const b = normalizeBet({ stake: 10, odds: 7, legs: [{ selection: 'A', odds: 0 }, { selection: 'B', odds: 0 }, { selection: 'C', odds: 0 }] });
+  assert.equal(b.odds, 7);
+  assert.equal(b.legs.every(l => l.odds === 0), true);
+  // Sin total ni cuotas: 1 (sin datos), no un error
+  assert.equal(normalizeBet({ stake: 10, legs: [{ selection: 'A', odds: 0 }, { selection: 'B', odds: 0 }] }).odds, 1);
+  // Una total fuera de rango sí es un error
+  rechaza({ stake: 10, odds: 5000, legs: [{ selection: 'A', odds: 0 }, { selection: 'B', odds: 0 }] }, 'La cuota');
+});
+
 test('combinada: máximo de 30 selecciones y las nulas cuentan 1', () => {
   rechaza({ stake: 1, legs: Array.from({ length: 31 }, (_, i) => ({ selection: 's' + i, odds: 2 })) }, 'máximo');
   assert.equal(normalizeBet({ stake: 1, legs: [{ selection: 'A', odds: 2 }, { selection: 'B', odds: 9, status: 'void' }] }).odds, 2);

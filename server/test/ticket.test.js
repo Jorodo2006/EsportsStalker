@@ -182,9 +182,10 @@ test('bet365, «Crear apuesta»: cuatro selecciones del mismo partido con una so
   ]);
   assert.strictEqual(legs[0].ref.out, 'a'); // SAC es el visitante
   assert.strictEqual(legs[0].selection, 'SAC +4.5');
-  // La cuota conjunta en la primera; el producto da la de la casa
-  assert.deepStrictEqual(legs.map(l => l.odds), [7, 1, 1, 1]);
-  assert.match(r.draft.notes, /cuota conjunta 7/);
+  // Una sola cuota, la de la apuesta; las selecciones van sin la suya (0)
+  assert.deepStrictEqual(legs.map(l => l.odds), [0, 0, 0, 0]);
+  assert.strictEqual(r.draft.odds, 7);
+  assert.match(r.draft.notes, /Crear apuesta de bet365/);
   const r2 = scan(B365_BUILDER2);
   assert.strictEqual(r2.draft.stake, 8.27);
   assert.strictEqual(r2.draft.legs.length, 2);
