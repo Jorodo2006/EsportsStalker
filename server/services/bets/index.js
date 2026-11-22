@@ -12,6 +12,7 @@ const alerts = require('./alerts');
 const authEvents = require('./auth-events');
 const admin = require('./admin');
 const push = require('./push');
+const scan = require('./scan');
 const internal = require('../../shared/internal');
 
 // A la interfaz no le llegan los valores del .env (para no mostrarlos ni guardarlos), sólo cuáles hay.
@@ -85,6 +86,8 @@ const routes = [
   ['POST', '/api/bets', ({ req, body }) => store.saveBet(who(req).id, body || {})],
   ['DELETE', '/api/bets/:id', ({ req, params }) => store.deleteBet(who(req).id, params.id)],
   ['POST', '/api/bets/import', ({ req, body }) => store.importBets(who(req).id, body?.list)],
+  // Leer la captura de un ticket de la casa y devolverla como borrador enlazado a su partido (scan.js); no guarda nada
+  ['POST', '/api/bets/scan', ({ req, body }) => scan.scan(who(req).id, body?.image)],
   // Comprobar ya los resultados (sin esperar a la pasada de cada 5 min). Pide sesión, como todo /api; devuelve cuántas cambiaron
   ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
   // Recomendaciones del modelo, para medir si acierta. No son de nadie: cualquiera con sesión las manda mientras las ve

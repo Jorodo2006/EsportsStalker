@@ -196,4 +196,4 @@ function googleCallback(req, res, q) {
   });
 }
 
-module.exports = { bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword, validPassword, googleStart, googleCallback };
+module.exports = { limiter, bootstrapAdmin, config, register, login, logout, userOf, changePassword, cookieOf, hashPassword, validPassword, googleStart, googleCallback };

@@ -14,7 +14,9 @@
     "odds": "node services/odds/index.js"
   },
   "dependencies": {
+    "@tesseract.js-data/spa": "1.0.0",
     "pg": "^8.16.0",
+    "tesseract.js": "7.0.0",
     "web-push": "^3.6.7"
   }
 }

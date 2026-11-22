@@ -218,7 +218,7 @@ function LegRow({ leg, snap, other, stake, onOpen }: { leg: Leg; snap: Snap | nu
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-zinc-50">{decEs(leg.selection)}</span>
           <span className="block truncate text-xs text-zinc-500">
-            {[other && SPORT_NAME[leg.ref.sport], decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : odd(leg.odds)].filter(Boolean).join(' · ')}
+            {[other && SPORT_NAME[leg.ref.sport], decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : leg.odds > 1 ? odd(leg.odds) : null].filter(Boolean).join(' · ')}
           </span>
         </span>
         <span className="max-w-[45%] shrink-0 text-right text-xs tnum">

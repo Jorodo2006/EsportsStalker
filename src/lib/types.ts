@@ -91,6 +91,11 @@ export interface PredictionReport { pending: number; unknown: number; since: str
 
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
 export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
+// Lo leído de la captura de un ticket: el borrador y, por selección, si se ha enlazado a su partido (y si no, por qué)
+export interface TicketScan {
+  book: string; kind: 'single' | 'combo' | 'builder'; draft: BetDraft; warnings: string[];
+  legs: { linked: boolean; text: string; game: string | null; why: string | null }[];
+}
 
 export interface Settings {
   currency: string;
@@ -566,6 +571,8 @@ export interface Api {
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
     // Enviar una apuesta tuya a amigos (sin tu importe ni tus notas; ven cómo va)
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
+    // Leer la captura de un ticket de la casa (PNG/JPEG en data URL): borrador enlazado a su partido, sin guardar (server/services/bets/scan.js)
+    scan(image: string): Promise<TicketScan>;
   };
   friends: {
     list(): Promise<FriendsList>;
