@@ -145,8 +145,16 @@ function footballPlayer(t, sub) {
 // El texto de una selección → { key, out, market, selection } con las claves de odds.js, o null si no se reconoce.
 // sub: la línea de debajo en bet365 («Paradas del portero - Otras opciones»), que dice de qué es
 function marketOf(text, G, A, B, sub = '') {
-  const t = cleanName(text);
-  const period = periodOf(t);
+  let t = cleanName(text);
+  // bet365 a veces sólo pone «Más de 4.5» y debajo de qué («Total de goles», «1ª mitad - Total de tarjetas»): se le añade la
+  // unidad (y el equipo, si el subtítulo nombra a uno) para que lo reconozcan las reglas de abajo
+  if (sub && /^(m[aá]s|menos) de \d+(?:[.,]\d+)?$/i.test(t)) {
+    const u = /tarjetas/i.test(sub) ? 'tarjetas' : /c[oó]rners|saques de esquina/i.test(sub) ? 'córners' : /goles/i.test(sub) ? 'goles'
+      : /puntos/i.test(sub) ? 'puntos' : /juegos/i.test(sub) ? 'juegos' : '';
+    const a = mentions(A, sub), b = mentions(B, sub);
+    if (u) t = `${t} ${u}${a !== b ? ` de ${(a ? G.a : G.b).name}` : ''}`;
+  }
+  const period = periodOf(t) || periodOf(sub);
   const pre = PERIOD_NAME[period] ? `${PERIOD_NAME[period]} · ` : '';
   const ou = OU.exec(t);
   const over = ou ? /^m[aá]s$/i.test(ou[1]) : null, line = ou ? num(ou[2]) : null;
@@ -155,6 +163,9 @@ function marketOf(text, G, A, B, sub = '') {
   if (G.sport === 'football') {
     const p = footballPlayer(t, sub);
     if (p) return { key: `wmx|${p.title}|`, out: 'yes', market: p.title, selection: p.who };
+    // «Ambos equipos recibirán 2 tarjetas o más» (bet365): cards_both, que resuelve settle.js con las tarjetas de cada uno
+    const both = /^ambos equipos recibir[aá]n (\d+) (?:tarjetas o m[aá]s|o m[aá]s tarjetas)/i.exec(t);
+    if (both) return { key: `cards_both|0||${both[1]}`, out: 'yes', market: `Ambos equipos con ${both[1]} tarjetas o más`, selection: 'Sí' };
     // «Más de 5 tarjetas» (bet365, «Crear apuesta»): sin medio punto es 6 o más, que ahí no hay nulas
     const c = /^(m[aá]s|menos) de (\d+(?:[.,]\d+)?)\s+(tarjetas|c[oó]rners|saques de esquina)/i.exec(t);
     if (c) {
@@ -273,16 +284,21 @@ function parseTicket(text) {
     /^(?:\S\s+)?(m[aá]s|menos) de \d+(?:[.,]\d+)? (tarjetas|c[oó]rners|goles|puntos|juegos)/i.test(l) || /\sser[aá] amonestad/i.test(l));
   const isMarket = l => !FOOTER.test(l) && !/crear apuesta|reutilizar|simple|combinada/i.test(l) &&
     /total|h[aá]ndicap|ganador|resultado|jugador|n[uú]mero|ambos|doble oportunidad|1x2/i.test(l);
-  const stripBullet = l => l.replace(/^\S\s+(?=\p{Lu})/u, ''); // la viñeta de bet365 sale como "9", "o"…
+  // La viñeta de bet365 sale como "9", "o", "S%"…: un carácter, o dos con un símbolo (no «TJ McConnell» ni «J. Smith»)
+  const stripBullet = l => l.replace(/^(?:\S|[^\p{L}\s.']\S|\S[^\p{L}\s.'])\s+(?=\p{Lu})/u, '');
+  // bet365 también pone sólo «Más de 4.5» y el mercado debajo («Total de goles»). Winamax tiene líneas así (la selección bajo el
+  // mercado), así que eso sólo cuenta en los de bet365
+  const bareOu = l => book === 'bet365' && /^(?:\S{1,2}\s+)?(m[aá]s|menos) de \d+(?:[.,]\d+)?(?:\s+\d{1,3}[.,]\d{2})?$/i.test(l);
   if (book === 'bet365' || lines.some(isLeg365)) {
     // El subtítulo puede repetir el título con otras palabras («Ambos equipos recibirán 2 o más tarjetas»): se reconoce porque
     // empieza igual, y no cuenta como otra selección
     const first3 = l => plain(stripBullet(l)).split(' ').slice(0, 3).join(' ');
     for (let i = 0; i < lines.length; i++) {
-      if (!isLeg365(lines[i])) continue;
+      const title = l => isLeg365(l) || bareOu(l);
+      if (!title(lines[i])) continue;
       const t = stripBullet(lines[i]), next = lines[i + 1], at = i;
       let sub = '';
-      if (next && !FOOTER.test(next) && (!isLeg365(next) || first3(next) === first3(lines[i]))) { sub = next; i++; }
+      if (next && !FOOTER.test(next) && (!title(next) || first3(next) === first3(lines[i]))) { sub = next; i++; }
       const o = [...t.matchAll(ODDS)].at(-1);
       out.legs.push({ text: o ? t.slice(0, o.index).trim() : t, sub, odds: o ? num(o[1]) : null, at });
     }

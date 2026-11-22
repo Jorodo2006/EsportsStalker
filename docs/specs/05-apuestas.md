@@ -154,7 +154,9 @@ solas con el resultado del partido.
     su periodo («1º cuarto», que el OCR lee «19 cuarto»). En fútbol, lo de jugador de bet365 («Courtois - Más de 2.5» + «Paradas
     del portero», «Iglesias - 1+ faltas cometidas», «X será amonestado») pasa a los títulos de Winamax que resuelve `settle.js`
     (`wmx|Realiza 3 o más paradas|`, con el jugador como selección), y «Más de 5 tarjetas» de una «Crear apuesta» es más de 5,5
-    (ahí no hay nulas). Lo que no reconoce («Ambos equipos recibirán 2 tarjetas») se queda sin enlazar, como texto.
+    (ahí no hay nulas). «Ambos equipos recibirán 2 tarjetas o más» es `cards_both|0||2` (sí), un mercado que sólo llega por aquí
+    y que `settle.js` resuelve con las tarjetas de cada equipo. Un «Más de 4.5» suelto toma la unidad de su subtítulo («Total de
+    goles»). Lo que no reconoce se queda sin enlazar, como texto.
   - bet365 pone cada selección en una línea y debajo, más pequeño, de qué es (`sub`); si esa línea repite el título con otras
     palabras, se reconoce porque empieza igual. El importe de bet365 sale dos veces (arriba y en «Imp:»): si coinciden, o hay un
     «aumento de ganancias», no se corrige con las ganancias. Un ticket sin fecha busca su partido desde 4 días antes.

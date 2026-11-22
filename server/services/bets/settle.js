@@ -265,6 +265,13 @@ function evaluate(ref, R) {
   if (quarterLine(line)) return null;
   // LoL: de los mercados por mapa (kills, primera sangre…) no se tiene el resultado: sólo ganador y hándicap del partido entero
   if (R.sport === 'lol' && (period !== 0 || !['moneyline', 'spread'].includes(type))) return null;
+  // «Ambos equipos recibirán N tarjetas o más» (bet365; sólo llega al subir su ticket): cards_both|0||N, sí o no
+  if (type === 'cards_both') {
+    const pair = R.cards, n = Number(parts[3]);
+    if (!pair || period !== 0 || !(n >= 1) || (out !== 'yes' && out !== 'no')) return null;
+    const both = pair[0] >= n && pair[1] >= n;
+    return { status: both === (out === 'yes') ? 'won' : 'lost', text: `Tarjetas: ${pair[0]} y ${pair[1]}` };
+  }
   if (type === 'corners' || type === 'cards') {
     const pair = R[type];
     if (!pair || period !== 0) return null;

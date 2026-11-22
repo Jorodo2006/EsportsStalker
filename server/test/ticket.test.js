@@ -331,7 +331,7 @@ Imp: Ganancias
 12,60€ 48,51€ ind aumento del 11.97€ O) 48,51€ Ganancias`);
   assert.strictEqual(r.draft.stake, 12.6);
   assert.strictEqual(r.warnings.length, 0);
-  assert.deepStrictEqual(r.draft.legs.map(l => l.ref?.key ?? null), ['btts|0||', null, 'cards|0||5.5', 'wmx|Comete 1 o más faltas|']);
+  assert.deepStrictEqual(r.draft.legs.map(l => l.ref?.key ?? null), ['btts|0||', 'cards_both|0||2', 'cards|0||5.5', 'wmx|Comete 1 o más faltas|']);
   assert.strictEqual(r.draft.legs[0].ref.out, 'yes');
   assert.strictEqual(r.draft.legs[0].ref.match, 'f2');
   assert.strictEqual(r.draft.legs[3].selection, 'Juan Iglesias');
@@ -362,4 +362,32 @@ Imp:
   assert.deepStrictEqual(r.draft.legs.map(l => [l.ref?.key, l.selection]), [
     ['wmx|El jugador recibe una o más tarjetas|', 'Youssouf Fofana'], ['wmx|El jugador recibe una o más tarjetas|', 'Robbie Ure']
   ]);
+});
+
+test('bet365, «Más de 4.5» con el mercado debajo («Total de goles»)', () => {
+  const r = scan2(`6,01€ Simple Perdida
+S% Más de 4.5 3.00
+
+Total de goles a
+
+———]————————[———— V E 1
+Y Real Madrid 2
+5 Celta de vigo 1
+Imp:
+6,01€ 0,00€ Ganancias 0,00€`);
+  assert.strictEqual(r.draft.stake, 6.01);
+  assert.strictEqual(r.draft.odds, 3);
+  assert.deepStrictEqual([r.draft.ref.match, r.draft.ref.key, r.draft.ref.out, r.draft.market], ['f1', 'total|0||4.5', 'over', 'Total de goles']);
+});
+
+test('bet365, «Ambos equipos recibirán 2 tarjetas o más» con su propio mercado', () => {
+  const r = scan2(`5,00€ Simple
+Y Ambos equipos recibirán 2 tarjetas o más 2.10
+
+Ambos equipos recibirán 2 o más tarjetas
+E sevilla 1
+Y Real Betis 1
+Imp:
+5,00€ 10,50€`);
+  assert.deepStrictEqual([r.draft.ref.match, r.draft.ref.key, r.draft.ref.out, r.draft.selection], ['f2', 'cards_both|0||2', 'yes', 'Sí']);
 });

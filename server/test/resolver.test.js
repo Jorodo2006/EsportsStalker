@@ -80,6 +80,10 @@ test('fútbol: 1X2, doble oportunidad, empate no válido, ambos marcan, córners
   assert.equal(ev('btts|1||', 'yes', football), 'lost');
   assert.equal(ev('corners|0||8.5', 'over', football), 'won');
   assert.equal(ev('cards|0||5.5', 'under', football), 'won');
+  // Ambos con 2 tarjetas o más (2 y 3): sí; con 3 o más, no
+  assert.equal(ev('cards_both|0||2', 'yes', football), 'won');
+  assert.equal(ev('cards_both|0||3', 'yes', football), 'lost');
+  assert.equal(ev('cards_both|0||3', 'no', football), 'won');
   const draw = { ...football, score: () => [1, 1] };
   assert.equal(ev('dnb|0||', 'a', draw), 'void');
   assert.equal(ev('moneyline|0||', 'x', draw), 'won');
