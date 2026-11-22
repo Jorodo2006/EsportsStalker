@@ -442,3 +442,43 @@ test('un mercado de jugador escrito a mano se enlaza con el jugador de la selecc
   assert.deepStrictEqual(understands('football', odd, taught), { known: true, market: 'Realiza 1 o más remates' });
   assert.strictEqual(understands('football', { event: 'Liverpool - Manchester United', market: 'Total de goles', selection: 'Más de 2.5' }, {}).known, true);
 });
+
+// bet365, doble de dos partidos: cada partido va debajo de su selección. Antes las dos se enlazaban al único que se reconocía
+// (Inter de Milán no se encontraba: ESPN lo llama «Internazionale»), y «Equipo visitante» no decía de quién era el total
+test('bet365: cada selección con el partido de debajo, y el total del equipo visitante', () => {
+  const side = (name, short, abbr) => ({ name, short, abbr, alts: [name, short, abbr] });
+  const games = [
+    gameOf('football', { id: 'laliga:1', leagueName: 'LaLiga', date: '2026-11-22T17:30Z', home: side('Osasuna', 'Osasuna', 'OSA'), away: side('Málaga', 'Málaga', 'MCF') }),
+    // Otro «Milan» del mismo fin de semana: con un solo equipo leído no tiene que colarse
+    gameOf('football', { id: 'seriea:3', leagueName: 'Serie A', date: '2026-11-21T17:00Z', home: side('AC Milan', 'Milan', 'MIL'), away: side('Frosinone', 'Frosinone', 'FRO') }),
+    gameOf('football', { id: 'seriea:2', leagueName: 'Serie A', date: '2026-11-22T19:45Z', home: side('Atalanta', 'Atalanta', 'ATA'), away: side('Internazionale', 'Inter Milan', 'INT') })
+  ];
+  const text = `15,00€ Doble
+1% Reutiizar selecciones
+
+> Menosde5 1.33
+
+Total de goles
+“+ Atalanta Dom 22 nov
+AP inter de Milán 2045
+* Másde0 1.57
+
+Equipo visitante - Total de goles - 3 opciones
+— Osasuna 1
+MP Málaga CF. AHerrero Posesión del balón — 0
+5533 per]
+Imp: Ganancias
+15,00€ 31,42€`;
+  const r = linkTicket(parseTicket(text), games, +new Date('2026-11-22T18:30Z'));
+  const [a, b] = r.draft.legs;
+  assert.deepStrictEqual([a.ref.match, a.ref.key, a.ref.out, a.selection], ['seriea:2', 'total|0||5', 'under', 'Menos de 5']);
+  assert.deepStrictEqual([b.ref.match, b.ref.key, b.ref.out, b.market], ['laliga:1', 'team_total|0|b|0', 'over', 'Goles de MCF']);
+  assert.strictEqual(r.draft.stake, 15);
+  // El OCR lee «Osasma»: vale Málaga, con su nombre entero, y se avisa
+  const typo = linkTicket(parseTicket(text.replace('Osasuna', 'Osasma')), games, +new Date('2026-11-22T18:30Z'));
+  assert.deepStrictEqual(typo.draft.legs.map(l => l.ref?.match), ['seriea:2', 'laliga:1']);
+  assert.ok(typo.warnings.some(w => /un solo equipo/.test(w)));
+  // Si el partido de una no se reconoce, se queda sin enlazar: no se le da el de la otra
+  const one = linkTicket(parseTicket(text), games.filter(g => g.id === 'laliga:1'), +new Date('2026-11-22T18:30Z'));
+  assert.deepStrictEqual(one.legs.map(l => l.linked), [false, true]);
+});

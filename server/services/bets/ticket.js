@@ -28,7 +28,8 @@ function aliasesOf(side, sport) {
   const list = [side.name, side.short, side.abbr, ...(side.alt || []), ...(side.alts || [])].filter(Boolean);
   const words = plain(side.name).split(' ');
   if ((sport === 'basket' || sport === 'tennis' || sport === 'mma') && words.length > 1 && words.at(-1).length >= 4) list.push(words.at(-1));
-  if (sport === 'football') list.push(...words.filter(w => w.length >= 5 && !COMMON.has(w)));
+  // También las del nombre corto y los otros («Internazionale» es «Inter Milan»: "inter", y la casa pone «Inter de Milán»)
+  if (sport === 'football') list.push(...[side.name, side.short, ...(side.alts || [])].flatMap(n => plain(n).split(' ')).filter(w => w.length >= 5 && !COMMON.has(w)));
   return [...new Set(list.map(plain).filter(a => a.length >= 3))]; // las de dos letras («NO», «SA») son palabras corrientes
 }
 // ¿Qué lado nombra un texto corto («I. Montes de la Torr», cortado por la casa)? Por las palabras de 4 letras o más del nombre,
@@ -57,7 +58,8 @@ function gameOf(sport, g) {
 }
 
 // Los partidos que salen en el ticket (con los dos equipos) y la línea donde está cada uno
-function findGames(lines, games, placedAt) {
+// more: buscar también los de un solo equipo aunque ya haya alguno entero (bet365, varias selecciones de partidos distintos)
+function findGames(lines, games, placedAt, more = false) {
   const found = [];
   for (const G of games) {
     const A = aliasesOf(G.a, G.sport), B = aliasesOf(G.b, G.sport);
@@ -71,16 +73,23 @@ function findGames(lines, games, placedAt) {
   // su apodo (no por la abreviatura, que es corta y sale en cualquier sitio), y se avisa (partial)
   // Con un solo equipo, un apodo lo comparten varios («Kings»: Sacramento y Sydney): gana el que tiene más nombres suyos en el
   // ticket («SAC Kings»: la abreviatura y el apodo), y si empatan dos equipos distintos no se elige ninguno
-  if (!found.length) {
+  if (!found.length || more) {
     const all = lines.join(' ');
     const one = [];
+    // Las líneas de los partidos ya encontrados no cuentan: «Inter de Milán» no es medio AC Milan - Frosinone
+    const used = new Set();
+    for (const f of found) lines.forEach((l, i) => { if (mentions(f.A, l) || mentions(f.B, l)) used.add(i); });
     for (const G of games) {
+      if (found.some(f => f.G === G)) continue;
       const A = aliasesOf(G.a, G.sport), B = aliasesOf(G.b, G.sport);
       const strong = list => list.filter(a => a.length >= 4);
-      const la = lines.findIndex(l => mentions(strong(A), l)), lb = lines.findIndex(l => mentions(strong(B), l));
+      const la = lines.findIndex((l, i) => !used.has(i) && mentions(strong(A), l)), lb = lines.findIndex((l, i) => !used.has(i) && mentions(strong(B), l));
       if ((la < 0) === (lb < 0)) continue;
       const side = la >= 0 ? A : B;
-      one.push({ G, A, B, at: la >= 0 ? la : lb, partial: (la >= 0 ? G.a : G.b).name, score: side.filter(a => mentions([a], all)).length });
+      // Fuera del baloncesto, el nombre entero y largo («Málaga» con «Osasuna» leído «Osasma») vale por dos: no es un apodo
+      const named = la >= 0 ? G.a : G.b, full = plain(named.name);
+      const whole = G.sport !== 'basket' && full.length >= 6 && mentions([full], all) ? 1 : 0;
+      one.push({ G, A, B, at: la >= 0 ? la : lb, partial: named.name, score: side.filter(a => mentions([a], all)).length + whole });
     }
     const top = Math.max(0, ...one.map(f => f.score));
     const best = one.filter(f => f.score === top);
@@ -168,7 +177,10 @@ function marketOf(text, G, A, B, sub = '') {
   if (sub && /^(m[aá]s|menos) de \d+(?:[.,]\d+)?$/i.test(t)) {
     const u = /tarjetas/i.test(sub) ? 'tarjetas' : /c[oó]rners|saques de esquina/i.test(sub) ? 'córners' : /goles/i.test(sub) ? 'goles'
       : /puntos/i.test(sub) ? 'puntos' : /juegos/i.test(sub) ? 'juegos' : '';
-    const a = mentions(A, sub), b = mentions(B, sub);
+    // «Equipo visitante - Total de goles»: el lado según el deporte (fútbol: a es el local; baloncesto: a es el visitante)
+    const role = /\bvisitante\b/i.test(sub) ? 'away' : /\blocal\b/i.test(sub) ? 'home' : null;
+    const bySide = role && G.sport === 'football' ? (role === 'home' ? 'a' : 'b') : role && G.sport === 'basket' ? (role === 'home' ? 'b' : 'a') : null;
+    const a = bySide ? bySide === 'a' : mentions(A, sub), b = bySide ? bySide === 'b' : mentions(B, sub);
     if (u) t = `${t} ${u}${a !== b ? ` de ${(a ? G.a : G.b).name}` : ''}`;
   }
   const period = periodOf(t) || periodOf(sub);
@@ -274,7 +286,8 @@ function linesOf(text) {
 
 // Texto del OCR → lo que dice el ticket (sin enlazar). legs: { text, odds, at } con la línea donde empieza cada selección
 function parseTicket(text) {
-  const raw = String(text || '');
+  // «Menosde5», «Másde0.5»: el OCR a veces se come los espacios
+  const raw = String(text || '').replace(/(?<!\p{L})(m[aá]s|menos)\s*de\s*(?=\d)/giu, '$1 de ');
   const lines = linesOf(raw);
   const book = bookOf(raw);
   const out = { book, kind: 'single', stake: null, payout: null, odds: null, placedAt: placedOf(raw), cashout: null, legs: [], lines };
@@ -299,7 +312,8 @@ function parseTicket(text) {
   // Las selecciones: bet365 las pone una por línea ("Jugador - 10+ rebotes", "1º cuarto - Hándicap - SAC Kings +4.5 puntos");
   // Winamax, el mercado y debajo la selección, a veces partidos en varias líneas: se juntan hasta tener cuota y selección
   // bet365: cada selección es un título y debajo, más pequeño, de qué es («Paradas del portero - Otras opciones», «Rebotes»)
-  const isLeg365 = l => !/^(?:\S\s+)?jugador\b/i.test(l) && (
+  // «Equipo visitante - Total de goles - 3 opciones» es el subtítulo de «Más de 0», no otra selección
+  const isLeg365 = l => !/^(?:\S\s+)?jugador\b/i.test(l) && !/^(?:\S\s+)?equipo (local|visitante)\b/i.test(l) && (
     /\s-\s*\d+\s*\+\s*\p{L}/u.test(l) || /\s-\s*h[aá]ndicap\s*-|\s-\s*total[^-]*-|\s-\s*ganador[^-]*-/i.test(l) ||
     /\s-\s*(m[aá]s|menos) de \d/i.test(l) || /^(?:\S\s+)?ambos equipos (anotar|marcar|recibir)/i.test(l) ||
     /^(?:\S\s+)?(m[aá]s|menos) de \d+(?:[.,]\d+)? (tarjetas|c[oó]rners|goles|puntos|juegos)/i.test(l) || /\sser[aá] amonestad/i.test(l));
@@ -363,11 +377,16 @@ function parseTicket(text) {
 // Lo leído + los partidos candidatos → borrador de apuesta (como lo guarda store.saveBet) y qué se ha enlazado
 function linkTicket(t, games, now = Date.now()) {
   const placedAt = t.placedAt ?? now;
-  const found = findGames(t.lines, games, placedAt);
+  const found = findGames(t.lines, games, placedAt, t.book === 'bet365' && t.kind !== 'builder' && t.legs.length > 1);
   const legs = t.legs.map((l, n) => {
     // Su partido: el que está justo encima en el ticket (Winamax) o, si no hay, el de debajo (bet365 lo pone al final)
     const above = found.filter(f => f.at <= l.at).at(-1), below = found.find(f => f.at > l.at);
-    const f = above || below || (found.length === 1 ? found[0] : null);
+    // bet365 lo pone debajo de cada selección, antes de la siguiente: si en su hueco no hay ninguno reconocido, no se le da el de
+    // otra selección (una doble de dos partidos se enlazaba entera al único que se reconocía)
+    const next = t.legs[n + 1]?.at ?? Infinity;
+    const own = found.find(f => f.at > l.at && f.at < next);
+    const perLeg = t.book === 'bet365' && t.kind !== 'builder' && t.legs.length > 1 && found.some(f => f.at > t.legs[0].at);
+    const f = perLeg ? own || null : above || below || (found.length === 1 ? found[0] : null);
     // «Crear apuesta»: una cuota para todas, la de la apuesta (las selecciones, sin cuota: 0). Una que no se ha leído, también 0
     const odds = t.kind === 'builder' ? 0 : l.odds || (t.legs.length === 1 ? t.odds : null) || 0;
     if (!f) return { leg: { event: '', league: '', market: l.text, selection: '', odds, status: 'pending' }, linked: false, text: l.text, why: 'No encuentro el partido entre los de esos días' };
