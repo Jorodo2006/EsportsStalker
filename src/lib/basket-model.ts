@@ -3,7 +3,7 @@
 // y el valor, la fiabilidad y el veredicto con las funciones comunes de value.ts.
 import type { BasketLogGame, BasketTeamLogs, MatchOdds } from './types';
 import type { GameCtx } from './basket-context';
-import { devig, devigBooks, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue } from './value';
+import { devig, devigBooks, lineProbs, relCommon, reliability, sideValue, tooFar, verdict, type Side, type SideValue, type Verdict } from './value';
 
 type G = BasketLogGame;
 
@@ -36,6 +36,14 @@ export type BasketMarket = keyof typeof BASKET_MARKETS;
 // cup: partido de la NBA Cup. En la fase de grupos no cambia nada (medido: se rinde igual que en la liga). En la eliminatoria
 // baja la fiabilidad, sin tocar la proyección: en 25-26 salió algo menos de lo proyectado (PRA −4,7 % ±6,7, 122 partidos de
 // jugador), sin significación ni otro periodo para comprobarlo (docs/specs/08-baloncesto.md). En pista neutral home va a null
+// Con compañeros importantes de baja desde hace poco no se recomienda el «menos»: le pueden llegar más minutos y balones, y el
+// modelo no lo cuenta (no está medido cuánto). Bajar sólo la fiabilidad no bastaba: con valor alto seguía saliendo «Apostar»
+// mientras el contexto decía «ojo con los menos» (Castle, R+A, 23-11-2026). Lo mismo hacen las recomendaciones (basket-picks.ts)
+export function noFreshUnder(v: Verdict, mates: string[]): Verdict {
+  if (!mates.length || v.best?.side !== 'under' || (v.code !== 'BET' && v.code !== 'LEAN')) return v;
+  return { ...v, code: 'PASS', title: 'No apostar', text: `Falta${mates.length > 1 ? 'n' : ''} desde hace poco ${mates.join(', ')}: le pueden llegar más minutos y balones, y el modelo no lo cuenta. Con bajas así no se recomienda el «menos».` };
+}
+
 export interface BasketCtx extends GameCtx { currentSeason: number; home: boolean | null; opp: string | null; injury: string | null; matesOut?: string[]; cup?: 'group' | 'ko' }
 
 // Lo que el partido le añade al contexto del modelo: NBA Cup y pista neutral (sin ventaja de campo). Igual en el analizador, el
@@ -235,7 +243,7 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: Li
     mu, sigma, projMin: P.projMin, factors: P.factors,
     pOver, pUnder, pPush, fairOver: (1 - pPush) / pOver, fairUnder: (1 - pPush) / pUnder,
     modelOver: model.over, histOver: empOver, market: mk, sides, rel, relBySide,
-    verdict: verdict(sides, rel.score, line, pOver >= pUnder ? 'over' : 'under'),
+    verdict: noFreshUnder(verdict(sides, rel.score, line, pOver >= pUnder ? 'over' : 'under'), mates),
     splits, ladder
   };
 }

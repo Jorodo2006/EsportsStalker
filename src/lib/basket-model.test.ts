@@ -1,6 +1,6 @@
 // Modelo de props de baloncesto: que las pantallas den lo mismo y que los ajustes medidos (PROJ) hagan lo que dicen
 import { describe, expect, it } from 'vitest';
-import { PROJ, analyze, gameExtras, playerLines, project, scanLine, type BasketCtx } from './basket-model';
+import { PROJ, analyze, gameExtras, playerLines, project, scanLine, type BasketCtx, noFreshUnder } from './basket-model';
 import { cupKind } from './basket-context';
 import { freshKeyOuts, matesOut, withAndWithout } from './basket-mates';
 import type { BasketLogGame, BasketTeamLogs, MarketLine, MatchOdds } from './types';
@@ -68,6 +68,12 @@ describe('analizador y escáner', () => {
     expect(out.relBySide.over.score).toBe(base.relBySide.over.score);
     expect(out.relBySide.under.score).toBeLessThan(base.relBySide.under.score);
     expect(out.pUnder).toBeCloseTo(base.pUnder, 12); // la probabilidad no cambia
+  });
+  it('con una baja nueva de un compañero importante, el menos nunca sale como apuesta', () => {
+    const best = { code: 'BET' as const, title: 'Menos de 12.5', text: '', best: { side: 'under' as const, price: 1.94, p: 0.6, pModel: 0.6, ev: 0.16, edge: 0.05, gap: 0.05, kelly: 0.02 } };
+    expect(noFreshUnder(best, ['Dylan Harper']).code).toBe('PASS');
+    expect(noFreshUnder(best, []).code).toBe('BET');
+    expect(noFreshUnder({ ...best, best: { ...best.best, side: 'over' } }, ['Dylan Harper']).code).toBe('BET');
   });
 });
 

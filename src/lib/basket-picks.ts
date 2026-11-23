@@ -71,6 +71,8 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
         for (const s of ['over', 'under'] as Side[]) {
           // Lo que nunca se va a recomendar no se calcula: una jornada son miles de líneas y esto corre en el móvil
           if ((s === 'over' ? l.over ?? 0 : l.under ?? 0) < MIN_PRICE) continue;
+          // Con compañeros importantes de baja desde hace poco, el «menos» no se recomienda (noFreshUnder de basket-model.ts)
+          if (s === 'under' && mates.length) continue;
           const r = scanLine(p.games, k, l.line, s, ctx, { over: l.over, under: l.under, books: Object.values(l.books) });
           const v = r?.value;
           if (!r || !v || r.played < MIN_PLAYED || r.projMin < MIN_MINUTES) continue;
