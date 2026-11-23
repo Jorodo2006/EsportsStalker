@@ -1,6 +1,8 @@
 // Plan de apuestas por objetivo: reparte el dinero entre las recomendaciones de las próximas 48 h para intentar llegar a un
 // beneficio, y dice con qué probabilidad se llega. Todo son funciones puras (sin red ni reloj propio), con sus pruebas en plan.test.ts.
 
+import type { BetRef } from './types';
+
 export type PlanSport = 'tennis' | 'football' | 'mma' | 'basket';
 
 export interface PlanPick {
@@ -10,6 +12,8 @@ export interface PlanPick {
   start: string; book: string; price: number; p: number; ev: number; rel: number;
   // Para llevarla al cupón con el mercado y la selección por separado (los adaptadores los rellenan si los tienen)
   market?: string; selection?: string;
+  // Su partido y mercado, como el ref de una apuesta: al llevarla al cupón, la apuesta se sigue y se resuelve sola
+  ref?: BetRef;
 }
 
 // Una apuesta sencilla (1 pata) o una combinada: cuota y probabilidad son el producto de las patas

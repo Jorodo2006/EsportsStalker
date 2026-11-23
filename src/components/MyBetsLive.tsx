@@ -1,4 +1,4 @@
-// «Tus apuestas» arriba de Partidos: las pendientes de hoy (de los cinco deportes, primero las que se están jugando) y cómo van,
+// «Tus apuestas» arriba de Partidos: las pendientes de hoy del deporte que se ve (primero las que se están jugando) y cómo van,
 // con una barra para las líneas (puntos de un jugador, totales) y quién va por delante en el resto (lib/bet-track.ts). Pulsar
 // una abre su partido y, si es de un jugador de baloncesto, sus estadísticas en ese partido (lib/focus-player.ts).
 // Sólo las apuestas que saben su partido (ref, las que salen del cupón); las apuntadas a mano sin partido no se pueden seguir.
@@ -13,12 +13,13 @@ import { madridDay } from '@/lib/route';
 import type { BasketBox, BasketGame, Bet, BetLeg, BetRef, FootballMatch, MmaFight, Sport, TennisMatch } from '@/lib/types';
 import { Card } from './ui';
 
-const SPORT_NAME: Record<Sport, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
 // Desde 24 h antes del partido hasta 12 h después (por si tarda en resolverse)
 const BEFORE = 24 * 3600e3, AFTER = 12 * 3600e3;
 const sum = (xs: number[]) => xs.reduce((s, x) => s + (Number(x) || 0), 0);
 
-type Leg = Pick<BetLeg, 'event' | 'market' | 'selection' | 'odds'> & { ref: BetRef };
+// Una selección: de una combinada salen todas, también las ya resueltas y las que no saben su partido (sin ref: sólo el texto)
+type Leg = Pick<BetLeg, 'event' | 'market' | 'selection' | 'odds' | 'status' | 'sport'> & { ref?: BetRef };
+const SPORT_NAME: Record<Sport, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
 type Row = { bet: Bet; legs: Leg[] };
 // El partido de una selección como lo enseña la fila, y lo que necesita el seguimiento
 type Snap = { live: LiveGame; label: string; status: string };
@@ -98,18 +99,22 @@ export function MyBetsLive() {
   const cur = useCurrency();
   const bets = useBets();
 
-  // Las pendientes con algún partido de hoy; de una combinada, todas sus selecciones con partido
+  // Las pendientes con algún partido de hoy de este deporte. Una combinada sale entera (todas sus selecciones, de cualquier
+  // deporte y también las ya resueltas), en cada deporte que tenga alguna selección suya por jugarse: una de tenis y fútbol, en los dos
   const rows = useMemo<Row[]>(() => {
     const now = Date.now();
     return (bets.data ?? []).filter(b => b.status === 'pending').flatMap(b => {
-      const legs: Leg[] = b.legs?.length
-        ? b.legs.filter(l => l.ref && l.status === 'pending').map(l => ({ event: l.event, market: l.market, selection: l.selection, odds: l.odds, ref: l.ref! }))
-        : b.ref ? [{ event: b.event, market: b.market, selection: b.selection, odds: b.odds, ref: b.ref }] : [];
-      return legs.some(l => inWindow(l.ref, now)) ? [{ bet: b, legs }] : [];
+      if (b.legs?.length) {
+        const mine = b.legs.some(l => l.ref && l.status === 'pending' && l.ref.sport === app && inWindow(l.ref, now));
+        return mine ? [{ bet: b, legs: b.legs.map(l => ({ event: l.event, market: l.market, selection: l.selection, odds: l.odds, status: l.status, sport: l.sport, ref: l.ref })) }] : [];
+      }
+      return b.ref?.sport === app && inWindow(b.ref, now)
+        ? [{ bet: b, legs: [{ event: b.event, market: b.market, selection: b.selection, odds: b.odds, status: 'pending' as const, sport: b.ref.sport, ref: b.ref }] }] : [];
     });
-  }, [bets.data]);
+  }, [bets.data, app]);
 
-  const refs = rows.flatMap(r => r.legs.map(l => l.ref)).filter(r => r.start && r.sport !== 'lol');
+  // Sólo hace falta el partido de las que aún se juegan
+  const refs = rows.flatMap(r => r.legs.filter(l => l.status === 'pending').map(l => l.ref)).filter((r): r is BetRef => !!r?.start && r.sport !== 'lol');
   const lists = [...new Map(refs.map(r => [listId(r), r])).values()];
   // ¿Alguna en juego ahora? Por la hora (el estado llega con la propia consulta): empezada hace menos de 4 h
   const anyLive = refs.some(r => { const t = +new Date(r.start!); return t < Date.now() && t > Date.now() - 4 * 3600e3; });
@@ -135,7 +140,8 @@ export function MyBetsLive() {
   });
   const boxes = new Map(boxIds.map((id, i) => [id, boxQs[i]?.data]));
 
-  const snapOf = (ref: BetRef): Snap | null => {
+  const snapOf = (ref?: BetRef): Snap | null => {
+    if (!ref) return null;
     const g = games.get(`${ref.sport}|${ref.match}`);
     if (!g) return null;
     if (ref.sport === 'basket') return basketSnap(g as BasketGame, boxes.get(ref.match));
@@ -147,18 +153,19 @@ export function MyBetsLive() {
 
   if (!rows.length) return null;
 
-  // Primero lo que se está jugando, luego lo que empieza antes; las del deporte que se ve, delante a igualdad
+  // Primero lo que se está jugando, luego lo que empieza antes
   const rank = (r: Row) => {
     const snaps = r.legs.map(l => snapOf(l.ref));
     const live = snaps.some(s => s?.live.state === 'in');
-    const next = Math.min(...r.legs.map(l => +new Date(l.ref.start ?? 0)));
-    return (live ? 0 : 1e15) + next + (r.bet.sport === app ? 0 : 1);
+    const next = Math.min(...r.legs.filter(l => l.status === 'pending' && l.ref?.start).map(l => +new Date(l.ref!.start!)));
+    return (live ? 0 : 1e15) + (isFinite(next) ? next : 0);
   };
   const list = rows.slice().sort((a, b) => rank(a) - rank(b));
   const shown = list.slice(0, 8);
 
   const open = (l: Leg) => {
     const { ref } = l;
+    if (!ref) return;
     if (ref.sport === 'lol') { openList('lol'); return; }
     const who = playerOf(ref);
     if (who && ref.sport === 'basket') focusPlayer(ref.match, who);
@@ -171,17 +178,22 @@ export function MyBetsLive() {
       <div className="-mx-5 -my-3 divide-y divide-zinc-800/60">
         {shown.map(({ bet, legs }) => {
           const combo = !!bet.legs?.length;
+          // Cómo va la combinada: las ya acertadas y, de las que se juegan, las que ahora mismo van bien
+          const won = legs.filter(l => l.status === 'won').length;
+          const going = legs.filter(l => l.status === 'pending' && !!l.ref && trackOf(l.ref, snapOf(l.ref)?.live, l.selection)?.mood === 'good').length;
           return (
             <div key={bet.id} className="py-1">
               {combo && (
                 <div className="flex items-baseline justify-between gap-3 px-5 pt-1.5 text-xs">
-                  <span className="font-medium text-zinc-300">Combinada de {bet.legs!.length}</span>
+                  <span className="font-medium text-zinc-300">Combinada de {legs.length}
+                    {(won > 0 || going > 0) && <span className="font-normal text-emerald-400"> · {[won && `${won} acertada${won === 1 ? '' : 's'}`, going && `${going} va${going === 1 ? '' : 'n'} bien`].filter(Boolean).join(', ')}</span>}
+                  </span>
                   <span className="text-zinc-500 tnum">{money(bet.stake, cur)} a {odd(bet.odds)}</span>
                 </div>
               )}
               {legs.map((l, i) => (
-                <LegRow key={i} leg={l} snap={snapOf(l.ref)} other={l.ref.sport !== app} onOpen={() => open(l)}
-                  stake={combo ? null : money(bet.stake, cur)} />
+                <LegRow key={i} leg={l} snap={l.status === 'pending' ? snapOf(l.ref) : null} onOpen={() => open(l)}
+                  other={!!l.sport && l.sport !== app} stake={combo ? null : money(bet.stake, cur)} />
               ))}
             </div>
           );
@@ -206,28 +218,35 @@ function when(ref: BetRef) {
   return today ? `Hoy ${time}` : `${d.toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'Europe/Madrid' })} ${time}`;
 }
 
-function LegRow({ leg, snap, other, stake, onOpen }: { leg: Leg; snap: Snap | null; other: boolean; stake: string | null; onOpen: () => void }) {
-  const t: Track | null = trackOf(leg.ref, snap?.live, leg.selection);
+// Las selecciones ya resueltas de una combinada: lo que fue, sin barra
+const SETTLED = { won: ['Acertada', 'text-emerald-400'], lost: ['Fallada', 'text-rose-300'], void: ['Nula', 'text-sky-300'] } as const;
+
+function LegRow({ leg, snap, stake, other, onOpen }: { leg: Leg; snap: Snap | null; stake: string | null; other: boolean; onOpen: () => void }) {
+  const { ref } = leg;
+  const t: Track | null = ref && leg.status === 'pending' ? trackOf(ref, snap?.live, leg.selection) : null;
   const state = snap?.live.state;
-  const player = leg.ref.sport === 'basket' && !!playerOf(leg.ref);
-  // El marcador va a la derecha, para que no se corte en el móvil; debajo, el cuarto y el reloj, o la hora
+  const player = ref?.sport === 'basket' && !!playerOf(ref);
+  const done = leg.status !== 'pending' ? SETTLED[leg.status] : null;
+  // El marcador va a la derecha, para que no se corte en el móvil; debajo, el cuarto y el reloj, o la hora. Una selección sin
+  // partido (apuntada a mano) no se puede abrir
   return (
-    <button type="button" onClick={onOpen} title={player ? 'Ver sus estadísticas en el partido' : 'Abrir el partido'}
-      className="group flex w-full cursor-pointer flex-col gap-1.5 px-5 py-2 text-left transition hover:bg-zinc-800/30">
+    <button type="button" onClick={onOpen} disabled={!ref} title={!ref ? undefined : player ? 'Ver sus estadísticas en el partido' : 'Abrir el partido'}
+      className={cn('group flex w-full flex-col gap-1.5 px-5 py-2 text-left transition', ref ? 'cursor-pointer hover:bg-zinc-800/30' : 'cursor-default')}>
       <span className="flex w-full items-start gap-3">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-zinc-50">{decEs(leg.selection)}</span>
+          <span className={cn('block truncate text-sm font-medium', done ? 'text-zinc-300' : 'text-zinc-50')}>{decEs(leg.selection) || decEs(leg.market)}</span>
           <span className="block truncate text-xs text-zinc-500">
-            {[other && SPORT_NAME[leg.ref.sport], decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : odd(leg.odds)].filter(Boolean).join(' · ')}
+            {[other && leg.sport && SPORT_NAME[leg.sport], decEs(leg.market), stake ? `${stake} a ${odd(leg.odds)}` : leg.odds > 1 ? odd(leg.odds) : null].filter(Boolean).join(' · ')}
           </span>
         </span>
         <span className="max-w-[45%] shrink-0 text-right text-xs tnum">
           <span className="block truncate font-medium text-zinc-200">{snap?.label ?? leg.event}</span>
-          {state === 'in' ? <span className="block truncate text-rose-300">{snap?.status || 'En juego'}</span>
-            : state === 'post' ? <span className="block text-zinc-500">Final · por resolver</span>
-              : leg.ref.start ? <span className="block text-zinc-400">{when(leg.ref)}</span> : null}
+          {done ? <span className={cn('block', done[1])}>{done[0]}</span>
+            : state === 'in' ? <span className="block truncate text-rose-300">{snap?.status || 'En juego'}</span>
+              : state === 'post' ? <span className="block text-zinc-500">Final · por resolver</span>
+                : ref?.start ? <span className="block text-zinc-400">{when(ref)}</span> : null}
         </span>
-        <ChevronRight size={14} className="mt-1 shrink-0 text-zinc-600 transition group-hover:text-zinc-300" />
+        <ChevronRight size={14} className={cn('mt-1 shrink-0 text-zinc-600 transition group-hover:text-zinc-300', !ref && 'invisible')} />
       </span>
       {t?.kind === 'bar' && <TrackBar t={t} />}
       {t?.kind === 'lead' && <span className={cn('text-xs font-medium', MOOD_TEXT[t.mood])}>{t.text}</span>}

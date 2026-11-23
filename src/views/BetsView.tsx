@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Check, CircleSlash, Download, Pencil, Percent, Plus, RefreshCw, Send, Target, Upload, Wallet, X } from 'lucide-react';
 import { ShareDialog } from './FriendsView';
+import { TicketUpload } from '@/components/TicketScan';
 import { History } from '@/views/bets/History';
 import { AutoMark } from '@/views/bets/AutoMark';
 import { ProfitText, profitString, useProfit } from '@/views/bets/Profit';
@@ -57,6 +58,7 @@ export default function BetsView() {
               toast(changed ? `${changed} apuesta${changed === 1 ? '' : 's'} resuelta${changed === 1 ? '' : 's'} con el resultado` : 'Nada nuevo: los partidos aún no han acabado o hay que resolverlas a mano');
             } catch (e) { toast((e as Error).message); } finally { setChecking(false); }
           }}><RefreshCw size={15} className={cn(checking && 'animate-spin')} /><span>Comprobar<span className="hidden sm:inline"> resultados</span></span></Button>
+        <TicketUpload />
         <Button className="order-first w-full sm:order-none sm:w-auto" onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 

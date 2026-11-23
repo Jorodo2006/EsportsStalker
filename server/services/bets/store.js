@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const { query, tx } = require('../../shared/db');
 const { fail } = require('../../shared/service');
+const ticket = require('./ticket');
 
 const DEFAULT_SETTINGS = {
   currency: '€',
@@ -13,6 +14,7 @@ const DEFAULT_SETTINGS = {
   refreshSeconds: 30,
   favoriteLeagues: [],
   favorites: [], // equipos, jugadores y luchadores que sigue cada usuario: [{ sport, name, logo }]
+  marketAliases: {}, // mercados enseñados por cada usuario (cleanAliases)
   welcomed: false, // ya vio la bienvenida de la cuenta nueva (banca inicial y deporte): no se le vuelve a enseñar
   unitSize: 0, // lo que vale una unidad en Mis apuestas (beneficio en unidades); 0 = el 1 % de la banca inicial
   // Lecturas de cuotas programadas (las hace el lector de Docker)
@@ -26,8 +28,8 @@ const DEFAULT_SETTINGS = {
 
 // Los ajustes son de la app entera: sólo los cambia el administrador y valen para todos (migración 010). De cada usuario
 // quedan su banca inicial (cada uno tiene su cartera), lo que vale su unidad, el filtro de ligas de la lista de LoL, sus
-// favoritos y si ya vio la bienvenida de la cuenta nueva, que no son ajustes de la app
-const USER_KEYS = ['initialBankroll', 'unitSize', 'favoriteLeagues', 'favorites', 'welcomed'];
+// favoritos, si ya vio la bienvenida de la cuenta nueva y los mercados que ha enseñado (marketAliases), que no son ajustes de la app
+const USER_KEYS = ['initialBankroll', 'unitSize', 'favoriteLeagues', 'favorites', 'welcomed', 'marketAliases'];
 
 // Una cantidad de dinero que manda el navegador: un número de 0 en adelante con dos decimales (lo que no lo es, 0)
 const cleanAmount = v => Math.round(Math.min(1e9, Math.max(0, Number(v) || 0)) * 100) / 100;
@@ -48,6 +50,18 @@ function cleanFavorites(v) {
     const logo = typeof x.logo === 'string' && /^https:\/\/[^\s"'<>]{1,300}$/.test(x.logo) ? x.logo : undefined;
     out.push(logo ? { sport, name, logo } : { sport, name });
     if (out.length >= MAX_FAVORITES) break;
+  }
+  return out;
+}
+// Mercados que el usuario ha enseñado (el formulario de apuesta): { texto que no se entendía, sin acentos: mercado de la app }.
+// Lo manda el navegador: sólo textos cortos y como mucho MAX_ALIASES
+const MAX_ALIASES = 200;
+function cleanAliases(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw fail('Los mercados enseñados tienen que ser un objeto');
+  const out = {};
+  for (const [k, x] of Object.entries(v).slice(-MAX_ALIASES)) {
+    const key = ticket.aliasKey(k), val = String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (key && val) out[key] = val;
   }
   return out;
 }
@@ -75,7 +89,7 @@ async function getSettings(userId) {
 // común recibe un 403: la interfaz no se lo enseña, así que sería una petición a mano
 async function setSettings(userId, isAdmin, patch) {
   const entries = Object.entries(patch || {}).filter(([k, v]) => k in DEFAULT_SETTINGS && v !== undefined)
-    .map(([k, v]) => [k, k === 'favorites' ? cleanFavorites(v) : k === 'welcomed' ? v === true : k === 'unitSize' ? cleanAmount(v) : v]);
+    .map(([k, v]) => [k, k === 'favorites' ? cleanFavorites(v) : k === 'marketAliases' ? cleanAliases(v) : k === 'welcomed' ? v === true : k === 'unitSize' ? cleanAmount(v) : v]);
   if (!isAdmin && entries.some(([k]) => !USER_KEYS.includes(k))) throw fail('Sólo el administrador puede cambiar los ajustes', 403);
   await tx(async c => {
     for (const [k, v] of entries) {
@@ -246,7 +260,7 @@ function normalizeBet(b) {
     selection: text(l.selection, 'selection'), odds: odds(l.odds, 'La cuota'), status: LEG_STATUSES.includes(l.status) ? l.status : 'pending',
     sport: sportOf(l.sport ?? b.sport), ...withRef(l.ref, sportOf(l.sport ?? b.sport))
   })).filter(l => l.selection || l.event) : [];
-  if (legs.length >= 2) return normalizeCombo(b, legs, money, text);
+  if (legs.length >= 2) return normalizeCombo(b, legs, money, text, odds);
   return {
     id: b.id ? text(b.id, 'id') : crypto.randomUUID(),
     date: day(b.date),
@@ -267,8 +281,12 @@ function normalizeBet(b) {
 
 // Combinada: la cuota es el producto de las selecciones (las nulas cuentan 1) y el estado sale de ellas:
 // una perdida → perdida; todas resueltas → ganada (o nula si todas son nulas). El cash out se respeta.
-function normalizeCombo(b, legs, money, text) {
-  const odds = Math.round(legs.reduce((p, l) => p * (l.status === 'void' ? 1 : l.odds || 1), 1) * 100) / 100;
+// La cuota de una combinada: si todas las selecciones tienen la suya, su producto (y una nula cuenta como 1, como en las casas);
+// si alguna no la tiene (0: «Crear apuesta», cuota mejorada, apuntada sólo con la total), la total que se manda
+function normalizeCombo(b, legs, money, text, oddsOf) {
+  const product = Math.round(legs.reduce((p, l) => p * (l.status === 'void' ? 1 : l.odds || 1), 1) * 100) / 100;
+  const given = b.odds == null || b.odds === '' ? 0 : oddsOf(b.odds, 'La cuota');
+  const odds = legs.every(l => l.odds > 1) || !(given > 1) ? product : Math.round(given * 100) / 100;
   let status = 'pending';
   if (legs.some(l => l.status === 'lost')) status = 'lost';
   else if (legs.every(l => l.status !== 'pending')) status = legs.every(l => l.status === 'void') ? 'void' : 'won';

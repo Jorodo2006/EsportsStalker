@@ -55,7 +55,8 @@ const usePickAdd = () => {
     const [key, out] = p.id.split('#');
     addToSlip({
       sport: 'tennis', status: 'pending', league: m.tournament, event: `${m.a.name} vs ${m.b.name}`, market: p.market, selection: p.selection, bookmaker: p.book, odds: p.price,
-      ...(key && out ? { live: { match: targetOfMatch(m).match, key, out } } : {})
+      // Con su ref sale en «Tus apuestas» y el servidor la resuelve sola
+      ...(key && out ? { ref: { sport: 'tennis' as const, match: m.id, key, out, start: m.date }, live: { match: targetOfMatch(m).match, key, out } } : {})
     });
   };
 };

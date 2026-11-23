@@ -7,8 +7,8 @@ const assert = require('node:assert');
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://nadie@localhost/nada'; // el pool no conecta hasta usarse
 const store = require('../services/bets/store');
 
-test('de cada usuario sólo quedan la banca inicial, la unidad, el filtro de ligas, los favoritos y la bienvenida', () => {
-  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll', 'unitSize', 'welcomed']);
+test('de cada usuario sólo quedan la banca inicial, la unidad, el filtro de ligas, los favoritos, la bienvenida y los mercados enseñados', () => {
+  assert.deepStrictEqual([...store.USER_KEYS].sort(), ['favoriteLeagues', 'favorites', 'initialBankroll', 'marketAliases', 'unitSize', 'welcomed']);
 });
 
 test('la unidad se guarda como cantidad: de 0 en adelante y con dos decimales', () => {

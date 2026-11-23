@@ -91,6 +91,11 @@ export interface PredictionReport { pending: number; unknown: number; since: str
 
 // fromSlip: la combinada viene del boleto (se vacía al guardarla)
 export type BetDraft = Partial<Bet> & { fromSlip?: boolean };
+// Lo leído de la captura de un ticket: el borrador y, por selección, si se ha enlazado a su partido (y si no, por qué)
+export interface TicketScan {
+  book: string; kind: 'single' | 'combo' | 'builder'; draft: BetDraft; warnings: string[];
+  legs: { linked: boolean; text: string; game: string | null; why: string | null }[];
+}
 
 export interface Settings {
   currency: string;
@@ -104,6 +109,7 @@ export interface Settings {
   refreshSeconds: number;
   favoriteLeagues: string[];
   favorites?: Favorite[]; // equipos, jugadores y luchadores que sigue el usuario (components/Favorites.tsx)
+  marketAliases?: Record<string, string>; // mercados que el usuario ha enseñado: { texto sin acentos: mercado de la app } (MarketHint)
   oddsAutoEnabled: boolean; // lecturas de cuotas programadas (las hace el lector de Docker)
   oddsFarEnabled: boolean; // leer también, más espaciados, los partidos de hasta 48 h
   challengerOddsEnabled?: boolean; // leer los Challenger: una vez hasta 12 h antes y la de cierre
@@ -566,6 +572,10 @@ export interface Api {
     recordPredictions(list: PredictionIn[]): Promise<{ saved: number }>;
     // Enviar una apuesta tuya a amigos (sin tu importe ni tus notas; ven cómo va)
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
+    // Leer la captura de un ticket de la casa (PNG/JPEG en data URL): borrador enlazado a su partido, sin guardar (server/services/bets/scan.js)
+    scan(image: string): Promise<TicketScan>;
+    // ¿Entiende la app el mercado escrito? (fútbol, tenis y MMA; null si aún no hay partido o mercado). market: cómo lo entiende
+    understand(q: { sport: Sport; event: string; market: string; selection: string }): Promise<{ known: boolean; market: string | null } | null>;
   };
   friends: {
     list(): Promise<FriendsList>;

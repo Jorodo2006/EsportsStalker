@@ -9,6 +9,7 @@ const client = require('../../shared/client');
 const store = require('./store');
 const { mentions } = require('../../shared/fighters');
 const predictions = require('./predictions');
+const ticket = require('./ticket');
 
 const TICK = 5 * 60e3;
 const madridDay = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
@@ -265,6 +266,13 @@ function evaluate(ref, R) {
   if (quarterLine(line)) return null;
   // LoL: de los mercados por mapa (kills, primera sangre…) no se tiene el resultado: sólo ganador y hándicap del partido entero
   if (R.sport === 'lol' && (period !== 0 || !['moneyline', 'spread'].includes(type))) return null;
+  // «Ambos equipos recibirán N tarjetas o más» (bet365; sólo llega al subir su ticket): cards_both|0||N, sí o no
+  if (type === 'cards_both') {
+    const pair = R.cards, n = Number(parts[3]);
+    if (!pair || period !== 0 || !(n >= 1) || (out !== 'yes' && out !== 'no')) return null;
+    const both = pair[0] >= n && pair[1] >= n;
+    return { status: both === (out === 'yes') ? 'won' : 'lost', text: `Tarjetas: ${pair[0]} y ${pair[1]}` };
+  }
   if (type === 'corners' || type === 'cards') {
     const pair = R[type];
     if (!pair || period !== 0) return null;
@@ -356,6 +364,13 @@ async function guessBasket(item, date) {
 
 // ---------- la pasada ----------
 let running = false;
+const GUESS = { football: '/api/football/games', tennis: '/api/tennis/games', mma: '/api/mma/games' };
+async function guessByText(item, date, sport, aliases) {
+  if (!item.event) return null;
+  const games = (await gamesAround(sport, GUESS[sport], null, date)).map(g => ticket.gameOf(sport, g)).filter(Boolean);
+  return ticket.guessRef(item, games, date, aliases);
+}
+
 async function run() {
   if (running) return;
   running = true;
@@ -369,6 +384,12 @@ async function run() {
     return results.get(k);
   };
   let changed = 0;
+  // Los mercados que ha enseñado cada usuario (marketAliases), uno por pasada
+  const taught = new Map();
+  const aliasesOf = userId => {
+    if (!taught.has(userId)) taught.set(userId, store.getSettings(userId).then(s => s.marketAliases || {}).catch(() => ({})));
+    return taught.get(userId);
+  };
   try {
     const { rows } = await query(`SELECT id, user_id FROM bets.bets WHERE status = 'pending' AND user_id IS NOT NULL ORDER BY date LIMIT 500`);
     for (const r of rows) {
@@ -381,6 +402,12 @@ async function run() {
         const sport = it.sport || bet.sport;
         if (!it.ref && sport === 'basket') {
           const g = await guessBasket(it, bet.date).catch(() => null);
+          if (g) { it.ref = g; touched = true; }
+        }
+        // Fútbol, tenis y MMA sin partido (apuntadas a mano, o de un sitio que no lo guardaba): por el texto, con las reglas del
+        // lector de tickets. Se guarda al momento, sin esperar al final, para que salga en «Tus apuestas» mientras se juega
+        if (!it.ref && GUESS[sport]) {
+          const g = await guessByText(it, bet.date, sport, await aliasesOf(r.user_id)).catch(() => null);
           if (g) { it.ref = g; touched = true; }
         }
         if (!it.ref || it.ref.settled) continue;

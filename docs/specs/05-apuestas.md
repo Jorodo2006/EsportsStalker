@@ -37,11 +37,26 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 - la gráfica de evolución (todo, 30 días o 7 días);
 - el desglose por casa y por liga.
 
+## Partido y mercado escritos a mano
+
+- Fuera de LoL, el campo *Partido* del formulario enseña los partidos del día de la apuesta de ese deporte (`GamePicker`), con el
+  nombre que lee la resolución (`gameOf` de `server/services/bets/ticket.js`): baloncesto «AWY @ HOM», fútbol «Local - Visitante»,
+  tenis «A - B» y MMA «A vs B». La *Selección* sugiere los jugadores del partido: la alineación en fútbol (sale una hora antes),
+  las plantillas en baloncesto y los dos rivales en tenis y MMA.
+- La resolución enlaza la apuesta por el texto (`guessRef`); en fútbol también los mercados de jugador con el jugador en la
+  selección («Realiza 1 remate» + «Joshua Zirkzee» → `wmx|Realiza 1 o más remates|`, `playerMarketOf`). Al guardar se lanza una
+  pasada a los 3 s.
+- Si la app no entiende el mercado (`POST /api/bets/understand`), `MarketHint` lo avisa bajo la selección y deja elegir qué es.
+  Se guarda en el ajuste de usuario `marketAliases` ({ texto sin acentos: mercado de la app }, como mucho 200) y vale para las
+  siguientes apuestas de ese usuario.
+
 ## Combinadas
 
 - **Guardado.** `normalizeBet` lee `legs`, que puede llegar como array o como texto JSON desde el CSV. Si hay 2 o más
   selecciones válidas, se llama a `normalizeCombo`, que recalcula siempre en el backend:
-  - **cuota** = producto de las cuotas de las selecciones; las nulas cuentan como 1;
+  - **cuota** = producto de las cuotas de las selecciones; las nulas cuentan como 1. Si alguna selección no tiene la suya (0:
+    una «Crear apuesta», una cuota mejorada, o apuntada sólo con la total), vale la total que se manda. El formulario pide en
+    las combinadas una sola «Cuota total»: si no es el producto de las de las selecciones, las manda sin cuota;
   - **estado**:
     - `lost` si alguna selección está perdida;
     - `pending` si alguna sigue pendiente;
@@ -115,6 +130,9 @@ solas con el resultado del partido.
 - **Apuestas sin `ref`** (las de antes o las de recomendaciones de equipo): si son de baloncesto y llevan los textos
   que pone la app ("CHA @ BKN" + "Total de puntos" + "Más de 212.5", "Asistencias · Naji Marshall" + "Más de 2.5",
   "Ganador", "Hándicap", "Puntos de X", con periodo) se reconocen por el texto (`guessBasket`, `ref.guessed`).
+  Las de fútbol, tenis y MMA, con las reglas del lector de tickets (`guessRef` de `ticket.js`): los dos equipos de un solo
+  partido en el evento y un mercado que se reconoce en mercado + selección; si no, nada. El `ref` se guarda en cuanto se
+  reconoce, sin esperar al final, para que la apuesta salga en directo en «Tus apuestas».
 - **Cuándo**: cada 5 minutos, o al pulsar *Comprobar resultados* en Mis apuestas (`POST /api/bets/settle`). Cada
   partido se pide una vez por pasada, al servicio de su deporte por su API (regla 6).
 - **Qué sabe resolver**: ganador (1X2 en fútbol), hándicap, totales y puntos/goles/juegos de cada uno, del partido y por
@@ -129,11 +147,49 @@ solas con el resultado del partido.
 - En el historial, cada apuesta con `ref` lleva la marca *se resuelve sola* / *resuelta sola* (al pasar el ratón, el
   resultado). Pruebas en `server/test/resolver.test.js`.
 
+## Subir ticket (`src/components/TicketScan.tsx`, `server/services/bets/scan.js`, `ticket.js`, `ocr.js`)
+
+- En *Mis apuestas*, «Subir ticket»: la captura de una apuesta hecha en la casa (Winamax y bet365, probados con capturas reales)
+  se convierte en una apuesta enlazada a su partido (`ref`), como si se hubiera apuntado desde el cupón: sale en «Tus apuestas»
+  y se resuelve sola. Se puede elegir, arrastrar o pegar (Ctrl+V).
+- La imagen se amplía al doble en el navegador si mide menos de 2000 px de ancho (las de bet365 en el ordenador miden ~1400: sin
+  ampliar, «Real Madrid» salía "real vacia") (el OCR lee mucho peor el texto pequeño: sin
+  ampliar, «1º cuarto» salía «TP cuarto» y el importe «1552») y se manda a `POST /api/bets/scan`. El servidor la lee con
+  Tesseract (`tesseract.js` con el español de `@tesseract.js-data/spa`, dentro del contenedor: ni APIs de pago ni descargas) y
+  no la guarda. Un lector a la vez, que se cierra a los 3 min sin uso; 30 lecturas por hora y usuario.
+- `ticket.js` es puro (pruebas en `server/test/ticket.test.js`, con el texto del OCR de capturas reales y referencias inventadas):
+  - `parseTicket`: casa, tipo (simple, combinada o «Crear apuesta»), importe, cuota, ganancias, fecha (Winamax la pone; si no,
+    el día del partido), cierre («Apuesta cerrada») y el texto de cada selección. El importe se comprueba con *importe × cuota =
+    ganancias* (el OCR confunde 8 y 6), sólo si la corrección se parece a lo leído (una perdida dice «Ganancias 0,00 €»).
+  - `linkTicket`: busca los partidos de baloncesto, fútbol, tenis y MMA del día de la apuesta y los de al lado cuyos dos equipos
+    salen en el ticket (nombre, abreviatura, otros nombres y, en baloncesto, el apodo; con los errores típicos: «B05» es «BOS»,
+    «SACKings» lleva «Kings»). Si el OCR se come uno, vale un solo equipo con al menos dos nombres suyos («SAC Kings») y se avisa;
+    un apodo suelto («Kings»: Sacramento y Sydney) no basta. Cada selección es del partido que tiene encima en el ticket (Winamax)
+    o, si no, del de debajo (bet365 lo pone al final).
+  - `marketOf`: el texto → la clave de `odds.js`: líneas de jugador («Total del jugador (asistencias + rebotes) - X» + «Más de
+    5,5»; «X - 17+ rebotes» es más de 16,5), hándicap (con la línea del lado `a`), totales, totales de equipo, ganador (también
+    con el nombre cortado por la casa: «I. Montes de la Torr», `fuzzySide`), empate y ambos marcan («Ambos equipos anotarán»), con
+    su periodo («1º cuarto», que el OCR lee «19 cuarto»). En fútbol, lo de jugador de bet365 («Courtois - Más de 2.5» + «Paradas
+    del portero», «Iglesias - 1+ faltas cometidas», «X será amonestado») pasa a los títulos de Winamax que resuelve `settle.js`
+    (`wmx|Realiza 3 o más paradas|`, con el jugador como selección), y «Más de 5 tarjetas» de una «Crear apuesta» es más de 5,5
+    (ahí no hay nulas). «Ambos equipos recibirán 2 tarjetas o más» es `cards_both|0||2` (sí), un mercado que sólo llega por aquí
+    y que `settle.js` resuelve con las tarjetas de cada equipo. Un «Más de 4.5» suelto toma la unidad de su subtítulo («Total de
+    goles»). Lo que no reconoce se queda sin enlazar, como texto.
+  - bet365 pone cada selección en una línea y debajo, más pequeño, de qué es (`sub`); si esa línea repite el título con otras
+    palabras, se reconoce porque empieza igual. El importe de bet365 sale dos veces (arriba y en «Imp:»): si coinciden, o hay un
+    «aumento de ganancias», no se corrige con las ganancias. Un ticket sin fecha busca su partido desde 4 días antes.
+- La «Crear apuesta» (varias selecciones del mismo partido con una cuota) se guarda como combinada con la cuota en la primera
+  selección y 1,00 en las demás, para que el producto sea la de la casa, y una nota que lo dice.
+- No guarda nada: la ventana enseña lo leído, lo enlazado y lo que no, y se guarda tal cual o se abre en el formulario. Avisa si
+  ya hay una apuesta igual (mismo día, importe, cuota y partido).
+
 ## Seguir las apuestas en juego (`src/components/MyBetsLive.tsx`, `src/lib/bet-track.ts`)
 
 - Arriba de *Partidos* de cada deporte, «Tus apuestas»: las pendientes con `ref` cuyo partido empieza en las próximas 24 h o
-  empezó hace menos de 12 h, de los cinco deportes (primero las que se están jugando; de una combinada, cada selección
-  pendiente). Las apuntadas a mano sin partido no salen: no se sabe qué seguir.
+  empezó hace menos de 12 h, sólo del deporte que se ve (primero las que se están jugando). Una combinada sale entera
+  en cada deporte con alguna selección suya por jugarse: todas sus selecciones, también las de otros deportes (con el
+  deporte delante) y las ya resueltas (acertada, fallada, nula), y arriba cuántas van acertadas y cuántas van bien ahora. Una de
+  tenis y fútbol sale en los dos. Las apuntadas a mano sin partido no salen: no se sabe qué seguir.
 - Cómo va cada una sale de `trackOf` (`bet-track.ts`, pruebas en `bet-track.test.ts`), que lee la misma clave de mercado que
   `settle.js`: barra con la cifra frente a la línea en las líneas de jugador de baloncesto, los totales y los totales de equipo
   (y los goleadores de Winamax en fútbol); quién va por delante en ganador, hándicap, doble oportunidad, empate no válido y

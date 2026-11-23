@@ -1,5 +1,5 @@
-import type { BasketLeagueId, FootballLineRow, MmaLineRow, TennisBoard, TennisPick } from '@/lib/types';
-import type { BasketPick } from '@/lib/basket-picks';
+import type { BasketLeagueId, BetRef, FootballLineRow, MmaLineRow, TennisBoard, TennisPick } from '@/lib/types';
+import { playerKeyOf, type BasketPick } from '@/lib/basket-picks';
 import type { PlanPick, PlanSport } from '@/lib/plan';
 
 // Adaptadores: pasan todas las líneas calculadas de cada deporte (no sólo la más fiable de cada partido) a la forma común del
@@ -23,10 +23,17 @@ function adapt(sport: PlanSport, rows: Row[]): PlanPick[] {
     if (out.has(id)) continue;
     out.set(id, {
       id, sport, match: `${sport}:${matchId}`, event, league, title: pk.title, start, book: pk.book,
-      price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score, market: pk.market, selection: pk.selection
+      price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score, market: pk.market, selection: pk.selection,
+      ...refOf(sport, matchId, start, pk.id)
     });
   }
   return [...out.values()];
+}
+
+// El id de una línea es «clave#selección» (como en las recomendaciones de cada deporte)
+function refOf(sport: PlanSport, match: string, start: string, id: string): { ref?: BetRef } {
+  const [key, out] = String(id).split('#');
+  return key && out ? { ref: { sport, match, key, out, start } } : {};
 }
 
 export const fromTennisBoard = (board: TennisBoard): PlanPick[] =>
@@ -52,7 +59,8 @@ export function fromBasket(picks: BasketPick[]): PlanPick[] {
     out.set(id, {
       id, sport: 'basket', match: `basket:${g.id}`, event: `${g.away.name} @ ${g.home.name}`, league: BASKET_LEAGUE[g.league] ?? g.league,
       title: pk.title, start: g.date, book: pk.book ?? '', price: pk.price, p: pk.p, ev: pk.ev, rel: pk.rel.score,
-      market: pk.market, selection: pk.selection
+      market: pk.market, selection: pk.selection,
+      ...(() => { const key = playerKeyOf(pk); return key ? { ref: { sport: 'basket' as const, match: g.id, key, out: pk.side, start: g.date } } : {}; })()
     });
   }
   return [...out.values()];

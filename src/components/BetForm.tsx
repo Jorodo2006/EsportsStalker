@@ -7,6 +7,7 @@ import type { BetDraft, BetLeg, BetRef, BetStatus, LegStatus, MatchOdds, Schedul
 import { Badge, Button, Dialog, Field, Input, Select, inputCls, seg, segWrap } from './ui';
 import { MatchPicker, matchName } from './MatchPicker';
 import { OptionInput, type Option } from './OptionInput';
+import { GamePicker, MarketHint, PlayersList } from './GamePicker';
 
 // Todos los mercados habituales de LoL en las casas, con los mismos nombres que usa el comparador de cuotas
 const MAP_MARKETS = ['Ganador', 'Hándicap de kills', 'Total de kills', 'Kills par / impar', 'Kills de equipo', 'Primera sangre',
@@ -42,6 +43,8 @@ const FOOTBALL_MARKETS: Option[] = ['1X2', 'Doble oportunidad', 'Empate no váli
 const BOOKS = ['Winamax', 'Betway'];
 
 const today = () => new Date().toISOString().slice(0, 10);
+// Qué se escribe en la selección: el equipo o jugador del mercado
+const selHint = (sport?: BetLeg['sport']) => sport === 'football' ? 'Liverpool, Más de 2.5, o el jugador' : sport === 'basket' ? 'LAL, Más de 220.5' : sport === 'tennis' || sport === 'mma' ? 'El jugador, Más de 22.5' : 'G2';
 const LEG_LABEL: Record<LegStatus, string> = { pending: 'Pendiente', won: 'Ganada', lost: 'Perdida', void: 'Nula' };
 // Botones para marcar cada selección de la combinada (el color del activo es el de su estado)
 const LEG_ICON: Record<LegStatus, typeof Check> = { pending: Clock, won: Check, lost: X, void: Ban };
@@ -69,6 +72,8 @@ export function BetFormDialog() {
   const [legs, setLegs] = useState<BetLeg[] | null>(null); // null = apuesta simple
   // El partido y mercado de una simple (para que se resuelva sola) va aparte: f sólo guarda textos
   const [ref, setRef] = useState<BetRef | undefined>(undefined);
+  // Combinada: una sola cuota, la de la casa para toda la apuesta. Si las selecciones traen la suya (del cupón), sale ya calculada
+  const [total, setTotal] = useState('');
 
   useEffect(() => {
     if (!betDraft) return;
@@ -77,10 +82,12 @@ export function BetFormDialog() {
     const d: BetDraft = { date: today(), market: 'Ganador del partido', status: 'pending', sport: 'lol', ...rest };
     setF(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v == null || v === 0 && k === 'cashout' ? '' : String(v)])));
     setLegs(dl?.length ? dl.map(l => ({ ...emptyLeg(), ...l, status: l.status || 'pending' })) : null);
+    const t = dl?.length ? (rest.odds && rest.odds > 1 ? rest.odds : dl.every(l => l.odds > 1) ? comboOdds(dl) : 0) : 0;
+    setTotal(t > 1 ? String(t) : '');
   }, [betDraft]);
 
   const set = (k: string) => (e: { target: { value: string } }) => setF(p => ({ ...p, [k]: e.target.value }));
-  const o = legs ? comboOdds(legs) : parseFloat(f.odds), s = parseFloat(f.stake);
+  const o = legs ? parseFloat(total) : parseFloat(f.odds), s = parseFloat(f.stake);
   const setLeg = (i: number, p: Partial<BetLeg>) => setLegs(ls => ls && ls.map((l, j) => j === i ? { ...l, ...p } : l));
   const events = useMemo(() => [...new Set(bets.flatMap(b => b.legs ? b.legs.map(l => l.event) : [b.event]).filter(Boolean))].slice(0, 200), [bets]);
   const usedMarkets = useMemo(() => [...new Set(bets.flatMap(b => b.legs ? b.legs.map(l => l.market) : [b.market]).filter(Boolean))]
@@ -90,7 +97,7 @@ export function BetFormDialog() {
   // Fuera de LoL no hay calendario de lolesports para elegir el partido: se escribe a mano
   const free = (f.sport || 'lol') !== 'lol';
   const foot = f.sport === 'football';
-  const sportNow = (f.sport || 'lol') as BetLeg['sport'];
+  const sportNow = (f.sport || 'lol') as NonNullable<BetLeg['sport']>;
   const marketsFor = (event: string, sport = f.sport): Option[] => {
     if (sport === 'basket') return [...BASKET_MARKETS, ...usedMarkets];
     if (sport === 'tennis') return [...TENNIS_MARKETS, ...usedMarkets];
@@ -105,7 +112,10 @@ export function BetFormDialog() {
 
   function toCombo() {
     const first: BetLeg = { event: f.event || '', league: f.league || '', market: f.market || '', selection: f.selection || '', odds: parseFloat(f.odds) || 0, status: 'pending', sport: sportNow };
-    setLegs(first.selection || first.event ? [first, emptyLeg()] : [emptyLeg(), emptyLeg()]);
+    // Las selecciones nuevas, del deporte elegido (antes salían de LoL y pedían su partido aunque se hubiera elegido otro)
+    const blank = (): BetLeg => ({ ...emptyLeg(), sport: sportNow });
+    setLegs(first.selection || first.event ? [first, blank()] : [blank(), blank()]);
+    setTotal('');
   }
   function toSingle() {
     const l = legs?.[0];
@@ -123,8 +133,13 @@ export function BetFormDialog() {
       if (legs) {
         const ok = legs.filter(l => l.selection.trim() || l.event.trim());
         if (ok.length < 2) throw new Error('Una combinada necesita al menos 2 selecciones');
-        if (ok.some(l => !(l.odds > 1))) throw new Error('Pon la cuota de cada selección');
-        await window.api.bets.save({ ...f, id: betDraft?.id, odds: comboOdds(ok), legs: ok, status: f.status === 'cashout' ? 'cashout' : 'pending' } as unknown as BetDraft);
+        const t = parseFloat(total);
+        if (!(t > 1)) throw new Error('Pon la cuota total de la combinada');
+        // Si la total no es el producto de las de cada selección («Crear apuesta», cuota mejorada), las selecciones se quedan sin
+        // cuota (0) y vale la total: así el servidor no la vuelve a calcular
+        const same = ok.every(l => l.odds > 1) && Math.abs(comboOdds(ok) - t) < 0.015;
+        const sent = same ? ok : ok.map(l => ({ ...l, odds: 0 }));
+        await window.api.bets.save({ ...f, id: betDraft?.id, odds: t, legs: sent, status: f.status === 'cashout' ? 'cashout' : 'pending' } as unknown as BetDraft);
         if (betDraft?.fromSlip) clearSlip();
       } else {
         await window.api.bets.save({ ...f, id: betDraft?.id, ...(ref ? { ref } : {}) } as unknown as BetDraft);
@@ -195,14 +210,15 @@ export function BetFormDialog() {
                     <div key={i} className="grid grid-cols-6 items-center gap-2 border-b border-zinc-800/60 pb-3 last:border-0 ">
                       <div className="col-span-6 sm:col-span-3">
                         {(l.sport || 'lol') !== 'lol'
-                          ? <Input list="dl-events" placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : 'LAL @ BOS'} value={l.event} onChange={e => setLeg(i, { event: e.target.value })} />
+                          ? <GamePicker sport={l.sport!} day={f.date || today()} placeholder={l.sport === 'football' ? 'Real Madrid - Barcelona' : l.sport === 'mma' ? 'Ilia Topuria vs Max Holloway' : l.sport === 'tennis' ? 'Carlos Alcaraz - Jannik Sinner' : 'LAL @ BOS'}
+                            value={l.event} onChange={v => setLeg(i, { event: v })} onPick={g => setLeg(i, { event: g.event, league: g.league })} />
                           : <MatchPicker value={l.event} day={f.date} past={events} onChange={v => setLeg(i, { event: v })}
                             onPick={ev => setLeg(i, { event: matchName(ev), league: ev.league })} />}
                       </div>
                       <div className="col-span-6 sm:col-span-3"><OptionInput placeholder="Ganador del partido" value={l.market} options={marketsFor(l.event, l.sport)} onChange={v => setLeg(i, { market: v })} /></div>
-                      <Input className="col-span-6 sm:col-span-2" placeholder="G2" value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
-                      <Input className="col-span-3 sm:col-span-1" type="number" step="0.01" min="1.01" value={l.odds || ''} onChange={e => setLeg(i, { odds: parseFloat(e.target.value) || 0 })} />
-                      <div className="col-span-3 flex gap-1 sm:col-span-2">
+                      <Input className="col-span-6 sm:col-span-3" list={`dl-pl-${i}`} placeholder={selHint(l.sport)} value={l.selection} onChange={e => setLeg(i, { selection: e.target.value })} />
+                      {(l.sport || 'lol') !== 'lol' && <PlayersList id={`dl-pl-${i}`} sport={l.sport!} day={f.date || today()} event={l.event} />}
+                      <div className="col-span-5 flex gap-1 sm:col-span-2">
                         {(Object.keys(LEG_LABEL) as LegStatus[]).map(v => {
                           const Icon = LEG_ICON[v];
                           return (
@@ -215,25 +231,29 @@ export function BetFormDialog() {
                         })}
                       </div>
                       <Button type="button" size="icon" variant="ghost" title="Quitar" disabled={legs.length <= 2} onClick={() => setLegs(legs.filter((_, j) => j !== i))}><X size={15} /></Button>
+                      <MarketHint sport={l.sport || 'lol'} event={l.event} market={l.market} selection={l.selection} />
                     </div>
                   ))}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <Button type="button" size="sm" variant="secondary" onClick={() => setLegs([...legs, { ...emptyLeg(), sport: sportNow }])}><Plus size={14} />Añadir selección</Button>
-                    <div className="text-sm text-zinc-400">{legs.length} selecciones · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></div>
+                    <div className="text-sm text-zinc-400">{legs.length} selecciones{o > 1 && <> · cuota total <span className="ml-1 text-base font-bold text-amber-300 tabular-nums">{odd(o)}</span></>}</div>
                   </div>
                 </div>
               </div>
             ) : <>
               <Field label="Partido">
                 {free
-                  ? <Input required list="dl-events" placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''} onChange={set('event')} />
+                  ? <GamePicker required sport={sportNow} day={f.date || today()} placeholder={foot ? 'Real Madrid - Barcelona' : 'LAL @ BOS'} value={f.event || ''}
+                    onChange={v => setF(p => ({ ...p, event: v }))} onPick={g => setF(p => ({ ...p, event: g.event, league: g.league }))} />
                   : <MatchPicker required value={f.event || ''} day={f.date} past={events} onChange={v => setF(p => ({ ...p, event: v }))}
                     onPick={ev => setF(p => ({ ...p, event: matchName(ev), league: ev.league }))} />}
               </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Mercado"><OptionInput value={f.market || ''} options={marketsFor(f.event || '')} onChange={v => setF(p => ({ ...p, market: v }))} /></Field>
-                <Field label="Selección"><Input required placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
+                <Field label="Selección"><Input required list="dl-pl-s" placeholder={nba ? 'LeBron James · Más de 25.5' : foot ? 'Real Madrid' : 'G2'} value={f.selection || ''} onChange={set('selection')} /></Field>
               </div>
+              {free && <PlayersList id="dl-pl-s" sport={sportNow} day={f.date || today()} event={f.event || ''} />}
+              {!ref && <MarketHint sport={sportNow} event={f.event || ''} market={f.market || ''} selection={f.selection || ''} />}
             </>}
             {when}
             <Field label="Notas"><textarea rows={2} className={inputCls + ' h-auto py-2'} value={f.notes || ''} onChange={set('notes')} /></Field>
@@ -243,7 +263,7 @@ export function BetFormDialog() {
             <div className={sec}>Dinero y resultado</div>
             <div className="grid grid-cols-2 gap-3">
               {legs
-                ? <Field label="Cuota total"><div className={inputCls + ' flex items-center font-semibold tabular-nums text-zinc-300'}>{odd(o)}</div></Field>
+                ? <Field label="Cuota total"><Input type="number" step="0.01" min="1.01" required placeholder="La de la casa" value={total} onChange={e => setTotal(e.target.value)} /></Field>
                 : <Field label="Cuota (decimal)"><Input type="number" step="0.01" min="1.01" required value={f.odds || ''} onChange={set('odds')} /></Field>}
               <Field label={`Stake (${currency})`}><Input type="number" step="0.01" min="0" required value={f.stake || ''} onChange={set('stake')} /></Field>
             </div>
