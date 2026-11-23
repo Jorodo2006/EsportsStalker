@@ -271,7 +271,7 @@ async function recomendaciones({ req, query: q }) {
   if (hit && Date.now() - hit.t < 60e3) return hit.v;
   const v = (async () => {
     const games = (await client.call('tennis', 'GET', `/api/tennis/games?date=${day}`))
-      .filter(g => g.level === 'challenger' && g.state === 'pre' && !/^previa/i.test(g.round || '') && known(g.a) && known(g.b));
+      .filter(g => g.level === 'challenger' && g.state === 'pre' && known(g.a) && known(g.b)); // también la previa (desde el 23-11-2026)
     const m = await model();
     const { matcher, surfaceOf, marketOf, picksOfMatch, PICKS, VALUE_VISIBLE } = await motor;
     const find = matcher(m);

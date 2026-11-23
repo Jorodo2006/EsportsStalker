@@ -2,7 +2,7 @@
 // modelo mezclada con la de la casa, en dos tipos y tres tramos de cuota.
 //  - Alta probabilidad: muy probable y sin regalar el margen, pero sin ventaja sobre la casa. Se dice siempre: sin valor, a la
 //    larga se pierde de media el margen de la casa.
-//  - Valor: no se enseña mientras valorVisible sea false (en la fase 0 el modelo no ganó a la cuota de cierre); se registra igual.
+//  - Valor: visible desde el 23-11-2026 (valorVisible), siempre con el aviso de que en la fase 0 no ganó a la cuota de cierre.
 // Salen en la pestaña Recomendaciones de cada Challenger, en la pantalla Recomendaciones del tenis y en las más fiables del día.
 // Fase 4: el riesgo de retirada de cada uno y los avisos físicos (retirada reciente, ranking protegido), que quitan la alta probabilidad.
 // Las dos se registran para medir su acierto por tipo y tramo (Administración → Acierto del modelo).
@@ -34,7 +34,7 @@ const WHY: Record<NonNullable<ChallengerMatchPicks['descartado']>, string> = {
   sin_cuotas: 'Todavía no hay cuotas de este partido. El lector las trae el día del partido.',
   pocos_datos: 'Uno de los dos tiene muy pocos partidos en el histórico: el modelo no tiene en qué apoyarse.',
   discrepancia: 'El modelo y las casas no coinciden en quién gana, y con tanta diferencia lo normal es que falte algo (una lesión, una cuota mal leída).',
-  ninguna: 'Ninguna llega al nivel: hace falta un 75 % o más, estar de acuerdo con la casa y no regalar su margen.'
+  ninguna: 'Ninguna llega al nivel: hace falta un 72 % o más en cuotas de hasta 1,50 o un 58 % hasta 2,00, estar de acuerdo con la casa y no regalar su margen.'
 };
 const PHYSICAL: ChallengerAviso[] = ['retirada_reciente', 'ranking_protegido', 'tmo_reciente'];
 // Sin alta probabilidad por un aviso físico del favorito: el del rival no la quita (su riesgo ya está en el valor esperado)
@@ -52,6 +52,8 @@ function Tag({ m, a }: { m: ChallengerMatchPicks; a: ChallengerAviso }) {
 // En palabras del usuario: nada de «fase 0» ni de pantallas que no ve (Acierto del modelo es del administrador)
 const RETIRE_NOTE = 'Si un jugador se retira, Winamax anula la apuesta al ganador y devuelve lo apostado (en los Challenger no hay Garantía Abandono); en Betway lo damos por igual, sin haberlo confirmado en su reglamento. El valor esperado ya lo tiene en cuenta.';
 const VALUE_NOTE = 'Valor: de momento no se enseña. Con las cuotas de 155 Challengers de noviembre de 2026, lo que el modelo veía como valor no ganó a la cuota de cierre. Se sigue midiendo antes de enseñarlo.';
+// Va siempre con las de Valor: todavía no han demostrado ganar dinero
+const VALUE_WARN = 'Sin demostrar: en la prueba de noviembre de 2026 (155 Challengers), las que el modelo veía con valor perdieron un 7,2 % frente a la cuota de cierre. Apuesta poco hasta que se vea cómo van.';
 const DISCLAIMER = 'Alta probabilidad no es una apuesta segura ni rentable: sin ventaja sobre la casa, a la larga se pierde de media su margen. La probabilidad mezcla el modelo de los Challenger con las casas, y las casas pesan más.';
 
 export const challengerQuery = (date: string) => ({
@@ -121,7 +123,7 @@ function ChallengerPicksPanelInner({ id, date, onOdds }: { id: string; date: str
   if (q.error) return <ErrorBox error={q.error} />;
   const day = q.data;
   const m = day?.partidos.find(x => x.id === id);
-  if (!day || !m) return <Empty>El motor de los Challenger sólo recomienda partidos del cuadro final que aún no han empezado: los de la previa no entran.</Empty>;
+  if (!day || !m) return <Empty>El motor de los Challenger sólo recomienda partidos que aún no han empezado, con cuotas y con los dos jugadores en su histórico.</Empty>;
   const shown = m.picks.filter(p => p.visible && (p.tipo === 'probabilidad' || day.valorVisible));
   const alta = shown.filter(p => p.tipo === 'probabilidad'), valor = shown.filter(p => p.tipo === 'valor');
   const aFav = (m.final ?? m.modelo ?? 0.5) >= 0.5;
@@ -154,6 +156,7 @@ function ChallengerPicksPanelInner({ id, date, onOdds }: { id: string; date: str
       )}
 
       <TvBand>Valor</TvBand>
+      {day.valorVisible && <p className="px-4 pt-2 text-[11px] text-amber-300">{VALUE_WARN}</p>}
       {day.valorVisible
         ? (valor.length ? valor.map(p => <PickRow key={p.lado + p.tipo} m={m} p={p} onAdd={() => add(m, p)} />) : <p className="px-4 py-3 text-[13px] text-zinc-300">Ninguna con valor en este partido.</p>)
         : <p className="px-4 py-3 text-[13px] text-zinc-400">{VALUE_NOTE}</p>}
@@ -192,9 +195,10 @@ export function ChallengerBoard({ days, until, onOpen }: { days: string[]; until
       {r.alta.length
         ? r.alta.map(x => <PickRow key={x.m.id + x.p.lado} m={x.m} p={x.p} withMatch onOpen={() => onOpen(x.m.id, x.day)} onAdd={() => add(x.m, x.p)} />)
         : <p className="px-4 py-3 text-[13px] text-zinc-300">{!r.list.length
-          ? 'No quedan Challenger del cuadro final por empezar en estos días. Los partidos salen la víspera, con el orden de juego.'
-          : r.conCuotas ? 'Ninguna llega al nivel: hace falta un 75 % o más, estar de acuerdo con la casa y no regalar su margen.' : 'Todavía no hay cuotas de los Challenger de estos días. El lector las trae el día del partido.'}</p>}
+          ? 'No quedan Challenger por empezar en estos días. Los partidos salen la víspera, con el orden de juego.'
+          : r.conCuotas ? 'Ninguna llega al nivel: hace falta un 72 % o más en cuotas de hasta 1,50 o un 58 % hasta 2,00, estar de acuerdo con la casa y no regalar su margen.' : 'Todavía no hay cuotas de los Challenger de estos días. El lector las trae el día del partido.'}</p>}
       <TvBand aside={valorVisible ? r.valor.length || undefined : undefined}>Valor</TvBand>
+      {valorVisible && <p className="px-4 pt-2 text-[11px] text-amber-300">{VALUE_WARN}</p>}
       {valorVisible
         ? (r.valor.length ? r.valor.map(x => <PickRow key={x.m.id + x.p.lado + 'v'} m={x.m} p={x.p} withMatch onOpen={() => onOpen(x.m.id, x.day)} onAdd={() => add(x.m, x.p)} />) : <p className="px-4 py-3 text-[13px] text-zinc-300">Ninguna con valor.</p>)
         : <p className="px-4 py-3 text-[13px] text-zinc-400">{VALUE_NOTE}</p>}

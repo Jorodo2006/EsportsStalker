@@ -15,10 +15,12 @@ import { RETIRE } from './form.js';
 export const PICKS = {
   w: 0.2, // peso del modelo frente a la casa en la mezcla (fase 0)
   maxGap: 0.2, // más diferencia con la casa sobre quién gana: casi siempre una cuota mal leída o algo que el modelo no sabe
+  // alta: la probabilidad mínima de «Alta probabilidad» en cada tramo. Con un 75 % en todos sólo salían cuotas de 1,15-1,25 (la
+  // justa de un 75 % es 1,33 y la casa se queda su margen); el 23-11-2026 se bajó, por tramos, para que salgan cuotas de 1,50 a 2,00
   tramos: [
-    { id: 'baja', min: 1.15, max: 1.6, valor: 0.03, alta: 0.75 },
-    { id: 'media', min: 1.6, max: 2.5, valor: 0.04, alta: 0.75 },
-    { id: 'alta', min: 2.5, max: 6, valor: 0.07, alta: null }, // en cuotas altas no hay "alta probabilidad"
+    { id: 'baja', min: 1.15, max: 1.5, valor: 0.03, alta: 0.72 },
+    { id: 'media', min: 1.5, max: 2.0, valor: 0.04, alta: 0.58 },
+    { id: 'alta', min: 2.0, max: 6, valor: 0.06, alta: null }, // en cuotas altas no hay "alta probabilidad"
   ],
   relValor: 55,
   relAlta: 65,
@@ -26,8 +28,9 @@ export const PICKS = {
   altaMaxGap: 0.05, // y que el modelo y la casa estén de acuerdo
   staleMs: 6 * 3600e3,
 };
-// Valor no se enseña mientras la fase 0 no diga que el modelo gana a la cuota de cierre (sí se calcula y se registra)
-export const VALUE_VISIBLE = false;
+// Valor se enseña desde el 23-11-2026 por decisión del usuario (Hugo), con el aviso de que en la fase 0 no ganó a la cuota de cierre
+// (CLV −7,2 %): la interfaz lo dice siempre junto a ellas. Se sigue registrando para medirlo
+export const VALUE_VISIBLE = true;
 
 // Qué hace cada casa con la apuesta al ganador si un jugador se retira (fase 4). Winamax la anula y devuelve lo apostado (su
 // reglamento, sección Tenis; la «Garantía Abandono», que la paga, es sólo para la ATP y la WTA: los Challenger no entran). Betway:
