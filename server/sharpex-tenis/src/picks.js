@@ -18,14 +18,18 @@ export const PICKS = {
   // alta: la probabilidad mínima de «Alta probabilidad» en cada tramo. Con un 75 % en todos sólo salían cuotas de 1,15-1,25 (la
   // justa de un 75 % es 1,33 y la casa se queda su margen); el 23-11-2026 se bajó, por tramos, para que salgan cuotas de 1,50 a 2,00
   tramos: [
-    { id: 'baja', min: 1.15, max: 1.5, valor: 0.03, alta: 0.72 },
-    { id: 'media', min: 1.5, max: 2.0, valor: 0.04, alta: 0.58 },
-    { id: 'alta', min: 2.0, max: 6, valor: 0.06, alta: null }, // en cuotas altas no hay "alta probabilidad"
+    // valor: el mínimo de valor esperado. El 23-11-2026 se igualó a la regla del resto de la app (2 %, BET_EV de src/lib/value.ts;
+    // 4 % en cuotas altas): con 3-7 % y el modelo pesando un 20 %, no salía ninguna
+    { id: 'baja', min: 1.15, max: 1.5, valor: 0.02, alta: 0.72 },
+    { id: 'media', min: 1.5, max: 2.0, valor: 0.02, alta: 0.58 },
+    { id: 'alta', min: 2.0, max: 6, valor: 0.04, alta: null }, // en cuotas altas no hay "alta probabilidad"
   ],
   relValor: 55,
   relAlta: 65,
-  altaMinEv: -0.03, // Alta probabilidad: que no regale el margen entero
-  altaMaxGap: 0.05, // y que el modelo y la casa estén de acuerdo
+  // Alta probabilidad: que no regale más que el margen normal de la casa (en cuotas de 1,50-2,00 es un 4-6 %: con −3 % no pasaba
+  // ninguna) y que el modelo y la casa estén de acuerdo
+  altaMinEv: -0.06,
+  altaMaxGap: 0.08,
   staleMs: 6 * 3600e3,
 };
 // Valor se enseña desde el 23-11-2026 por decisión del usuario (Hugo), con el aviso de que en la fase 0 no ganó a la cuota de cierre
