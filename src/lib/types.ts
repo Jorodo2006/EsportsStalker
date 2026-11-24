@@ -236,6 +236,12 @@ export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean;
 
 // ---------- Fútbol (servicio football: ESPN) ----------
 export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
+// Una noticia de fútbol unida a los equipos de un partido (server/services/football/news.js). seen_at: cuándo la vio Sharpex.
+// tags: baja, duda, vuelve, sancion, rotacion, alineacion, entrenador
+export interface FootballNews {
+  id: string; source: string; url: string; title: string; summary: string; published: string; seen_at: string;
+  teams: string[]; players: string[]; tags: string[];
+}
 export interface FootballLeague { id: FootballLeagueId; name: string; country: string; logo: string }
 // form: últimos resultados (G, E o P); record: ganados-empatados-perdidos en la competición; color y alt: los del equipo, sin #
 export interface FootballTeam {
@@ -635,6 +641,8 @@ export interface Api {
     days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
     live(): Promise<FootballMatch[]>;
     match(id: string): Promise<FootballDetail>;
+    // Noticias de los dos equipos (ids de ESPN) de los últimos días, lo más nuevo primero
+    news(teams: string[]): Promise<FootballNews[]>;
     // Estadísticas de un jugador en un partido (API core de ESPN), { nombre de ESPN: valor }
     playerStats(match: string, team: string, player: string): Promise<Record<string, number>>;
     // Foto del jugador: ESPN o, si no tiene, Wikipedia; url vacía si no hay

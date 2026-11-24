@@ -210,6 +210,7 @@ export const api: Api = {
   football: {
     leagues: () => get('/api/football/leagues'),
     games: date => get('/api/football/games', { date }),
+    news: teams => get('/api/football/news', { teams: teams.join(',') }),
     days: (from, n) => get('/api/football/days', { from, n }),
     live: () => get('/api/football/live'),
     match: id => get('/api/football/match', { id }),

@@ -83,6 +83,24 @@ El orden de la tabla es el de la lista de partidos. Para añadir una liga basta 
 - `src/views/FootballStandings.tsx`: la segunda sección de la app ("Clasificación" en vez de "Jugadores").
 - `src/components/football.tsx`: el balón del selector, `themeOf`, `esTime` y la tabla de clasificación.
 
+## Noticias
+
+`server/services/football/news.js`, tabla `football.news` (migración 002), pestaña *Noticias* de la ficha
+(`src/views/football/News.tsx`, ruta pública `GET /api/football/news?teams=<id>,<id>`).
+
+- **Fuentes** (gratuitas; sus `robots.txt` permiten estos RSS): las noticias de cada liga de ESPN, cada 10 min, que ya traen
+  el equipo (`teamId`) y los jugadores; y los RSS de fútbol de Mundo Deportivo, BBC Sport y The Guardian, cada 5 min. Marca y
+  AS no: sus RSS llevan semanas o años sin actualizarse. Antes de añadir otra fuente, mira su `robots.txt`.
+- **Equipos**: en los RSS se buscan por nombre en el titular, la entradilla y las categorías, sólo entre los equipos de los
+  partidos de ayer a dentro de 4 días (`upcomingTeams`). Frases enteras; las palabras que comparten muchos clubes («Real»,
+  «Athletic», «Inter») solas no cuentan; los apodos de la prensa van en `NICK` («Barça», «Atleti», «perico»); un nombre dentro
+  del de otro equipo no cuenta («Milan» en «Inter de Milán»); y una noticia es del femenino sólo si lo dice. Las que no son de
+  ningún equipo con partido no se guardan. Se borran a los 14 días.
+- **Etiquetas** (`tagsOf`): baja, duda, vuelve, sanción, rotación, alineación y entrenador, por palabras del titular y la
+  entradilla en español e inglés. Son una ayuda para leer: no entran en el modelo ni en las recomendaciones.
+- `seen_at` es cuándo la vio Sharpex por primera vez, para medir más adelante cuánto nos adelantamos a la cuota.
+- Pruebas sin red en `server/test/noticias.test.js`.
+
 ## H2H y "cuántas veces se cumple"
 
 Pestaña *H2H* de la ficha (`FootballTrends`, tabla común en `src/components/Trends.tsx`, la misma que en baloncesto):

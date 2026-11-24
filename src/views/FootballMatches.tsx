@@ -27,6 +27,7 @@ import { Timeline } from './football/Timeline';
 import { MatchShotMap } from './football/Shots';
 import { Stats } from './football/Stats';
 import { Lineups } from './football/Lineups';
+import { MatchNews } from './football/News';
 import { FootballTrends, Form, Table } from './football/Form';
 import { cardNote } from '@/lib/odds-window';
 
@@ -164,7 +165,7 @@ export default function FootballMatches() {
 }
 
 // ---------- ficha del partido ----------
-type Tab = 'summary' | 'picks' | 'odds' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
+type Tab = 'summary' | 'picks' | 'odds' | 'news' | 'stats' | 'lineups' | 'form' | 'h2h' | 'table';
 
 // initialTab: la pestaña con la que se abre (desde Recomendaciones, la suya)
 function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview: FootballMatch | null; initialTab?: Tab; onClose: () => void }) {
@@ -193,12 +194,14 @@ function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview
         <SheetTabs value={current} onChange={setTab} items={[
           ['summary', 'Resumen'], ...(st === 'pre' && !m.off ? [['picks', 'Recomendaciones']] as [Tab, string][] : []),
           ...(st === 'post' || m.off ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
+          ['news', 'Noticias'],
           ['stats', 'Estadísticas'], ['lineups', 'Alineaciones'], ['form', 'Forma'], ['h2h', 'H2H'],
           ...(m.league !== 'copa' ? [['table', 'Clasificación']] as [Tab, string][] : [])
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'football', league: m.leagueName, event: targetOfFootball(m).event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </MatchHeader>
       {current === 'odds' ? <SportOdds target={targetOfFootball(m)} />
         : current === 'picks' ? <FootballPicksPanel m={m} onOdds={() => setTab('odds')} />
+        : current === 'news' ? <MatchNews m={m} />
         : !d ? (q.error ? <ErrorBox error={q.error} /> : <Loading label="Cargando la ficha…" />)
         : current === 'summary' ? <Timeline d={d} />
           : current === 'stats' ? <div className="flex flex-col gap-3">{!!d.shots?.length && <MatchShotMap m={m} shots={d.shots} />}<Stats d={d} /></div>
