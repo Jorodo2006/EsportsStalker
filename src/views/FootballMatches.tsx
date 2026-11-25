@@ -27,7 +27,7 @@ import { Timeline } from './football/Timeline';
 import { MatchShotMap } from './football/Shots';
 import { Stats } from './football/Stats';
 import { Lineups } from './football/Lineups';
-import { MatchNews } from './football/News';
+import { MatchNews } from '@/components/MatchNews';
 import { FootballTrends, Form, Table } from './football/Form';
 import { cardNote } from '@/lib/odds-window';
 
@@ -201,7 +201,7 @@ function MatchDetail({ id, preview, initialTab, onClose }: { id: string; preview
       </MatchHeader>
       {current === 'odds' ? <SportOdds target={targetOfFootball(m)} />
         : current === 'picks' ? <FootballPicksPanel m={m} onOdds={() => setTab('odds')} />
-        : current === 'news' ? <MatchNews m={m} />
+        : current === 'news' ? <MatchNews sport="football" teams={[m.home, m.away].map(t => ({ key: String(t.id), name: t.name, logo: t.logo }))} />
         : !d ? (q.error ? <ErrorBox error={q.error} /> : <Loading label="Cargando la ficha…" />)
         : current === 'summary' ? <Timeline d={d} />
           : current === 'stats' ? <div className="flex flex-col gap-3">{!!d.shots?.length && <MatchShotMap m={m} shots={d.shots} />}<Stats d={d} /></div>

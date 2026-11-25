@@ -132,7 +132,8 @@ export function ValueChip({ pick }: { pick: TennisPick }) {
   );
 }
 
-export function PickRow({ pick, onAdd, match }: { pick: TennisPick; onAdd: (p: TennisPick) => void; match?: SlipLive['match'] }) {
+// note: lo que va debajo (la noticia que puede cambiarla, NewsHint)
+export function PickRow({ pick, onAdd, match, note }: { pick: TennisPick; onAdd: (p: TennisPick) => void; match?: SlipLive['match']; note?: ReactNode }) {
   return (
     <div className="px-3 py-2 transition hover:bg-white/[.04]" title={`${pick.market}: ${pick.selection}. Modelo ${p0(pick.pModel)}, casa ${p0(pick.pMarket)}`}>
       <div className="text-[14px] font-semibold leading-[18px] text-zinc-50">{pick.title}</div>
@@ -142,6 +143,7 @@ export function PickRow({ pick, onAdd, match }: { pick: TennisPick; onAdd: (p: T
         {match && <RefreshOdds match={match} focus={pick.id.split('#')[0]} />}
         <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
       </div>
+      {note && <div className="mt-1">{note}</div>}
       <div className="mt-1 h-[2px] bg-zinc-800"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
   );

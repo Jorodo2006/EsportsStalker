@@ -24,6 +24,13 @@ import { Empty, FoldOnPhone, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
+import { NewsHint, useTeamNews } from './MatchNews';
+import { keyNews, withNews, type KeyNews } from '@/lib/news';
+
+// La noticia que puede cambiar una recomendación (la del jugador, si la nombra; lib/news.ts). La del equipo sale sólo bajo la
+// mejor opción; en las filas, sólo las que nombran a su jugador (si no, la misma se repetía en todas las de ese partido)
+type NewsOf = (p: BasketPick) => KeyNews | null;
+const newsKeys = (g: BasketGame) => [`${g.league}:${g.away.id}`, `${g.league}:${g.home.id}`];
 import { memberOnly } from './MemberOnly';
 import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
 
@@ -173,7 +180,7 @@ const OpenHint = ({ pick, big }: { pick: BasketPick; big?: boolean }) => (
   </span>
 );
 
-function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
+function PickRow({ pick, oneGame, onOpen, onAdd, newsOf }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
   const good = hasValue(pick);
   return (
     <div className="px-3 py-2.5 transition hover:bg-white/[.04]">
@@ -196,24 +203,25 @@ function PickRow({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
           <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
         </span>
       </div>
+      {newsOf && <NewsHint k={newsOf(pick)?.player ? newsOf(pick) : null} className="mt-1.5" />}
       <div className="mt-1.5 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
     </div>
   );
 }
 
-function PickList({ title, hint, list, oneGame, onOpen, onAdd }: { title: string; hint: string; list: BasketPick[]; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
+function PickList({ title, hint, list, oneGame, onOpen, onAdd, newsOf }: { title: string; hint: string; list: BasketPick[]; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
   const [all, setAll] = useState(false);
   return (
     <div className="min-w-0">
       <TvBand aside={list.length || undefined}>{title}</TvBand>
       <p className="px-3 pt-1 text-[11px] text-zinc-500">{hint}</p>
-      {!list.length ? <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna con estos filtros.</p> : (all ? list : list.slice(0, PAGE)).map(p => <PickRow key={p.id} pick={p} oneGame={oneGame} onOpen={onOpen} onAdd={onAdd} />)}
+      {!list.length ? <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna con estos filtros.</p> : (all ? list : list.slice(0, PAGE)).map(p => <PickRow key={p.id} pick={p} oneGame={oneGame} onOpen={onOpen} onAdd={onAdd} newsOf={newsOf} />)}
       {list.length > PAGE && <button onClick={() => setAll(!all)} className="w-full cursor-pointer py-1.5 text-xs text-zinc-500 hover:text-zinc-200">{all ? `Ver sólo las ${PAGE} primeras` : `Ver las ${list.length}`}</button>}
     </div>
   );
 }
 
-function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
+function TopPick({ pick, oneGame, onOpen, onAdd, newsOf }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
       <button onClick={() => onOpen(pick)} title={tip(pick)} className="group col-span-2 flex min-w-0 cursor-pointer items-start gap-3.5 text-left md:col-span-1">
@@ -245,6 +253,7 @@ function TopPick({ pick, oneGame, onOpen, onAdd }: { pick: BasketPick; oneGame: 
         </button>
       </div>
       <PickWhy p={pick.p} ev={pick.ev} rel={pick.rel.score} by="value" className="col-span-2 md:col-span-4" />
+      {newsOf && <NewsHint k={newsOf(pick)} className="col-span-2 md:col-span-4" />}
     </div>
   );
 }
@@ -265,9 +274,20 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
 
   const add = usePickAdd();
   const q = useBasketPicks(games, injuries, book);
+  // Las noticias de los equipos: una de baja o duda que nombra al jugador le baja la fiabilidad antes de ordenar y filtrar
+  const news = useTeamNews('basket', games.flatMap(newsKeys)).data;
+  const withN = useMemo(() => {
+    const ks = new Map<string, KeyNews | null>();
+    const picks = q.picks.map(p => {
+      const k = news ? keyNews(news, newsKeys(p.game), p.who?.name ?? '') : null;
+      ks.set(p.id, k);
+      return k ? { ...p, rel: withNews(p.rel, k) } : p;
+    });
+    return { picks, newsOf: ((p: BasketPick) => ks.get(p.id) ?? null) as NewsOf };
+  }, [q.picks, news]);
   const line = lineText.trim() ? parseLine(lineText) : null;
   const filters: PickFilters = { group, side, line, minOdds, onlyValue };
-  const A = useMemo(() => arrangePicks(q.picks, filters), [q.picks, group, side, line, minOdds, onlyValue]); // eslint-disable-line react-hooks/exhaustive-deps
+  const A = useMemo(() => arrangePicks(withN.picks, filters), [withN.picks, group, side, line, minOdds, onlyValue]); // eslint-disable-line react-hooks/exhaustive-deps
   // "+2,5" es Más de 2,5 y "-2,5", Menos de 2,5
   const onLine = (v: string) => { const s = v.trim()[0]; if (s === '+') setSide('over'); else if (s === '-') setSide('under'); setLineText(v); };
 
@@ -282,7 +302,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
   );
 
   const sub = [oneGame ? (games[0].round ? `${LEAGUE_NAME[games[0].league]} · ${games[0].round}` : LEAGUE_NAME[games[0].league]) : `${games.length - q.noOdds.length} de ${games.length} partidos con cuotas`, book !== 'all' ? `sólo ${book}` : '', q.age != null ? `cuotas ${ago(q.age)}` : ''].filter(Boolean).join(' · ');
-  const props = { oneGame, onOpen, onAdd: add };
+  const props = { oneGame, onOpen, onAdd: add, newsOf: withN.newsOf };
   return (
     <div className="flex flex-col gap-2.5">
       <FoldOnPhone always label="Más filtros" remember="basket-picks-more" summary={[PICK_GROUPS.find(g => g.value === group)?.label, side === 'over' ? 'Más' : side === 'under' ? 'Menos' : '', line != null && `línea ${lineText}`, book !== 'all' && book, onlyValue && 'con valor', `cuota ≥ ${odd(minOdds).replace('.', ',')}`].filter(Boolean).join(' · ')}>

@@ -97,9 +97,14 @@ El orden de la tabla es el de la lista de partidos. Para añadir una liga basta 
   del de otro equipo no cuenta («Milan» en «Inter de Milán»); y una noticia es del femenino sólo si lo dice. Las que no son de
   ningún equipo con partido no se guardan. Se borran a los 14 días.
 - **Etiquetas** (`tagsOf`): baja, duda, vuelve, sanción, rotación, alineación y entrenador, por palabras del titular y la
-  entradilla en español e inglés. Son una ayuda para leer: no entran en el modelo ni en las recomendaciones.
+  entradilla en español e inglés. No entran en el modelo; en las recomendaciones, ver abajo.
 - `seen_at` es cuándo la vio Sharpex por primera vez, para medir más adelante cuánto nos adelantamos a la cuota.
-- Pruebas sin red en `server/test/noticias.test.js`.
+- **En las recomendaciones** (`FootballPicks.tsx`): bajo la más fiable de la ficha, la noticia del equipo que puede cambiarla
+  (`NewsHint`); en el resto de filas, sólo las que nombran al jugador de esa recomendación; en la pantalla Recomendaciones y en
+  el escáner, la de cada partido. Una de baja, duda, sanción o rotación que nombra al jugador le baja 20 puntos la fiabilidad
+  (`withNews` de `src/lib/news.ts`, `NEWS_PENALTY`): es una decisión, no una medida, y no toca la probabilidad.
+- Lo común con el baloncesto está en `server/shared/news.js`; aquí, las fuentes y los apodos (`NICK`).
+- Pruebas sin red en `server/test/noticias.test.js` y `src/lib/news.test.ts`.
 
 ## H2H y "cuántas veces se cumple"
 

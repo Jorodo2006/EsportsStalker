@@ -12,6 +12,7 @@ import { madridDay } from '@/lib/route';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam, MatchOdds } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
 import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
+import { MatchNews } from '@/components/MatchNews';
 import { BasketOdds, matchOfGame, targetOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
@@ -174,7 +175,7 @@ function DayBand({ onOpen, onAll }: { onOpen: (p: BasketPick) => void; onAll: ()
 // El día de la tira va al centro: la semana que se pide empieza 3 días antes
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
-type Tab = 'stats' | 'odds' | 'picks' | 'points' | 'lines' | 'h2h' | 'teams' | 'rosters' | 'value';
+type Tab = 'stats' | 'odds' | 'picks' | 'news' | 'points' | 'lines' | 'h2h' | 'teams' | 'rosters' | 'value';
 
 // Ficha del partido (como la de LoL): estadísticas en juego o terminado, recomendaciones y cuotas antes de empezar.
 // from: la recomendación con la que se abrió, para ir directo a su análisis
@@ -214,13 +215,14 @@ function GameDetail({ game, injuries, from, onClose }: { game: BasketGame; injur
           ['stats', 'Estadísticas'],
           ...(st === 'pre' ? [['picks', 'Recomendaciones']] as [Tab, string][] : []),
           ...(st === 'post' ? [] : [['odds', 'Cuotas']] as [Tab, string][]),
-          ['points', 'Puntos'],
+          ['news', 'Noticias'], ['points', 'Puntos'],
           ...(st === 'pre' ? [['lines', 'Líneas']] as [Tab, string][] : []),
           ['h2h', 'H2H'], ['teams', 'Equipos'], ['rosters', 'Plantillas'], ['value', player ? `Valor: ${player.name}` : 'Valor de jugador']
         ]} right={<Button size="sm" onClick={() => openBet({ sport: 'basket', league: LEAGUE_NAME[game.league], event })}><Plus size={14} /><span className="max-sm:sr-only">Apuesta</span></Button>} />
       </Scoreboard>
       {st === 'pre' && <RestStrip game={game} />}
       {tab === 'stats' ? <GameStats game={game} onPick={pick} focus={focus} /> : tab === 'odds' ? <BasketOdds game={game} />
+        : tab === 'news' ? <MatchNews sport="basket" teams={[game.away, game.home].map(t => ({ key: `${game.league}:${t.id}`, name: t.name, logo: t.logo }))} />
         : tab === 'picks' ? <BasketPicksBoard games={[game]} injuries={injuries} onOpen={openPick} onOdds={() => setTab('odds')} />
         : tab === 'points' ? <GamePoints key={teamPick?.id} game={game} odds={odds.data} initial={teamPick?.period && teamPick.pointKind ? { period: teamPick.period, kind: teamPick.pointKind, line: teamPick.line } : undefined} />
           : tab === 'lines' ? <BasketLineScanner games={[game]} injuries={injuries} onPick={p => { setPlayer(p); setTab('value'); }} />

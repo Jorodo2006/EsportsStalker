@@ -272,6 +272,7 @@ export const api: Api = {
   basket: {
     leagues: () => get('/api/basket/leagues'),
     games: date => get('/api/basket/games', { date }),
+    news: teams => get('/api/basket/news', { teams: teams.join(',') }),
     days: (from, n) => get('/api/basket/days', { from, n }),
     live: () => get('/api/basket/live'),
     roster: (league, t) => get(`/api/basket/roster/${part(league)}/${part(t)}`),

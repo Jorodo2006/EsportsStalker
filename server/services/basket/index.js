@@ -8,6 +8,7 @@ const espn = require('./espn');
 const el = require('./euroleague');
 const { hits, queryOf } = require('../../shared/search');
 const { warmEvery } = require('../../shared/cached');
+const { basketNews, keyOf } = require('./news');
 
 const LEAGUES = [
   { id: 'nba', name: 'NBA', country: 'EE. UU.', logo: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png', src: espn },
@@ -72,6 +73,8 @@ const routes = [
   ['GET', '/api/basket/search', ({ query: q }) => search(q.q)],
   ['GET', '/api/basket/leagues', () => meta()],
   ['GET', '/api/basket/games', async ({ query: q }) => between(valid(q.date), valid(q.date))],
+  // Noticias de unos equipos (news.js), con su liga delante: ?teams=nba:19,nba:27 (los dos de un partido, o los de un día)
+  ['GET', '/api/basket/news', ({ query: q }) => news.newsFor(String(q.teams || '').split(',').filter(x => /^[a-z]{2,12}:[\w-]{1,12}$/.test(x)).slice(0, 40))],
   // Cuántos partidos hay cada día (para la tira de días)
   ['GET', '/api/basket/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));
@@ -154,7 +157,21 @@ const routes = [
 // entra no tiene que esperarlo (la caché sirve lo caducado hace poco mientras se renueva, cache.js)
 warmEvery('basket', 4 * 60e3, () => { const t = madridDay(Date.now()); return Promise.all([between(addDays(t, -1), addDays(t, 1)), espn.injuries('nba')]); });
 
+// Los equipos de los partidos de ayer a dentro de 4 días, para unir a ellos las noticias de la prensa (news.js)
+async function upcomingTeams() {
+  const t = madridDay(Date.now());
+  const seen = new Map();
+  for (const g of await between(addDays(t, -1), addDays(t, 4)).catch(() => []))
+    for (const team of [g.home, g.away]) {
+      const key = keyOf(g.league, team.id);
+      if (team?.id && !seen.has(key)) seen.set(key, { key, id: team.id, name: team.name, short: team.abbr?.length > 3 ? team.abbr : '', alts: team.alt || [] });
+    }
+  return [...seen.values()];
+}
+const news = basketNews({ upcoming: upcomingTeams });
+
 migrate('basket', path.join(__dirname, 'migrations'))
   .then(() => cache.init())
+  .then(() => news.start())
   .then(() => start({ name: 'basket', port: Number(process.env.PORT) || 4004, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

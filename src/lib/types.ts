@@ -236,9 +236,10 @@ export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean;
 
 // ---------- Fútbol (servicio football: ESPN) ----------
 export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
-// Una noticia de fútbol unida a los equipos de un partido (server/services/football/news.js). seen_at: cuándo la vio Sharpex.
+// Una noticia unida a los equipos de un partido (server/shared/news.js). seen_at: cuándo la vio Sharpex. teams: claves de los
+// equipos (fútbol: id de ESPN; baloncesto: «nba:19»).
 // tags: baja, duda, vuelve, sancion, rotacion, alineacion, entrenador
-export interface FootballNews {
+export interface NewsItem {
   id: string; source: string; url: string; title: string; summary: string; published: string; seen_at: string;
   teams: string[]; players: string[]; tags: string[];
 }
@@ -642,7 +643,7 @@ export interface Api {
     live(): Promise<FootballMatch[]>;
     match(id: string): Promise<FootballDetail>;
     // Noticias de los dos equipos (ids de ESPN) de los últimos días, lo más nuevo primero
-    news(teams: string[]): Promise<FootballNews[]>;
+    news(teams: string[]): Promise<NewsItem[]>;
     // Estadísticas de un jugador en un partido (API core de ESPN), { nombre de ESPN: valor }
     playerStats(match: string, team: string, player: string): Promise<Record<string, number>>;
     // Foto del jugador: ESPN o, si no tiene, Wikipedia; url vacía si no hay
@@ -697,6 +698,8 @@ export interface Api {
   basket: {
     leagues(): Promise<BasketLeague[]>;
     games(date: string): Promise<BasketGame[]>;
+    // Noticias de unos equipos («nba:19»), de los últimos días, lo más nuevo primero
+    news(teams: string[]): Promise<NewsItem[]>;
     days(from: string, n: number): Promise<Record<string, { total: number; live: number }>>;
     live(): Promise<BasketGame[]>;
     roster(league: BasketLeagueId, teamId: string): Promise<BasketRosterPlayer[]>;

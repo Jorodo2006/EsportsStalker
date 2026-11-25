@@ -18,6 +18,19 @@ import { memberOnly } from './MemberOnly';
 import { targetOfFootball } from '@/lib/odds-targets';
 import { RefreshOdds } from './RefreshOdds';
 import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
+import { NewsHint, useTeamNews } from './MatchNews';
+import { keyNews, withNews, type KeyNews } from '@/lib/news';
+import type { NewsItem } from '@/lib/types';
+
+// La noticia que puede cambiar una recomendación (la del jugador, si es de jugador) y su fiabilidad con ella (lib/news.ts).
+// En la ficha, la del equipo sale una vez, bajo la más fiable; en el resto de filas, sólo las que nombran a su jugador
+type Teams = { home: { id: string }; away: { id: string } };
+const newsKeys = (m: Teams) => [String(m.home.id), String(m.away.id)];
+const playerOf = (p: FootballPick) => (p.id.startsWith('wmx|') ? p.selection : '');
+function pickNews(p: FootballPick, m: Teams, list: NewsItem[] | undefined): { p: FootballPick; k: KeyNews | null } {
+  const k = list ? keyNews(list, newsKeys(m), playerOf(p)) : null;
+  return { p: { ...p, rel: withNews(p.rel, k) }, k };
+}
 
 const g1 = (v: number) => v.toFixed(1).replace('.', ',');
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
@@ -50,6 +63,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
     if (r?.ready) logPredictions(footballPredictions(m, r.all ?? [r.top, ...(r.easy ?? []), ...(r.hard ?? [])]));
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const add = (p: FootballPick) => addPick(m, p);
+  const news = useTeamNews('football', newsKeys(m), pre).data;
   if (!pre) return <Empty>Las recomendaciones son para antes de empezar: el modelo no sigue el marcador en directo.</Empty>;
   if (q.isLoading) return <Loading label="Calculando las recomendaciones…" />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -59,7 +73,8 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
       ? <div className="flex flex-col items-center gap-2"><Empty>Todavía no hay cuotas de este partido, y sin ellas no se puede recomendar nada.</Empty><button onClick={onOdds} className="cursor-pointer text-[13px] text-amber-400 hover:underline">Ir a Cuotas y actualizarlas</button></div>
       : <Empty>{r?.reason === 'nomodel' ? 'El modelo no cubre esta competición.' : 'Las recomendaciones son para antes de empezar: el modelo no sigue el marcador en directo.'}</Empty>;
   }
-  const f = r.match, top = r.top;
+  const f = r.match;
+  const T = r.top ? pickNews(r.top, m, news) : null, top = T?.p;
   const sub = [`${g1(f.goalsHome)} - ${g1(f.goalsAway)} goles esperados`, r.oddsAge != null ? `cuotas ${ago(r.oddsAge)}` : ''].filter(Boolean).join(' · ');
   return (
     <TvFrame>
@@ -96,6 +111,7 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
             </button>
           </div>
           <PickWhy p={top.p} ev={top.ev} rel={top.rel.score} by="reliability" className="md:col-span-4" />
+          <NewsHint k={T!.k} className="md:col-span-4" />
         </div>
       ) : (
         <p className="px-4 py-3 text-[13px] text-zinc-300">
@@ -104,8 +120,8 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-white/10">
-        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={targetOfFootball(m).match} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
-        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(p => <PickRow key={p.id} pick={p} onAdd={add} match={targetOfFootball(m).match} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más fáciles</TvBand>{r.easy?.length ? r.easy.map(raw => { const x = pickNews(raw, m, news); return <PickRow key={raw.id} pick={x.p} onAdd={add} match={targetOfFootball(m).match} note={<NewsHint k={x.k?.player ? x.k : null} />} />; }) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
+        <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(raw => { const x = pickNews(raw, m, news); return <PickRow key={raw.id} pick={x.p} onAdd={add} match={targetOfFootball(m).match} note={<NewsHint k={x.k?.player ? x.k : null} />} />; }) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
       </div>
 
       {!!r.warnings?.length && <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">{r.warnings.map(w => <div key={w} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} />{w}</div>)}</div>}
@@ -119,16 +135,18 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
 // ---------- Pantalla Recomendaciones ----------
 // Los partidos de un día con cuotas: la más fiable de cada uno (de la más probable a la menos) y, aparte, la más complicada
 // de cada uno (de la de más valor a la de menos). Al pulsar una, se abre su partido; la cuota la manda al cupón
-function BoardRow({ d, p, onOpen, onAdd }: { d: FootballDayPick; p: FootballPick; onOpen: (id: string) => void; onAdd: (d: FootballDayPick, p: FootballPick) => void }) {
+function BoardRow({ d, p: raw, onOpen, onAdd, news }: { d: FootballDayPick; p: FootballPick; onOpen: (id: string) => void; onAdd: (d: FootballDayPick, p: FootballPick) => void; news?: NewsItem[] }) {
+  const { p, k } = pickNews(raw, d, news);
   return (
-    <div className="flex items-center gap-3 px-3 py-2 transition hover:bg-zinc-800/30">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 transition hover:bg-zinc-800/30">
       <button onClick={() => onOpen(d.id)} title={`${p.market}: ${p.selection}. ${p.why}. Pulsa para abrir el partido`} className="min-w-0 flex-1 cursor-pointer text-left">
         <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-zinc-50">{p.title}</span>
         <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
       </button>
       <PickNums p={p.p} ev={p.ev} good={verdictOf(p.ev, p.rel.score) === 'BET'} />
       <RefreshOdds match={targetOfFootball(d).match} focus={p.id.split('#')[0]} />
-      <PickOdd price={p.price} book={p.book} fair={p.fair} onAdd={() => onAdd(d, p)} />
+      <PickOdd price={p.price} book={p.book} fair={p.fair} onAdd={() => onAdd(d, raw)} />
+      {k && <NewsHint k={k} className="basis-full" />}
     </div>
   );
 }
@@ -150,6 +168,7 @@ function LineScanner({ date, onOpen }: { date: string; onOpen: (id: string) => v
   const rows = q.data ?? [];
   const kinds = [...new Set(rows.map(r => kindOf(r.pick.family)))].sort();
   const shown = rows.filter(r => (!kind || kindOf(r.pick.family) === kind) && r.pick.price >= minPrice && (!onlyValue || verdictOf(r.pick.ev, r.pick.rel.score) === 'BET'));
+  const news = useTeamNews('football', [...new Set(rows.flatMap(r => newsKeys(r)))]).data;
   const asDay = (r: FootballLineRow): FootballDayPick => ({ id: r.id, league: r.league, leagueName: r.leagueName, date: r.date, home: r.home, away: r.away, top: r.pick, hard: null });
   return (
     <div className="flex flex-col gap-2.5">
@@ -169,7 +188,7 @@ function LineScanner({ date, onOpen }: { date: string; onOpen: (id: string) => v
         : (
           <TvFrame>
             <TvHeader title="Líneas" sub={`${shown.length} de ${rows.length} líneas calculadas`} />
-            {shown.length ? shown.slice(0, limit).map(r => <BoardRow key={`${r.id}|${r.pick.id}`} d={asDay(r)} p={r.pick} onOpen={onOpen} onAdd={(d, p) => addPick(d, p)} />)
+            {shown.length ? shown.slice(0, limit).map(r => <BoardRow key={`${r.id}|${r.pick.id}`} d={asDay(r)} p={r.pick} onOpen={onOpen} onAdd={(d, p) => addPick(d, p)} news={news} />)
               : <p className="px-3 py-3 text-[13px] text-zinc-400">Ninguna con esos filtros.</p>}
             {shown.length > limit && <button onClick={() => setLimit(l => l + 40)} className="w-full cursor-pointer border-t border-zinc-800 py-2 text-xs text-zinc-400 transition hover:text-zinc-100">Ver más ({shown.length - limit})</button>}
             <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
@@ -190,6 +209,7 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
   const tops = data.slice().sort((x, y) => y.top.p - x.top.p);
   const hard = data.filter(d => d.hard).sort((x, y) => y.hard!.ev - x.hard!.ev);
   const add = (d: FootballDayPick, p: FootballPick) => addPick(d, p);
+  const news = useTeamNews('football', data.flatMap(newsKeys)).data;
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap gap-2">
@@ -216,11 +236,11 @@ function FootballPicksPageInner({ days, onOpen }: { days: { value: string; label
             <div className="grid grid-cols-1 divide-y divide-zinc-800 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
               <div className="min-w-0">
                 <TvBand aside={tops.length}>La más fiable de cada partido</TvBand>
-                {tops.map(d => <BoardRow key={d.id} d={d} p={d.top} onOpen={onOpen} onAdd={add} />)}
+                {tops.map(d => <BoardRow key={d.id} d={d} p={d.top} onOpen={onOpen} onAdd={add} news={news} />)}
               </div>
               <div className="min-w-0">
                 <TvBand aside={hard.length || undefined}>Más complicadas</TvBand>
-                {hard.length ? hard.map(d => <BoardRow key={d.id} d={d} p={d.hard!} onOpen={onOpen} onAdd={add} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}
+                {hard.length ? hard.map(d => <BoardRow key={d.id} d={d} p={d.hard!} onOpen={onOpen} onAdd={add} news={news} />) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}
               </div>
             </div>
             <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">

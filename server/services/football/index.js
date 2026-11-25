@@ -10,7 +10,7 @@ const { cachedJSON, warmEvery } = require('../../shared/cached');
 const { photoOf, photosOf } = require('./photos');
 const { picksFor, scannable } = require('./picks');
 const { hits, queryOf } = require('../../shared/search');
-const { startNews, newsFor } = require('./news');
+const { footballNews } = require('./news');
 
 // En este orden salen en la lista de partidos
 const LEAGUES = [
@@ -383,8 +383,8 @@ async function search(raw) {
 const routes = [
   ['GET', '/api/football/search', ({ query: q }) => search(q.q)],
   ['GET', '/api/football/leagues', () => leagues()],
-  // Noticias de los dos equipos de un partido (news.js): ?teams=<id local>,<id visitante>
-  ['GET', '/api/football/news', ({ query: q }) => newsFor(String(q.teams || '').split(',').filter(x => /^\d{1,10}$/.test(x)))],
+  // Noticias de unos equipos (news.js): ?teams=<id>,<id> (los dos de un partido, o hasta 40 de un día)
+  ['GET', '/api/football/news', ({ query: q }) => news.newsFor(String(q.teams || '').split(',').filter(x => /^\d{1,10}$/.test(x)).slice(0, 40))],
   ['GET', '/api/football/games', ({ query: q }) => between(valid(q.date), valid(q.date))],
   ['GET', '/api/football/days', async ({ query: q }) => {
     const from = valid(q.from), n = Math.min(21, Math.max(1, Number(q.n) || 7));
@@ -454,6 +454,8 @@ async function upcomingTeams() {
   return [...seen.values()];
 }
 
+const news = footballNews({ leagues: LEAGUES, upcoming: upcomingTeams });
+
 // Partidos de ayer a mañana y directos siempre preparados: el primero que entra no espera a ESPN (shared/cached.js)
 warmEvery('football', 4 * 60e3, () => { const t = madridDay(Date.now()); return Promise.all([between(addDays(t, -1), addDays(t, 1)), live()]); });
 
@@ -461,6 +463,6 @@ migrate('football', path.join(__dirname, 'migrations'))
   // Las fotos de jugadores duran más: buscarlas cuesta (Wikipedia, de una en una) y casi no cambian
   // y los resultados de meses pasados (hist:, para el modelo) no cambian: se quedan
   .then(() => query(`DELETE FROM football.cache WHERE key NOT LIKE 'hist:%' AND t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
-  .then(() => startNews({ leagues: LEAGUES, upcoming: upcomingTeams }))
+  .then(() => news.start())
   .then(() => start({ name: 'football', port: Number(process.env.PORT) || 4006, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

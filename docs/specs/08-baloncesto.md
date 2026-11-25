@@ -357,6 +357,21 @@ sabiéndolo. Lo que sí hace (`src/lib/basket-mates.ts`, con los registros de la
 Para meterlo en la proyección habría que medir con `scripts/backtest-basket.ts` cuánto cambia de verdad (como el B2B, que parecía obvio y
 salió al revés).
 
+## Noticias
+
+`server/services/basket/news.js` (lo común en `server/shared/news.js`, como el fútbol: `docs/specs/11-futbol.md`), tabla
+`basket.news` (migración 002), pestaña *Noticias* de la ficha y ruta pública `GET /api/basket/news?teams=nba:19,nba:27`.
+
+- **Fuentes**: las noticias de la NBA y la WNBA de ESPN (traen el equipo y los jugadores) y los RSS de baloncesto y NBA de Mundo
+  Deportivo, la NBA de The Guardian y Gigantes del Basket. La web de la Euroliga responde 429 a quien no es un navegador: no se usa.
+- **Equipos**: con la liga delante (`nba:19`, `euroleague:RMB`), porque los ids de ESPN de la NBA y la WNBA se repiten. En
+  los RSS se buscan por el nombre, el apodo (`alt`: «Lakers») y `NICK`; un nombre que llevan dos equipos con partido
+  («Kings»: Sacramento y Sydney) no cuenta.
+- **En las recomendaciones** (`BasketPicks.tsx`): la noticia del equipo bajo la mejor opción y, en las filas, la que nombra a su
+  jugador. Una de baja, duda, sanción o rotación que nombra al jugador le baja 20 puntos la fiabilidad antes de ordenar y
+  filtrar (`withNews` de `src/lib/news.ts`); si también dice que vuelve, sólo se enseña. Las bajas de ESPN siguen entrando
+  en el modelo como antes: las noticias no cambian la proyección.
+
 ## Pendiente
 
 - Flechas de subida y bajada de las cuotas (el histórico se guarda en `odds.price_history` y lo da `POST /api/odds/history`; falta la interfaz).
