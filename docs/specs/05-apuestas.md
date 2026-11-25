@@ -35,7 +35,23 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 - cuota media y apuestas pendientes con su retorno;
 - banca, igual a la banca inicial del usuario (en *Tu cuenta*) más el beneficio;
 - la gráfica de evolución (todo, 30 días o 7 días);
-- el desglose por casa y por liga.
+- el desglose por cuota, tipo de mercado, simples y combinadas, casa y liga, cada uno con «acierto / necesario».
+
+### Rendimiento (`src/lib/bet-stats.ts`, `src/views/bets/Performance.tsx`)
+
+Lo que dice si apostar sale a cuenta, más allá del beneficio. Lógica pura con pruebas en `src/lib/bet-stats.test.ts`.
+
+- **Acierto frente al necesario** (`edgeOf`): el acierto contra la media de `1/cuota`, que es el acierto con el que se queda a
+  cero a esas cuotas. Los cash out no cuentan. Sale en las cifras y en cada fila de los desgloses.
+- **¿Suerte o ventaja?** (`luckOf`): si no hubiera ventaja (cada apuesta gana con probabilidad `1/cuota`) el beneficio esperado
+  es 0 con varianza `Σ importe² × (cuota − 1)`; `p` es lo probable que es ganar al menos lo ganado sólo por suerte (aproximación
+  normal). No cuenta el margen de la casa, así que es generosa. Con menos de 20 resueltas no dice nada.
+- **Peor caída y rachas** (`runsOf`): la mayor bajada desde el máximo de beneficio, cuánto se está ahora por debajo, y la racha
+  actual y las más largas. Las que quedan a cero no cortan ni suman racha.
+- **Beneficio por mes** (`byMonth`): barras verdes y rojas; si el beneficio es constante o sale de un mes suelto.
+- **Todas las apps juntas** (`combinedSeries`): el beneficio acumulado de la cartera entera y la parte de un deporte elegido,
+  con una tabla por deporte. Sólo una línea de deporte a la vez: los acentos de LoL y tenis no se distinguen en la misma gráfica.
+- **Tipo de mercado** (`marketKind`): sale de `ref.key`, las claves de `settle.js`; las apuestas sin enlazar a su partido van aparte.
 
 ## Partido y mercado escritos a mano
 

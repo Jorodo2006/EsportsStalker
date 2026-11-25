@@ -6,6 +6,8 @@ import { ShareDialog } from './FriendsView';
 import { TicketUpload } from '@/components/TicketScan';
 import { History } from '@/views/bets/History';
 import { AutoMark } from '@/views/bets/AutoMark';
+import { CombinedChart, MonthlyChart, PerformanceKpis } from '@/views/bets/Performance';
+import { edgeOf, marketKind, oddsBand, oddsBandOrder } from '@/lib/bet-stats';
 import { ProfitText, profitString, useProfit } from '@/views/bets/Profit';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
@@ -77,9 +79,19 @@ export default function BetsView() {
         <Stat label="Pendientes" value={s.pendingCount} sub={`${money(s.pendingStake, cur)} en juego · retorno ${money(s.pendingReturn, cur)}`} />
       </div>
 
+      <PerformanceKpis bets={bets} />
+
       <ProfitChart bets={bets} />
 
       <div className="my-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
+        <MonthlyChart bets={bets} />
+        <CombinedChart all={all} app={app} />
+      </div>
+
+      <div className="my-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
+        <Breakdown title="Por cuota" bets={bets} keyFn={b => oddsBand(b.odds)} order={(a, b) => oddsBandOrder(a) - oddsBandOrder(b)} />
+        <Breakdown title="Por tipo de mercado" bets={bets} keyFn={marketKind} />
+        <Breakdown title="Simples y combinadas" bets={bets} keyFn={b => b.legs?.length ? 'Combinadas' : 'Simples'} />
         <Breakdown title="Por casa de apuestas" bets={bets} keyFn={b => b.bookmaker || 'Sin casa'} />
         <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
       </div>
@@ -168,18 +180,21 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
   );
 }
 
-// Apostado cuenta también lo pendiente; beneficio y ROI sólo las resueltas (con todo pendiente se ve "—", no 0)
-function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: (b: Bet) => string }) {
+// Apostado cuenta también lo pendiente; beneficio y ROI sólo las resueltas (con todo pendiente se ve "—", no 0).
+// «Acierto / necesario»: lo que se acierta y lo que piden esas cuotas para quedarse a cero (edgeOf); en verde si se gana a la cuota.
+// order: el orden de las filas (los tramos de cuota, de menor a mayor); sin él, de más a menos beneficio
+function Breakdown({ title, bets, keyFn, order }: { title: string; bets: Bet[]; keyFn: (b: Bet) => string; order?: (a: string, b: string) => number }) {
   const cur = useCurrency();
-  const rows = useMemo(() => [...groupBy(bets, keyFn)].map(([k, l]) => ({ k, ...summarize(l) })).sort((a, b) => b.profit - a.profit), [bets, keyFn]);
+  const rows = useMemo(() => [...groupBy(bets, keyFn)].map(([k, l]) => ({ k, ...summarize(l), edge: edgeOf(l) }))
+    .sort((a, b) => order ? order(a.k, b.k) : b.profit - a.profit), [bets, keyFn, order]);
   return (
     <Card title={title} className="overflow-hidden">
       {!rows.length ? <Empty>Sin datos todavía</Empty> : (
         <div className="-m-5 overflow-x-auto">
-          <table className="w-full min-w-[480px]">
+          <table className="w-full min-w-[560px]">
             <thead className="bg-zinc-900/60"><tr>
               <th className={th}></th><th className={th + ' text-right'}>Apuestas</th><th className={th + ' text-right'}>Apostado</th>
-              <th className={th + ' text-right'}>En juego</th><th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
+              <th className={th + ' text-right'}>En juego</th><th className={th + ' text-right'} title="Lo que aciertas y lo que piden esas cuotas para no perder">Acierto / necesario</th><th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
             </tr></thead>
             <tbody className="divide-y divide-zinc-800/70">
               {rows.map(r => (
@@ -187,6 +202,7 @@ function Breakdown({ title, bets, keyFn }: { title: string; bets: Bet[]; keyFn: 
                   <td className={td + ' font-medium'}>{r.k}</td><td className={td + ' text-right tabular-nums'}>{r.count}</td>
                   <td className={td + ' text-right tabular-nums'}>{money(r.staked + r.pendingStake, cur)}</td>
                   <td className={td + ' text-right tabular-nums text-zinc-400'}>{r.pendingStake ? money(r.pendingStake, cur) : '—'}</td>
+                  <td className={td + ' whitespace-nowrap text-right tabular-nums ' + (r.edge.n ? tone(r.edge.diff) : 'text-zinc-500')}>{r.edge.n ? `${pct(r.edge.hit)} / ${pct(r.edge.breakEven)}` : '—'}</td>
                   <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (r.settled ? tone(r.profit) : 'text-zinc-500')}>{r.settled ? <ProfitText value={r.profit} /> : '—'}</td>
                   <td className={td + ' text-right tabular-nums ' + (r.settled ? tone(r.roi) : 'text-zinc-500')}>{r.settled ? pct(r.roi) : '—'}</td>
                 </tr>
