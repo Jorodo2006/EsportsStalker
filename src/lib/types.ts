@@ -61,7 +61,7 @@ export interface Friend { id: string; username: string; since: string }
 export interface FriendRow extends Friend { unread: number; last: string | null; preview: string | null }
 // Avisos de cuotas (server/services/bets/alerts.js): caída o subida fuerte en lo tuyo, o recomendación nueva con valor.
 // open: el partido que abre el aviso (sin id, sólo el deporte y el día)
-export type OddsAlertKind = 'drop' | 'rise' | 'value';
+export type OddsAlertKind = 'drop' | 'rise' | 'value' | 'news';
 export interface OddsAlert { id: string; kind: OddsAlertKind; sport: Sport | ''; title: string; body: string; open: { sport: Sport; id?: string; date?: string } | null; created: string; read: boolean }
 export interface AlertsList { list: OddsAlert[]; unread: number; push: { key: string | null; devices: number } }
 // status y reason: lo que respondió el servicio de push (Apple, Google…) si no lo aceptó; gone: dio el dispositivo por caducado
@@ -239,9 +239,14 @@ export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | '
 // Una noticia unida a los equipos de un partido (server/shared/news.js). seen_at: cuándo la vio Sharpex. teams: claves de los
 // equipos (fútbol: id de ESPN; baloncesto: «nba:19»).
 // tags: baja, duda, vuelve, sancion, rotacion, alineacion, entrenador
+// La noticia en la que se basa algo (una baja, una recomendación). seen_at: cuándo la vio Sharpex
+export interface NewsBasis { title: string; source: string; url: string; published: string; seen_at: string }
+// Lo que dice una noticia de un jugador (shared/news.js, playerStatuses)
+export type PlayerNewsStatus = 'out' | 'doubt' | 'injured' | 'suspended' | 'back';
+export interface PlayerNews { name: string; team: string; status: PlayerNewsStatus }
 export interface NewsItem {
   id: string; source: string; url: string; title: string; summary: string; published: string; seen_at: string;
-  teams: string[]; players: string[]; tags: string[];
+  teams: string[]; players: string[]; tags: string[]; outs: PlayerNews[];
 }
 export interface FootballLeague { id: FootballLeagueId; name: string; country: string; logo: string }
 // form: últimos resultados (G, E o P); record: ganados-empatados-perdidos en la competición; color y alt: los del equipo, sin #
@@ -350,6 +355,8 @@ export interface FootballPicks {
   ready: boolean; reason?: 'started' | 'finished' | 'noodds' | 'nomodel'; oddsAge?: number;
   match?: { home: number; draw: number; away: number; pMarketHome: number | null; goalsHome: number; goalsAway: number; weight: number; fav: 'a' | 'b'; pFav: number };
   all?: FootballPick[]; top?: FootballPick | null; easy?: FootballPick[]; hard?: FootballPick[]; considered?: number; warnings?: string[];
+  // Cómo están los jugadores según las noticias de las últimas 48 h; removed: se han quitado sus líneas (no juega o sancionado)
+  basis?: (PlayerNews & { removed: boolean; news: NewsBasis })[];
 }
 
 // ---------- MMA (servicio mma: UFC y PFL de ESPN, WOW de wowmma.com) ----------
@@ -493,7 +500,8 @@ export interface BasketTeamInfo {
 }
 // Colores de un equipo ("#552583"); alt puede faltar
 export interface BasketTeamColor { color: string; alt: string | null }
-export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null }
+// news: la noticia en la que se basa una baja que todavía no da ESPN (/api/basket/injuries la añade si la prensa dice que no juega)
+export interface BasketInjury { playerId: string | null; name: string; teamId: string; team: string; status: string; detail: string; returnDate: string | null; news?: NewsBasis }
 export interface BasketPlayerHit { id: string; league: BasketLeagueId; name: string; team: string; teamId?: string; pos: string; headshot: string }
 // Un partido de un jugador (lo más reciente primero en BasketGamelog.games)
 export interface BasketLogGame {

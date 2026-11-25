@@ -410,7 +410,7 @@ const routes = [
   ['GET', '/api/football/picks', async ({ query: q }) => {
     const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
     if (!m) throw fail('Partido no encontrado');
-    return picksFor(m, BY_ID[m.league].espn, { all: q.all === '1', players: true });
+    return picksFor(m, BY_ID[m.league].espn, { all: q.all === '1', players: true, news: await newsOf(m) });
   }],
   ['GET', '/api/football/picks/day', async ({ query: q }) => {
     const date = valid(q.date);
@@ -419,7 +419,7 @@ const routes = [
     const list = (await between(date, date)).filter(m => m.state === 'pre' && !m.off);
     const out = [];
     for (const m of list) {
-      const r = await picksFor(m, BY_ID[m.league].espn).catch(e => { console.error('[football] recomendaciones:', m.id, e.message); return null; });
+      const r = await picksFor(m, BY_ID[m.league].espn, { news: await newsOf(m) }).catch(e => { console.error('[football] recomendaciones:', m.id, e.message); return null; });
       if (r?.ready && r.top) out.push({ id: m.id, league: m.league, leagueName: m.leagueName, date: m.date, home: m.home, away: m.away, top: r.top, hard: r.hard[0] ?? null });
     }
     out.sort((x, y) => y.top.p - x.top.p);
@@ -434,7 +434,7 @@ const routes = [
     const list = (await between(date, date)).filter(m => m.state === 'pre' && !m.off);
     const out = [];
     for (const m of list) {
-      const r = await picksFor(m, BY_ID[m.league].espn, { all: true, players: true }).catch(e => { console.error('[football] líneas:', m.id, e.message); return null; });
+      const r = await picksFor(m, BY_ID[m.league].espn, { all: true, players: true, news: await newsOf(m) }).catch(e => { console.error('[football] líneas:', m.id, e.message); return null; });
       for (const pick of r?.ready ? r.all.filter(scannable) : []) out.push({ id: m.id, league: m.league, leagueName: m.leagueName, date: m.date, home: m.home, away: m.away, pick });
     }
     out.sort((x, y) => y.pick.ev - x.pick.ev);
@@ -443,14 +443,24 @@ const routes = [
   }]
 ];
 const dayPicks = new Map(), dayLines = new Map();
+// Cómo están los jugadores de los dos equipos según las noticias de las últimas 48 h (news.js): las recomendaciones se basan en ellas
+const newsOf = m => news.statusOfPlayers([String(m.home.id), String(m.away.id)], 48).catch(() => []);
 
 // Los equipos de los partidos de ayer a dentro de 4 días, para unir a ellos las noticias de la prensa (news.js). women: del
 // fútbol femenino (una noticia del Barcelona sin decir «femenino» es del masculino)
 async function upcomingTeams() {
   const t = madridDay(Date.now());
   const seen = new Map();
-  for (const m of await between(addDays(t, -1), addDays(t, 4)).catch(() => []))
-    for (const team of [m.home, m.away]) if (team?.id && !seen.has(team.id)) seen.set(team.id, { ...team, women: !!BY_ID[m.league]?.women });
+  // Su liga (para pedir la plantilla) y su próximo partido sin terminar (al que lleva el aviso de una baja)
+  const games = (await between(addDays(t, -1), addDays(t, 4)).catch(() => [])).slice().sort((a, b) => +new Date(a.date) - +new Date(b.date));
+  for (const m of games) {
+    for (const team of [m.home, m.away]) {
+      if (!team?.id) continue;
+      const cur = seen.get(team.id);
+      if (!cur) seen.set(team.id, { ...team, women: !!BY_ID[m.league]?.women, league: m.league, match: m.state === 'post' ? null : { id: m.id, date: m.date } });
+      else if (!cur.match && m.state !== 'post') cur.match = { id: m.id, date: m.date };
+    }
+  }
   return [...seen.values()];
 }
 

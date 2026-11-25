@@ -18,7 +18,7 @@ import { memberOnly } from './MemberOnly';
 import { targetOfFootball } from '@/lib/odds-targets';
 import { RefreshOdds } from './RefreshOdds';
 import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
-import { NewsHint, useTeamNews } from './MatchNews';
+import { NewsBasisList, NewsHint, useTeamNews } from './MatchNews';
 import { keyNews, withNews, type KeyNews } from '@/lib/news';
 import type { NewsItem } from '@/lib/types';
 
@@ -124,6 +124,10 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
         <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(raw => { const x = pickNews(raw, m, news); return <PickRow key={raw.id} pick={x.p} onAdd={add} match={targetOfFootball(m).match} note={<NewsHint k={x.k?.player ? x.k : null} />} />; }) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
       </div>
 
+      <NewsBasisList items={(r.basis ?? []).map(b => ({
+        name: b.name, status: b.status, news: b.news,
+        did: b.removed ? 'Sin sus líneas de jugador' : b.status === 'out' || b.status === 'suspended' ? 'No tenía líneas' : b.status === 'back' ? 'Cuenta como disponible' : 'Sus líneas, con menos fiabilidad'
+      }))} />
       {!!r.warnings?.length && <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">{r.warnings.map(w => <div key={w} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} />{w}</div>)}</div>}
       <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
         Es una estimación, no una garantía: mezcla un modelo de goles (ataque y defensa de cada equipo) con las casas, y las casas pesan más. Probado con unos 2.800 partidos de 2025 y 2026: en el 1X2 sale bien calibrado; en los goles acierta poco más que la casa. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero.

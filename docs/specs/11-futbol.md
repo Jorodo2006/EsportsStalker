@@ -85,12 +85,29 @@ El orden de la tabla es el de la lista de partidos. Para añadir una liga basta 
 
 ## Noticias
 
-`server/services/football/news.js`, tabla `football.news` (migración 002), pestaña *Noticias* de la ficha
-(`src/views/football/News.tsx`, ruta pública `GET /api/football/news?teams=<id>,<id>`).
+`server/services/football/news.js`, tabla `football.news` (migraciones 002 y 003), pestaña *Noticias* de la ficha
+(`src/components/MatchNews.tsx`, ruta pública `GET /api/football/news?teams=<id>,<id>`).
 
-- **Fuentes** (gratuitas; sus `robots.txt` permiten estos RSS): las noticias de cada liga de ESPN, cada 10 min, que ya traen
-  el equipo (`teamId`) y los jugadores; y los RSS de fútbol de Mundo Deportivo, BBC Sport y The Guardian, cada 5 min. Marca y
-  AS no: sus RSS llevan semanas o años sin actualizarse. Antes de añadir otra fuente, mira su `robots.txt`.
+- **Fuentes** (gratuitas; sus `robots.txt` permiten estos RSS): las noticias de cada liga de ESPN, cada 3 min, que ya traen
+  el equipo (`teamId`) y los jugadores; y los RSS de fútbol de Mundo Deportivo, BBC Sport y The Guardian, cada 2 min. Las dos con
+  peticiones condicionales (ETag / Last-Modified): si no ha cambiado, la fuente responde 304 sin mandarlo. Marca y AS no: sus RSS
+  llevan semanas o años sin actualizarse. Antes de añadir otra fuente, mira su `robots.txt`.
+- **Quién no juega** (`playerStatuses` de `server/shared/news.js`, columna `outs`: `[{ name, team, status }]`): con la plantilla
+  de ESPN de cada equipo (una vez cada 12 h), el jugador que sale en la frase, por su nombre o por su apellido si sólo lo lleva
+  él, y lo que dice de él: `out` (no juega), `suspended`, `back` (vuelve a entrenar, a la convocatoria…), `doubt` o `injured`
+  (lesionado sin decir si juega). Tiene que estar cerca (6 palabras en no juega y sancionado, 10 en duda y lesionado): en «Herro
+  anota 32 y Turner 27… con X fuera» la baja es de X. No cuenta lo del partido ya jugado («out before win over», «se perdió»,
+  `PAST`) ni lo que otra frase niega («no es baja», «won't need surgery», «win appeal», «fouled out», `DENIED`). «Baja» sola
+  («a la baja») y «vuelve» o «returns» solos («vuelve a ser campeón») no cuentan. Cada titular real que se leía mal está en
+  `server/test/noticias.test.js`.
+- **Las recomendaciones se basan en ellas**: `picksFor` recibe cómo están los jugadores según las noticias de las últimas 48 h
+  (`news.statusOfPlayers`) y quita las líneas de jugador de quien no juega o está sancionado (`samePlayer`: «R. Lewandowski» es
+  «Robert Lewandowski»). Devuelve `basis` (quién, cómo, si se quitaron sus líneas y la noticia), que la ficha enseña en «Basadas en
+  estas noticias» (`NewsBasisList`), con cuánto tardó Sharpex en verla.
+- **Avisos al momento**: una noticia nueva (de menos de 12 h) que dice cómo está un jugador se manda a `bets`
+  (`/internal/alerts/news`, `fromNews` de `alerts.js`), que avisa con la campana y una notificación a quien tiene una apuesta
+  pendiente con ese jugador o lo sigue (o sigue a su equipo, si no juega o está sancionado). Preferencia «Noticias de bajas» en
+  *Tu cuenta* (`news`); lo mismo no se repite en 12 h.
 - **Equipos**: en los RSS se buscan por nombre en el titular, la entradilla y las categorías, sólo entre los equipos de los
   partidos de ayer a dentro de 4 días (`upcomingTeams`). Frases enteras; las palabras que comparten muchos clubes («Real»,
   «Athletic», «Inter») solas no cuentan; los apodos de la prensa van en `NICK` («Barça», «Atleti», «perico»); un nombre dentro

@@ -97,7 +97,7 @@ const routes = [
   ['GET', '/api/basket/league-games/:league', ({ params }) => league(params.league).src.leagueGames(params.league)],
   // Plantilla con los partidos de cada jugador, para el escáner de líneas
   ['GET', '/api/basket/team-logs/:league/:team', ({ params }) => league(params.league).src.teamLogs(params.league, params.team)],
-  ['GET', '/api/basket/injuries', () => espn.injuries('nba')],
+  ['GET', '/api/basket/injuries', () => injuriesWithNews()],
   // id = "nba:401909912" o "euroleague:E2026_10" (el id del partido en la lista)
   ['GET', '/api/basket/boxscore/:id', ({ params }) => {
     const [lg, ...rest] = String(params.id).split(':');
@@ -161,14 +161,44 @@ warmEvery('basket', 4 * 60e3, () => { const t = madridDay(Date.now()); return Pr
 async function upcomingTeams() {
   const t = madridDay(Date.now());
   const seen = new Map();
-  for (const g of await between(addDays(t, -1), addDays(t, 4)).catch(() => []))
+  // Con su próximo partido sin terminar (al que lleva el aviso de una baja)
+  const games = (await between(addDays(t, -1), addDays(t, 4)).catch(() => [])).slice().sort((a, b) => +new Date(a.date) - +new Date(b.date));
+  for (const g of games)
     for (const team of [g.home, g.away]) {
-      const key = keyOf(g.league, team.id);
-      if (team?.id && !seen.has(key)) seen.set(key, { key, id: team.id, name: team.name, short: team.abbr?.length > 3 ? team.abbr : '', alts: team.alt || [] });
+      if (!team?.id) continue;
+      const key = keyOf(g.league, team.id), match = g.state === 'post' ? null : { id: g.id, date: g.date };
+      const cur = seen.get(key);
+      if (!cur) seen.set(key, { key, id: team.id, name: team.name, abbr: team.abbr || '', short: team.abbr?.length > 3 ? team.abbr : '', alts: team.alt || [], match });
+      else if (!cur.match) cur.match = match;
     }
   return [...seen.values()];
 }
-const news = basketNews({ upcoming: upcomingTeams });
+const news = basketNews({ upcoming: upcomingTeams, rosterOf: (lg, id) => league(lg).src.roster(lg, id) });
+
+// Las bajas de la NBA: las de ESPN y, delante de ellas, las que acaba de dar la prensa (una noticia de las últimas 36 h que dice
+// que no juega o está sancionado, de alguien que ESPN aún no da como baja). Así el modelo las tiene en cuenta como cualquier baja
+// (recomendaciones, puntos de equipo, plan) antes de que salgan en el parte. Llevan news con la noticia en la que se basan
+async function injuriesWithNews() {
+  const espnList = await espn.injuries('nba');
+  const teamsNow = await upcomingTeams().catch(() => []);
+  const keys = teamsNow.filter(t => t.key.startsWith('nba:')).map(t => t.key);
+  const said = keys.length ? await news.statusOfPlayers(keys, 36).catch(() => []) : [];
+  const out = [];
+  for (const s of said.filter(x => x.status === 'out' || x.status === 'suspended')) {
+    const teamId = s.team.split(':')[1];
+    const known = espnList.find(i => i.teamId === teamId && plainName(i.name) === plainName(s.name));
+    if (known && /out/i.test(known.status)) continue;
+    const roster = await espn.roster('nba', teamId).catch(() => []);
+    const p = roster.find(r => plainName(r.name) === plainName(s.name));
+    const team = teamsNow.find(t => t.key === s.team);
+    out.push({
+      playerId: p?.id || null, name: p?.name || s.name, teamId, team: team?.abbr || '', status: 'Out',
+      detail: `${s.status === 'suspended' ? 'Sancionado' : 'No juega'} según ${s.news.source}`, returnDate: null, news: s.news
+    });
+  }
+  return [...out, ...espnList.filter(i => !out.some(o => o.teamId === i.teamId && plainName(o.name) === plainName(i.name)))];
+}
+const plainName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]+/g, ' ').trim();
 
 migrate('basket', path.join(__dirname, 'migrations'))
   .then(() => cache.init())

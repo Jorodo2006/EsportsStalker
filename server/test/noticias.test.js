@@ -99,3 +99,72 @@ test('junto a una recomendación: las de bajas y dudas de sus equipos de las úl
   assert.strictEqual(keyNews(list, ['nba:8'], '', now).top.title, 'Pistons: Cade Cunningham, duda');
   assert.strictEqual(keyNews(list, ['nba:99'], '', now), null);
 });
+
+test('quién no juega: el jugador de la plantilla y lo que dice la frase en la que sale', () => {
+  const { playerStatuses } = require('../shared/news');
+  const barca = ['Robert Lewandowski', 'Jules Koundé', 'Joan Garcia', 'Lamine Yamal', 'Ronald Araújo', 'Eric García'].map(name => ({ name, team: '83' }));
+  const st = (t, ps = barca) => playerStatuses(t, ps).map(x => `${x.name}:${x.status}`).sort();
+  assert.deepStrictEqual(st('Lewandowski, baja ante el Athletic por una lesión muscular'), ['Robert Lewandowski:out']);
+  assert.deepStrictEqual(st('Pendientes de Joan Garcia. El guardameta acabó con dolor en la rodilla y será duda para el sábado'), []); // la duda va en otra frase sin su nombre
+  assert.deepStrictEqual(st('Joan Garcia, duda para el sábado por molestias en la rodilla'), ['Joan Garcia:doubt']);
+  assert.deepStrictEqual(st('Hansi Flick on Barcelona with no Lamine Yamal: Lamine Yamal will miss the game'), ['Lamine Yamal:out']);
+  assert.deepStrictEqual(st('Araújo, sancionado; Koundé vuelve a la convocatoria'), ['Jules Koundé:back', 'Ronald Araújo:suspended']);
+  // «García» lo llevan dos: por el apellido solo no se sabe cuál
+  assert.deepStrictEqual(st('García, baja para el sábado'), []);
+  // «a la baja» o «no es baja» no son una baja
+  assert.deepStrictEqual(st('Las cuotas de Lewandowski goleador, a la baja'), []);
+  assert.deepStrictEqual(st('Koundé no es baja: el club descarta la lesión'), []);
+  const nba = [{ name: 'Jalen Duren', team: 'nba:8' }, { name: 'Kyle Landale', team: 'nba:1' }, { name: 'Donte DiVincenzo', team: 'nba:16' }];
+  // Ir a recuperarse para volver: sigue lesionado (no dice que juegue)
+  assert.deepStrictEqual(st('Jalen Duren to begin rehab assignment in next step to return from injury', nba), ['Jalen Duren:injured']);
+  // Titulares reales que se leían mal: «rule … out», «won't need surgery», un recurso ganado, «return» sin decir a qué
+  const more = [...nba, { name: 'Victor Wembanyama', team: 'nba:24' }, { name: 'Kawhi Leonard', team: 'nba:12' }];
+  assert.deepStrictEqual(st('Spurs rule Victor Wembanyama out for Saturday against Portland', more), ['Victor Wembanyama:out']);
+  assert.deepStrictEqual(st("Kawhi Leonard's return from knee swelling still at least week away", more), []);
+  const fut = [{ name: 'David Raya', team: '359' }, { name: 'Leny Yoro', team: '360' }, { name: 'Ethan Nwaneri', team: '359' }];
+  assert.deepStrictEqual(st("David Raya won't need surgery - Arsenal boss Mikel Arteta", fut), []);
+  assert.deepStrictEqual(st('Man United win appeal over Leny Yoro red card suspension', fut), []);
+  assert.deepStrictEqual(st('Nwaneri at risk of becoming Arsenal forgotten teenager on return with', fut), []);
+  assert.deepStrictEqual(st('Koundé vuelve a la convocatoria'), ['Jules Koundé:back']);
+  assert.deepStrictEqual(st("Landale (hip) won't play Sunday against Boston", nba), ['Kyle Landale:out']);
+  assert.deepStrictEqual(st("Sources: Wolves' Donte DiVincenzo eyes New Year's for season debut after knee injury", nba), ['Donte DiVincenzo:injured']);
+});
+
+test('el jugador de la noticia es el de la línea de la casa', () => {
+  const { samePlayer } = require('../services/football/picks');
+  assert.ok(samePlayer('Robert Lewandowski', 'R. Lewandowski'));
+  assert.ok(samePlayer('Robert Lewandowski', 'Lewandowski'));
+  assert.ok(!samePlayer('Eric García', 'Joan García'));
+  assert.ok(!samePlayer('Lamine Yamal', 'Robert Lewandowski'));
+});
+
+test('aviso de noticia: a quien tiene una apuesta con ese jugador o lo sigue', () => {
+  const { newsTargets, newsText } = require('../services/bets/alerts');
+  const o = { name: 'Robert Lewandowski', team: '83', status: 'out', teamName: 'Barcelona' };
+  const bets = [
+    { user_id: 1, sport: 'football', event: 'Barcelona - Athletic Club', market: 'Goleador', selection: 'R. Lewandowski' },
+    { user_id: 2, sport: 'football', event: 'Barcelona - Athletic Club', market: 'Resultado', selection: 'Barcelona' },
+    { user_id: 3, sport: 'basket', event: 'LAL @ BOS', market: 'Puntos · Lewandowski', selection: 'Más de 9.5' }
+  ];
+  const favorites = [{ user_id: 4, sport: 'football', name: 'Barcelona' }, { user_id: 5, sport: 'football', name: 'Robert Lewandowski' }];
+  const t = newsTargets('football', o, { bets, favorites });
+  assert.deepStrictEqual(t.map(x => [x.userId, x.why]), [['1', 'bet'], ['4', 'fav'], ['5', 'fav']]);
+  // Una duda no avisa a quien sigue al equipo, sólo al jugador
+  assert.deepStrictEqual(newsTargets('football', { ...o, status: 'doubt' }, { bets: [], favorites }).map(x => x.userId), ['5']);
+  assert.match(newsText(o, { title: 'Lewandowski, baja ante el Athletic', source: 'Mundo Deportivo' }, t[0]).title, /^Robert Lewandowski: no juega \(Barcelona\)$/);
+});
+
+test('lo que dice la frase es del jugador que está cerca, y si otra frase lo niega no cuenta', () => {
+  const { playerStatuses } = require('../shared/news');
+  const st = (t, ps) => playerStatuses(t, ps).map(x => `${x.name}:${x.status}`).sort();
+  const mil = ['Tyler Herro', 'Myles Turner', 'Giannis Antetokounmpo'].map(name => ({ name, team: 'nba:15' }));
+  assert.deepStrictEqual(st('Herro scores 32 points and Turner adds 27 as the Bucks beat the Raptors to snap a losing streak with Giannis Antetokounmpo ruled out', mil), ['Giannis Antetokounmpo:out']);
+  const sp = ['Victor Wembanyama', "De'Aaron Fox"].map(name => ({ name, team: 'nba:24' }));
+  assert.deepStrictEqual(st("Spurs rule Victor Wembanyama, De'Aaron Fox out for Friday's game against the Kings", sp), ["De'Aaron Fox:out", 'Victor Wembanyama:out']);
+  // Lo del partido ya jugado no es una baja para el siguiente
+  assert.deepStrictEqual(st("Spurs rule Victor Wembanyama, De'Aaron Fox out 90 minutes before win over Kings", sp), []);
+  assert.deepStrictEqual(st('Curry se perdió el partido del martes', [{ name: 'Stephen Curry', team: 'nba:9' }]), []);
+  assert.deepStrictEqual(st('Man United win appeal over Leny Yoro red card. The defender had been handed a three-game suspension.', [{ name: 'Leny Yoro', team: '360' }]), []);
+  assert.deepStrictEqual(st('Tyler Herro scored 32 points, Myles Turner fouled out with a season-high 27', mil), []);
+  assert.deepStrictEqual(st('Oviedo fan handed suspended prison sentence for racist abuse toward Mbappé', [{ name: 'Kylian Mbappé', team: '86' }]), []);
+});

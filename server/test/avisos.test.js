@@ -61,7 +61,7 @@ test('el texto dice cuánto ha cambiado y por qué te avisa', () => {
 test('cupón, preferencias y valor', () => {
   const w = cleanWatch([{ sport: 'basket', a: 'Utah Jazz', b: 'LA Clippers', key: 'moneyline|0||', out: 'a', id: 'g1', date: '2026-11-18T03:30:00Z' }, { sport: 'golf', a: 'x', b: 'y', key: 'k', out: 'a' }, { a: '', b: 'y' }]);
   assert.strictEqual(w.length, 1);
-  assert.deepStrictEqual(cleanPrefs({ drop: false }), { drop: false, rise: true, value: true });
+  assert.deepStrictEqual(cleanPrefs({ drop: false }), { drop: false, rise: true, value: true, news: true });
   assert.ok(isValue({ ev: 0.05, rel: { score: 60 }, price: 2 }, 'tennis'));
   assert.ok(!isValue({ ev: 0.05, rel: 60, price: 2 }, 'basket')); // en baloncesto, sólo las fuertes
   assert.ok(isValue({ ev: 0.09, rel: 70, price: 2 }, 'basket'));

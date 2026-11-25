@@ -130,7 +130,9 @@ const routes = [
   ['POST', '/api/alerts/push/remove', ({ req, body }) => push.unsubscribe(who(req).id, body?.endpoint)],
   ['POST', '/api/alerts/push/test', ({ req, body }) => push.test(who(req).id, body?.endpoint)],
   // Los manda odds tras cada lectura (sólo por la red interna: el gateway no reparte /internal)
-  ['POST', '/internal/alerts/odds', ({ body }) => alerts.fromOdds(body)]
+  ['POST', '/internal/alerts/odds', ({ body }) => alerts.fromOdds(body)],
+  // Un jugador no juega, duda, está lesionado, sancionado o vuelve según una noticia nueva (football y basket, shared/news.js)
+  ['POST', '/internal/alerts/news', ({ body }) => alerts.fromNews(body)]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))

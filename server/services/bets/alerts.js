@@ -9,8 +9,8 @@ const { query, notify } = require('../../shared/db');
 const client = require('../../shared/client');
 const push = require('./push');
 
-const PREF_KEYS = ['drop', 'rise', 'value'];
-const DEFAULT_PREFS = { drop: true, rise: true, value: true };
+const PREF_KEYS = ['drop', 'rise', 'value', 'news'];
+const DEFAULT_PREFS = { drop: true, rise: true, value: true, news: true };
 const REPEAT_MS = 3 * 3600e3; // lo mismo (partido, mercado, selección, sentido) no se repite antes de 3 h
 const KEEP_DAYS = 14;
 const PUSH_PER_DAY = 20; // notificaciones con la app cerrada por usuario y día; el resto queda en la campana
@@ -185,6 +185,66 @@ async function fromOdds(body) {
   return { sent };
 }
 
+// ---------- Noticias: un jugador no juega, duda, está lesionado, sancionado o vuelve ----------
+// Las manda football o basket en cuanto ven la noticia por primera vez (shared/news.js, onNew), para avisar antes de que se
+// mueva la cuota. A quién: a quien tiene una apuesta pendiente con ese jugador (su nombre en la selección o el mercado, de ese
+// deporte y con su equipo en el partido) y a quien lo sigue (favorito el jugador; o su equipo, si no juega o está sancionado)
+const NEWS_STATUS = { out: 'no juega', suspended: 'sancionado', doubt: 'en duda', injured: 'lesionado', back: 'vuelve' };
+const namedIn = (text, name) => {
+  const t = ` ${norm(text)} `, n = norm(name), last = n.split(' ').filter(w => w.length >= 4).at(-1);
+  return (!!n && t.includes(` ${n} `)) || (!!last && t.includes(` ${last} `));
+};
+function newsTargets(sport, o, { bets = [], favorites = [] }) {
+  const out = [];
+  for (const b of bets) {
+    if ((b.sport || 'lol') !== sport) continue;
+    if (!namedIn(`${b.selection} ${b.market}`, o.name)) continue;
+    if (o.teamName && !mentionsTeam(b.event, { name: o.teamName }) && !namedIn(b.event, o.name)) continue;
+    out.push({ userId: String(b.user_id), why: 'bet' });
+  }
+  for (const f of favorites) {
+    if (f.sport !== sport) continue;
+    if (norm(f.name) === norm(o.name)) out.push({ userId: String(f.user_id), why: 'fav', fav: f.name });
+    else if (o.teamName && norm(f.name) === norm(o.teamName) && (o.status === 'out' || o.status === 'suspended')) out.push({ userId: String(f.user_id), why: 'fav', fav: f.name });
+  }
+  const seen = new Set();
+  return out.filter(t => (seen.has(t.userId) ? false : (seen.add(t.userId), true)));
+}
+function newsText(o, item, t) {
+  const why = t.why === 'bet' ? 'Tienes una apuesta con él' : `Sigues a ${t.fav}`;
+  return {
+    title: `${o.name}: ${NEWS_STATUS[o.status] || o.status}${o.teamName ? ` (${o.teamName})` : ''}`,
+    body: `${item.title} · ${item.source}. ${why}: mira la cuota antes de que se mueva.`
+  };
+}
+async function fromNews(body) {
+  const sport = String(body?.sport || ''), items = Array.isArray(body?.items) ? body.items.slice(0, 50) : [];
+  if (!['football', 'basket'].includes(sport) || !items.length) return { sent: 0 };
+  const [bets, favorites] = await Promise.all([
+    query(`SELECT b.user_id, b.event, b.market, b.selection, coalesce(b.sport, 'lol') AS sport FROM bets.bets b WHERE b.status = 'pending' AND coalesce(b.sport, 'lol') = $1 AND b.market <> 'Combinada'
+      UNION ALL
+      SELECT b.user_id, l.event, l.market, l.selection, coalesce(l.sport, b.sport, 'lol') AS sport FROM bets.bet_legs l JOIN bets.bets b ON b.id = l.bet_id
+      WHERE b.status = 'pending' AND l.status = 'pending' AND coalesce(l.sport, b.sport, 'lol') = $1`, [sport]),
+    query("SELECT user_id, value FROM bets.user_settings WHERE key = 'favorites' AND jsonb_array_length(value) > 0")
+  ]);
+  const favs = favorites.rows.flatMap(r => (r.value || []).map(f => ({ ...f, user_id: r.user_id })));
+  let sent = 0;
+  for (const item of items) {
+    for (const o of Array.isArray(item.outs) ? item.outs.slice(0, 10) : []) {
+      if (!NEWS_STATUS[o?.status] || !o?.name) continue;
+      const targets = newsTargets(sport, o, { bets: bets.rows, favorites: favs });
+      const prefs = await prefsOf([...new Set(targets.map(t => t.userId))]);
+      for (const t of targets) {
+        if (!prefs.get(t.userId)?.news) continue;
+        const txt = newsText(o, item, t);
+        const open = o.match?.id ? { sport, id: o.match.id, date: o.match.date } : { sport };
+        if (await deliver(t.userId, { kind: 'news', sport, dedupe: `news|${sport}|${norm(o.name)}|${o.status}`, ...txt, open }, { repeatMs: 12 * 3600e3 })) sent++;
+      }
+    }
+  }
+  return { sent };
+}
+
 // ---------- Recomendaciones nuevas con valor ----------
 // Las del día y del siguiente de tenis, fútbol y MMA (las calcula cada servicio con las cuotas de ahora). De todas las líneas, no
 // de las de la portada: la «más fiable» de cada partido suele pagar poco y casi nunca tiene valor
@@ -262,4 +322,4 @@ function startAlerts() {
   setInterval(() => query(`DELETE FROM bets.alerts WHERE created_at < now() - interval '${KEEP_DAYS} days'`).catch(() => {}), 6 * 3600e3);
 }
 
-module.exports = { fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, urlOf, cleanWatch, cleanPrefs, isValue };
+module.exports = { fromNews, newsTargets, newsText, fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, urlOf, cleanWatch, cleanPrefs, isValue };

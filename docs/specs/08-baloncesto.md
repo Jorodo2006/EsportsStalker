@@ -367,10 +367,17 @@ salió al revés).
 - **Equipos**: con la liga delante (`nba:19`, `euroleague:RMB`), porque los ids de ESPN de la NBA y la WNBA se repiten. En
   los RSS se buscan por el nombre, el apodo (`alt`: «Lakers») y `NICK`; un nombre que llevan dos equipos con partido
   («Kings»: Sacramento y Sydney) no cuenta.
+- **Quién no juega**: como en el fútbol (`playerStatuses`, ver `docs/specs/11-futbol.md`), con la plantilla de cada equipo
+  (`roster` de `espn.js` o `euroleague.js`).
+- **Bajas para el modelo** (`injuriesWithNews` en `server/services/basket/index.js`, `GET /api/basket/injuries`): a las de ESPN se
+  añaden, como `Out` y con la noticia en `news`, los jugadores de la NBA que una noticia de las últimas 36 h da por baja o
+  sancionados y ESPN aún no. Así las recomendaciones, los puntos de equipo, el analizador y el plan los tratan como cualquier baja
+  (sus líneas no salen; las de sus compañeros y los puntos, como con una baja de ESPN) antes de que salgan en el parte. La lista
+  «Basadas en estas noticias» de las recomendaciones dice cuáles. Sólo la NBA: el resto de ligas no usa el parte de ESPN.
 - **En las recomendaciones** (`BasketPicks.tsx`): la noticia del equipo bajo la mejor opción y, en las filas, la que nombra a su
-  jugador. Una de baja, duda, sanción o rotación que nombra al jugador le baja 20 puntos la fiabilidad antes de ordenar y
-  filtrar (`withNews` de `src/lib/news.ts`); si también dice que vuelve, sólo se enseña. Las bajas de ESPN siguen entrando
-  en el modelo como antes: las noticias no cambian la proyección.
+  jugador. La que dice que su jugador está en duda o lesionado le baja 20 puntos la fiabilidad antes de ordenar y filtrar
+  (`withNews` de `src/lib/news.ts`); si vuelve, sólo se enseña. Las noticias no cambian la proyección.
+- **Avisos al momento**: como en el fútbol, a quien tiene una apuesta pendiente con ese jugador o lo sigue.
 
 ## Pendiente
 

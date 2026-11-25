@@ -3,7 +3,7 @@
 // Un aviso nuevo llega en vivo (alerts:new) y, con la app cerrada, como notificación del sistema (src/lib/push.ts).
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
+import { Bell, Newspaper, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import { resyncPush } from '@/lib/push';
@@ -29,8 +29,8 @@ export function useAlerts() {
   return useQuery({ queryKey: ['alerts'], queryFn: () => window.api.alerts.list(), enabled: member, staleTime: 60e3, refetchInterval: 5 * 60e3 });
 }
 
-const ICON = { drop: TrendingDown, rise: TrendingUp, value: Sparkles } as const;
-const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amber-400' } as const;
+const ICON = { drop: TrendingDown, rise: TrendingUp, value: Sparkles, news: Newspaper } as const;
+const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amber-400', news: 'text-sky-300' } as const;
 
 // Avisos ya seguidos desde una notificación (compartido por las dos campanas)
 const followed = new Set<string>();

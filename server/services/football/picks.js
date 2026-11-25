@@ -35,6 +35,16 @@ function stateOf(pool) {
 }
 
 // ---------- Qué dice cada selección ----------
+// ¿El jugador de la noticia (nombre de la plantilla de ESPN, «Robert Lewandowski») es el de la línea de la casa («Robert
+// Lewandowski», «R. Lewandowski», «Lewandowski»)? Mismo apellido y, si los dos lo traen, la misma inicial
+const plainN = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+function samePlayer(a, b) {
+  const x = plainN(a).split(' '), y = plainN(b).split(' ');
+  if (!x[0] || !y[0]) return false;
+  if (x.join(' ') === y.join(' ')) return true;
+  if (x.at(-1) !== y.at(-1) || x.at(-1).length < 4) return false;
+  return x.length === 1 || y.length === 1 || x[0][0] === y[0][0];
+}
 const dec = v => String(v).replace('.', ',');
 const signed = v => (v > 0 ? `+${dec(v)}` : `−${dec(Math.abs(v))}`);
 const HALF_PRE = { 0: '', 1: '1.ª parte: ' };
@@ -234,7 +244,16 @@ async function picksFor(match, espn, opts = {}) {
   }
 
   // Mercados de jugador (Goleador, remates, paradas, faltas): el modelo de scorers.js, sólo en los partidos de hombres que lo piden (la ficha y el escáner)
-  if (opts.players && pool === 'men') picks.push(...await playerPicks({ odds, m, pool, e, gap, age }));
+  // Sin los de quien no juega o está sancionado según una noticia de las últimas 48 h (opts.news, de news.statusOfPlayers): el
+  // modelo da por hecho que juega, y la casa a veces tarda en quitar la línea
+  const gone = (opts.news || []).filter(s => s.status === 'out' || s.status === 'suspended');
+  const removed = new Map();
+  if (opts.players && pool === 'men') {
+    for (const q of await playerPicks({ odds, m, pool, e, gap, age })) {
+      const g = gone.find(s => samePlayer(s.name, q.selection));
+      if (g) removed.set(g.name, g); else picks.push(q);
+    }
+  }
 
   const pFav = Math.max(x.h, x.a), fav = x.h >= x.a ? 'a' : 'b';
   const sane = q => Math.abs(q.pModel - q.pMarket) <= MAX_DISAGREE;
@@ -256,10 +275,12 @@ async function picksFor(match, espn, opts = {}) {
   if (age > STALE_MS) warnings.push(`Cuotas de hace ${Math.round(age / 3600e3)} h: actualízalas antes de apostar`);
   const ctx = { m, lh: e.lh, la: e.la, x };
   const withWhy = q => q && ({ ...q, why: reason(q, ctx) });
+  // En qué noticias se ha basado: las de quién no juega (se han quitado sus líneas) y, para enseñar, las de dudas y lesiones
+  const basis = (opts.news || []).map(s => ({ name: s.name, team: s.team, status: s.status, removed: removed.has(s.name), news: s.news }));
   return {
     ready: true, oddsAge: age,
     match: { home: x.h, draw: x.d, away: x.a, pMarketHome, goalsHome: e.lh, goalsAway: e.la, weight: w, fav, pFav },
-    top: withWhy(top), easy: easy.map(withWhy), hard: hard.map(withWhy), considered: picks.length, warnings,
+    top: withWhy(top), easy: easy.map(withWhy), hard: hard.map(withWhy), considered: picks.length, warnings, basis,
     ...(opts.all ? { all: picks.map(withWhy) } : {})
   };
 }
@@ -268,4 +289,4 @@ async function picksFor(match, espn, opts = {}) {
 // fiabilidad de 40 o más, cuota de 1,15 o más y un EV de −12 % o más); la interfaz las filtra y las ordena
 const scannable = q => Math.abs(q.pModel - q.pMarket) <= MAX_DISAGREE && q.rel.score >= 40 && q.price >= MIN_PRICE && q.ev >= -0.12;
 
-module.exports = { picksFor, stateOf, scannable };
+module.exports = { picksFor, stateOf, scannable, samePlayer };

@@ -204,10 +204,11 @@ function OddsAlertsCard() {
   const ITEMS: [OddsAlertKind, string, string][] = [
     ['drop', 'Caídas de cuota', 'Cuando una cuota de tus apuestas pendientes, de tu cupón o del partido de un favorito baja un 10 % o más de una lectura a otra: suele ser dinero entrando o una noticia.'],
     ['rise', 'Subidas de cuota', 'Lo mismo cuando sube: si tienes apostado, el mercado se va en contra.'],
-    ['value', 'Nuevas con valor', 'Cuando sale una recomendación con valor en tenis, fútbol o MMA, y las más fuertes de baloncesto. Como mucho cinco de golpe.']
+    ['value', 'Nuevas con valor', 'Cuando sale una recomendación con valor en tenis, fútbol o MMA, y las más fuertes de baloncesto. Como mucho cinco de golpe.'],
+    ['news', 'Noticias de bajas', 'En cuanto sale una noticia de que un jugador de tus apuestas pendientes o de tus favoritos no juega, está en duda, lesionado, sancionado o vuelve (fútbol y baloncesto). También si tu equipo favorito pierde a alguien.']
   ];
   async function flip(k: OddsAlertKind, on: boolean) {
-    const n: OddsAlertPrefs = { ...(prefs.data ?? { drop: true, rise: true, value: true }), [k]: on };
+    const n: OddsAlertPrefs = { ...(prefs.data ?? { drop: true, rise: true, value: true, news: true }), [k]: on };
     qc.setQueryData(['alerts', 'prefs'], n);
     try { qc.setQueryData(['alerts', 'prefs'], await window.api.alerts.setPrefs(n)); } catch (e) { toast((e as Error).message); prefs.refetch(); }
   }

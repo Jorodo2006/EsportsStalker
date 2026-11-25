@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { ExternalLink, Newspaper } from 'lucide-react';
 import { cn } from '@/lib/format';
-import { KEY_TAGS, NEWS_TAG, RISK_TAGS, type KeyNews } from '@/lib/news';
+import { KEY_TAGS, NEWS_PENALTY, NEWS_TAG, PLAYER_STATUS, newsRisk, type KeyNews } from '@/lib/news';
 import { ageOf } from '@/lib/slip-live';
-import type { NewsItem } from '@/lib/types';
+import type { NewsBasis, NewsItem, PlayerNewsStatus } from '@/lib/types';
 import { Badge, Empty, ErrorBox, Loading, TeamLogo, chip } from './ui';
 import { Panel } from './viz';
 
@@ -53,7 +53,8 @@ function NewsRow({ n, teams }: { n: NewsItem; teams: NewsTeam[] }) {
         </div>
         <div className="text-[14px] font-medium leading-snug text-zinc-100 group-hover:underline">{n.title}</div>
         {n.summary && <div className="line-clamp-2 text-[13px] text-zinc-400">{n.summary}</div>}
-        {!!n.players.length && <div className="text-xs text-zinc-500">{n.players.join(', ')}</div>}
+        {!!n.outs?.length && <div className="flex flex-wrap gap-1.5">{n.outs.map(o => <Badge key={o.name} tone={PLAYER_STATUS[o.status].tone}>{o.name}: {PLAYER_STATUS[o.status].label}</Badge>)}</div>}
+        {!!n.players.length && !n.outs?.length && <div className="text-xs text-zinc-500">{n.players.join(', ')}</div>}
         <div className="flex items-center gap-1.5 text-xs text-zinc-500">
           <span>{n.source}</span><span>·</span><span title={new Date(n.published).toLocaleString('es-ES')}>{ageOf(+new Date(n.published))}</span>
           <ExternalLink size={12} className="ml-0.5 opacity-60" />
@@ -87,20 +88,47 @@ export function MatchNews({ sport, teams }: { sport: NewsSport; teams: NewsTeam[
   );
 }
 
-// Bajo una recomendación: la noticia que puede cambiarla (la del jugador, si la hay). Es la justificación; no cambia la cifra
+// Bajo una recomendación: la noticia que puede cambiarla (la que dice cómo está su jugador, si la hay). «Basada en la noticia»
+// cuando la ha cambiado (le ha bajado la fiabilidad, newsRisk); si no, es sólo para leer
 export function NewsHint({ k, className }: { k: KeyNews | null; className?: string }) {
   if (!k) return null;
-  const risk = k.top.tags.some(t => RISK_TAGS.includes(t));
+  const based = newsRisk(k);
+  const what = k.status && k.name ? `${k.name}: ${PLAYER_STATUS[k.status].label}` : null;
   return (
     <a href={k.top.url} target="_blank" rel="noopener noreferrer nofollow" onClick={e => e.stopPropagation()}
       title={`${k.top.source} · ${new Date(k.top.published).toLocaleString('es-ES')}`}
-      className={cn('flex min-w-0 items-start gap-1.5 text-xs hover:underline', risk ? 'text-amber-300' : 'text-zinc-400', className)}>
+      className={cn('flex min-w-0 items-start gap-1.5 text-xs hover:underline', based ? 'text-amber-300' : 'text-zinc-400', className)}>
       <Newspaper size={13} className="mt-0.5 shrink-0" />
       <span className="min-w-0">
-        <span className="font-medium">{k.player ? 'Noticia del jugador' : 'Noticia del equipo'}</span>
-        {k.top.tags.length > 0 && <> ({k.top.tags.map(t => NEWS_TAG[t]?.label.toLowerCase()).filter(Boolean).join(', ')})</>}: {k.top.title}
-        <span className="text-zinc-500"> · {k.top.source}, {ageOf(+new Date(k.top.published))}{k.n > 1 ? ` · ${k.n - 1} más en Noticias` : ''}</span>
+        <span className="font-medium">{based ? 'Basada en la noticia' : k.player ? 'Noticia del jugador' : 'Noticia del equipo'}</span>
+        {what ? <> ({what})</> : k.top.tags.length > 0 && <> ({k.top.tags.map(t => NEWS_TAG[t]?.label.toLowerCase()).filter(Boolean).join(', ')})</>}: {k.top.title}
+        <span className="text-zinc-500"> · {k.top.source}, {ageOf(+new Date(k.top.published))}{based ? ` · fiabilidad −${NEWS_PENALTY}` : ''}{k.n > 1 ? ` · ${k.n - 1} más en Noticias` : ''}</span>
       </span>
     </a>
   );
 }
+
+// Las noticias en las que se basan las recomendaciones de un partido o un día: quién no juega (y qué se ha hecho con eso) y quién
+// está en duda. items: [{ name, status, did, news }]
+export interface BasisItem { name: string; status: PlayerNewsStatus; did: string; news: NewsBasis }
+export function NewsBasisList({ items, className }: { items: BasisItem[]; className?: string }) {
+  if (!items.length) return null;
+  return (
+    <div className={cn('flex flex-col gap-1 border-t border-white/10 px-3 py-2', className)}>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"><Newspaper size={13} />Basadas en estas noticias</div>
+      {items.map(b => (
+        <a key={`${b.name}|${b.news.url}`} href={b.news.url} target="_blank" rel="noopener noreferrer nofollow"
+          className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-xs hover:underline">
+          <Badge tone={PLAYER_STATUS[b.status].tone}>{b.name}: {PLAYER_STATUS[b.status].label}</Badge>
+          <span className="text-zinc-300">{b.did}</span>
+          <span className="min-w-0 text-zinc-500">{b.news.title} · {b.news.source}, {ageOf(+new Date(b.news.published))}{seenFirst(b.news)}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+// Cuánto después de publicarse la vio Sharpex (si fue a los pocos minutos, se dice)
+const seenFirst = (n: NewsBasis) => {
+  const m = Math.round((+new Date(n.seen_at) - +new Date(n.published)) / 60e3);
+  return n.seen_at && m >= 0 && m <= 10 ? ` · vista ${m <= 1 ? 'al momento' : `a los ${m} min`}` : '';
+};
