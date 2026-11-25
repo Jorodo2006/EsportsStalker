@@ -29,6 +29,9 @@ const leagueName = (l: string) => LEAGUE_NAME[l] ?? (l || 'Sin competición');
 // cuota bajó un 5 %, es decir, que el mercado fue hacia lo que decía el modelo. La última es la que se vio por última vez en la
 // app antes del partido, que suele estar cerca del cierre, pero no siempre
 const clv = (r: PredictionRow) => (r.firstPrice > 1 && r.price > 1 ? r.firstPrice / r.price - 1 : null);
+// CLV de verdad: la cuota de la primera vez que se recomendó frente a la de cierre de la casa (la última del histórico antes de
+// empezar, bets/closing.js). Positivo de forma constante = el modelo ve antes que el mercado; es lo que dice si tiene ventaja
+const clvClose = (r: PredictionRow) => (r.firstPrice > 1 && r.closePrice && r.closePrice > 1 ? r.firstPrice / r.closePrice - 1 : null);
 const decided = (r: PredictionRow) => r.status !== 'void';
 const won = (r: PredictionRow) => r.status === 'won';
 // Beneficio de apostar 1 unidad: la nula devuelve lo apostado
@@ -41,7 +44,9 @@ function sum(rows: PredictionRow[]) {
   const hit = d.length ? d.filter(won).length / d.length : 0;
   const said = d.length ? d.reduce((s, r) => s + r.p, 0) / d.length : 0;
   const pl = rows.reduce((s, r) => s + profit(r), 0);
-  return { n: rows.length, decided: d.length, hit, said, pl, roi: rows.length ? pl / rows.length : 0, ev: rows.length ? rows.reduce((s, r) => s + r.ev, 0) / rows.length : 0 };
+  const cl = rows.map(clvClose).filter((v): v is number => v != null);
+  return { n: rows.length, decided: d.length, hit, said, pl, roi: rows.length ? pl / rows.length : 0, ev: rows.length ? rows.reduce((s, r) => s + r.ev, 0) / rows.length : 0,
+    clv: cl.length ? cl.reduce((a, v) => a + v, 0) / cl.length : null, clvN: cl.length };
 }
 // Margen al 95 % de un porcentaje con n casos: con pocas, la diferencia no dice nada
 const margin = (p: number, n: number) => (n ? 1.96 * Math.sqrt(Math.max(p * (1 - p), 0.01) / n) : 1);
@@ -129,6 +134,9 @@ export default function ModelTab() {
   const clvs = rows.map(clv).filter((v): v is number => v != null);
   const clvAvg = clvs.length ? clvs.reduce((a, v) => a + v, 0) / clvs.length : null;
   const clvBeat = clvs.length ? clvs.filter(v => v > 0).length / clvs.length : null;
+  const closes = rows.map(clvClose).filter((v): v is number => v != null);
+  const closeAvg = closes.length ? closes.reduce((a, v) => a + v, 0) / closes.length : null;
+  const closeBeat = closes.length ? closes.filter(v => v > 0).length / closes.length : null;
   // Calibración por tramos de probabilidad
   const buckets = [[0, 0.3], [0.3, 0.4], [0.4, 0.5], [0.5, 0.6], [0.6, 0.7], [0.7, 0.8], [0.8, 1.01]].map(([lo, hi]) => {
     const rs = rows.filter(r => decided(r) && r.p >= lo && r.p < hi);
@@ -171,8 +179,11 @@ export default function ModelTab() {
             <SplitBar won={nWon} lost={nLost} none={nVoid} />
           </Metric>
           <Metric label="A 1 unidad cada una" value={units(S.pl)} valueClass={tone(S.pl)} sub={<>ROI <span className={tone(S.roi)}>{signedPct(S.roi)}</span> · esperaba {signedPct(S.ev)}</>} />
-          <Metric label="Movimiento de la cuota" value={clvAvg == null ? '–' : signedPct(clvAvg)} valueClass={clvAvg == null ? undefined : tone(clvAvg)}
-            sub={clvBeat == null ? 'sin datos' : `bajó en el ${pct(clvBeat)} · cuota media ${odd(rows.reduce((s, r) => s + r.price, 0) / rows.length)}`} />
+          {closeAvg != null
+            ? <Metric label="CLV (frente al cierre)" value={signedPct(closeAvg)} valueClass={tone(closeAvg)}
+                sub={`mejor que el cierre en el ${pct(closeBeat!)} de ${closes.length.toLocaleString('es-ES')}${clvAvg == null ? '' : ` · movimiento visto ${signedPct(clvAvg)}`}`} />
+            : <Metric label="Movimiento de la cuota" value={clvAvg == null ? '–' : signedPct(clvAvg)} valueClass={clvAvg == null ? undefined : tone(clvAvg)}
+                sub={clvBeat == null ? 'sin datos' : `bajó en el ${pct(clvBeat)} · cuota media ${odd(rows.reduce((s, r) => s + r.price, 0) / rows.length)} · sin cuotas de cierre todavía`} />}
         </div>
       </section>
       {S.decided < 100 && <p className="-mt-2 mb-4 text-xs text-zinc-500">Con menos de 100 resueltas, las cifras se mueven mucho de un día a otro: míralas como orientación.</p>}
@@ -335,12 +346,12 @@ function Breakdown({ groups, sportAll }: { groups: Record<GroupF, { label: strin
         <Lead>Las mismas cuentas por grupos, para ver dónde acierta y dónde pierde. La barra es lo que salió; la raya, lo que esperaba.</Lead>
         <TvTabs value={cur} onChange={setBy} items={keys.map(k => ({ value: k, label: groups[k].label }))} />
       </div>
-      <div className="hidden grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px] gap-4 px-4 pt-3 text-[11px] text-zinc-500 sm:grid">
-        <span /><span className="text-right">Casos</span><span>Acierto · esperaba</span><span className="text-right">A 1 unidad</span><span className="text-right">ROI</span>
+      <div className="hidden grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px_64px] gap-4 px-4 pt-3 text-[11px] text-zinc-500 sm:grid">
+        <span /><span className="text-right">Casos</span><span>Acierto · esperaba</span><span className="text-right">A 1 unidad</span><span className="text-right">ROI</span><span className="text-right" title="Cuota de la recomendación frente a la de cierre">CLV</span>
       </div>
       <ul className="divide-y divide-zinc-800/60">
         {list.map(r => (
-          <li key={r.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px]">
+          <li key={r.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px_64px]">
             <span className="truncate text-[13px] text-zinc-100" title={r.key}>{r.key}</span>
             <span className="hidden text-right text-[13px] text-zinc-400 tnum sm:block">{r.n.toLocaleString('es-ES')}</span>
             <div className="order-3 col-span-2 flex items-center gap-3 sm:order-none sm:col-span-1">
@@ -349,6 +360,7 @@ function Breakdown({ groups, sportAll }: { groups: Record<GroupF, { label: strin
             </div>
             <span className={cn('text-right text-[13px] font-semibold tnum', tone(r.pl))}>{units(r.pl)}<span className="font-normal text-zinc-500 sm:hidden"> · {r.n}</span></span>
             <span className={cn('hidden text-right text-[13px] tnum sm:block', tone(r.roi))}>{signedPct(r.roi)}</span>
+            <span className={cn('hidden text-right text-[13px] tnum sm:block', r.clv == null ? 'text-zinc-500' : tone(r.clv))} title={r.clvN ? `${r.clvN} con cuota de cierre` : 'Sin cuotas de cierre'}>{r.clv == null ? '–' : signedPct(r.clv)}</span>
           </li>
         ))}
       </ul>

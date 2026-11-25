@@ -52,6 +52,27 @@ Lo que dice si apostar sale a cuenta, más allá del beneficio. Lógica pura con
 - **Todas las apps juntas** (`combinedSeries`): el beneficio acumulado de la cartera entera y la parte de un deporte elegido,
   con una tabla por deporte. Sólo una línea de deporte a la vez: los acentos de LoL y tenis no se distinguen en la misma gráfica.
 - **Tipo de mercado** (`marketKind`): sale de `ref.key`, las claves de `settle.js`; las apuestas sin enlazar a su partido van aparte.
+- **CLV, frente a la cuota de cierre** (`clvOf`, `closeOdds`): la cuota apostada frente a la última de la casa antes de empezar
+  (`cuota / cierre − 1`, ponderado por importe), y en qué parte de las apuestas se batió. Se sabe en cuanto empieza el partido, sin
+  esperar a cientos de resultados, y es la mejor señal de que se gana a la larga. Sale también en cada fila del historial
+  («cierre 1,95 (+7,7 %)»). Combinadas: el producto de sus selecciones, sólo si todas tienen cierre.
+
+### Cuota de cierre (`server/services/bets/closing.js`, `server/services/odds/closing.js`; migración `bets/021`)
+
+Al final de cada pasada del resolvedor, `bets` busca la cuota de cierre de las apuestas (de los últimos 10 días) y de las
+recomendaciones del modelo cuyo partido empezó hace más de 10 min. Se la pide a `odds` (`/internal/odds/closing`), que:
+
+1. empareja el partido con el del comparador como los avisos de cuotas: mismo deporte, inicio a menos de 6 h y el texto del
+   partido nombra a los dos (`mentionsTeam`, ahora en `server/shared/mentions.js`);
+2. toma del histórico (`odds.price_history`) el tramo de precio vigente al empezar en cada casa, sólo si se vio en las 3 h
+   anteriores (si no, no es de cierre).
+
+Cuenta la de la misma casa de la apuesta; si es de otra o no se leyó, la mejor de las que hay (la más difícil de batir). Sin cierre a
+las 6 h, se apunta que no lo hay (`price` null) y no se busca más. Se guarda en `bets.closing` (por apuesta y selección: `pos` −1 es la
+simple) y no en el `ref`, que lo manda el navegador: así nadie puede poner la suya, y no viaja en las apuestas que se pasan a los
+amigos. Si se edita la apuesta y cambia la selección, el cierre guardado deja de valer y se vuelve a buscar. De las recomendaciones
+va en `close_price`, `close_book` y `close_at` de `bets.predictions`, y *Acierto del modelo* enseña el CLV de la primera cuota
+recomendada frente al cierre, en total y por grupo. Pruebas en `server/test/cierre.test.js`.
 
 ## Partido y mercado escritos a mano
 

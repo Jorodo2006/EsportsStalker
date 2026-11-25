@@ -115,3 +115,31 @@ export function combinedSeries(bets: Bet[], sport: string | null) {
   return rows.length ? [{ date: '', event: '', total: 0, part: 0 }, ...rows] : rows;
 }
 const round = (v: number) => Math.round(v * 100) / 100;
+
+// CLV (closing line value): la cuota a la que se apostó frente a la de cierre de la casa (la última antes de empezar). Apostar a
+// 2,10 lo que cerró a 1,90 es un +10,5 %: quien gana a la cuota de cierre de forma constante gana a la larga, y se sabe en cuanto
+// empieza el partido, sin esperar a cientos de resultados. Las combinadas, con el producto de sus selecciones (todas con cierre;
+// las nulas no cuentan). Cuentan también las pendientes ya empezadas.
+export function closeOdds(b: Bet): number | null {
+  if (b.legs?.length) {
+    const legs = b.legs.filter(l => l.status !== 'void');
+    if (!legs.length || legs.some(l => !(l.close?.price && l.close.price > 1))) return null;
+    return legs.reduce((p, l) => p * l.close!.price!, 1);
+  }
+  return b.close?.price && b.close.price > 1 ? b.close.price : null;
+}
+export function clvOf(bets: Bet[]) {
+  const list = bets.filter(b => b.status !== 'void' && b.odds > 1).map(b => ({ b, close: closeOdds(b) })).filter(x => x.close) as { b: Bet; close: number }[];
+  const n = list.length;
+  const clv = list.map(x => x.b.odds / x.close - 1);
+  // Con importe: lo que se gana a la cuota de cierre por cada euro apostado, como el ROI
+  const staked = list.reduce((s, x) => s + x.b.stake, 0);
+  return {
+    n,
+    // Las que podrían tenerla (con partido enlazado) y aún no: la interfaz lo dice para que no parezca que falta algo
+    withRef: bets.filter(b => b.status !== 'void' && (b.ref || b.legs?.some(l => l.ref))).length,
+    avg: n ? clv.reduce((s, v) => s + v, 0) / n : 0,
+    weighted: staked ? list.reduce((s, x, i) => s + x.b.stake * clv[i], 0) / staked : 0,
+    beat: n ? clv.filter(v => v > 0).length / n : 0
+  };
+}

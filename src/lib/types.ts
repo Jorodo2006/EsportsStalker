@@ -13,7 +13,10 @@ export interface BetRef {
   sport: Sport; match: string; key: string; out: string; start?: string;
   guessed?: boolean; settled?: { at: string; text: string };
 }
-export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport; ref?: BetRef }
+// Cuota de cierre (la última de la casa antes de empezar), la pone sólo el servidor (bets/closing.js) para el CLV. price null: se
+// buscó y no la hay (el partido no se leyó cerca del inicio)
+export interface BetClose { price: number | null; book: string }
+export interface BetLeg { event: string; league: string; market: string; selection: string; odds: number; status: LegStatus; sport?: Sport; ref?: BetRef; close?: BetClose }
 // En el boleto se guarda también la casa de donde salió la cuota
 // Para volver a leer la cuota desde el cupón: el partido como lo pide el comparador, la clave del mercado y la selección.
 // at: cuándo se leyó la cuota (o se añadió); was: la cuota de antes si al actualizar cambió; gone: la casa ya no ofrece la línea.
@@ -41,6 +44,7 @@ export interface Bet {
   notes: string;
   legs?: BetLeg[]; // combinada: 2 o más selecciones (cuota = producto, estado según las selecciones)
   ref?: BetRef; // simple: su partido y mercado, para resolverla sola
+  close?: BetClose; // simple: su cuota de cierre
 }
 
 // Una recomendación del modelo tal y como se registra: su partido y mercado (como el ref de una apuesta), lo que decía
@@ -81,7 +85,8 @@ export type ChatItem =
   | { kind: 'msg'; id: string; mine: boolean; body: string; created: string; read: boolean }
   | ({ kind: 'bet'; id: string; shareId: string; mine: boolean; bet: SharedBetData; note: string; created: string; copied: boolean } & SharedState);
 export interface PredictionRow {
-  sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; p: number; pModel: number | null;
+  // closePrice: la cuota de cierre de la casa (la última antes de empezar, del histórico; bets/closing.js); null si no se leyó cerca
+  sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; closePrice: number | null; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
 }
 // Lo que falta por resolver, por lo que le pasa: por jugar, en juego (menos de 2 h), acabadas esperando resultado y sin poder

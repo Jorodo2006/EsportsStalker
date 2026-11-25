@@ -1,11 +1,12 @@
 import { Check, CircleSlash, Pencil, Send, X } from 'lucide-react';
-import { STATUS_LABEL, STATUS_TONE, betProfit, decEs, money, odd, tone } from '@/lib/format';
+import { STATUS_LABEL, STATUS_TONE, betProfit, decEs, decimal, money, odd, tone } from '@/lib/format';
 import { useCurrency } from '@/lib/app-context';
 import type { Bet, BetStatus } from '@/lib/types';
 import { Badge, Button } from '@/components/ui';
 import { RowMenu } from '@/components/bets/RowMenu';
 import { AutoMark } from '@/views/bets/AutoMark';
 import { ProfitText } from '@/views/bets/Profit';
+import { closeOdds } from '@/lib/bet-stats';
 
 // Una apuesta del historial: lo importante en la fila y las acciones a la derecha, sin tabla ni scroll lateral.
 // Pulsar la fila abre la edición; los botones no (stopPropagation)
@@ -17,9 +18,12 @@ export function BetRow({ bet: b, onEdit, onSettle, onShare }: {
   const pending = b.status === 'pending';
   const done = combo ? b.legs!.filter(l => l.status !== 'pending').length : 0;
   const profit = betProfit(b);
+  const close = b.status === 'void' ? null : closeOdds(b), clv = close ? b.odds / close - 1 : 0;
   const sub = [
     combo ? `Combinada ×${b.legs!.length} · ${done} de ${b.legs!.length} resueltas` : [b.event, decEs(b.market)].filter(Boolean).join(' · '),
-    b.bookmaker, `${money(b.stake, cur)} a ${odd(b.odds)}`
+    b.bookmaker, `${money(b.stake, cur)} a ${odd(b.odds)}`,
+    // La cuota de cierre (CLV, bet-stats.ts): «cierre 1,95 (+7,7 %)», en cuanto empieza el partido
+    close ? `cierre ${odd(close)} (${clv > 0 ? '+' : ''}${decimal(clv * 100, 1)} %)` : ''
   ].filter(Boolean).join(' · ');
   const stop = (fn: () => void) => (e: { stopPropagation: () => void }) => { e.stopPropagation(); fn(); };
   // La nula (se devuelve lo apostado) sólo estaba dentro de Editar y no se veía: va en el menú, con ganada y perdida a la vista

@@ -8,6 +8,7 @@
 const { query, notify } = require('../../shared/db');
 const client = require('../../shared/client');
 const push = require('./push');
+const { norm, mentionsTeam } = require('../../shared/mentions');
 
 const PREF_KEYS = ['drop', 'rise', 'value', 'news'];
 const DEFAULT_PREFS = { drop: true, rise: true, value: true, news: true };
@@ -20,7 +21,6 @@ const MAX_WATCH = 40;
 // todas las líneas, así que sólo las fuertes (la regla de «Recomendaciones fuertes» de los avisos de la app)
 const VALUE = { ev: 0.02, rel: 55 }, VALUE_BASKET = { ev: 0.08, rel: 65 };
 
-const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const odd = v => Number(v).toFixed(2).replace('.', ',');
 const pctOf = c => `${c > 0 ? '+' : '−'}${Math.round(Math.abs(c) * 100)} %`;
 const madridDay = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
@@ -42,15 +42,6 @@ function urlOf(id, open) {
 
 // ---------- Quién tiene que enterarse (funciones puras, con pruebas en server/test/avisos.test.js) ----------
 
-// ¿El texto del partido de una apuesta ("UTAH @ LAC", "Albacete - Celta", "Alcaraz vs Sinner") nombra a este equipo?
-function mentionsTeam(event, team) {
-  const e = ` ${norm(event)} `, name = norm(team?.name), code = norm(team?.code);
-  if (name && e.includes(` ${name} `)) return true;
-  if (code && code.length >= 2 && e.includes(` ${code} `)) return true;
-  // Tenis y MMA: basta el apellido ("Alcaraz vs Sinner")
-  const last = name.split(' ').pop();
-  return !!last && last.length >= 4 && e.includes(` ${last} `);
-}
 const sameStart = (a, b) => !a || !b || Math.abs(+new Date(a) - +new Date(b)) <= 6 * 3600e3;
 
 // A quién le importa cada movimiento de un partido. Devuelve [{ userId, move, why, open }] (why: 'bet' | 'watch' | 'fav')

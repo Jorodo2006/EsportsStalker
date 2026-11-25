@@ -215,6 +215,12 @@ Recomendaciones del modelo para medir si acierta (migración `009_predicciones.s
 es la misma para todos. Una fila por `(match, key, out)`; `p`, `p_model`, `p_market`, `price`, `ev` y `rel` son la última
 opinión antes del partido, `first_price` la cuota de la primera vez. `status`: `pending`, `won`, `lost`, `void` o
 `unknown` (no se pudo resolver sola en 4 días). La escribe `POST /api/bets/predictions` y la cierra el resolvedor. `tried_at` (migración 019): la última vez que el resolvedor la intentó sin conseguirlo; cada pasada (cada 5 min, 3000 como mucho) coge primero las nunca intentadas y deja 30 min entre intentos, para que las que no tienen resultado no tapen a las demás.
+
+`close_price`, `close_book`, `close_at` y `close_checked` (migración 021): su cuota de cierre, para el CLV (`bets/closing.js`). `close_checked`: ya se buscó, con o sin cierre.
+
+### `bets.closing`
+
+Cuota de cierre de cada apuesta (`pos` −1) o selección de combinada (`pos` 0, 1…), con la selección a la que corresponde (`match`, `key`, `out`), la casa y `price` (null si se buscó y no la hay). Sólo la escribe el servidor (`bets/closing.js`, migración 021); se borra con la apuesta. Detalle en `05-apuestas.md`.
 La migración `017_periodos_imposibles.sql` borró las de baloncesto con un total de mitad o cuarto que era en realidad el del
 partido entero (Betway, NBL; ver `docs/specs/08-baloncesto.md`).
 

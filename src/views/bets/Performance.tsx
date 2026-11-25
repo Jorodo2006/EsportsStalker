@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Activity, Dices, Flame, TrendingDown } from 'lucide-react';
+import { Activity, Dices, Flame, Gauge, TrendingDown } from 'lucide-react';
 import { useCurrency } from '@/lib/app-context';
-import { MIN_LUCK, byMonth, combinedSeries, edgeOf, luckOf, runsOf, settledOf } from '@/lib/bet-stats';
+import { MIN_LUCK, byMonth, clvOf, combinedSeries, edgeOf, luckOf, runsOf, settledOf } from '@/lib/bet-stats';
 import { chip, Card, Empty, Stat } from '@/components/ui';
 import { betProfit, cn, decimal, fmtDate, money, pct, tone } from '@/lib/format';
 import { profitString, useProfit } from '@/views/bets/Profit';
@@ -29,6 +29,7 @@ export function PerformanceKpis({ bets }: { bets: Bet[] }) {
   const e = useMemo(() => edgeOf(bets), [bets]);
   const l = useMemo(() => luckOf(bets), [bets]);
   const r = useMemo(() => runsOf(bets), [bets]);
+  const c = useMemo(() => clvOf(bets), [bets]);
   if (!e.n && !r.peak && !r.maxDrop) return null;
 
   const luck = l.p === null
@@ -39,7 +40,11 @@ export function PerformanceKpis({ bets }: { bets: Bet[] }) {
   const streak = r.streak.kind ? `${r.streak.n} ${r.streak.kind === 'won' ? 'ganada' : 'perdida'}${r.streak.n === 1 ? '' : 's'} seguidas` : '—';
 
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 max-md:[&>:last-child:nth-child(odd)]:col-span-2 2xl:grid-cols-4">
+    <div className="mb-5 grid grid-cols-2 gap-3 max-md:[&>:last-child:nth-child(odd)]:col-span-2 md:grid-cols-3 2xl:grid-cols-5">
+      <Stat label="CLV (frente al cierre)" icon={<Gauge size={15} />}
+        value={c.n ? `${c.weighted > 0 ? '+' : ''}${pct(c.weighted)}` : '—'} valueClass={c.n ? tone(c.weighted) : 'text-zinc-500'}
+        sub={c.n ? `Mejor cuota que la de cierre en ${pct(c.beat)} de ${c.n} apuestas`
+          : c.withRef ? 'Saldrá cuando empiecen los partidos de tus apuestas' : 'Sólo con apuestas enlazadas a su partido (desde el cupón)'} />
       <Stat label="Acierto frente al necesario" icon={<Activity size={15} />}
         value={e.n ? pp(e.diff) : '—'} valueClass={e.n ? tone(e.diff) : 'text-zinc-500'}
         sub={e.n ? `Aciertas ${pct(e.hit)}; a tus cuotas hace falta ${pct(e.breakEven)} para no perder` : 'Sin apuestas resueltas'} />

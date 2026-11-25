@@ -9,6 +9,7 @@ const client = require('../../shared/client');
 const store = require('./store');
 const { mentions } = require('../../shared/fighters');
 const predictions = require('./predictions');
+const closing = require('./closing');
 const ticket = require('./ticket');
 
 const TICK = 5 * 60e3;
@@ -433,9 +434,9 @@ async function run() {
     await predictions.settle(resultOf, evaluate, madridDay);
   } catch (e) {
     console.error('Resolver recomendaciones:', e.message);
-  } finally {
-    running = false;
   }
+  // La cuota de cierre de lo que ya ha empezado, para el CLV (closing.js). No falla nunca: lo apunta en el log
+  try { await closing.run(); } finally { running = false; }
   if (changed) notify('bets:settled', { n: changed });
   return changed;
 }

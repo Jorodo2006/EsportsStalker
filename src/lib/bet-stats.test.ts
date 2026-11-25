@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byMonth, combinedSeries, edgeOf, luckOf, marketKind, normalCdf, oddsBand, runsOf } from '@/lib/bet-stats';
+import { byMonth, clvOf, closeOdds, combinedSeries, edgeOf, luckOf, marketKind, normalCdf, oddsBand, runsOf } from '@/lib/bet-stats';
 import type { Bet, BetStatus } from '@/lib/types';
 
 let id = 0;
@@ -80,5 +80,27 @@ describe('combinedSeries', () => {
     const s = combinedSeries([bet('won', 2, 10, '2026-11-01', { sport: 'basket' }), bet('lost', 2, 5, '2026-11-02', { sport: 'tennis' })], 'basket');
     expect(s.map(p => p.total)).toEqual([0, 10, 5]);
     expect(s.map(p => p.part)).toEqual([0, 10, 10]);
+  });
+});
+
+describe('clvOf', () => {
+  const ref = { sport: 'football' as const, match: '1', key: 'moneyline|0||', out: 'a' };
+  it('la cuota frente a la de cierre', () => {
+    const c = clvOf([
+      bet('won', 2.2, 10, '2026-11-01', { ref, close: { price: 2, book: 'winamax' } }), // +10 %
+      bet('pending', 1.8, 30, '2026-11-02', { ref, close: { price: 2, book: 'winamax' } }), // −10 %
+      bet('lost', 2, 10, '2026-11-03', { ref, close: { price: null, book: '' } }), // sin cierre
+      bet('void', 2, 10, '2026-11-03', { ref, close: { price: 1.5, book: '' } }) // nula: fuera
+    ]);
+    expect(c.n).toBe(2);
+    expect(c.avg).toBeCloseTo(0);
+    expect(c.weighted).toBeCloseTo((10 * 0.1 + 30 * -0.1) / 40);
+    expect(c.beat).toBe(0.5);
+    expect(c.withRef).toBe(3);
+  });
+  it('combinada: con todas sus selecciones con cierre, sin contar las nulas', () => {
+    const leg = (price: number | null, status: 'won' | 'void' = 'won') => ({ event: '', league: '', market: '', selection: '', odds: 2, status, ref, close: { price, book: 'betway' } });
+    expect(closeOdds(bet('won', 4, 10, '2026-11-01', { legs: [leg(1.8), leg(2.5), leg(null, 'void')] }))).toBeCloseTo(4.5);
+    expect(closeOdds(bet('won', 4, 10, '2026-11-01', { legs: [leg(1.8), leg(null)] }))).toBeNull();
   });
 });

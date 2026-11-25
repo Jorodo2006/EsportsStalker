@@ -6,6 +6,7 @@ const { migrate, query } = require('../../shared/db');
 const bridge = require('./bridge');
 const odds = require('./odds');
 const scheduler = require('./scheduler');
+const closing = require('./closing');
 const { AUTO_PAGE } = require('./auto-page');
 
 const matchOf = body => {
@@ -37,6 +38,10 @@ const routes = [
   ['GET', '/api/odds/auto/status', () => scheduler.status()],
   // Primer arranque con backend: direcciones aprendidas que había en casas-urls.json
   ['POST', '/api/odds/legacy-urls', ({ body }) => bridge.importUrls(body?.urls)],
+
+  // ---------- Entre servicios (el gateway no las reparte) ----------
+  // Cuota de cierre de apuestas y recomendaciones, para el CLV (bets/closing.js)
+  ['POST', '/internal/odds/closing', ({ body }) => closing.closingFor(body?.items)],
 
   // ---------- Para el marcador y la extensión de Chrome ----------
   ['GET', '/ping', () => ({ ok: true })],

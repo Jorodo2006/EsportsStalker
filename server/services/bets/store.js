@@ -115,15 +115,25 @@ async function claimExisting(c, userId) {
 
 // ---------- Apuestas ----------
 const LEGS_SQL = `(SELECT json_agg(json_build_object('event', l.event, 'league', l.league, 'market', l.market,
-  'selection', l.selection, 'odds', l.odds, 'status', l.status, 'sport', l.sport, 'ref', l.ref) ORDER BY l.pos) FROM bets.bet_legs l WHERE l.bet_id = b.id) AS legs`;
+  'selection', l.selection, 'odds', l.odds, 'status', l.status, 'sport', l.sport, 'ref', l.ref) ORDER BY l.pos) FROM bets.bet_legs l WHERE l.bet_id = b.id) AS legs,
+  (SELECT json_agg(json_build_object('pos', c.pos, 'match', c.match, 'key', c.key, 'out', c.out, 'price', c.price, 'book', c.book))
+    FROM bets.closing c WHERE c.bet_id = b.id) AS closing`;
+
+// La cuota de cierre guardada (closing.js) de la simple (pos −1) o de una selección, si sigue siendo de la misma selección (si se
+// editó la apuesta y cambió, no vale). { price, book }; price null: se buscó y no la hay. Va fuera del ref: no viaja al pasar la
+// apuesta a un amigo (friends.js, shareable) ni se puede mandar desde el navegador
+function closeAt(closing, pos, ref) {
+  const c = ref && (closing || []).find(x => x.pos === pos && x.match === ref.match && x.key === ref.key && x.out === ref.out);
+  return c ? { close: { price: c.price, book: c.book } } : {};
+}
 
 function fromRow(r) {
   const bet = {
     id: r.id, date: r.date, sport: r.sport, league: r.league, event: r.event, market: r.market, selection: r.selection,
     bookmaker: r.bookmaker, odds: r.odds, stake: r.stake, status: r.status, cashout: r.cashout, notes: r.notes
   };
-  if (r.ref) bet.ref = r.ref;
-  if (r.legs && r.legs.length) bet.legs = r.legs.map(l => (l.ref ? l : (({ ref: _, ...x }) => x)(l)));
+  if (r.ref) Object.assign(bet, { ref: r.ref }, closeAt(r.closing, -1, r.ref));
+  if (r.legs && r.legs.length) bet.legs = r.legs.map((l, pos) => (l.ref ? { ...l, ...closeAt(r.closing, pos, l.ref) } : (({ ref: _, ...x }) => x)(l)));
   return bet;
 }
 
