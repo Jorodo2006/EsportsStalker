@@ -35,7 +35,13 @@ La implementación está en `betProfit` (`src/lib/format.ts`). Sobre ese benefic
 - cuota media y apuestas pendientes con su retorno;
 - banca, igual a la banca inicial del usuario (en *Tu cuenta*) más el beneficio;
 - la gráfica de evolución (todo, 30 días o 7 días);
-- el desglose por cuota, tipo de mercado, simples y combinadas, casa y liga, cada uno con «acierto / necesario».
+- «Dónde ganas y dónde pierdes» (`src/views/bets/Breakdown.tsx`): un solo panel con pestañas (liga, cuota, mercado, casa, simples
+  y combinadas; y deporte con «Todo»). Cada grupo es una fila con una barra del beneficio desde el cero, a la misma escala en todas
+  (verde a la derecha, roja a la izquierda), el beneficio y el ROI, y lo que se acierta frente a lo que piden esas cuotas. Con más de
+  8 grupos, «Ver todas».
+
+Arriba de la pantalla, el selector «<deporte> / Todo» (`bets-scope` en `localStorage`): con «Todo» las cifras, gráficas, desglose e
+historial son de las apuestas de los cinco deportes juntas.
 
 ### Rendimiento (`src/lib/bet-stats.ts`, `src/views/bets/Performance.tsx`)
 

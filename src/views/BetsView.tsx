@@ -7,12 +7,12 @@ import { TicketUpload } from '@/components/TicketScan';
 import { History } from '@/views/bets/History';
 import { AutoMark } from '@/views/bets/AutoMark';
 import { CombinedChart, MonthlyChart, PerformanceKpis } from '@/views/bets/Performance';
-import { edgeOf, marketKind, oddsBand, oddsBandOrder } from '@/lib/bet-stats';
+import { Breakdown } from '@/views/bets/Breakdown';
 import { ProfitText, profitString, useProfit } from '@/views/bets/Profit';
 import { useApp, useCurrency, useWallet } from '@/lib/app-context';
-import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, groupBy, money, odd, pct, summarize, tone } from '@/lib/format';
+import { STATUS_LABEL, STATUS_TONE, betProfit, cn, decEs, fmtDate, money, odd, pct, summarize, tone } from '@/lib/format';
 import type { Bet, BetStatus, LegStatus } from '@/lib/types';
-import { Badge, Button, Card, Empty, Loading, PageHeader, Stat, Tabs, td, th } from '@/components/ui';
+import { Badge, Button, Card, Empty, Loading, PageHeader, Stat, Tabs } from '@/components/ui';
 
 
 
@@ -25,8 +25,12 @@ export default function BetsView() {
   const [sharing, setSharing] = useState<Bet | null>(null);
   const qc = useQueryClient();
   const { data: all = [], isLoading } = useQuery({ queryKey: ['bets'], queryFn: () => window.api.bets.list() });
-  // Cada app ve sus apuestas; las combinadas que mezclan LoL y baloncesto salen en las dos
-  const bets = useMemo(() => all.filter(b => (b.sport || 'lol') === app || b.sport === 'mix'), [all, app]);
+  // Cada app ve sus apuestas (las combinadas que mezclan deportes salen en todas) o, con «Todo», las de los cinco juntas. Se
+  // recuerda la elección en localStorage
+  const [scope, setScopeState] = useState<'app' | 'all'>(() => { try { return localStorage.getItem('bets-scope') === 'all' ? 'all' : 'app'; } catch { return 'app'; } });
+  const setScope = (v: 'app' | 'all') => { setScopeState(v); try { localStorage.setItem('bets-scope', v); } catch { /* sin localStorage */ } };
+  const everything = scope === 'all';
+  const bets = useMemo(() => everything ? all : all.filter(b => (b.sport || 'lol') === app || b.sport === 'mix'), [all, app, everything]);
   const s = useMemo(() => summarize(bets), [bets]);
   // La cartera es común a todas las apps; las estadísticas de abajo son sólo de esta
   const w = useWallet();
@@ -45,7 +49,7 @@ export default function BetsView() {
 
   return (
     <>
-      <PageHeader title="Mis apuestas" subtitle={`${APP_NAME[app]}: registro, beneficio y rendimiento`}>
+      <PageHeader title="Mis apuestas" subtitle={`${everything ? 'Todos los deportes' : APP_NAME[app]}: registro, beneficio y rendimiento`}>
         <Button variant="secondary" onClick={async () => {
           try { const n = await window.api.bets.import(); if (n) { toast(`${n} apuestas importadas`); qc.invalidateQueries({ queryKey: ['bets'] }); } }
           catch (e) { toast('Error al importar: ' + (e as Error).message); }
@@ -64,6 +68,10 @@ export default function BetsView() {
         <Button className="order-first w-full sm:order-none sm:w-auto" onClick={() => openBet()}><Plus size={16} />Nueva apuesta</Button>
       </PageHeader>
 
+      <div className="-mt-2 mb-5">
+        <Tabs value={scope} onChange={setScope} items={[{ value: 'app', label: APP_NAME[app] }, { value: 'all', label: 'Todo' }]} />
+      </div>
+
       {!bets.length ? <FirstBet onNew={() => openBet()} /> : <>
 
       <Pending bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onShare={setSharing} />
@@ -71,7 +79,7 @@ export default function BetsView() {
       <div className="mb-5 grid grid-cols-2 gap-3 max-md:[&>:last-child:nth-child(odd)]:col-span-2 md:grid-cols-3 2xl:grid-cols-5">
         <Stat label="Cartera (todas las apps)" icon={<Wallet size={15} />} value={money(w.balance, cur)}
           sub={<>{money(w.inPlay, cur)} en juego · beneficio total <ProfitText value={w.profit} /></>} />
-        <Stat label={`Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={<ProfitText value={s.profit} unitsClass="text-sm" />} valueClass={tone(s.profit)}
+        <Stat label={everything ? 'Beneficio de todo' : `Beneficio en ${APP_NAME[app].toLowerCase().replace('lol', 'LoL')}`} value={<ProfitText value={s.profit} unitsClass="text-sm" />} valueClass={tone(s.profit)}
           sub={`${s.settled} apuestas resueltas`} />
         <Stat label="ROI / Yield" icon={<Percent size={15} />} value={pct(s.roi)} valueClass={tone(s.roi)}
           sub={s.pendingStake ? `${money(s.staked, cur)} en resueltas · ${money(s.pendingStake, cur)} pendientes` : `Apostado ${money(s.staked, cur)}`} />
@@ -88,13 +96,7 @@ export default function BetsView() {
         <CombinedChart all={all} app={app} />
       </div>
 
-      <div className="my-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
-        <Breakdown title="Por cuota" bets={bets} keyFn={b => oddsBand(b.odds)} order={(a, b) => oddsBandOrder(a) - oddsBandOrder(b)} />
-        <Breakdown title="Por tipo de mercado" bets={bets} keyFn={marketKind} />
-        <Breakdown title="Simples y combinadas" bets={bets} keyFn={b => b.legs?.length ? 'Combinadas' : 'Simples'} />
-        <Breakdown title="Por casa de apuestas" bets={bets} keyFn={b => b.bookmaker || 'Sin casa'} />
-        <Breakdown title="Por liga" bets={bets} keyFn={b => b.league || 'Sin liga'} />
-      </div>
+      <Breakdown bets={bets} bySport={everything} />
 
       <History bets={bets} onEdit={b => openBet(b)} onSettle={quickSettle} onShare={setSharing} />
       <ShareDialog bet={sharing} onClose={() => setSharing(null)} />
@@ -174,41 +176,6 @@ function ProfitChart({ bets }: { bets: Bet[] }) {
               <Area type="monotone" dataKey="profit" stroke={color} strokeWidth={2} fill="url(#pg)" />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// Apostado cuenta también lo pendiente; beneficio y ROI sólo las resueltas (con todo pendiente se ve "—", no 0).
-// «Acierto / necesario»: lo que se acierta y lo que piden esas cuotas para quedarse a cero (edgeOf); en verde si se gana a la cuota.
-// order: el orden de las filas (los tramos de cuota, de menor a mayor); sin él, de más a menos beneficio
-function Breakdown({ title, bets, keyFn, order }: { title: string; bets: Bet[]; keyFn: (b: Bet) => string; order?: (a: string, b: string) => number }) {
-  const cur = useCurrency();
-  const rows = useMemo(() => [...groupBy(bets, keyFn)].map(([k, l]) => ({ k, ...summarize(l), edge: edgeOf(l) }))
-    .sort((a, b) => order ? order(a.k, b.k) : b.profit - a.profit), [bets, keyFn, order]);
-  return (
-    <Card title={title} className="overflow-hidden">
-      {!rows.length ? <Empty>Sin datos todavía</Empty> : (
-        <div className="-m-5 overflow-x-auto">
-          <table className="w-full min-w-[560px]">
-            <thead className="bg-zinc-900/60"><tr>
-              <th className={th}></th><th className={th + ' text-right'}>Apuestas</th><th className={th + ' text-right'}>Apostado</th>
-              <th className={th + ' text-right'}>En juego</th><th className={th + ' text-right'} title="Lo que aciertas y lo que piden esas cuotas para no perder">Acierto / necesario</th><th className={th + ' text-right'}>Beneficio</th><th className={th + ' text-right'}>ROI</th>
-            </tr></thead>
-            <tbody className="divide-y divide-zinc-800/70">
-              {rows.map(r => (
-                <tr key={r.k}>
-                  <td className={td + ' font-medium'}>{r.k}</td><td className={td + ' text-right tabular-nums'}>{r.count}</td>
-                  <td className={td + ' text-right tabular-nums'}>{money(r.staked + r.pendingStake, cur)}</td>
-                  <td className={td + ' text-right tabular-nums text-zinc-400'}>{r.pendingStake ? money(r.pendingStake, cur) : '—'}</td>
-                  <td className={td + ' whitespace-nowrap text-right tabular-nums ' + (r.edge.n ? tone(r.edge.diff) : 'text-zinc-500')}>{r.edge.n ? `${pct(r.edge.hit)} / ${pct(r.edge.breakEven)}` : '—'}</td>
-                  <td className={td + ' whitespace-nowrap text-right font-semibold tabular-nums ' + (r.settled ? tone(r.profit) : 'text-zinc-500')}>{r.settled ? <ProfitText value={r.profit} /> : '—'}</td>
-                  <td className={td + ' text-right tabular-nums ' + (r.settled ? tone(r.roi) : 'text-zinc-500')}>{r.settled ? pct(r.roi) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </Card>
