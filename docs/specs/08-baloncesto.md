@@ -513,5 +513,27 @@ pone `home` a null en los props y `projectGame(…, neutral)` quita la ventaja d
 medida, es lo que significa una pista neutral. Tras los cuartos y las semifinales de diciembre de 2026 hay que repetir la
 prueba: si la eliminatoria vuelve a salir por debajo, pasará a ser un factor de `CTX_FACTORS`.
 
+**Por papel (26-11-2026).** La media no cambiaba, pero el reparto sí. Con `scripts/backtest-basket.ts` (papel = minutos de media en
+sus 15 últimos partidos de la temporada: estrella 32+, titular 26-32, rotación 18-26, banquillo menos de 18), en la fase de grupos
+frente a la liga de las mismas semanas:
+
+| Papel | Minutos 25-26 | Minutos 26-27 | Producción (PRA) |
+|---|---|---|---|
+| Estrella | +3,6 % (liga +0,9 %) | +3,6 % (liga +1,1 %) | −1,0 % (liga +0,7 %) / +7,0 % (liga +2,9 %): no sube de forma clara |
+| Banquillo | +1,1 % (liga +7,8 %) | −3,1 % (liga +0,8 %) | +0,2 % (liga +13,6 %) / −13,3 % (liga −2,3 %): unos 11-13 puntos menos que en la liga |
+
+Las estrellas juegan más pero no producen más, y el banquillo produce menos. Un factor de 0,94 para el banquillo (ajustado con 25-26
+y encogido a la mitad) baja la log-loss de sus líneas en 26-27 (0,6778 → 0,6730), pero la sube en 25-26 (0,6900 → 0,6906): en
+25-26 el modelo ya se quedaba corto con el banquillo en la liga. Sin mejora en los dos periodos, **no entra en la probabilidad**. En
+la eliminatoria (9 partidos de 25-26) la rotación y el banquillo pierden un 17 % de minutos: se queda en la fiabilidad. El backtest
+ya pasa `cup` al modelo como la app (`gameExtras`); antes no lo hacía.
+
+Lo que sí se enseña: en las recomendaciones de un partido de la Cup, «NBA Cup: cómo rota cada equipo» (`BasketCupRotation.tsx`,
+`cupRotation` de `src/lib/basket-cup.ts`, con pruebas), con los minutos de media de cada jugador en la liga y en la Cup esta temporada
+en los partidos que jugó (los que se perdió son lesiones, no decisiones del entrenador), lo que cambian sus 2 de más minutos y su
+banquillo, y cuántos juegan 10 minutos o más. Sólo con los partidos de ese equipo (los registros traen también los de cada jugador
+con su equipo anterior). La temporada pasada no se enseña: los registros del equipo sólo traen a la plantilla de hoy. Tras los
+cuartos y las semifinales de diciembre, repetir la prueba por papel.
+
 Debajo de "En las casas", la tabla del analizador enseña la cuota de cada casa por línea (Más y Menos), con la que paga
 más resaltada cuando las dos la tienen (`playerLines` guarda `books` con las cuotas de cada casa).

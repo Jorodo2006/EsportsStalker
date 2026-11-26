@@ -38,8 +38,16 @@ for (const games of byPlayer.values()) for (const g of games) {
 
 const MARKETS: BasketMarket[] = ['pts', 'reb', 'ast', 'fg3m', 'pra', 'pr', 'pa', 'ra', 'stl', 'blk', 'tov'];
 const SPLIT = +new Date('2026-02-01'); // antes: para ajustar; después (y la temporada 26-27): para comprobar
-type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; cup: 'group' | 'ko' | null; cupWeeks: boolean; muCtx: number; pBase: number; pCtx: number; line: number };
+type Role = 'star' | 'starter' | 'rotation' | 'bench';
+type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; cup: 'group' | 'ko' | null; cupWeeks: boolean; muCtx: number; pBase: number; pCtx: number; line: number; role: Role; pAt?: (k: number) => number };
 const rows: Row[] = [];
+// Papel en el equipo por sus minutos de esta temporada antes del partido (en la NBA Cup los entrenadores dan más minutos a los
+// primeros y menos a la rotación: ¿mejora la probabilidad si se tiene en cuenta?)
+const roleOf = (prior: BasketLogGame[], season: number): Role => {
+  const xs = prior.filter(x => x.season === season && x.type === 'reg' && x.min > 0).slice(-15);
+  const m = xs.length ? xs.reduce((s, x) => s + x.min, 0) / xs.length : 0;
+  return m >= 32 ? 'star' : m >= 26 ? 'starter' : m >= 18 ? 'rotation' : 'bench';
+};
 
 for (const games of byPlayer.values()) {
   const asc = games.filter(g => g.type !== 'pre').sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -50,17 +58,24 @@ for (const games of byPlayer.values()) {
     const team = g.teamId ? teamGames.get(g.teamId) ?? [] : [];
     // El contexto sale igual que en la app: sólo del registro del jugador, del calendario de su equipo y de la fecha
     const cx = gameCtx(prior, team, g.date, g.teamId);
+    // Como en la app (gameExtras): el partido de la NBA Cup entra en el contexto
+    const cupG = cupOf(g);
     const base: BasketCtx = { currentSeason: g.season, home: g.home, opp: g.opp, injury: null };
+    const full: BasketCtx = { ...base, ...cx, ...(cupG ? { cup: cupG } : {}) };
     for (const m of MARKETS) {
       const P = project(prior, m, base);
       if (!P || P.mu <= 0.3) continue;
-      const Pc = project(prior, m, { ...base, ...cx });
+      const Pc = project(prior, m, full);
       const line = Math.floor(P.mu) + 0.5; // una línea cerca de la proyección, como las de las casas
-      const A = analyze(prior, m, line, {}, base), Ac = analyze(prior, m, line, {}, { ...base, ...cx });
+      const A = analyze(prior, m, line, {}, base), Ac = analyze(prior, m, line, {}, full);
       if (!A || !Ac || !Pc) continue;
+      const cup = cupOf(g);
       rows.push({
         fit: +new Date(g.date) < SPLIT && g.season === 2026, m, y: BASKET_MARKETS[m].f(g), mu: P.mu, min: g.min, projMin: P.projMin,
-        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, cup: cupOf(g), cupWeeks: /-(11|12)-/.test(g.date.slice(4, 8)) && g.date.slice(5, 10) <= '12-20', muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line
+        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, cup, cupWeeks: /-(11|12)-/.test(g.date.slice(4, 8)) && g.date.slice(5, 10) <= '12-20', muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line,
+        role: roleOf(prior, g.season),
+        // Probabilidad de «Más» si la proyección se multiplica por k (se aproxima moviendo la línea: line / k)
+        ...(cup ? { pAt: (k: number) => analyze(prior, m, line / k, {}, { ...base, ...cx })?.pOver ?? Ac.pOver } : {})
       });
     }
   }
@@ -102,6 +117,16 @@ for (const part of [true, false]) {
     const rs = R.filter(f);
     console.log(`  ${name.padEnd(18)} ${score(rs, r => r.pBase)}  →  ${score(rs, r => r.pCtx)}  (n ${rs.length})`);
   }
+  // NBA Cup por papel: real / proyectado en la Cup frente a la liga de las mismas semanas, y si un factor por papel ajustado con la
+  // temporada 25-26 mejora la probabilidad en la otra
+  console.log('\nNBA Cup por papel (real / proyectado; Cup frente a liga de las mismas semanas):');
+  for (const role of ['star', 'starter', 'rotation', 'bench'] as Role[]) {
+    for (const [name, f] of [['grupos', (r: Row) => r.cup === 'group'], ['eliminatoria', (r: Row) => r.cup === 'ko'], ['liga mismas semanas', (r: Row) => !r.cup && r.cupWeeks]] as [string, (r: Row) => boolean][]) {
+      const rs = R.filter(r => r.role === role && f(r));
+      if (rs.length < 30) continue;
+      console.log(`  ${role.padEnd(9)} ${name.padEnd(20)} minutos ${fmt(ratio(rs.filter(r => r.m === 'pts'), r => r.min, r => r.projMin))}  PRA ${fmt(ratio(rs.filter(r => r.m === 'pra'), r => r.y, r => r.muCtx))}`);
+    }
+  }
   // Calibración con contexto: por tramos de probabilidad, lo que dijo frente a lo que salió
   console.log('\nCalibración con contexto (dijo → salió):');
   for (let lo = 0; lo < 1; lo += 0.1) {
@@ -109,5 +134,48 @@ for (const part of [true, false]) {
     if (rs.length < 30) continue;
     const said = rs.reduce((s, r) => s + r.pCtx, 0) / rs.length, got = rs.filter(r => r.y > r.line).length / rs.length;
     console.log(`  ${(lo * 100).toFixed(0).padStart(3)}-${((lo + 0.1) * 100).toFixed(0)} %: ${(said * 100).toFixed(1)} % → ${(got * 100).toFixed(1)} %  (n ${rs.length})`);
+  }
+}
+
+// Factor por papel para la fase de grupos: se ajusta con 25-26 (lo que se queda la Cup frente a la liga de esas semanas, en cada
+// estadística) y se comprueba en 26-27. Si en 26-27 no baja la log-loss, no se usa
+{
+  const isFitSeason = (r: Row) => r.fit || (!r.fit && r.cup && false);
+  const cupFit = rows.filter(r => r.cup === 'group' && r.fit === true), cupChk = rows.filter(r => r.cup === 'group' && !r.fit);
+  const leagueFit = rows.filter(r => !r.cup && r.cupWeeks && r.fit);
+  const K = new Map<string, number>();
+  for (const role of ['star', 'starter', 'rotation', 'bench'] as Role[]) for (const m of MARKETS) {
+    const c = cupFit.filter(r => r.role === role && r.m === m), l = leagueFit.filter(r => r.role === role && r.m === m);
+    if (c.length < 20 || l.length < 50) continue;
+    const kc = ratio(c, r => r.y, r => r.muCtx).q, kl = ratio(l, r => r.y, r => r.muCtx).q;
+    // Encogido a la mitad hacia 1: con tan pocos partidos de Cup, la mitad del efecto como mucho
+    K.set(`${role}|${m}`, 1 + (kc / kl - 1) / 2);
+  }
+  const score = (rs: Row[], p: (r: Row) => number) => {
+    let l = 0;
+    for (const r of rs) { const o = r.y > r.line ? 1 : 0, q = Math.min(0.999, Math.max(0.001, p(r))); l -= o ? Math.log(q) : Math.log(1 - q); }
+    return (l / rs.length).toFixed(5);
+  };
+  void isFitSeason;
+  console.log('\n===== NBA Cup, factor por papel (ajuste 25-26 → comprobación 26-27) =====');
+  console.log('factores:', [...K].map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', '));
+  for (const [name, rs] of [['ajuste', cupFit], ['comprobación', cupChk]] as [string, Row[]][]) {
+    const withK = rs.filter(r => K.has(`${r.role}|${r.m}`) && r.pAt);
+    console.log(`  ${name.padEnd(13)} log-loss sin factor ${score(withK, r => r.pCtx)} → con factor ${score(withK, r => r.pAt!(K.get(`${r.role}|${r.m}`)!))}  (n ${withK.length})`);
+  }
+  // Más sencillo (menos riesgo de aprenderse el ruido): un solo factor por papel, el de PRA, para todas las estadísticas
+  const KR = new Map<Role, number>();
+  for (const role of ['star', 'starter', 'rotation', 'bench'] as Role[]) {
+    const c = cupFit.filter(r => r.role === role && r.m === 'pra'), l = leagueFit.filter(r => r.role === role && r.m === 'pra');
+    if (c.length >= 20 && l.length >= 50) KR.set(role, 1 + (ratio(c, r => r.y, r => r.muCtx).q / ratio(l, r => r.y, r => r.muCtx).q - 1) / 2);
+  }
+  console.log('un factor por papel:', [...KR].map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', '));
+  for (const [name, rs] of [['ajuste', cupFit], ['comprobación', cupChk]] as [string, Row[]][]) {
+    const withK = rs.filter(r => KR.has(r.role) && r.pAt);
+    console.log(`  ${name.padEnd(13)} log-loss sin factor ${score(withK, r => r.pCtx)} → con factor ${score(withK, r => r.pAt!(KR.get(r.role)!))}  (n ${withK.length})`);
+    for (const role of KR.keys()) {
+      const x = withK.filter(r => r.role === role);
+      console.log(`    ${role.padEnd(9)} ${score(x, r => r.pCtx)} → ${score(x, r => r.pAt!(KR.get(role)!))}  (n ${x.length})`);
+    }
   }
 }

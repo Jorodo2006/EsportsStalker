@@ -26,6 +26,7 @@ import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { NewsBasisList, NewsHint, useTeamNews } from './MatchNews';
 import { BasketWithout, absencesOf } from './BasketWithout';
+import { BasketCupRotation } from './BasketCupRotation';
 import { useBasketWeights } from '@/lib/basket-weights';
 import { keyNews, withNews, type KeyNews } from '@/lib/news';
 
@@ -350,6 +351,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
         )}
 
         <BasketWithout absents={absents} picks={withN.picks} oddsOf={q.oddsOf} onAdd={add} oneGame={oneGame} />
+        {oneGame && <BasketCupRotation game={games[0]} logsOf={q.logsOf} />}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x lg:divide-white/10">
           <PickList title="Más fáciles" hint={`Probabilidad de 58 % o más, de más a menos valor: ${EASY_HINT}`} list={A.easy} {...props} />
