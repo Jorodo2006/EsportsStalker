@@ -79,13 +79,19 @@ async function run() {
   return out;
 }
 
-// Los pesos de ahora y los últimos intentos (para Acierto del modelo)
+// Los pesos de ahora y los intentos de las últimas 8 semanas (Acierto del modelo: la tabla y el resumen semanal)
 async function summary() {
   const { rows } = await query(`SELECT day, kind, prev_w, fit_w, w, applied, reason, n_fit, n_test, ll_prev, ll_new, ll_market, ll_model
-    FROM bets.model_tuning ORDER BY day DESC, kind LIMIT 28`);
+    FROM bets.model_tuning ORDER BY day DESC, kind LIMIT 120`);
   const num = v => (v == null ? null : Number(v));
+  // De qué aprende: las líneas de baloncesto guardadas por día de partido (hora de España) y cuántas ya tienen resultado. Se
+  // guardan cuando un navegador calcula las recomendaciones: un día sin líneas es un día del que el reajuste no aprende
+  const feed = await query(`SELECT to_char(start AT TIME ZONE 'Europe/Madrid', 'YYYY-MM-DD') AS day, count(*)::int AS n,
+      count(*) FILTER (WHERE status IN ('won', 'lost'))::int AS resolved
+    FROM bets.predictions WHERE sport = 'basket' AND start > now() - interval '14 days' AND start < now() GROUP BY 1 ORDER BY 1`);
   return {
     ...(await weights()),
+    feed: feed.rows,
     history: rows.map(r => ({ day: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day), kind: r.kind, prev: num(r.prev_w), fit: num(r.fit_w), w: num(r.w), applied: r.applied, reason: r.reason, nFit: r.n_fit, nTest: r.n_test, ll: { prev: num(r.ll_prev), next: num(r.ll_new), market: num(r.ll_market), model: num(r.ll_model) } }))
   };
 }

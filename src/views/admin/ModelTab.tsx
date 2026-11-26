@@ -7,6 +7,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Too
 import { useQuery } from '@tanstack/react-query';
 import { cn, odd, pct, tone } from '@/lib/format';
 import { verdictOf } from '@/lib/value';
+import { MIN_GROUP, MIN_PRECISE, tuningHealth, weekly, type TuningHealth, type WeekGroup, type WeekSummary } from '@/lib/model-weeks';
 import type { PredictionQueue, PredictionReport, PredictionRow, Sport } from '@/lib/types';
 import { Button, chip, Empty, ErrorBox, Loading, Tabs } from '@/components/ui';
 import { Panel, panel, TvTabs } from '@/components/viz';
@@ -83,6 +84,9 @@ export default function ModelTab() {
     return (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && (league === 'all' || r.league === league)
       && +new Date(r.start) >= since && (scope === 'lines' || isPick(r)));
   }, [q.data, sport, league, range, scope]);
+  // El resumen semanal va siempre por semanas: no le afecta el periodo
+  const weekRows = useMemo(() => (q.data?.rows ?? []).filter(r => (sport === 'all' || r.sport === sport) && (league === 'all' || r.league === league)
+    && (scope === 'lines' || isPick(r))), [q.data, sport, league, scope]);
   // Sólo los deportes que ya tienen alguna resuelta, y las competiciones del elegido de la que más a la que menos
   const sports = useMemo(() => SPORT_ORDER.filter(s => (q.data?.rows ?? []).some(r => r.sport === s)), [q.data]);
   const leagues = useMemo(() => {
@@ -117,6 +121,7 @@ export default function ModelTab() {
     <>
       {toolbar}
       <Registry data={data} sport={sport} />
+      <WeeklySummary rows={weekRows} sport={sport} />
       {(sport === 'all' || sport === 'basket') && <Tuning />}
       <Empty>
         Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${league !== 'all' ? leagueName(league) : SPORT_NAME[sport].toLowerCase()}` : ''}{scope === 'picks' && (sport === 'basket' || sport === 'all') ? ' entre las recomendadas (prueba con «Todas las líneas»)' : ''}.
@@ -163,6 +168,7 @@ export default function ModelTab() {
     <>
       {toolbar}
       <Registry data={data} sport={sport} />
+      <WeeklySummary rows={weekRows} sport={sport} />
 
       <section className={cn(panel, 'mb-4 grid overflow-hidden 2xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]')} aria-label="Resumen">
         <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 2xl:border-b-0 2xl:border-r">
@@ -474,6 +480,132 @@ function ProfitCurve({ rows }: { rows: PredictionRow[] }) {
   );
 }
 
+// Resumen semanal (src/lib/model-weeks.ts): la última semana en grande y las anteriores en una tabla, para ver de un vistazo si el
+// modelo va a mejor. «Frente a la casa» es el Brier con las mismas líneas: si la app acierta peor que la casa sin margen, el modelo
+// no aporta esa semana. El reajuste es el de baloncesto (lo único que se reentrena solo con los resultados de cada día)
+const weekLabel = (w: string) => {
+  const a = new Date(`${w}T12:00:00Z`), b = new Date(a.getTime() + 6 * 864e5);
+  const f = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString('es-ES', { timeZone: 'UTC', ...o });
+  return a.getUTCMonth() === b.getUTCMonth() ? `${f(a, { day: 'numeric' })}-${f(b, { day: 'numeric', month: 'short' })}` : `${f(a, { day: 'numeric', month: 'short' })}-${f(b, { day: 'numeric', month: 'short' })}`;
+};
+const KIND_SHORT = { player: 'jugador', team: 'equipo' } as const;
+function tuningText(w: WeekSummary) {
+  const t = w.tuning;
+  if (!t) return null;
+  const moves = (['player', 'team'] as const).filter(k => t.from[k] != null).map(k => `${KIND_SHORT[k]} ${dec(t.from[k]!)}${t.to[k] !== t.from[k] ? ` → ${dec(t.to[k]!)}` : ''}`);
+  return `${t.tries} ${t.tries === 1 ? 'intento' : 'intentos'}, ${t.applied ? `${t.applied} ${t.applied === 1 ? 'aplicado' : 'aplicados'}` : 'ninguno aplicado'} · ${moves.join(' · ')}`;
+}
+// Cuánto mejor (o peor) que la casa: diferencia de Brier en milésimas, positivo si la app acierta más
+const vsMarket = (w: WeekSummary) => (w.brier ? w.brier.market - w.brier.app : null);
+const milli = (v: number) => `${v > 0 ? '+' : ''}${(v * 1000).toFixed(1).replace('.', ',')}`;
+
+function GroupLine({ label, g, value }: { label: string; g: WeekGroup | null; value: (g: WeekGroup) => ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-[11px] text-zinc-500">{label}</span>
+      {g ? <span className="truncate text-[13px] text-zinc-100" title={g.key}>{g.key} <span className="tnum">{value(g)}</span></span> : <span className="text-[13px] text-zinc-500">–</span>}
+    </div>
+  );
+}
+
+function WeeklySummary({ rows, sport }: { rows: PredictionRow[]; sport: SportF }) {
+  const t = useQuery({ queryKey: ['bets', 'model-weights'], queryFn: () => window.api.bets.modelWeights(), staleTime: 10 * 60e3 });
+  const tuned = sport === 'all' || sport === 'basket';
+  const weeks = useMemo(() => weekly(rows, tuned ? t.data?.history ?? [] : [], r => (sport === 'all' ? `${SPORT_NAME[r.sport] ?? r.sport} · ` : '') + r.group), [rows, t.data, tuned, sport]);
+  if (!weeks.length) return null;
+  const [cur, ...prev] = weeks;
+  const last = prev[0];
+  const vm = vsMarket(cur), vmLast = last ? vsMarket(last) : null;
+  return (
+    <Panel title="Resumen semanal" aside={`últimas ${weeks.length} semanas`} className="mb-4">
+      <div className="flex flex-col gap-4 p-4">
+        <Lead>Cada semana, de lunes a domingo: lo que se resolvió, si acertó lo que decía, lo que habría dado a 1 unidad cada una, si acertó más que la casa y qué aprendió el reajuste diario de baloncesto. El mercado más rentable o el más preciso sólo se nombra con {MIN_GROUP} casos o más ({MIN_PRECISE} para la precisión).</Lead>
+        <div className="flex flex-col gap-3 rounded-md border border-zinc-800 p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-[13px] font-semibold text-zinc-100">Semana del {weekLabel(cur.week)}</span>
+            {last && (
+              <span className="text-xs text-zinc-500">
+                frente a la anterior: ROI <span className={tone(cur.roi - last.roi)}>{signedPct(cur.roi - last.roi)}</span>
+                {vm != null && vmLast != null && <> · frente a la casa <span className={tone(vm - vmLast)}>{milli(vm - vmLast)}</span></>}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div><div className="text-[11px] text-zinc-500">resueltas</div><div className="font-score text-lg font-semibold tnum">{cur.n.toLocaleString('es-ES')}</div></div>
+            <div>
+              <div className="text-[11px] text-zinc-500">acierto · esperaba</div>
+              <div className="font-score text-lg font-semibold tnum"><span className={offTone(cur.hit, cur.said, cur.decided)}>{cur.decided ? pct(cur.hit) : '–'}</span><span className="text-sm font-normal text-zinc-500"> · {cur.decided ? pct(cur.said) : '–'}</span></div>
+            </div>
+            <div>
+              <div className="text-[11px] text-zinc-500">a 1 unidad</div>
+              <div className={cn('font-score text-lg font-semibold tnum', tone(cur.pl))}>{units(cur.pl)}</div>
+              <div className="text-[11px] text-zinc-500">ROI <span className={tone(cur.roi)}>{signedPct(cur.roi)}</span></div>
+            </div>
+            <div>
+              <div className="text-[11px] text-zinc-500">frente a la casa</div>
+              <div className={cn('font-score text-lg font-semibold', vm == null ? 'text-zinc-500' : tone(vm))}>{vm == null ? '–' : vm > 0 ? 'Acierta más' : 'Acierta menos'}</div>
+              {cur.brier && <div className="text-[11px] text-zinc-500 tnum">Brier {dec(cur.brier.app, 4)} · casa {dec(cur.brier.market, 4)}</div>}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 border-t border-zinc-800/70 pt-3 sm:grid-cols-3">
+            <GroupLine label="más rentable" g={cur.best} value={g => <span className="text-emerald-400">{units(g.pl)} en {g.n}</span>} />
+            <GroupLine label="peor" g={cur.worst} value={g => <span className="text-rose-400">{units(g.pl)} en {g.n}</span>} />
+            <GroupLine label="más preciso frente a la casa" g={cur.precise} value={g => <span className="text-emerald-400">{milli(g.gain!)}</span>} />
+          </div>
+          <div className="border-t border-zinc-800/70 pt-3 text-xs text-zinc-400">
+            <span className="text-zinc-500">Reajuste del modelo: </span>
+            {tuningText(cur) ?? (tuned ? 'sin intentos esta semana' : 'este deporte no se reajusta solo')}
+          </div>
+        </div>
+        {!!prev.length && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-xs">
+              <thead className="text-zinc-500">
+                <tr>
+                  <th className="py-1.5 pr-3 font-normal">semana</th><th className="pr-3 text-right font-normal">resueltas</th><th className="pr-3 font-normal">acierto · esperaba</th>
+                  <th className="pr-3 text-right font-normal">a 1 unidad</th><th className="pr-3 text-right font-normal">ROI</th>
+                  <th className="pr-3 text-right font-normal" title="Diferencia de Brier con la casa, en milésimas: positivo, la app acierta más">vs casa</th>
+                  <th className="pr-3 font-normal">más rentable</th><th className="font-normal">reajuste</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prev.map(w => {
+                  const v = vsMarket(w);
+                  return (
+                    <tr key={w.week} className="border-t border-zinc-800 text-zinc-300">
+                      <td className="whitespace-nowrap py-1.5 pr-3">{weekLabel(w.week)}</td>
+                      <td className="pr-3 text-right tnum">{w.n.toLocaleString('es-ES')}</td>
+                      <td className="pr-3 tnum">{w.decided ? <><span className={offTone(w.hit, w.said, w.decided)}>{pct(w.hit)}</span><span className="text-zinc-500"> · {pct(w.said)}</span></> : '–'}</td>
+                      <td className={cn('pr-3 text-right tnum', tone(w.pl))}>{units(w.pl)}</td>
+                      <td className={cn('pr-3 text-right tnum', tone(w.roi))}>{signedPct(w.roi)}</td>
+                      <td className={cn('pr-3 text-right tnum', v == null ? 'text-zinc-500' : tone(v))}>{v == null ? '–' : milli(v)}</td>
+                      <td className="max-w-[180px] truncate pr-3" title={w.best?.key}>{w.best ? <>{w.best.key} <span className="text-emerald-400 tnum">{units(w.best.pl)}</span></> : '–'}</td>
+                      <td className="whitespace-nowrap text-zinc-400">{w.tuning ? `${w.tuning.applied} de ${w.tuning.tries} aplicados` : '–'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+// ¿Se está reentrenando de verdad? (tuningHealth): que se ejecute cada día y que tenga líneas de las que aprender
+const shortDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('es-ES', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+function HealthLine({ h }: { h: TuningHealth }) {
+  if (h.ok) return <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-[13px] leading-5 text-emerald-200" role="status">Funcionando: se ha ejecutado {h.lastRun ? `el ${shortDay(h.lastRun)}` : ''} y hay líneas guardadas de los últimos días para aprender.</p>;
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-rose-500/10 px-3 py-2 text-[13px] leading-5 text-rose-200" role="status">
+      {h.stale && <p>No se ejecuta desde {h.lastRun ? `el ${shortDay(h.lastRun)}` : 'nunca'}: mira que el servicio bets esté en marcha (lo intenta cada hora y lo hace una vez al día).</p>}
+      {h.emptyDays.length > 2 && <p>Sin líneas guardadas: {h.emptyDays.map(shortDay).join(', ')}. Se guardan cuando alguien abre las recomendaciones de baloncesto; si no hubo partidos esos días, es normal.</p>}
+      {h.lowSample && <p>El último intento no tenía muestra suficiente para decidir: el peso se queda como estaba hasta que haya más líneas resueltas.</p>}
+    </div>
+  );
+}
+
 // Reajuste diario del modelo de baloncesto (server/services/bets/tuning.js): cuánto pesa hoy frente a la casa y qué ha probado
 // cada día. Sólo cambia si en los días de prueba (la última semana, que no se usa para ajustar) acierta mejor, y como mucho 0,05
 const KIND_NAME = { player: 'Líneas de jugador', team: 'Totales y puntos de equipo' } as const;
@@ -486,6 +618,7 @@ function Tuning() {
     <Panel title="Reajuste diario del modelo de baloncesto" aside={d.updated ? `último, ${d.updated}` : 'todavía sin ninguno'} className="mb-4">
       <div className="flex flex-col gap-3 p-4">
         <Lead>Cada día, con lo que se ha resuelto, prueba cuánto debe pesar el modelo frente a la casa: ajusta con lo de hasta hace una semana y lo comprueba con la última semana, que no ha usado. Sólo cambia si ahí acierta mejor (pérdida logarítmica más baja), y como mucho 0,05 al día, para no aprenderse de memoria unos días buenos.</Lead>
+        <HealthLine h={tuningHealth(d.history, d.feed ?? [], new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }))} />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {(['player', 'team'] as const).map(k => (
             <div key={k} className="rounded-md border border-zinc-800 px-3 py-2">
@@ -502,7 +635,7 @@ function Tuning() {
                 <tr><th className="py-1.5 pr-3 font-normal">día</th><th className="pr-3 font-normal">mercado</th><th className="pr-3 font-normal">peso</th><th className="pr-3 font-normal">ajuste</th><th className="pr-3 font-normal">prueba: antes → nuevo · casa sola</th><th className="font-normal">qué pasó</th></tr>
               </thead>
               <tbody>
-                {d.history.map(h => (
+                {d.history.slice(0, 28).map(h => (
                   <tr key={`${h.day}|${h.kind}`} className="border-t border-zinc-800 text-zinc-300">
                     <td className="py-1.5 pr-3 tnum">{h.day}</td>
                     <td className="pr-3">{KIND_NAME[h.kind]}</td>

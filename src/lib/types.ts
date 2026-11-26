@@ -251,7 +251,8 @@ export interface ModelTuningRow {
   day: string; kind: 'player' | 'team'; prev: number; fit: number; w: number; applied: boolean; reason: string; nFit: number; nTest: number;
   ll: { prev: number | null; next: number | null; market: number | null; model: number | null };
 }
-export interface ModelWeights { player: number; team: number; updated: string | null; history: ModelTuningRow[] }
+// feed: las líneas de baloncesto guardadas por día de partido de las dos últimas semanas (de lo que aprende el reajuste)
+export interface ModelWeights { player: number; team: number; updated: string | null; history: ModelTuningRow[]; feed?: { day: string; n: number; resolved: number }[] }
 export interface NewsBasis { title: string; source: string; url: string; published: string; seen_at: string }
 // Lo que dice una noticia de un jugador (shared/news.js, playerStatuses)
 export type PlayerNewsStatus = 'out' | 'doubt' | 'injured' | 'suspended' | 'back';
