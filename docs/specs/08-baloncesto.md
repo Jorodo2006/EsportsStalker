@@ -379,6 +379,40 @@ salió al revés).
   (`withNews` de `src/lib/news.ts`); si vuelve, sólo se enseña. Las noticias no cambian la proyección.
 - **Avisos al momento**: como en el fútbol, a quien tiene una apuesta pendiente con ese jugador o lo sigue.
 
+## Sin X (bajas: quién gana minutos)
+
+`src/lib/basket-without.ts` (con pruebas) y la tarjeta `BasketWithout.tsx` en las recomendaciones de baloncesto, sobre las tres listas.
+
+- Cuándo: un jugador de baja (el parte de ESPN con las de las noticias en la NBA; el estado de la plantilla en el resto) que es
+  habitual (`keyAbsentee`: ha jugado la mitad de los partidos del equipo esta temporada con 20 minutos o más de media).
+- Qué: las medias de esta temporada (liga regular, antes del partido) de sus compañeros en los partidos en que jugó y en los que
+  no (`withoutSplits`), en puntos, rebotes, asistencias y triples. Sólo de la rotación (18 minutos o más con él o sin él), con 3
+  partidos sin él y 3 con él como mínimo, sin los que tampoco juegan hoy, y si el cambio es de un 20 % y de una cantidad que se nota.
+  Ordenados por cuánto cambian (no en proporción) y primero los que tienen línea en las casas; se enseñan 4.
+- Junto a cada uno: la línea principal de la casa y, si Sharpex tiene esa línea en el sentido del cambio (sube: el «más»; baja: el
+  «menos»), su probabilidad, su valor y el botón al cupón. Con una baja reciente el «menos» no se recomienda (`noFreshUnder`):
+  entonces sale sólo la línea de la casa.
+- No cambia la proyección ni la probabilidad: las bajas de compañeros no han mejorado el modelo cuando se han medido, y con 3-6
+  partidos una media sale alta o baja muchas veces por suerte. Por eso cada fila dice cuántos partidos son.
+
+## Reajuste diario con los resultados
+
+`server/services/bets/tuning.js` (pruebas en `server/test/ajuste.test.js`), tabla `bets.model_tuning` (migración 021 de bets),
+`GET /api/bets/model-weights`, `useBasketWeights` (`src/lib/basket-weights.ts`) y el panel «Reajuste diario» de *Acierto del
+modelo*.
+
+- Qué ajusta: cuánto pesa el modelo frente a la casa sin margen (la mezcla de `blendWithMarket`), por separado en las líneas de
+  jugador (`MODEL_WEIGHT` de `basket-model.ts`; con poca muestra, la mitad) y en los totales y puntos de equipo (`MODEL_WEIGHT` de
+  `basket-teams.ts`). Con todas las líneas calculadas y resueltas de `bets.predictions` (`p_model`, `p_market`).
+- Cómo: una vez al día. Ajuste con lo resuelto de los 45 días anteriores salvo la última semana (el peso con menos pérdida
+  logarítmica, de 0 a 1 de 0,05 en 0,05); prueba con la última semana. Sólo cambia si en la prueba la pérdida baja 0,0002 o más,
+  con 3.000 de ajuste y 500 de prueba como mínimo, un paso de 0,05 como mucho hacia el del ajuste y entre 0 y 0,5. Cada intento se
+  guarda, aplicado o no, con su motivo.
+- Primer intento (26-11-2026, datos locales: 23.033 de ajuste y 3.723 de prueba en jugadores; 7.053 y 2.280 en equipos): en
+  jugadores el ajuste pedía 0,10 y en la prueba apenas cambiaba (0,5648 → 0,5647): se queda en 0,30, que acierta más que la casa
+  sola (0,5665). En equipos el ajuste pedía 0,75 y en la prueba empeoraba (0,6615 → 0,6625; la casa sola, 0,6577): se queda en 0,25.
+- No cambia la proyección (`PROJ`, el contexto): eso se sigue midiendo con `scripts/calib-basket.ts` y los backtests.
+
 ## Pendiente
 
 - Flechas de subida y bajada de las cuotas (el histórico se guarda en `odds.price_history` y lo da `POST /api/odds/history`; falta la interfaz).

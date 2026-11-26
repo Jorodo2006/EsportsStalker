@@ -10,9 +10,16 @@ type G = BasketLogGame;
 // Cuánto pesa el modelo frente a la casa sin margen al calcular el valor. Con las primeras 633 recomendaciones reales de la NBA
 // (noviembre de 2026, unos 15 partidos: es poco) la casa sola acertó más que cualquier mezcla en los "más", y en los "menos"
 // lo mejor fue 0,2-0,3; con 0,4 se recomendaba el doble y se perdía. Se baja a 0,3, como en tenis y fútbol (0,25). Hay que
-// volver a medirlo con «Todas las líneas» en Acierto del modelo cuando haya unos miles resueltas
-const MODEL_WEIGHT = 0.3;
-const THIN_WEIGHT = 0.15; // con poca muestra, todavía menos
+// volver a medirlo con «Todas las líneas» en Acierto del modelo cuando haya unos miles resueltas.
+// Desde el 26-11-2026 se reajusta solo cada día con los resultados (server/services/bets/tuning.js, sólo si mejora en días que no se
+// usaron para ajustar y como mucho 0,05 al día): useBasketWeights lo pone con setBasketWeights; 0,3 es lo de antes y el de reserva
+let MODEL_WEIGHT = 0.3;
+let THIN_WEIGHT = 0.15; // con poca muestra, la mitad
+export function setPlayerWeight(w: number) {
+  if (!(w >= 0 && w <= 0.5)) return;
+  MODEL_WEIGHT = w;
+  THIN_WEIGHT = w / 2;
+}
 const THIN_GAMES = 10;
 export const BASKET_MARKETS: Record<string, { label: string; short: string; f: (g: G) => number }> = {
   pts: { label: 'Puntos', short: 'PTS', f: g => g.pts },

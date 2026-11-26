@@ -16,6 +16,7 @@ import { LEAGUE_NAME } from './BasketAnalyzer';
 import { ValuePanel } from './ValuePanel';
 import { Empty, ErrorBox, Input, Loading, TeamLogo, chip, th } from './ui';
 import { Panel, TvBand, TvFrame, TvHeader, TvTabs, panel, tdc } from './viz';
+import { useBasketWeights } from '@/lib/basket-weights';
 
 export const dec = (v: number | null | undefined, d = 1) => (v == null ? '–' : v.toFixed(d).replace('.', ','));
 export const signed = (v: number | null | undefined) => (v == null ? '–' : `${v > 0 ? '+' : ''}${dec(v)}`);
@@ -261,6 +262,7 @@ function RowsTable({ rows, value, line }: { rows: TeamRow[]; value: (r: TeamRow)
 // ---------- Un partido: total y puntos de cada equipo ----------
 // initial: con qué abrir (lo mandan las recomendaciones)
 export function GamePoints({ game, odds, initial }: { game: BasketGame; odds?: MatchOdds; initial?: { period: PointPeriod; kind: PointKind; line: number } }) {
+  useBasketWeights(); // el peso de hoy del modelo frente a la casa (reajuste diario)
   const { addToSlip, settings } = useApp();
   const { data: bets = [] } = useBets();
   const bank = (settings?.initialBankroll || 0) + summarize(bets).profit;

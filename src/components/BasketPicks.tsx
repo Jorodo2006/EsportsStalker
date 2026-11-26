@@ -25,6 +25,8 @@ import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { NewsBasisList, NewsHint, useTeamNews } from './MatchNews';
+import { BasketWithout, absencesOf } from './BasketWithout';
+import { useBasketWeights } from '@/lib/basket-weights';
 import { keyNews, withNews, type KeyNews } from '@/lib/news';
 
 // La noticia que puede cambiar una recomendación (la del jugador, si la nombra; lib/news.ts). La del equipo sale sólo bajo la
@@ -52,6 +54,8 @@ const hasTeams = (o?: MatchOdds) => !!o?.markets.some(m => /^(total|team_total)\
 // Todo lo que hace falta de varios partidos. Los jugadores y los equipos sólo se piden si las casas tienen líneas: mirar un partido sin
 // cuotas no sirve de nada, y los partidos de los jugadores pesan. book: calcular sólo con las cuotas de esa casa (onlyBook)
 export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], book: PickBook = 'all') {
+  // El peso de hoy del modelo frente a la casa (reajuste diario): si cambia, se recalcula todo
+  const weights = useBasketWeights();
   // La misma clave que la ficha del partido: comparten las cuotas ya leídas. Mirar muchos partidos no es abrirlos: quiet
   const oddsQ = useQueries({
     queries: games.map(g => { const t = targetOfGame(g); return { queryKey: ['odds', t.sport, t.id], queryFn: () => window.api.odds.match(t.match, { quiet: true }), meta: oddsMeta(t.match), refetchInterval: ODDS_FALLBACK }; })
@@ -102,14 +106,14 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
       const la = logsOf(g, 'away'), lb = logsOf(g, 'home');
       const statusOf = (id: string, roster: string | null | undefined) => (g.league === 'nba' ? injuries.find(x => x.playerId === id)?.status : null) || roster;
       const outsOf = g.state === 'pre' && (la || lb) ? (P: Parameters<NonNullable<Parameters<typeof teamPicks>[3]>>[0]) => ({ away: teamOuts(la, g.away.id, P.a, g.date, statusOf), home: teamOuts(lb, g.home.id, P.b, g.date, statusOf) }) : undefined;
-      all.push(...once(`${g.id}:equipos:${book}`, [g.date, odds.markets, leagueData, la, lb, injuries.length], () => teamPicks(g, leagueData, odds, outsOf)));
+      all.push(...once(`${g.id}:equipos:${book}`, [g.date, odds.markets, leagueData, la, lb, injuries.length, weights], () => teamPicks(g, leagueData, odds, outsOf)));
     });
     teams.forEach((t, i) => {
       const data = logs[i]?.data, odds = view(oddsQ[games.indexOf(t.game)]?.data);
-      if (data && odds) all.push(...once(`${t.game.id}:${t.side}:${book}`, [t.game.date, odds.markets, data, injuries.length], () => playerPicks(t.game, t.side, data, odds, injuries)));
+      if (data && odds) all.push(...once(`${t.game.id}:${t.side}:${book}`, [t.game.date, odds.markets, data, injuries.length, weights], () => playerPicks(t.game, t.side, data, odds, injuries)));
     });
     return { picks: all.filter(saneLine), considered: all.length, lines: all };
-  }, [games, oddsKey, logsKey, pointsKey, injuries.length, book]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [games, oddsKey, logsKey, pointsKey, injuries.length, book, weights]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Se registran todas las líneas calculadas, no sólo las de valor, para medir después si el modelo acierta (Mis apuestas →
   // Acierto del modelo). Si sólo se guardaran las de valor, que son justo en las que el modelo no está de acuerdo con la casa,
@@ -129,6 +133,9 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
     stale: games.filter((_, i) => { const t = newest(oddsQ[i]?.data); return t && now - t > STALE_MS; }),
     age: stamps.length ? now - Math.max(...stamps) : null,
     loaded: logs.filter(q => q.data).length + points.filter(q => q.data).length, total: logs.length + points.length,
+    // Para la tarjeta «Sin X» (BasketWithout.tsx): los partidos de cada equipo y las cuotas de cada partido, ya cargados aquí
+    logsOf: (g: BasketGame, side: 'away' | 'home') => logs[teams.findIndex(t => t.game.id === g.id && t.side === side)]?.data,
+    oddsOf: (g: BasketGame) => view(oddsQ[games.indexOf(g)]?.data),
     failed: [...oddsQ, ...logs].find(q => q.error)?.error
   };
 }
@@ -285,6 +292,8 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
     });
     return { picks, newsOf: ((p: BasketPick) => ks.get(p.id) ?? null) as NewsOf };
   }, [q.picks, news]);
+  // Bajas importantes de estos partidos y sus compañeros que cambian sin ellas (BasketWithout.tsx)
+  const absents = useMemo(() => absencesOf(games, injuries, q.logsOf), [games, injuries, q.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const line = lineText.trim() ? parseLine(lineText) : null;
   const filters: PickFilters = { group, side, line, minOdds, onlyValue };
   const A = useMemo(() => arrangePicks(withN.picks, filters), [withN.picks, group, side, line, minOdds, onlyValue]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -339,6 +348,8 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
         {A.top ? <TopPick pick={A.top} {...props} /> : (
           <p className="px-4 py-3 text-[13px] text-zinc-300">{!q.considered ? (q.loaded < q.total ? 'Calculando…' : 'Las casas todavía no tienen líneas de jugadores ni totales que el modelo sepa calcular.') : 'Ninguna sale rentable con estos filtros. Abajo tienes las que menos pierden; prueba a bajar la cuota mínima o a quitar filtros.'}</p>
         )}
+
+        <BasketWithout absents={absents} picks={withN.picks} oddsOf={q.oddsOf} onAdd={add} oneGame={oneGame} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x lg:divide-white/10">
           <PickList title="Más fáciles" hint={`Probabilidad de 58 % o más, de más a menos valor: ${EASY_HINT}`} list={A.easy} {...props} />

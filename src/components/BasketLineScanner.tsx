@@ -22,6 +22,7 @@ import { Panel, TvTabs, panel, tdc } from './viz';
 import { gameMinutes } from '@/lib/basket-leagues';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { sized } from '@/lib/img';
+import { useBasketWeights } from '@/lib/basket-weights';
 
 const PREFS = 'basket-scan';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS) || '{}') || {}; } catch { return {}; } };
@@ -39,6 +40,7 @@ type Row = NonNullable<ReturnType<typeof scanLine>> & {
 };
 
 export function BasketLineScanner({ games, injuries, onPick }: { games: BasketGame[]; injuries: BasketInjury[]; onPick: (p: Picked) => void }) {
+  useBasketWeights(); // el peso de hoy del modelo frente a la casa (reajuste diario)
   const { addToSlip } = useApp();
   const prefs = useMemo(loadPrefs, []);
   const [market, setMarket] = useState<BasketMarket>(prefs.market in BASKET_MARKETS ? prefs.market : 'ast');

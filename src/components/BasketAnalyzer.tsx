@@ -18,6 +18,7 @@ import { ValuePanel } from './ValuePanel';
 import { Badge, Card, Empty, ErrorBox, Input, Loading, Select, Tabs, oddBtn, td, th } from './ui';
 import { espnLeague, gameMinutes } from '@/lib/basket-leagues';
 import { sized } from '@/lib/img';
+import { useBasketWeights } from '@/lib/basket-weights';
 
 const BOOKS = ['Winamax', 'Betway'];
 export const LEAGUE_NAME: Record<BasketLeagueId, string> = { nba: 'NBA', wnba: 'WNBA', euroleague: 'Euroliga', eurocup: 'EuroCup', nbl: 'NBL' };
@@ -32,6 +33,7 @@ export const badInjury = (s: string) => /out/i.test(s);
 export type Picked = { id: string; name: string; league: BasketLeagueId; headshot?: string; teamId?: string; game?: BasketGame | null; market?: BasketMarket; line?: number; seen?: { side: Side; price: number; book?: string; ev: number; at: number } };
 
 export function BasketAnalyzer({ player, games = [], injuries = [], odds }: { player: Picked; games?: BasketGame[]; injuries?: BasketInjury[]; odds?: MatchOdds }) {
+  useBasketWeights(); // el peso de hoy del modelo frente a la casa (reajuste diario)
   const { addToSlip, settings } = useApp();
   const log = useQuery({ queryKey: ['basket', 'gamelog', player.league, player.id, player.teamId], queryFn: () => window.api.basket.gamelog(player.league, player.id, player.teamId), staleTime: 10 * 60e3 });
   const { data: bets = [] } = useBets();

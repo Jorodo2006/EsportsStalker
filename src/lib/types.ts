@@ -245,6 +245,13 @@ export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | '
 // equipos (fútbol: id de ESPN; baloncesto: «nba:19»).
 // tags: baja, duda, vuelve, sancion, rotacion, alineacion, entrenador
 // La noticia en la que se basa algo (una baja, una recomendación). seen_at: cuándo la vio Sharpex
+// Reajuste diario del modelo de baloncesto (server/services/bets/tuning.js). ll: pérdida logarítmica en los días de prueba con el peso
+// de antes, el nuevo, la casa sola y el modelo solo
+export interface ModelTuningRow {
+  day: string; kind: 'player' | 'team'; prev: number; fit: number; w: number; applied: boolean; reason: string; nFit: number; nTest: number;
+  ll: { prev: number | null; next: number | null; market: number | null; model: number | null };
+}
+export interface ModelWeights { player: number; team: number; updated: string | null; history: ModelTuningRow[] }
 export interface NewsBasis { title: string; source: string; url: string; published: string; seen_at: string }
 // Lo que dice una noticia de un jugador (shared/news.js, playerStatuses)
 export type PlayerNewsStatus = 'out' | 'doubt' | 'injured' | 'suspended' | 'back';
@@ -594,6 +601,8 @@ export interface Api {
     share(id: string, to: string[], note?: string): Promise<{ sent: number }>;
     // Leer la captura de un ticket de la casa (PNG/JPEG en data URL): borrador enlazado a su partido, sin guardar (server/services/bets/scan.js)
     scan(image: string): Promise<TicketScan>;
+    // Cuánto pesa hoy el modelo de baloncesto frente a la casa (reajuste diario con los resultados) y los últimos intentos
+    modelWeights(): Promise<ModelWeights>;
     // ¿Entiende la app el mercado escrito? (fútbol, tenis y MMA; null si aún no hay partido o mercado). market: cómo lo entiende
     understand(q: { sport: Sport; event: string; market: string; selection: string }): Promise<{ known: boolean; market: string | null } | null>;
   };

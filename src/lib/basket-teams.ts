@@ -107,9 +107,11 @@ export function leagueTable(d: BasketLeagueGames, win: TableWindow, period: Poin
 export const POINT_PARAMS = { halfLife: 15, thisSeason: 1.6, modelWeight: 80, sdScale: 0.9, effect: 0.8 };
 // A partir de qué ventaja sobre la casa el modelo deja de ser creíble: sabe menos que ella (bajas, descanso, alineaciones)
 const TOO_FAR = 0.12;
-// Peso del modelo frente a la casa al calcular el valor: un total se ajusta mucho más que una línea de jugador. Es una
-// decisión, no una medida (no hay cuotas históricas)
-const MODEL_WEIGHT = 0.25;
+// Peso del modelo frente a la casa al calcular el valor: un total se ajusta mucho más que una línea de jugador. Empezó como una
+// decisión (0,25); desde el 26-11-2026 se reajusta solo cada día con los resultados (server/services/bets/tuning.js), y
+// useBasketWeights lo pone con setTeamWeight
+let MODEL_WEIGHT = 0.25;
+export function setTeamWeight(w: number) { if (w >= 0 && w <= 0.5) MODEL_WEIGHT = w; }
 
 function sample(rows: TeamRow[], season: number) {
   const pool = rows.slice(0, 60);

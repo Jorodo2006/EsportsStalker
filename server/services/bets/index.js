@@ -9,6 +9,7 @@ const settle = require('./settle');
 const predictions = require('./predictions');
 const friends = require('./friends');
 const alerts = require('./alerts');
+const tuning = require('./tuning');
 const authEvents = require('./auth-events');
 const admin = require('./admin');
 const push = require('./push');
@@ -103,6 +104,8 @@ const routes = [
   }],
   ['POST', '/api/bets/scan', ({ req, body }) => scan.scan(who(req).id, body?.image)],
   // Comprobar ya los resultados (sin esperar a la pasada de cada 5 min). Pide sesión, como todo /api; devuelve cuántas cambiaron
+  // Cuánto pesa hoy el modelo de baloncesto frente a la casa (reajuste diario con los resultados, tuning.js) y los últimos intentos
+  ['GET', '/api/bets/model-weights', ({ req }) => { who(req); return tuning.summary(); }],
   ['POST', '/api/bets/settle', async ({ req }) => { who(req); return { changed: await settle.run() }; }],
   // Recomendaciones del modelo, para medir si acierta. No son de nadie: cualquiera con sesión las manda mientras las ve
   ['POST', '/api/bets/predictions', ({ req, body }) => { who(req); return predictions.record(body?.list); }],
@@ -140,5 +143,6 @@ migrate('bets', path.join(__dirname, 'migrations'))
   .then(() => start({ name: 'bets', port: Number(process.env.PORT) || 4003, routes, health: async () => (await query('SELECT 1'), true) }))
   .then(() => settle.startSettler())
   .then(() => alerts.startAlerts())
+  .then(() => tuning.startTuning())
   .then(() => authEvents.startPurge())
   .catch(e => { console.error(e); process.exit(1); });

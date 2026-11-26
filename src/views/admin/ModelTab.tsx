@@ -117,6 +117,7 @@ export default function ModelTab() {
     <>
       {toolbar}
       <Registry data={data} sport={sport} />
+      {(sport === 'all' || sport === 'basket') && <Tuning />}
       <Empty>
         Todavía no hay recomendaciones resueltas{sport !== 'all' ? ` de ${league !== 'all' ? leagueName(league) : SPORT_NAME[sport].toLowerCase()}` : ''}{scope === 'picks' && (sport === 'basket' || sport === 'all') ? ' entre las recomendadas (prueba con «Todas las líneas»)' : ''}.
         Se guardan todas las líneas que calcula el modelo de baloncesto y las recomendaciones de tenis, fútbol y MMA que se ven en la app; cuando
@@ -468,6 +469,53 @@ function ProfitCurve({ rows }: { rows: PredictionRow[] }) {
             <Area dataKey="pl" type="monotone" stroke="var(--acc-400)" strokeWidth={2} fill="var(--acc-400)" fillOpacity={0.08} dot={false} isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+    </Panel>
+  );
+}
+
+// Reajuste diario del modelo de baloncesto (server/services/bets/tuning.js): cuánto pesa hoy frente a la casa y qué ha probado
+// cada día. Sólo cambia si en los días de prueba (la última semana, que no se usa para ajustar) acierta mejor, y como mucho 0,05
+const KIND_NAME = { player: 'Líneas de jugador', team: 'Totales y puntos de equipo' } as const;
+const dec = (v: number | null, d = 2) => (v == null ? '–' : v.toFixed(d).replace('.', ','));
+function Tuning() {
+  const q = useQuery({ queryKey: ['bets', 'model-weights'], queryFn: () => window.api.bets.modelWeights(), staleTime: 10 * 60e3 });
+  const d = q.data;
+  if (!d) return null;
+  return (
+    <Panel title="Reajuste diario del modelo de baloncesto" aside={d.updated ? `último, ${d.updated}` : 'todavía sin ninguno'} className="mb-4">
+      <div className="flex flex-col gap-3 p-4">
+        <Lead>Cada día, con lo que se ha resuelto, prueba cuánto debe pesar el modelo frente a la casa: ajusta con lo de hasta hace una semana y lo comprueba con la última semana, que no ha usado. Sólo cambia si ahí acierta mejor (pérdida logarítmica más baja), y como mucho 0,05 al día, para no aprenderse de memoria unos días buenos.</Lead>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(['player', 'team'] as const).map(k => (
+            <div key={k} className="rounded-md border border-zinc-800 px-3 py-2">
+              <div className="text-xs text-zinc-400">{KIND_NAME[k]}</div>
+              <div className="font-score text-2xl font-semibold tnum">{dec(d[k])}</div>
+              <div className="text-xs text-zinc-500">peso del modelo hoy (0 = sólo la casa)</div>
+            </div>
+          ))}
+        </div>
+        {!!d.history.length && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-xs">
+              <thead className="text-zinc-500">
+                <tr><th className="py-1.5 pr-3 font-normal">día</th><th className="pr-3 font-normal">mercado</th><th className="pr-3 font-normal">peso</th><th className="pr-3 font-normal">ajuste</th><th className="pr-3 font-normal">prueba: antes → nuevo · casa sola</th><th className="font-normal">qué pasó</th></tr>
+              </thead>
+              <tbody>
+                {d.history.map(h => (
+                  <tr key={`${h.day}|${h.kind}`} className="border-t border-zinc-800 text-zinc-300">
+                    <td className="py-1.5 pr-3 tnum">{h.day}</td>
+                    <td className="pr-3">{KIND_NAME[h.kind]}</td>
+                    <td className={cn('pr-3 tnum', h.applied && 'font-semibold text-zinc-50')}>{dec(h.prev)} → {dec(h.w)}</td>
+                    <td className="pr-3 tnum">{dec(h.fit)}</td>
+                    <td className="pr-3 tnum">{dec(h.ll.prev, 4)} → {dec(h.ll.next, 4)} · {dec(h.ll.market, 4)}</td>
+                    <td className={h.applied ? 'text-emerald-400' : 'text-zinc-400'}>{h.reason} <span className="text-zinc-600">({h.nFit.toLocaleString('es-ES')} / {h.nTest.toLocaleString('es-ES')})</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Panel>
   );
