@@ -12,7 +12,7 @@ import { madridDay } from '@/lib/route';
 import type { BasketGame, BasketInjury, BasketLeagueId, BasketRosterPlayer, BoxTeam, MatchOdds } from '@/lib/types';
 import { BasketAnalyzer, LEAGUE_NAME, badInjury, esTime, type Picked } from '@/components/BasketAnalyzer';
 import { SheetScroll, CompetitionBlock, DayStrip, LiveSection, MatchCard, MatchesTitle, ModeSwitch, OddsLegend, NoGames, Scoreboard, SheetTabs, StateFilterBar, Toggle, noGamesText, useNextDay, type MatchState, type StateFilter } from '@/components/sport';
-import { MatchNews } from '@/components/MatchNews';
+import { MatchNews, NewsDay } from '@/components/MatchNews';
 import { BasketOdds, matchOfGame, targetOfGame, useBasketOdds } from '@/components/BasketOdds';
 import { BasketLineScanner } from '@/components/BasketLineScanner';
 import { BasketPlayerGameDialog } from '@/components/BasketPlayerGame';
@@ -37,7 +37,7 @@ import { cardNote } from '@/lib/odds-window';
 
 const ORDER: BasketLeagueId[] = ['nba', 'euroleague', 'eurocup', 'nbl', 'wnba'];
 const stateOf = (g: BasketGame): MatchState => (g.state === 'in' ? 'live' : g.state);
-type Mode = 'games' | 'picks';
+type Mode = 'games' | 'picks' | 'news';
 const pickedOf = (p: BasketPick): Picked => ({
   id: p.who!.id, name: p.who!.name, league: p.game.league, headshot: p.who!.headshot, teamId: p.who!.teamId, game: p.game, market: p.marketKey ?? undefined, line: p.line,
   seen: { side: p.side, price: p.price, book: p.book, ev: p.ev, at: Date.now() }
@@ -88,7 +88,7 @@ export default function BasketMatches() {
   const liveNow = shown.filter(g => g.state === 'in');
   const byLeague = ORDER.map(id => ({ id, list: shown.filter(g => g.league === id && g.state !== 'in') })).filter(x => x.list.length);
   const open = all.find(g => g.id === openId) ?? (fromPick?.game.id === openId ? fromPick?.game : null) ?? null;
-  useSections(open || mode === 'picks' ? [] : [
+  useSections(open || mode !== 'games' ? [] : [
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(({ id, list }) => ({ id: sectionId(LEAGUE_NAME[id]), label: LEAGUE_NAME[id], count: list.length, live: 0 }))
   ]);
@@ -102,7 +102,22 @@ export default function BasketMatches() {
 
   if (open) return <GameDetail key={open.id} game={open} injuries={injuries.data ?? []} from={fromPick?.game.id === open.id ? fromPick : null} onClose={closeMatch} />;
 
-  const modes = <ModeSwitch value={mode} onChange={pickMode} />;
+  const modes = <ModeSwitch value={mode} onChange={pickMode} news />;
+  // Noticias y bajas del día: las bajas de la NBA con la foto del jugador (ESPN) y las noticias de cada equipo
+  const headshotNba = (id: string | null) => (id ? `https://a.espncdn.com/i/headshots/nba/players/full/${id}.png` : null);
+  if (mode === 'news') {
+    const outsOf = (teamId: string) => (injuries.data ?? []).filter(i => i.teamId === teamId).map(i => ({ name: i.name, team: i.team, status: injuryEs(i.status), detail: i.detail, photo: headshotNba(i.playerId) }));
+    return (
+      <div className="flex min-w-0 flex-col gap-5">{modes}
+        <DayStrip value={date} onChange={setDate} />
+        <NewsDay sport="basket" games={all.map(g => ({
+          id: g.id, title: `${g.away.name} @ ${g.home.name}`, when: new Date(g.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+          teams: [g.away, g.home].map(t => ({ key: `${g.league}:${t.id}`, name: t.name, logo: t.logo })),
+          outs: g.league === 'nba' ? [...outsOf(g.away.id), ...outsOf(g.home.id)] : []
+        }))} />
+      </div>
+    );
+  }
   if (mode === 'picks') return <div className="flex min-w-0 flex-col gap-5">{modes}<PicksPage onOpen={openPick} /></div>;
 
   const card = (g: BasketGame, featured?: boolean) => {

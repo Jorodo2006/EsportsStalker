@@ -15,6 +15,75 @@
   "holdB": 0.752659371,
   "weight": 0.167347293
  },
+ "context": {
+  "a": {
+   "last10": {
+    "won": 8,
+    "lost": 2
+   },
+   "streak": {
+    "win": false,
+    "n": 1
+   },
+   "weeks4": {
+    "won": 0,
+    "lost": 0
+   },
+   "matches14": 0,
+   "hours14": 0,
+   "prevHours": 0,
+   "surface": {
+    "won": 17,
+    "lost": 13
+   },
+   "gamesAvg": 27.3,
+   "acesAvg": 8.3,
+   "last": {
+    "date": "2026-09-01",
+    "tournament": "Torneo 8",
+    "round": "R32",
+    "win": false,
+    "opp": "Hugo Zeta",
+    "score": "6-3 6-4"
+   }
+  },
+  "b": {
+   "last10": {
+    "won": 8,
+    "lost": 2
+   },
+   "streak": {
+    "win": true,
+    "n": 2
+   },
+   "weeks4": {
+    "won": 0,
+    "lost": 0
+   },
+   "matches14": 0,
+   "hours14": 0,
+   "prevHours": 0,
+   "surface": {
+    "won": 19,
+    "lost": 7
+   },
+   "gamesAvg": 29.8,
+   "acesAvg": 6.1,
+   "last": {
+    "date": "2026-09-03",
+    "tournament": "Torneo 1",
+    "round": "R32",
+    "win": true,
+    "opp": "Pedro Gamma",
+    "score": "6-4 3-6 7-6(4)"
+   }
+  },
+  "h2h": {
+   "a": 6,
+   "b": 10
+  },
+  "surface": "Hard"
+ },
  "picks": [
   {
    "id": "moneyline|0||#a",
@@ -66,7 +135,8 @@
     ],
     "warnings": []
    },
-   "why": "Elo le da 42 % · +1,3 pts al saque"
+   "why": "Elo le da 42 % · +1,3 pts al saque",
+   "story": "Alpha llega con 8-2 en sus últimos 10; Beta, con 8-2 en sus últimos 10. En pista dura, este año, Alpha va 17-13 y Beta 19-7. Cara a cara: Alpha 6-10 Beta. Probabilidad: 59 % (el modelo solo, 49 %; la casa, 61 %)."
   },
   {
    "id": "moneyline|0||#b",
@@ -118,7 +188,8 @@
     ],
     "warnings": []
    },
-   "why": "Elo le da 58 % · −1,3 pts al saque"
+   "why": "Elo le da 58 % · −1,3 pts al saque",
+   "story": "Beta llega con 8-2 en sus últimos 10; Alpha, con 8-2 en sus últimos 10. En pista dura, este año, Beta va 19-7 y Alpha 17-13. Cara a cara: Alpha 6-10 Beta. Probabilidad: 41 % (el modelo solo, 51 %; la casa, 39 %)."
   },
   {
    "id": "team_total|0|a|12.5#over",
@@ -170,7 +241,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 12,3 juegos de Alpha"
+   "why": "Se esperan 12,3 juegos de Alpha",
+   "story": "Alpha llega con 8-2 en sus últimos 10; Beta, con 8-2 en sus últimos 10. En pista dura, este año, Alpha va 17-13 y Beta 19-7. Cara a cara: Alpha 6-10 Beta. El modelo espera 12,3 juegos de Alpha. Probabilidad: 51 % (el modelo solo, 49 %; la casa, 51 %)."
   },
   {
    "id": "team_total|0|a|12.5#under",
@@ -222,7 +294,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 12,3 juegos de Alpha"
+   "why": "Se esperan 12,3 juegos de Alpha",
+   "story": "Alpha llega con 8-2 en sus últimos 10; Beta, con 8-2 en sus últimos 10. En pista dura, este año, Alpha va 17-13 y Beta 19-7. Cara a cara: Alpha 6-10 Beta. El modelo espera 12,3 juegos de Alpha. Probabilidad: 49 % (el modelo solo, 51 %; la casa, 49 %)."
   },
   {
    "id": "team_total|0|b|10.5#over",
@@ -273,7 +346,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 11,3 juegos de Beta"
+   "why": "Se esperan 11,3 juegos de Beta",
+   "story": "Beta llega con 8-2 en sus últimos 10; Alpha, con 8-2 en sus últimos 10. En pista dura, este año, Beta va 19-7 y Alpha 17-13. Cara a cara: Alpha 6-10 Beta. El modelo espera 11,3 juegos de Beta. Probabilidad: 53 % (el modelo solo, 62 %; la casa, 51 %)."
   },
   {
    "id": "team_total|0|b|10.5#under",
@@ -324,7 +398,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 11,3 juegos de Beta"
+   "why": "Se esperan 11,3 juegos de Beta",
+   "story": "Beta llega con 8-2 en sus últimos 10; Alpha, con 8-2 en sus últimos 10. En pista dura, este año, Beta va 19-7 y Alpha 17-13. Cara a cara: Alpha 6-10 Beta. El modelo espera 11,3 juegos de Beta. Probabilidad: 47 % (el modelo solo, 38 %; la casa, 49 %)."
   },
   {
    "id": "total|0||21.5#over",
@@ -376,7 +451,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque"
+   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque",
+   "story": "Se esperan 23,5 juegos: Alpha gana el 80 % de sus juegos al saque y Beta el 75 %. En sus últimos partidos, los de Alpha tuvieron 27,3 juegos de media y los de Beta, 29,8. Probabilidad: 51 % (el modelo solo, 54 %; la casa, 50 %)."
   },
   {
    "id": "total|0||21.5#under",
@@ -428,7 +504,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque"
+   "why": "Se esperan 23,5 juegos con 80 % y 75 % al saque",
+   "story": "Se esperan 23,5 juegos: Alpha gana el 80 % de sus juegos al saque y Beta el 75 %. En sus últimos partidos, los de Alpha tuvieron 27,3 juegos de media y los de Beta, 29,8. Probabilidad: 49 % (el modelo solo, 46 %; la casa, 50 %)."
   },
   {
    "id": "spread|0||-2.5#a",
@@ -479,7 +556,8 @@
     ],
     "warnings": []
    },
-   "why": "Elo le da 42 % · +1,3 pts al saque"
+   "why": "Elo le da 42 % · +1,3 pts al saque",
+   "story": "Alpha llega con 8-2 en sus últimos 10; Beta, con 8-2 en sus últimos 10. En pista dura, este año, Alpha va 17-13 y Beta 19-7. Cara a cara: Alpha 6-10 Beta. El modelo espera 1,0 juegos de diferencia a favor de Alpha. Probabilidad: 49 % (el modelo solo, 49 %; la casa, 49 %)."
   },
   {
    "id": "spread|0||-2.5#b",
@@ -530,7 +608,8 @@
     ],
     "warnings": []
    },
-   "why": "Elo le da 58 % · −1,3 pts al saque"
+   "why": "Elo le da 58 % · −1,3 pts al saque",
+   "story": "Beta llega con 8-2 en sus últimos 10; Alpha, con 8-2 en sus últimos 10. En pista dura, este año, Beta va 19-7 y Alpha 17-13. Cara a cara: Alpha 6-10 Beta. El modelo espera 1,0 juegos de diferencia a favor de Alpha. Probabilidad: 51 % (el modelo solo, 51 %; la casa, 51 %)."
   },
   {
    "id": "wmx|aces-a#over",
@@ -581,7 +660,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque"
+   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque",
+   "story": "Se esperan 7,4 aces de Alpha: hace un 10,0 % de sus puntos al saque. Alpha lleva 8,3 aces de media en sus últimos partidos. Probabilidad: 53 % (el modelo solo, 52 %; la casa, 53 %)."
   },
   {
    "id": "wmx|aces-a#under",
@@ -632,7 +712,8 @@
     ],
     "warnings": []
    },
-   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque"
+   "why": "Se esperan 7,4 aces de Alpha: 10,0 % de sus puntos al saque",
+   "story": "Se esperan 7,4 aces de Alpha: hace un 10,0 % de sus puntos al saque. Alpha lleva 8,3 aces de media en sus últimos partidos. Probabilidad: 47 % (el modelo solo, 48 %; la casa, 47 %)."
   },
   {
    "id": "betway|un-set#x2",
@@ -683,7 +764,8 @@
     ],
     "warnings": []
    },
-   "why": "Elo le da 58 % · −1,3 pts al saque"
+   "why": "Elo le da 58 % · −1,3 pts al saque",
+   "story": "Beta llega con 8-2 en sus últimos 10; Alpha, con 8-2 en sus últimos 10. En pista dura, este año, Beta va 19-7 y Alpha 17-13. Cara a cara: Alpha 6-10 Beta. Probabilidad: 59 % (el modelo solo, 63 %; la casa, 58 %)."
   }
  ],
  "top": null,

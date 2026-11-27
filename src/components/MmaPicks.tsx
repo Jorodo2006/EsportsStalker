@@ -18,7 +18,7 @@ import { TvBand, TvFrame, TvHeader, TvStat } from './viz';
 import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { useMember } from './AuthGate';
-import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0, PickAvatar } from './PickParts';
 
 
 // El combate como lo pide el comparador (targetOfFight), para que el cupón y las recomendaciones puedan volver a leer la cuota
@@ -186,9 +186,10 @@ function MmaDayPicksInner({ date, onOpen }: { date: string; onOpen: (id: string)
   if (!data.length) return null;
   const list = all ? data : data.slice(0, 5);
   const row = (d: MmaDayPick) => (
-    <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition last:border-0 hover:bg-zinc-800/40">
+    <button key={d.id} onClick={() => onOpen(d.id)} title={`${d.top.market}: ${d.top.selection}. ${d.top.why}`} className="group flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition last:border-0 hover:bg-white/[.04]">
+      {(() => { const s = d.top.side ?? d.top.who ?? null; return s ? <PickAvatar photo={d[s].photo} name={d[s].name} badge={d[s].flag} /> : <PickAvatar pair={[d.a.flag, d.b.flag]} />; })()}
       <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{d.top.title}</span>
+        <span className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{d.top.title}</span>
         <span className="block truncate text-xs text-zinc-500"><span className="tnum">{esTime(d.date)}</span> · {surname(d.a.name)} - {surname(d.b.name)} · {d.orgName}</span>
       </span>
       <PickNums p={d.top.p} ev={d.top.ev} good={verdictOf(d.top.ev, d.top.rel.score) === 'BET'} />

@@ -9,6 +9,7 @@ import { KEY_TAGS, NEWS_PENALTY, NEWS_TAG, PLAYER_STATUS, newsRisk, type KeyNews
 import { ageOf } from '@/lib/slip-live';
 import type { NewsBasis, NewsItem, PlayerNewsStatus } from '@/lib/types';
 import { Badge, Empty, ErrorBox, Loading, TeamLogo, chip } from './ui';
+import { PickAvatar } from './PickParts';
 import { Panel } from './viz';
 
 export type NewsSport = 'football' | 'basket';
@@ -132,3 +133,30 @@ const seenFirst = (n: NewsBasis) => {
   const m = Math.round((+new Date(n.seen_at) - +new Date(n.published)) / 60e3);
   return n.seen_at && m >= 0 && m <= 10 ? ` · vista ${m <= 1 ? 'al momento' : `a los ${m} min`}` : '';
 };
+
+// El apartado Noticias y bajas de cada deporte (tercer botón junto a Partidos y Recomendaciones): los partidos del día, cada uno con
+// sus bajas (con la foto del jugador, en el baloncesto) y las noticias de sus dos equipos. Antes iban dentro de las recomendaciones
+export interface NewsDayGame { id: string; title: string; when: string; teams: NewsTeam[]; outs?: { name: string; team: string; status: string; detail: string; photo: string | null }[] }
+export function NewsDay({ sport, games }: { sport: NewsSport; games: NewsDayGame[] }) {
+  if (!games.length) return <p className="text-[13px] text-zinc-400">No hay partidos este día.</p>;
+  return (
+    <div className="flex flex-col gap-5">
+      {games.map(g => (
+        <section key={g.id} className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3"><h3 className="text-[15px] font-semibold text-zinc-50">{g.title}</h3><span className="shrink-0 text-xs text-zinc-500">{g.when}</span></div>
+          {!!g.outs?.length && (
+            <div className="flex flex-wrap gap-2">
+              {g.outs.map(o => (
+                <span key={o.name} title={o.detail} className="flex items-center gap-2 rounded-lg bg-zinc-900 py-1 pl-1 pr-2.5 ring-1 ring-inset ring-zinc-800">
+                  <PickAvatar photo={o.photo} name={o.name} />
+                  <span className="min-w-0"><span className="block text-[13px] font-medium text-zinc-100">{o.name}</span><span className="block text-[11px] text-rose-300">{o.status} · {o.team}</span></span>
+                </span>
+              ))}
+            </div>
+          )}
+          <MatchNews sport={sport} teams={g.teams} />
+        </section>
+      ))}
+    </div>
+  );
+}

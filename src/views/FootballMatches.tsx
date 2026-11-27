@@ -27,11 +27,11 @@ import { Timeline } from './football/Timeline';
 import { MatchShotMap } from './football/Shots';
 import { Stats } from './football/Stats';
 import { Lineups } from './football/Lineups';
-import { MatchNews } from '@/components/MatchNews';
+import { MatchNews, NewsDay } from '@/components/MatchNews';
 import { FootballTrends, Form, Table } from './football/Form';
 import { cardNote } from '@/lib/odds-window';
 
-type Mode = 'games' | 'picks';
+type Mode = 'games' | 'picks' | 'news';
 const addWeekStart = (d: string) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 3); return x.toISOString().slice(0, 10); };
 
 function loadList(key: string): string[] { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } }
@@ -85,7 +85,7 @@ export default function FootballMatches() {
     enabled: ok && showOdds && pending.length > 0, refetchInterval: 60_000
   });
   const open = openId ? all.find(g => g.id === openId) ?? null : null;
-  useSections(openId || mode === 'picks' ? [] : [
+  useSections(openId || mode !== 'games' ? [] : [
     ...(liveNow.length ? [{ id: 'comp-en-directo', label: 'En directo', count: liveNow.length, live: liveNow.length }] : []),
     ...byLeague.map(([, list]) => ({ id: sectionId(list[0].leagueName), label: list[0].leagueName, count: list.length, live: 0 }))
   ]);
@@ -103,7 +103,19 @@ export default function FootballMatches() {
   // La ficha se carga por su id: también abre los partidos que llegan desde la columna de directo aunque sean de otro día
   if (openId && known) return <MatchDetail key={openId} id={openId} preview={open} initialTab={openTab?.id === openId ? openTab.tab : undefined} onClose={closeMatch} />;
 
-  const modes = <ModeSwitch value={mode} onChange={pickMode} />;
+  const modes = <ModeSwitch value={mode} onChange={pickMode} news />;
+  // Noticias del día: las de los dos equipos de cada partido (ESPN, Mundo Deportivo, BBC y The Guardian)
+  if (mode === 'news') {
+    return (
+      <div className="flex min-w-0 flex-col gap-5">{modes}
+        <DayStrip value={date} onChange={setDate} />
+        <NewsDay sport="football" games={all.map(g => ({
+          id: g.id, title: `${g.home.name} - ${g.away.name}`, when: `${g.leagueName} · ${new Date(g.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+          teams: [g.home, g.away].map(t => ({ key: String(t.id), name: t.name, logo: t.logo }))
+        }))} />
+      </div>
+    );
+  }
   // La ficha de fútbol se carga por su id, así que el día sólo dice a qué lista se vuelve: la que se estaba viendo
   const openPick = (id: string) => { setOpenTab({ id, tab: 'picks' }); openGame(id, date); };
   if (mode === 'picks') {

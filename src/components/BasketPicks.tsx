@@ -24,7 +24,7 @@ import { Empty, FoldOnPhone, Input, Loading, Select } from './ui';
 import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel } from './viz';
 import { ODDS_FALLBACK, oddsMeta } from '@/lib/odds-live';
 import { EASY_HINT, PickWhy } from './PickWhy';
-import { NewsBasisList, NewsHint, useTeamNews } from './MatchNews';
+import { NewsHint, useTeamNews } from './MatchNews';
 import { BasketWithout, absencesOf } from './BasketWithout';
 import { BasketCupRotation } from './BasketCupRotation';
 import { useBasketWeights } from '@/lib/basket-weights';
@@ -359,10 +359,6 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
           <PickList title="Más complicadas" hint="Probabilidad de menos de 42 %, cuota alta" list={A.hard} {...props} />
         </div>
 
-        <NewsBasisList items={injuries.filter(i => i.news && games.some(g => g.league === 'nba' && (g.home.id === i.teamId || g.away.id === i.teamId))).map(i => ({
-          name: i.name, status: /^Sancionado/.test(i.detail) ? 'suspended' as const : 'out' as const, news: i.news!,
-          did: 'Cuenta como baja en el modelo, igual que las del parte de ESPN'
-        }))} />
         {(!!q.noOdds.length || !!q.stale.length || !!q.noBook.length) && (
           <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">
             {!!q.noOdds.length && <Note>Sin cuotas todavía: {q.noOdds.map(eventOf).join(', ')}.</Note>}

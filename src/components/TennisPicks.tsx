@@ -13,7 +13,7 @@ import { targetOfMatch } from '@/lib/odds-targets';
 import { RefreshOdds } from './RefreshOdds';
 import type { SlipLive } from '@/lib/types';
 import { TENNIS_GROUPS, TENNIS_SCOPES, arrangeTennis, boardPicks, dayBest, hasValue, type TennisBoardPick, type TennisFilters, type TennisGroup, type TennisOrder, type TennisScope } from '@/lib/tennis-picks';
-import type { TennisBoard, TennisBoardMatch, TennisMatch, TennisPick, TennisSurface, Tour } from '@/lib/types';
+import type { TennisBoard, TennisBoardMatch, TennisForm, TennisFormContext, TennisMatch, TennisPick, TennisSurface, Tour } from '@/lib/types';
 import { useMedia } from '@/lib/use-media';
 import { AdSlot } from './AdSlot';
 import { ReliabilityMeter } from './ValuePanel';
@@ -23,7 +23,7 @@ import { TvBand, TvFrame, TvHeader, TvStat, TvTabs, panel, surname } from './viz
 import { EASY_HINT, PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { ChallengerBestRows, ChallengerBoard, challengerQuery } from './ChallengerPicks';
-import { PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
+import { OpenHint, PickAvatar, PickNums, PickOdd, PickOddText, PicksTitle, p0, signed } from './PickParts';
 import { CircuitBadge, CircuitMark } from './tennis-logos';
 
 const SURFACE: Record<TennisSurface, string> = { Hard: 'Pista dura', Clay: 'Tierra', Grass: 'Hierba' };
@@ -163,27 +163,34 @@ function Context({ pick, oneMatch }: { pick: TennisBoardPick; oneMatch: boolean 
   return <>
     {!oneMatch && <span className="text-zinc-300"><CircuitMark circuit={pick.match.m.tour} className="mr-1.5" />{vsOf(pick.match.m)}, {when(pick.match.m.date)} · </span>}
     {pick.warn && <span className="text-amber-300">{pick.warn} · </span>}
-    {pick.why}
+    {pick.story || pick.why}
   </>;
 }
 
 interface RowProps { oneMatch: boolean; onOpen?: (x: TennisBoardMatch) => void; onAdd: (p: TennisBoardPick) => void }
 
+// La cara de la recomendación, como en el baloncesto: la foto del jugador de la apuesta (ESPN, por su id) con su bandera; en las del
+// partido (totales), las dos banderas
+const headshot = (id: string) => (/^\d+$/.test(id) ? `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png` : null);
+function TennisFace({ pick, big }: { pick: TennisBoardPick; big?: boolean }) {
+  const m = pick.match.m, side = pick.side ?? (pick.who === 'a' || pick.who === 'b' ? pick.who : null);
+  return side ? <PickAvatar photo={headshot(m[side].id)} name={m[side].name} badge={m[side].flag} big={big} /> : <PickAvatar pair={[m.a.flag, m.b.flag]} big={big} />;
+}
+
 function BoardRow({ pick, oneMatch, onOpen, onAdd }: RowProps & { pick: TennisBoardPick }) {
-  // El título en su línea entera y las cifras debajo, junto al partido: en las tres columnas estrechas, con las cifras al lado,
-  // el mercado se cortaba («Allen: menos...»)
-  const title = <div className="text-[14px] font-semibold leading-[18px] text-zinc-50">{pick.title}</div>;
-  const ctx = <span className="line-clamp-2 text-[11px] leading-[14px] text-zinc-400"><Context pick={pick} oneMatch={oneMatch} /></span>;
+  // Como las del baloncesto: la cara, la apuesta, el partido con la explicación y, debajo, las cifras y la cuota
+  const text = <span className="min-w-0 flex-1">
+    <span className="block font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{pick.title}</span>
+    <span className="mt-0.5 line-clamp-2 text-[11px] leading-[14px] text-zinc-400"><Context pick={pick} oneMatch={oneMatch} /></span>
+    {onOpen && <OpenHint />}
+  </span>;
   return (
-    <div className="px-3 py-2 transition hover:bg-zinc-800/30">
+    <div className="px-3 py-2.5 transition hover:bg-white/[.04]">
       {onOpen
-        ? <button onClick={() => onOpen(pick.match)} title={`${tip(pick)}. Pulsa para abrir el partido`} className="block w-full cursor-pointer text-left">{title}</button>
-        : <div title={tip(pick)}>{title}</div>}
-      <div className="mt-1 flex items-center gap-2.5">
-        {onOpen
-          ? <button onClick={() => onOpen(pick.match)} className="min-w-0 flex-1 cursor-pointer text-left">{ctx}</button>
-          : <div className="min-w-0 flex-1">{ctx}</div>}
-        <PickNums p={pick.p} ev={pick.ev} good={hasValue(pick)} />
+        ? <button onClick={() => onOpen(pick.match)} title={`${tip(pick)}. Pulsa para abrir el partido`} className="group flex w-full cursor-pointer items-start gap-2.5 text-left"><TennisFace pick={pick} />{text}</button>
+        : <div title={tip(pick)} className="flex items-start gap-2.5"><TennisFace pick={pick} />{text}</div>}
+      <div className="mt-1.5 flex items-center gap-2.5 pl-[50px]">
+        <span className="flex-1"><PickNums p={pick.p} ev={pick.ev} good={hasValue(pick)} /></span>
         <RefreshOdds match={targetOfMatch(pick.match.m).match} focus={pick.id.split('#')[0]} />
         <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
       </div>
@@ -274,6 +281,7 @@ function BestRows({ best, onOpen }: { best: TennisBoardPick[]; onOpen?: (x: Tenn
   return <>
     {best.map(p => (
       <button key={p.match.m.id} onClick={() => onOpen?.(p.match)} title={tip(p)} className="flex w-full cursor-pointer items-center gap-3 border-b border-zinc-800 px-4 py-2.5 text-left transition hover:bg-zinc-800/40">
+        <TennisFace pick={p} />
         <span className="min-w-0 flex-1">
           <span className="line-clamp-2 text-[13px] font-semibold leading-[17px] text-zinc-50">{p.title}</span>
           <span className="block truncate text-xs text-zinc-500"><CircuitMark circuit={p.match.m.tour} className="mr-1.5 text-zinc-300" /><span className="tnum">{esTime(p.match.m.date)}</span> · {vsOf(p.match.m)}</span>
@@ -298,6 +306,33 @@ function MatchStats({ x }: { x: TennisBoardMatch }) {
       <TvStat label="Modelo" value={p0(side(s.pModel))} sub="sin mirar cuotas" title={`Elo y estadísticas: ${p0(s.pElo)} y ${p0(s.pStats)} para ${m.a.name}`} />
       {s.pMarket != null && <TvStat label="Casas" value={p0(side(s.pMarket))} sub="sin su margen" />}
       <TvStat label="Juegos" value={s.expectedGames.toFixed(1).replace('.', ',')} sub="esperados" />
+    </div>
+  );
+}
+
+// Cómo llegan los dos al partido (TennisMyLife): forma, racha, horas en pista, superficie y cara a cara. Va encima del tablero de un
+// partido, como el contexto del analizador del baloncesto
+const SURF_ES: Record<TennisSurface, string> = { Hard: 'pista dura', Clay: 'tierra', Grass: 'hierba' };
+function Arrival({ c, m }: { c: TennisFormContext; m: TennisMatch }) {
+  const wl = (r: { won: number; lost: number } | null) => (r && r.won + r.lost ? `${r.won}-${r.lost}` : '–');
+  const h = (v: number) => (v ? `${v.toFixed(1).replace('.', ',')} h` : '–');
+  const rows: [string, (f: TennisForm) => string][] = [
+    ['Últimos 10', f => wl(f.last10)],
+    ['Racha', f => (f.streak ? `${f.streak.n} ${f.streak.win ? 'ganados' : 'perdidos'}` : '–')],
+    ['Últimas 4 semanas', f => wl(f.weeks4)],
+    ['Horas en pista (2 semanas)', f => `${h(f.hours14)}${f.matches14 ? ` · ${f.matches14} partidos` : ''}`],
+    ...(c.surface ? [[`En ${SURF_ES[c.surface]}, este año`, (f: TennisForm) => wl(f.surface)] as [string, (f: TennisForm) => string]] : [])
+  ];
+  return (
+    <div className="overflow-x-auto border-b border-zinc-800">
+      <table className="w-full min-w-[360px] text-[13px]">
+        <thead className="bg-zinc-900/60"><tr><th className="px-4 py-2 text-left text-xs font-medium text-zinc-400">Cómo llegan</th><th className="px-3 py-2 text-right text-xs font-medium text-zinc-300">{surname(m.a.name)}</th><th className="px-4 py-2 text-right text-xs font-medium text-zinc-300">{surname(m.b.name)}</th></tr></thead>
+        <tbody className="divide-y divide-zinc-800/60">
+          {rows.map(([l, f]) => <tr key={l}><td className="px-4 py-1.5 text-zinc-400">{l}</td><td className="px-3 py-1.5 text-right tnum text-zinc-100">{f(c.a)}</td><td className="px-4 py-1.5 text-right tnum text-zinc-100">{f(c.b)}</td></tr>)}
+          {c.h2h.a + c.h2h.b > 0 && <tr><td className="px-4 py-1.5 text-zinc-400">Cara a cara</td><td colSpan={2} className="px-4 py-1.5 text-right tnum text-zinc-100">{c.h2h.a}-{c.h2h.b}</td></tr>}
+        </tbody>
+      </table>
+      <p className="px-4 py-1.5 text-[11px] text-zinc-500">De TennisMyLife, con días de retraso. Haber jugado muchas horas en el torneo anterior es, en el histórico, estar en forma: el modelo lo suma.</p>
     </div>
   );
 }
@@ -372,6 +407,7 @@ export function TennisPicksBoard({ matches, noOdds = [], onOpen, split, sideExtr
 
   const main = (
       <TvFrame>
+        {one?.context && <Arrival c={one.context} m={one.m} />}
         <TvHeader title={<PicksTitle>{one ? 'Recomendaciones' : heading}</PicksTitle>} sub={sub}
           media={!one && <span className="flex shrink-0 gap-1.5">{tours.map(t => <CircuitBadge key={t} circuit={t} />)}</span>}>
           {one ? <MatchStats x={one} /> : (

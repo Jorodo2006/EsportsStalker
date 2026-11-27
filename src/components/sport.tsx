@@ -2,7 +2,7 @@
 // bloque de competición con sus tarjetas, la sección En directo y el marcador grande del partido abierto.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, CalendarX, ChevronDown, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-react';
+import { CalendarDays, CalendarX, ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Newspaper } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { Button, Empty, TeamLogo, chip, oddBtn, panelCls } from './ui';
 import { useApp } from '@/lib/app-context';
@@ -76,7 +76,8 @@ export function NoGames({ app, text, next, onDay, children }: {
 // teñida del color del deporte. Mientras alguien no la haya abierto nunca en este navegador, da un pequeño salto al cargar
 // (tres veces y se para: AGENTS.md no quiere cosas que laten sin fin; nada si el sistema pide menos movimiento)
 const PICKS_SEEN = 'picks-seen';
-export function ModeSwitch<T extends 'games' | 'picks'>({ value, onChange }: { value: T; onChange: (v: T) => void }) {
+// news: el tercer apartado, Noticias y bajas (baloncesto y fútbol), fuera de las recomendaciones
+export function ModeSwitch<T extends 'games' | 'picks' | 'news'>({ value, onChange, news }: { value: T; onChange: (v: T) => void; news?: boolean }) {
   const [seen, setSeen] = useState(() => { try { return localStorage.getItem(PICKS_SEEN) === '1'; } catch { return true; } });
   const go = (v: T) => {
     if (v === 'picks' && !seen) { setSeen(true); try { localStorage.setItem(PICKS_SEEN, '1'); } catch { /* sin almacenamiento */ } }
@@ -86,15 +87,21 @@ export function ModeSwitch<T extends 'games' | 'picks'>({ value, onChange }: { v
   const picks = value === 'picks';
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div role="tablist" aria-label="Sección" className="grid w-full grid-cols-2 gap-1 rounded-xl bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800 sm:inline-grid sm:w-auto">
-        <button type="button" role="tab" aria-selected={!picks} onClick={() => go('games' as T)}
-          className={cn(base, !picks ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
+      <div role="tablist" aria-label="Sección" className={cn('grid w-full gap-1 rounded-xl bg-zinc-900 p-1 ring-1 ring-inset ring-zinc-800 sm:inline-grid sm:w-auto', news ? 'grid-cols-3' : 'grid-cols-2')}>
+        <button type="button" role="tab" aria-selected={value === 'games'} onClick={() => go('games' as T)}
+          className={cn(base, value === 'games' ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
           <CalendarDays size={16} />Partidos
         </button>
         <button type="button" role="tab" aria-selected={picks} onClick={() => go('picks' as T)}
           className={cn(base, picks ? 'bg-zinc-700 text-zinc-50' : 'bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/45 hover:bg-amber-500/25', !picks && !seen && 'attn')}>
           <Lightbulb size={16} className={picks ? 'text-amber-400' : ''} />Recomendaciones
         </button>
+        {news && (
+          <button type="button" role="tab" aria-selected={value === 'news'} onClick={() => go('news' as T)}
+            className={cn(base, value === 'news' ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100')}>
+            <Newspaper size={16} />Noticias
+          </button>
+        )}
       </div>
       {!picks && <span className="hidden text-[13px] text-zinc-400 sm:inline">Las apuestas en las que el modelo ve valor, con su probabilidad</span>}
     </div>

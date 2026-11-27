@@ -2,9 +2,41 @@
 // nombre debajo, la cuota con su casa entera y una ayuda (ⓘ) que explica cada cifra. Antes cada deporte lo pintaba a su
 // manera: en baloncesto las cifras iban sueltas («52 %», «+8,3 %», «2.10») y el tenis sí ponía «prob.» y «cuota»
 import { useState } from 'react';
-import { Info } from 'lucide-react';
+import { ChevronRight, Info } from 'lucide-react';
+import { sized } from '@/lib/img';
 import { cn, odd } from '@/lib/format';
 import { Dialog } from './ui';
+
+// La cara de una recomendación, como la del baloncesto (PickFace de BasketPicks.tsx), para el tenis, el fútbol y la MMA: la foto del
+// jugador o luchador con su bandera o su escudo en la esquina (sin foto, sus iniciales); logo: un escudo solo (el equipo de la
+// apuesta); pair: los dos escudos o banderas, en las apuestas del partido
+const initialsOf = (name: string) => { const w = name.split(/\s+/).filter(Boolean); return ((w[0]?.[0] ?? '') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
+export function PickAvatar({ photo, name, badge, logo, pair, big }: { photo?: string | null; name?: string; badge?: string | null; logo?: string | null; pair?: (string | null | undefined)[]; big?: boolean }) {
+  const [broken, setBroken] = useState(false);
+  const circle = cn('relative grid shrink-0 place-items-center rounded-full bg-zinc-800 ring-1 ring-inset ring-white/10', big ? 'h-14 w-14 md:h-16 md:w-16' : 'h-10 w-10');
+  if (logo) return <span className={circle}><img src={sized(logo, 40)} alt="" loading="lazy" decoding="async" className={cn('object-contain', big ? 'h-9 w-9' : 'h-6 w-6')} /></span>;
+  if (!name) {
+    return (
+      <span className={circle}>
+        <span className="flex items-center -space-x-1">{(pair ?? []).filter(Boolean).map((src, i) => <img key={i} src={sized(src!, 40)} alt="" loading="lazy" decoding="async" className={cn('rounded-[3px] object-cover', big ? 'h-6 w-7' : 'h-3.5 w-[18px]')} />)}</span>
+      </span>
+    );
+  }
+  const show = !broken && photo;
+  return (
+    <span className={circle}>
+      <span className="absolute inset-0 grid place-items-center overflow-hidden rounded-full">
+        {show ? <img src={sized(photo!, big ? 64 : 40)} onError={() => setBroken(true)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
+          : <span className={cn('font-score font-semibold text-zinc-300', big ? 'text-lg' : 'text-[13px]')}>{initialsOf(name)}</span>}
+      </span>
+      {badge && <span className={cn('absolute -bottom-0.5 -right-0.5 grid place-items-center overflow-hidden rounded-full bg-zinc-950 ring-1 ring-zinc-800', big ? 'h-6 w-6' : 'h-[18px] w-[18px]')}><img src={sized(badge, 20)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /></span>}
+    </span>
+  );
+}
+// Que se vea que la recomendación se abre, como en el baloncesto
+export const OpenHint = ({ text = 'Pulsa para ver el partido', big }: { text?: string; big?: boolean }) => (
+  <span className={cn('mt-1 flex items-center gap-0.5 whitespace-nowrap font-medium text-amber-400 group-hover:underline', big ? 'text-xs' : 'text-[11px] leading-[14px]')}>{text}<ChevronRight size={big ? 14 : 12} className="shrink-0" /></span>
+);
 
 export const p0 = (v: number) => `${Math.round(v * 100)} %`;
 export const signed = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1).replace('.', ',')} %`;

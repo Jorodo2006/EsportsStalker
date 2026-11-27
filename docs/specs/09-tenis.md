@@ -374,5 +374,5 @@ desde junio de 2024 (unos 7.000 por circuito, en dos mitades), cuántos minutos 
   haber jugado mucho es haber llegado lejos, y el Elo va con retraso. No es cansancio, es forma.
 - **Si se añadiera** (β·diferencia de horas/3 al logit, β ≈ 0,12-0,15, estable entre mitades y circuitos), ajustado con una mitad y comprobado en la otra baja el log-loss
   sólo 0,0007-0,0016 (de 0,614 a 0,613 en la ATP). Es una mejora real pero casi nula, y exigiría sacar los minutos de cada jugador al predecir.
-**No se añade al modelo.** Si algún día se retoma, hay que verlo como forma reciente, no como cansancio.
+**Se añade desde el 27-11-2026** como forma reciente, no como cansancio: `FORM_BETA` (0,12, el más bajo medido) en `matchContext` de `picks.js`, con las horas de los torneos de las dos últimas semanas que no son el del partido. Con el mismo contexto (`formContext`: últimos 10, racha, 4 semanas, horas en pista, balance en la superficie este año y cara a cara) se escribe la explicación larga de cada recomendación (`story`) y el cuadro *Cómo llegan* de la pestaña de un partido.
 

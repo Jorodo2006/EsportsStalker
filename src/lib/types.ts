@@ -354,7 +354,15 @@ export interface TennisRank { rank: number; previous: number; points: number; tr
 export interface TennisPick {
   id: string; title: string; market: string; selection: string; family: string; side: 'a' | 'b' | null; who?: 'a' | 'b' | null; book: string; price: number; prices: Record<string, number>;
   p: number; pModel: number; pMarket: number; fair: number; ev: number; rel: Reliability; why: string;
+  story?: string; // la explicación larga: cómo llegan, superficie, cara a cara y lo que dice el modelo (picks.js, storyOf)
 }
+// Cómo llega un jugador a un partido, de TennisMyLife (picks.js, formOf). prevHours: horas en pista de su torneo anterior, de las
+// dos últimas semanas (en el histórico, haber jugado mucho es estar en forma, no cansancio)
+export interface TennisForm {
+  last10: { won: number; lost: number }; streak: { win: boolean; n: number } | null; weeks4: { won: number; lost: number };
+  matches14: number; hours14: number; prevHours: number; surface: { won: number; lost: number } | null; gamesAvg: number | null; acesAvg: number | null;
+}
+export interface TennisFormContext { a: TennisForm; b: TennisForm; h2h: { a: number; b: number }; surface: TennisSurface | null }
 // Un partido de un tenista en TennisMyLife (GET /api/tennis/gamelog), desde su lado. date: el lunes de la semana del torneo (no da
 // el día). Las estadísticas de saque son null si el partido no las tiene; breaks: los que hizo él
 export interface TennisLogMatch {
@@ -379,6 +387,7 @@ export interface TennisPlayerLines {
 // summary: el partido según el modelo (pModel, pElo, pStats), las casas (pMarket) y la mezcla (pFinal), todo para el jugador a.
 // picks: las líneas de las casas que el servicio no descarta; la interfaz las separa por riesgo (lib/tennis-picks.ts)
 export interface TennisMatchPicks {
+  context?: TennisFormContext;
   surface: TennisSurface | null; indoor: boolean; bestOf: number; oddsAge: number;
   summary: { pModel: number; pElo: number; pStats: number; pMarket: number | null; pFinal: number; expectedGames: number; holdA: number; holdB: number; weight: number };
   picks: TennisPick[]; considered: number; warnings: string[];

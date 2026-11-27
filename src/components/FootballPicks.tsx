@@ -17,8 +17,8 @@ import { PickWhy } from './PickWhy';
 import { memberOnly } from './MemberOnly';
 import { targetOfFootball } from '@/lib/odds-targets';
 import { RefreshOdds } from './RefreshOdds';
-import { PickNums, PickOdd, PickOddText, PicksTitle, p0 } from './PickParts';
-import { NewsBasisList, NewsHint, useTeamNews } from './MatchNews';
+import { PickNums, PickOdd, PickOddText, PicksTitle, p0, OpenHint, PickAvatar } from './PickParts';
+import { NewsHint, useTeamNews } from './MatchNews';
 import { keyNews, withNews, type KeyNews } from '@/lib/news';
 import type { NewsItem } from '@/lib/types';
 
@@ -124,10 +124,6 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
         <div><TvBand>Más complicadas</TvBand>{r.hard?.length ? r.hard.map(raw => { const x = pickNews(raw, m, news); return <PickRow key={raw.id} pick={x.p} onAdd={add} match={targetOfFootball(m).match} note={<NewsHint k={x.k?.player ? x.k : null} />} />; }) : <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna que merezca la pena.</p>}</div>
       </div>
 
-      <NewsBasisList items={(r.basis ?? []).map(b => ({
-        name: b.name, status: b.status, news: b.news,
-        did: b.removed ? 'Sin sus líneas de jugador' : b.status === 'out' || b.status === 'suspended' ? 'No tenía líneas' : b.status === 'back' ? 'Cuenta como disponible' : 'Sus líneas, con menos fiabilidad'
-      }))} />
       {!!r.warnings?.length && <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">{r.warnings.map(w => <div key={w} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} />{w}</div>)}</div>}
       <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
         Es una estimación, no una garantía: mezcla un modelo de goles (ataque y defensa de cada equipo) con las casas, y las casas pesan más. Probado con unos 2.800 partidos de 2025 y 2026: en el 1X2 sale bien calibrado; en los goles acierta poco más que la casa. Sin cuotas históricas no se ha podido comprobar si a la larga da dinero.
@@ -141,11 +137,17 @@ function FootballPicksPanelInner({ m, onOdds }: { m: FootballMatch; onOdds: () =
 // de cada uno (de la de más valor a la de menos). Al pulsar una, se abre su partido; la cuota la manda al cupón
 function BoardRow({ d, p: raw, onOpen, onAdd, news }: { d: FootballDayPick; p: FootballPick; onOpen: (id: string) => void; onAdd: (d: FootballDayPick, p: FootballPick) => void; news?: NewsItem[] }) {
   const { p, k } = pickNews(raw, d, news);
+  // La cara, como en el baloncesto: el escudo del equipo de la apuesta, o los dos en las del partido
+  const side = p.side ?? p.who ?? null, team = side === 'a' ? d.home : side === 'b' ? d.away : null;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 transition hover:bg-zinc-800/30">
-      <button onClick={() => onOpen(d.id)} title={`${p.market}: ${p.selection}. ${p.why}. Pulsa para abrir el partido`} className="min-w-0 flex-1 cursor-pointer text-left">
-        <span className="line-clamp-2 text-[14px] font-semibold leading-[18px] text-zinc-50">{p.title}</span>
-        <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 transition hover:bg-white/[.04]">
+      <button onClick={() => onOpen(d.id)} title={`${p.market}: ${p.selection}. ${p.why}. Pulsa para abrir el partido`} className="group flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 text-left">
+        {team ? <PickAvatar logo={team.logo} /> : <PickAvatar pair={[d.home.logo, d.away.logo]} />}
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{p.title}</span>
+          <span className="block truncate text-[11px] text-zinc-400"><span className="tnum">{esTime(d.date)}</span> · {d.home.short || d.home.name} - {d.away.short || d.away.name} · {d.leagueName}</span>
+          <OpenHint />
+        </span>
       </button>
       <PickNums p={p.p} ev={p.ev} good={verdictOf(p.ev, p.rel.score) === 'BET'} />
       <RefreshOdds match={targetOfFootball(d).match} focus={p.id.split('#')[0]} />

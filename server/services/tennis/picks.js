@@ -240,6 +240,89 @@ function reliabilityOf({ family, pModel, pMarket, gap, minPoints, books, age, sa
   return { score, label: score >= 70 ? 'Alta' : score >= 50 ? 'Media' : 'Baja', factors, warnings };
 }
 
+// ---------- Cómo llegan los dos: forma, horas en pista, superficie y cara a cara (TennisMyLife) ----------
+// Las horas del torneo anterior (de menos de 14 días) no cansan: el que más jugó rinde unos 3 puntos por encima del modelo, porque
+// haber llegado lejos es estar en forma (backtest-contexto.js, docs/specs/09-tenis.md). Sumar β·(diferencia de horas / 3) al logit
+// mejoró el log-loss en las dos mitades y los dos circuitos (β 0,12-0,15): se usa el más bajo. Las del mismo torneo no tienen efecto
+const FORM_BETA = 0.12;
+const DAY_MS = 864e5;
+function formOf(log, surface, current, now) {
+  const ago = g => (now - Date.parse(`${g.date}T12:00:00Z`)) / DAY_MS;
+  const rec = list => ({ won: list.filter(g => g.win).length, lost: list.filter(g => !g.win).length });
+  let streak = 0;
+  for (const g of log) { if (g.win !== log[0].win) break; streak++; }
+  // La fecha es el lunes del torneo: los de las dos últimas semanas son los de torneos que empezaron hace menos de 20 días
+  const two = log.filter(g => ago(g) < 20), hours = list => Math.round(list.reduce((t, g) => t + (g.minutes || 0), 0) / 6) / 10;
+  const year = log.filter(g => ago(g) < 365);
+  const recent = log.slice(0, 10), withAces = recent.filter(g => g.aces != null);
+  return {
+    last10: rec(recent), streak: log.length ? { win: log[0].win, n: streak } : null, weeks4: rec(log.filter(g => ago(g) < 34)),
+    matches14: two.length, hours14: hours(two), prevHours: hours(two.filter(g => norm(g.tournament) !== norm(current))),
+    surface: surface ? rec(year.filter(g => g.surface === surface)) : null,
+    gamesAvg: recent.length ? recent.reduce((t, g) => t + g.gamesWon + g.gamesLost, 0) / recent.length : null,
+    acesAvg: withAces.length ? withAces.reduce((t, g) => t + g.aces, 0) / withAces.length : null,
+    last: log[0] ? { date: log[0].date, tournament: log[0].tournament, round: log[0].round, win: log[0].win, opp: log[0].opp, score: log[0].score } : null
+  };
+}
+function formContext(data, ka, kb, tour, surface, current, now) {
+  const logA = ka ? tml.gamelogOf(data, ka, tour) : [], logB = kb ? tml.gamelogOf(data, kb, tour) : [];
+  const a = formOf(logA, surface, current, now), b = formOf(logB, surface, current, now);
+  const vs = kb ? logA.filter(g => norm(g.opp) === kb) : [];
+  const x = ka && kb ? clamp((a.prevHours - b.prevHours) / 3, -1.5, 1.5) : 0;
+  return { a, b, h2h: { a: vs.filter(g => g.win).length, b: vs.filter(g => !g.win).length }, surface, x };
+}
+const publicForm = f => ({ a: f.a, b: f.b, h2h: f.h2h, surface: f.surface });
+
+// La explicación larga de una recomendación, en palabras: cómo llegan, la superficie, el cara a cara y lo que dice el modelo, según
+// lo que sea la apuesta (ganador o hándicap, juegos de uno, total, aces)
+const SURFACE_ES = { Hard: 'pista dura', Clay: 'tierra', Grass: 'hierba' };
+function storyOf(p, c, r) {
+  const { m, f, form, exp, expA, expB, hold, x } = c;
+  if (!form) return '';
+  const nm = w => m[w].name.split(' ').slice(1).join(' ') || m[w].name;
+  const es = v => v.toFixed(1).replace('.', ',');
+  const pc = v => `${Math.round(v * 100)} %`;
+  const fo = w => form[w], other = w => (w === 'a' ? 'b' : 'a');
+  const bal = w => {
+    const L = fo(w).last10, st = fo(w).streak;
+    if (!(L.won + L.lost)) return 'sin partidos recientes en el histórico';
+    return `${L.won}-${L.lost} en sus últimos ${L.won + L.lost}${st && st.n >= 3 ? ` (${st.n} ${st.win ? 'victorias' : 'derrotas'} seguidas)` : ''}`;
+  };
+  const prob = `Probabilidad: ${pc(p.p)} (el modelo solo, ${pc(p.pModel)}; la casa, ${pc(p.pMarket)}).`;
+  const out = [];
+  if (r.aceWho) {
+    const who = r.aceWho, mean = x.aceMean(who);
+    out.push(who === 'both' ? `Se esperan ${es(mean)} aces entre los dos.` : `Se esperan ${es(mean)} aces de ${nm(who)}: hace un ${es(f.aces[who] * 100)} % de sus puntos al saque.`);
+    for (const w of who === 'both' ? ['a', 'b'] : [who]) if (fo(w).acesAvg != null) out.push(`${nm(w)} lleva ${es(fo(w).acesAvg)} aces de media en sus últimos partidos.`);
+    out.push(prob);
+    return out.join(' ');
+  }
+  const side = p.side || (p.who === 'a' || p.who === 'b' ? p.who : null);
+  if (side) {
+    const ot = other(side);
+    out.push(`${nm(side)} llega con ${bal(side)}; ${nm(ot)}, con ${bal(ot)}.`);
+    const sf = form.surface, A = fo(side).surface, B = fo(ot).surface;
+    if (sf && A && B && A.won + A.lost >= 5 && B.won + B.lost >= 5) out.push(`En ${SURFACE_ES[sf]}, este año, ${nm(side)} va ${A.won}-${A.lost} y ${nm(ot)} ${B.won}-${B.lost}.`);
+    const hs = fo(side).prevHours, ho = fo(ot).prevHours;
+    if (Math.abs(hs - ho) >= 1.5) {
+      const more = hs > ho ? side : ot;
+      out.push(`${nm(more)} viene de jugar ${es(Math.max(hs, ho))} h en su torneo anterior (${nm(other(more))}, ${es(Math.min(hs, ho))} h): en el histórico eso es estar en forma, no cansancio.`);
+    }
+    if (form.h2h.a + form.h2h.b) out.push(`Cara a cara: ${nm('a')} ${form.h2h.a}-${form.h2h.b} ${nm('b')}.`);
+    if (/^Juegos de/.test(p.family)) out.push(`El modelo espera ${es(side === 'a' ? expA : expB)} juegos de ${nm(side)}.`);
+    else if (/Hándicap de juegos/.test(p.family)) out.push(`El modelo espera ${es(Math.abs(expA - expB))} juegos de diferencia a favor de ${nm(expA >= expB ? 'a' : 'b')}.`);
+    out.push(prob);
+    return out.join(' ');
+  }
+  if (/Total de juegos/.test(p.family)) {
+    out.push(`Se esperan ${es(exp)} juegos: ${nm('a')} gana el ${pc(hold.a)} de sus juegos al saque y ${nm('b')} el ${pc(hold.b)}.`);
+    const ga = fo('a').gamesAvg, gb = fo('b').gamesAvg;
+    if (ga != null && gb != null) out.push(`En sus últimos partidos, los de ${nm('a')} tuvieron ${es(ga)} juegos de media y los de ${nm('b')}, ${es(gb)}.`);
+  }
+  out.push(prob);
+  return out.join(' ');
+}
+
 // Una frase con el motivo, a partir de los datos del partido
 function reason(p, c, r) {
   const { m, exp, expA, expB, expSet, f, hold, x } = c;
@@ -285,7 +368,10 @@ async function matchContext(match, odds) {
   const ka = key(m.a.name), kb = key(m.b.name);
   const pa = ka ? st.players.get(ka) : empty(m.a.rank), pb = kb ? st.players.get(kb) : empty(m.b.rank);
   const avg = st.avgOf(M.conditionOf(surface, edition?.indoor));
-  const f = M.predict(pa, pb, surface, day, avg, m.bestOf, P);
+  const f0 = M.predict(pa, pb, surface, day, avg, m.bestOf, P);
+  // Cómo llegan (forma, horas en pista, superficie, cara a cara) y el efecto medido de las horas del torneo anterior en el modelo
+  const form = formContext(st.data, ka, kb, tour, surfaceName, edition?.tourney_name, Date.now());
+  const f = { ...f0, pModelBase: f0.pModel, pModel: sigmoid(logit(clamp(f0.pModel, 0.005, 0.995)) + FORM_BETA * form.x) };
 
   const ml = odds?.markets?.find(l => l.key === 'moneyline|0||');
   const oa = ml?.outcomes.find(o => o.id === 'a');
@@ -315,7 +401,8 @@ async function matchContext(match, odds) {
   };
   const ctx = { m, exp, expA, expB, expSet, f, hold, x };
   const age = odds ? Math.max(0, Date.now() - Math.max(...Object.values(odds.sources || {}).map(s => s.ts || 0))) : null;
-  return { m, P, f, w, gap, minPoints, pFinal, mlMarket, sa, sb, dist, setDist, exp, expA, expB, hold, x, ctx, age, surfaceName, edition, ka, kb };
+  ctx.form = form;
+  return { m, P, f, w, gap, minPoints, pFinal, mlMarket, sa, sb, dist, setDist, exp, expA, expB, hold, x, ctx, age, surfaceName, edition, ka, kb, form };
 }
 
 // Todas las líneas de las casas que el modelo sabe calcular, con su probabilidad, su valor y su fiabilidad, menos las que no se
@@ -349,7 +436,7 @@ function picksOf(c, odds) {
   // Lo que no se recomienda nunca: tanta diferencia con la casa suele ser un error, una cuota que regala el margen entero o algo
   // casi imposible. El resto va a la interfaz, que lo filtra y lo separa por riesgo (src/lib/tennis-picks.ts)
   const sane = x => Math.abs(x.pModel - x.pMarket) <= MAX_DISAGREE && x.price >= MIN_PRICE && x.price <= MAX_PRICE && x.p >= MIN_P && x.ev >= MIN_EV && x.rel.score >= MIN_REL;
-  const shown = picks.filter(sane).map(({ _r, ...pick }) => ({ ...pick, why: reason(pick, ctx, _r) }));
+  const shown = picks.filter(sane).map(({ _r, ...pick }) => ({ ...pick, why: reason(pick, ctx, _r), story: storyOf(pick, ctx, _r) }));
   return { shown, considered: picks.length };
 }
 
@@ -371,7 +458,7 @@ async function picksFor(match) {
   const classic = classicOf(shown, c.pFinal);
   return {
     ready: true, surface: c.surfaceName, indoor: String(c.edition?.indoor).toUpperCase() === 'I', bestOf: c.m.bestOf, oddsAge: c.age,
-    summary: summaryOf(c), picks: shown, ...classic, considered, warnings: warningsOf(c)
+    summary: summaryOf(c), context: publicForm(c.form), picks: shown, ...classic, considered, warnings: warningsOf(c)
   };
 }
 
@@ -407,7 +494,7 @@ async function playerLines(match, side) {
   const picks = withOdds ? picksOf(c, odds).shown.filter(p => p.who === side || p.family.includes(name) || MATCH_FAMILIES.test(p.family)) : [];
   return {
     ready: true, side, surface: c.surfaceName, bestOf: m.bestOf, withOdds, oddsAge: c.age, known: !!(side === 'a' ? c.ka : c.kb),
-    pWin: side === 'a' ? c.pFinal : 1 - c.pFinal, weight: c.w, expected, ladders, picks, warnings: warningsOf(c)
+    pWin: side === 'a' ? c.pFinal : 1 - c.pFinal, weight: c.w, expected, ladders, picks, context: publicForm(c.form), warnings: warningsOf(c)
   };
 }
 
