@@ -303,6 +303,17 @@ export interface FootballStandingRow {
   gf: number; ga: number; gd: number; points: number; zone: { color: string; text: string } | null;
 }
 export interface FootballGroup { name: string; rows: FootballStandingRow[] }
+// Estadísticas de la temporada (server/services/football/season.js): sumas de los partidos terminados. games: partidos con datos;
+// missing: los que faltan por traer de ESPN (se completan solos). Los córneres sólo por equipo: ESPN no los da por jugador
+export interface FootballSeasonTeam {
+  id: string; name: string; logo: string; games: number; cornersFor: number; cornersAgainst: number; shots: number; shotsOnTarget: number;
+  shotsAgainst: number; yellow: number; yellowAgainst: number; red: number; fouls: number;
+}
+export interface FootballSeasonPlayer {
+  id: string; name: string; team: string; games: number; starts: number; shots: number; shotsOnTarget: number; goals: number; assists: number;
+  fouls: number; fouled: number; yellow: number; red: number;
+}
+export interface FootballSeasonStats { season: string; games: number; missing: number; teams: FootballSeasonTeam[]; players: FootballSeasonPlayer[] }
 
 // ---------- Tenis (servicio tennis: ESPN, ATP y WTA individuales) ----------
 export type Tour = 'atp' | 'wta';
@@ -689,6 +700,7 @@ export interface Api {
     // Últimos partidos acabados de un equipo (todas las competiciones)
     teamGames(teamId: string): Promise<FootballTeamGame[]>;
     standings(league: FootballLeagueId): Promise<FootballGroup[]>;
+    seasonStats(league: FootballLeagueId): Promise<FootballSeasonStats>;
     picks(date: string, id: string): Promise<FootballPicks>;
     picksDay(date: string): Promise<FootballDayPick[]>;
     picksLines(date: string): Promise<FootballLineRow[]>;

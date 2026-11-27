@@ -11,6 +11,7 @@ const { photoOf, photosOf } = require('./photos');
 const { picksFor, scannable } = require('./picks');
 const { hits, queryOf } = require('../../shared/search');
 const { footballNews } = require('./news');
+const season = require('./season');
 
 // En este orden salen en la lista de partidos
 const LEAGUES = [
@@ -408,6 +409,8 @@ const routes = [
   // Las de una alineación entera: { players: [{ id, name, team }] } → { id: { url, from } | null (aún buscándola) }
   ['POST', '/api/football/photos', ({ body }) => photosOf(body?.players)],
   ['GET', '/api/football/standings/:league', ({ params }) => standings(params.league)],
+  // Estadísticas de la temporada por jugador y por equipo (season.js)
+  ['GET', '/api/football/season-stats/:league', ({ params }) => season.seasonStats(league(params.league).espn)],
   // Recomendaciones de un partido (modelo de goles + cuotas), o las mejores de un día entre los partidos con cuotas leídas
   ['GET', '/api/football/picks', async ({ query: q }) => {
     const m = (await between(valid(q.date), valid(q.date))).find(x => x.id === q.id);
@@ -473,8 +476,11 @@ warmEvery('football', 4 * 60e3, () => { const t = madridDay(Date.now()); return 
 
 migrate('football', path.join(__dirname, 'migrations'))
   // Las fotos de jugadores duran más: buscarlas cuesta (Wikipedia, de una en una) y casi no cambian
-  // y los resultados de meses pasados (hist:, para el modelo) no cambian: se quedan
-  .then(() => query(`DELETE FROM football.cache WHERE key NOT LIKE 'hist:%' AND t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
+  // y los resultados de meses pasados (hist:, para el modelo) y las estadísticas de los partidos terminados (pst:, season.js)
+  // no cambian: se quedan
+  .then(() => query(`DELETE FROM football.cache WHERE key NOT LIKE 'hist:%' AND key NOT LIKE 'pst:%' AND t < now() - CASE WHEN key LIKE 'photo:%' THEN interval '60 days' ELSE interval '7 days' END`))
   .then(() => news.start())
+  // Estadísticas de la temporada: lo que falte, en segundo plano, al arrancar y cada 30 min
+  .then(() => { const go = () => season.fill(LEAGUES).catch(e => console.warn('[football] temporada:', e.message)); setTimeout(go, 60e3); setInterval(go, 30 * 60e3); })
   .then(() => start({ name: 'football', port: Number(process.env.PORT) || 4006, routes, health: async () => (await query('SELECT 1'), true) }))
   .catch(e => { console.error(e); process.exit(1); });

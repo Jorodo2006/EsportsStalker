@@ -87,4 +87,4 @@ async function results(pool, months = 18) {
   return (await inBatches(tasks)).flat().filter(r => !seen.has(r.id) && seen.add(r.id)).sort((x, y) => x.date.localeCompare(y.date));
 }
 
-module.exports = { POOLS, CUPS, FRIENDLY, poolOf, results, monthsBack };
+module.exports = { POOLS, CUPS, FRIENDLY, poolOf, results, monthsBack, month };

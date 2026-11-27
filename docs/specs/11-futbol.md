@@ -30,6 +30,16 @@ gratuita y sin clave, la misma que usan la NBA y el tenis.
 El orden de la tabla es el de la lista de partidos. Para añadir una liga basta con una fila en `LEAGUES` (servicio), en
 `FootballLeagueId` (`src/lib/types.ts`) y, si tiene tabla, en `src/views/FootballStandings.tsx`.
 
+**Estadísticas de la temporada** (*Clasificación → Jugadores / Equipos*; `server/services/football/season.js`,
+`GET /api/football/season-stats/:liga`, pública como el resto de estadísticas; `src/views/football/SeasonStats.tsx` y el orden en
+`src/lib/football-season.ts`, con pruebas): por jugador, tiros, a puerta, goles, asistencias, faltas hechas y recibidas y tarjetas;
+por equipo, córneres a favor y en contra, tiros y tarjetas, todo por partido. ESPN no las da sumadas: se suman las del resumen de
+cada partido terminado de la temporada en curso (la de `season` del calendario de ESPN; fuera de temporada, la anterior). Lo de un
+partido terminado no cambia y se guarda para siempre en `football.cache` (`pst:<liga>:<partido>`; la limpieza de 7 días no lo toca,
+como `hist:`). Una petición trae como mucho 12 partidos que falten, de 4 en 4 y sin empezar más pasados 3 s; el resto los trae
+`season.fill` en segundo plano (al minuto de arrancar y cada 30 min, de uno en uno con 1,5 s de pausa, 400 por pasada). La primera
+vez son unos 1.500 partidos entre todas las competiciones; luego, los de cada jornada. Los córneres por jugador no existen en ESPN.
+
 **A-League** (Australia, `aus.1`): se juega de octubre a mayo, de madrugada en hora de España. En el modelo va en su propio grupo
 (`aus` en `POOLS` de `history.js`), porque sus equipos nunca juegan contra los europeos, con los mismos parámetros que el masculino
 hasta medirlos con `backtest.js aus` (al añadirla, 191 partidos de octubre de 2025 a noviembre de 2026). En el lector, Winamax la

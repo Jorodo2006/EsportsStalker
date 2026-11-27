@@ -221,6 +221,7 @@ export const api: Api = {
     photos: players => call('POST', '/api/football/photos', { players }),
     teamGames: teamId => get(`/api/football/team-games/${part(teamId)}`),
     standings: league => get(`/api/football/standings/${part(league)}`),
+    seasonStats: league => get(`/api/football/season-stats/${part(league)}`),
     picks: (date, id) => get('/api/football/picks', { date, id, all: '1' }), // all: todas las líneas, para registrarlas
     // Las del día se registran para medir si el modelo acierta (las ve la lista de fútbol y la portada Hoy)
     picksLines: date => get('/api/football/picks/lines', { date }),
