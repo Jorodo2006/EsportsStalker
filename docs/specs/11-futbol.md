@@ -40,6 +40,22 @@ como `hist:`). Una petición trae como mucho 12 partidos que falten, de 4 en 4 y
 `season.fill` en segundo plano (al minuto de arrancar y cada 30 min, de uno en uno con 1,5 s de pausa, 400 por pasada). La primera
 vez son unos 1.500 partidos entre todas las competiciones; luego, los de cada jornada. Los córneres por jugador no existen en ESPN.
 
+Cada tabla tiene dos vistas: **Medias** y **Líneas: más / menos de** (`playerLines`, `teamLines`). En Líneas se elige la
+estadística (remates, a puerta, faltas hechas y recibidas, tarjetas; en equipos, córneres del partido, a favor, en contra, tarjetas
+del partido y remates), más o menos de y la línea (las típicas de las casas), y sale en cuántos partidos se cumplió, la media y los
+últimos 5. Para eso `season.js` guarda además lo de cada partido en orden (`log`). Es lo que pasó, no una probabilidad: la pantalla
+lo dice, y que con pocos partidos un 100 % puede ser casualidad.
+
+**Córneres del partido en las recomendaciones** (`server/services/football/totals.js`, comprobado con `backtest-totales.js prev`):
+lo que cada equipo saca y concede en la temporada, tirado hacia la media de la liga con K = 20 partidos; lo esperado de cada uno es
+lo suyo × lo que concede el rival / la media, y el total, una binomial negativa con R = 25. Ajustado con la 2025-26 entera de las
+ligas de hombres y la A-League (2.507 partidos) y probado con la 2026-27 (632): log-loss 0,6437 frente a 0,6486 con la media de la
+liga, y calibrado (más de 7,5: decía 69,3 %, fue 72,6 %; más de 9,5: 47,5 % y 49,2 %; más de 11,5: 28,1 % y 28,0 %). En `picks.js` se
+mezcla con la casa sin margen con un peso de 0,2 (`W_CORNERS`, decisión: las casas saben más que la media) y la fiabilidad cuenta
+el mercado como el de jugador. Sólo con 3 partidos o más de cada equipo. **Tarjetas, no:** saber los equipos casi no mejora la
+media de la liga (0,5476 frente a 0,5488) y se queda corto en todas las líneas (esta temporada salen más; las decide sobre todo el
+árbitro, que no está en los datos). Si se añade el árbitro, repite la comprobación antes de recomendarlas.
+
 **A-League** (Australia, `aus.1`): se juega de octubre a mayo, de madrugada en hora de España. En el modelo va en su propio grupo
 (`aus` en `POOLS` de `history.js`), porque sus equipos nunca juegan contra los europeos, con los mismos parámetros que el masculino
 hasta medirlos con `backtest.js aus` (al añadirla, 191 partidos de octubre de 2025 a noviembre de 2026). En el lector, Winamax la
@@ -250,7 +266,7 @@ Comprobación en LaLiga (614 equipos-partido, de enero a noviembre de 2026, log-
 remates 0,2263 (0,2524), remates a puerta 0,1640 (0,1806), faltas cometidas 0,3473 (0,3508) y recibidas 0,3271 (con K=3). Las paradas no mejoran al ritmo de la posición
 (0,5289 con K=8 frente a 0,5332), por eso su peso es 30. Los goles esperados del partido no mejoraron el ritmo de remates (gamma 0 y 0,5 empatan), así que no se usan.
 Las probabilidades medias salen cerca de lo real (remates 9,1 % frente a 9,4 %; paradas 45 % frente a 42 %, algo alto).
-Como el goleador, sólo en los partidos de hombres, en la ficha y en el escáner, y la casa se reparte con el total del modelo. En la prueba (selecciones, sólo para ver el
+Como el goleador, sólo en los partidos de hombres y de la A-League (con los ritmos por posición de LaLiga: no se han medido allí), en la ficha y en el escáner, y la casa se reparte con el total del modelo. En la prueba (selecciones, sólo para ver el
 circuito) los EV salen en torno a −36 %: es una cota conservadora, porque sin cuotas históricas no hay con qué fijar el margen real de esas listas. No se registran
 en `bets.predictions`.
 

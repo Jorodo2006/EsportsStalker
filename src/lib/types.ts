@@ -308,10 +308,12 @@ export interface FootballGroup { name: string; rows: FootballStandingRow[] }
 export interface FootballSeasonTeam {
   id: string; name: string; logo: string; games: number; cornersFor: number; cornersAgainst: number; shots: number; shotsOnTarget: number;
   shotsAgainst: number; yellow: number; yellowAgainst: number; red: number; fouls: number;
+  log: number[][]; // cada partido, del más antiguo al último: [córneres a favor, en contra, tarjetas suyas, del rival, remates]
 }
 export interface FootballSeasonPlayer {
   id: string; name: string; team: string; games: number; starts: number; shots: number; shotsOnTarget: number; goals: number; assists: number;
   fouls: number; fouled: number; yellow: number; red: number;
+  log: number[][]; // cada partido, del más antiguo al último: [remates, a puerta, faltas hechas, faltas recibidas, tarjetas]
 }
 export interface FootballSeasonStats { season: string; games: number; missing: number; teams: FootballSeasonTeam[]; players: FootballSeasonPlayer[] }
 

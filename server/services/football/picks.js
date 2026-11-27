@@ -8,12 +8,17 @@ const client = require('../../shared/client');
 const H = require('./history');
 const M = require('./model');
 const Sc = require('./scorers');
+const Season = require('./season');
+const T = require('./totals');
 
 const { clamp } = M;
 const logit = p => Math.log(p / (1 - p));
 const sigmoid = x => 1 / (1 + Math.exp(-x));
 const W_MODEL = 0.25; // las casas aciertan más que el modelo (en la comprobación, 1,007 de log-loss frente a ~0,97 de las casas)
 const W_THIN = 0.1; // con pocos partidos de alguno de los dos, todavía menos
+// Córneres del partido (totals.js): el modelo mejora poco a la media de la liga (backtest-totales.js) y las casas saben más que la
+// media: pesa poco. Decisión, no medida (no hay cuotas históricas de córneres)
+const W_CORNERS = 0.2;
 const THIN_GAMES = 8; // partidos ponderados (los recientes pesan más)
 const ASSUMED_MARGIN = 0.07;
 const STALE_MS = 6 * 3600e3;
@@ -108,7 +113,7 @@ function marketProb(line, outcome) {
 const blend = (model, market, w) => sigmoid(w * logit(clamp(model, 0.002, 0.998)) + (1 - w) * logit(clamp(market, 0.002, 0.998)));
 
 // Lo bien que salió cada mercado en la comprobación con partidos pasados (el 1X2 calibrado; los goles, algo peor)
-const trustOf = f => (/Goleador|^Jugador ·/.test(f) ? 0.4 : /^1\.ª parte/.test(f) ? 0.5 : /Resultado|Doble oportunidad|Empate no válido|Hándicap/.test(f) ? 1 : /Total de goles/.test(f) ? 0.7 : 0.6);
+const trustOf = f => (/Goleador|^Jugador ·|Córneres/.test(f) ? 0.4 : /^1\.ª parte/.test(f) ? 0.5 : /Resultado|Doble oportunidad|Empate no válido|Hándicap/.test(f) ? 1 : /Total de goles/.test(f) ? 0.7 : 0.6);
 
 function reliabilityOf({ family, pModel, pMarket, gap, minGames, books, age }) {
   const factors = [
@@ -243,12 +248,37 @@ async function picksFor(match, espn, opts = {}) {
     }
   }
 
-  // Mercados de jugador (Goleador, remates, paradas, faltas): el modelo de scorers.js, sólo en los partidos de hombres que lo piden (la ficha y el escáner)
+  // Córneres del partido (totals.js), con las estadísticas de la temporada de esta competición. Las tarjetas no: en la comprobación,
+  // saber los equipos no mejoraba nada a la media de la liga (las decide sobre todo el árbitro)
+  const cornerLines = odds.markets.filter(l => /^corners\|0\|\|/.test(l.key) && l.line != null && Math.abs(l.line * 2 % 2) === 1);
+  if (cornerLines.length && (pool === 'men' || pool === 'aus')) {
+    const ex = T.expected(T.ratesOf(await Season.history(espn).catch(() => []), 'corners'), m.home.id, m.away.id, T.PARAMS.corners);
+    if (ex && ex.games >= T.MIN_GAMES) {
+      for (const line of cornerLines) for (const o of line.outcomes) {
+        if (o.id !== 'over' && o.id !== 'under') continue;
+        const books = Object.entries(o.prices).filter(([, v]) => v > 1);
+        const pMarket = marketProb(line, o);
+        if (!books.length || pMarket == null) continue;
+        const pModel = T.overUnder(ex.mu, T.PARAMS.corners.r, line.line)[o.id];
+        const p = blend(pModel, pMarket, W_CORNERS);
+        const [book, price] = books.sort((a, b) => b[1] - a[1])[0];
+        const family = 'Córneres del partido';
+        picks.push({
+          id: `${line.key}#${o.id}`, title: `${o.id === 'over' ? 'Más' : 'Menos'} de ${dec(line.line)} córneres`, market: line.group, selection: o.label, family, side: null, who: null,
+          book, price, prices: o.prices, p, pModel, pMarket, fair: 1 / p, ev: p * price - 1,
+          rel: reliabilityOf({ family, pModel, pMarket, gap, minGames: 2 * ex.games, books: books.length, age }),
+          note: `Se esperan ${dec(ex.a.toFixed(1))} córneres de ${m.home.name} y ${dec(ex.b.toFixed(1))} de ${m.away.name} (${ex.games} partidos de esta temporada el que menos)`
+        });
+      }
+    }
+  }
+
+  // Mercados de jugador (Goleador, remates, paradas, faltas): el modelo de scorers.js, en los partidos de hombres y de la A-League que lo piden (la ficha y el escáner)
   // Sin los de quien no juega o está sancionado según una noticia de las últimas 48 h (opts.news, de news.statusOfPlayers): el
   // modelo da por hecho que juega, y la casa a veces tarda en quitar la línea
   const gone = (opts.news || []).filter(s => s.status === 'out' || s.status === 'suspended');
   const removed = new Map();
-  if (opts.players && pool === 'men') {
+  if (opts.players && (pool === 'men' || pool === 'aus')) {
     for (const q of await playerPicks({ odds, m, pool, e, gap, age })) {
       const g = gone.find(s => samePlayer(s.name, q.selection));
       if (g) removed.set(g.name, g); else picks.push(q);

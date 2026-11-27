@@ -40,6 +40,8 @@ test('la temporada: córneres a favor y en contra, tarjetas y tiros de cada juga
   assert.equal(del.games, 2);
   assert.equal(del.shots, 8);
   assert.equal(del.starts, 2);
+  assert.deepEqual(del.log, [[4, 2, 1, 3, 0], [4, 2, 1, 3, 0]]);
+  assert.deepEqual(t1.log.map(x => x.slice(0, 2)), [[7, 3], [2, 5]]);
   const cen = r.players.find(p => p.name === 'Central');
   assert.equal(cen.yellow, 2);
   assert.equal(cen.red, 2);
@@ -47,4 +49,9 @@ test('la temporada: córneres a favor y en contra, tarjetas y tiros de cada juga
 
 test('un partido sin los dos equipos no cuenta', () => {
   assert.deepEqual(aggregate([{ t: [['1', 'A', '', 1, 1, 1, 0, 0, 1]], p: [] }]), { teams: [], players: [] });
+});
+
+test('lo de cada partido va del más antiguo al más reciente', () => {
+  const a = { ...compactMatch(summary('1', '2', 9, 1)), date: '2026-11-02' }, b = { ...compactMatch(summary('1', '2', 3, 1)), date: '2026-10-01' };
+  assert.deepEqual(aggregate([a, b]).teams.find(t => t.id === '1').log.map(x => x[0]), [3, 9]);
 });

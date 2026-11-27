@@ -32,10 +32,13 @@ function compactMatch(j) {
   return { t, p };
 }
 
-// Suma de los partidos de una temporada. Pura
+// Suma de los partidos de una temporada, del más antiguo al más reciente (date en cada uno; sin ella, en el orden en que llegan).
+// Además de las sumas, lo de cada partido (log), para las líneas: «más de 1,5 remates en 7 de sus 9 partidos». Jugador:
+// [remates, a puerta, faltas hechas, faltas recibidas, tarjetas]; equipo: [córneres a favor, en contra, tarjetas suyas, del rival,
+// remates]. Pura
 function aggregate(list) {
   const teams = new Map(), players = new Map();
-  for (const m of list) {
+  for (const m of [...list].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))) {
     if (m.t.length !== 2) continue;
     m.t.forEach((x, i) => {
       const o = m.t[1 - i];
@@ -43,12 +46,14 @@ function aggregate(list) {
       r.name = x[1] || r.name; r.logo = x[2] || r.logo;
       r.games++; r.cornersFor += x[3]; r.cornersAgainst += o[3]; r.shots += x[4]; r.shotsOnTarget += x[5]; r.shotsAgainst += o[4];
       r.yellow += x[6]; r.yellowAgainst += o[6]; r.red += x[7]; r.fouls += x[8];
+      (r.log ||= []).push([x[3], o[3], x[6] + x[7], o[6] + o[7], x[4]]);
       teams.set(x[0], r);
     });
     for (const x of m.p) {
       const key = `${x[0]}|${x[2]}`; // un jugador traspasado cuenta aparte en cada equipo
       const r = players.get(key) || { id: x[0], name: x[1], team: x[2], games: 0, starts: 0, shots: 0, shotsOnTarget: 0, goals: 0, assists: 0, fouls: 0, fouled: 0, yellow: 0, red: 0 };
       r.games++; r.starts += x[3]; r.shots += x[4]; r.shotsOnTarget += x[5]; r.goals += x[6]; r.assists += x[7]; r.fouls += x[8]; r.fouled += x[9]; r.yellow += x[10]; r.red += x[11];
+      (r.log ||= []).push([x[4], x[5], x[8], x[9], x[10] + x[11]]);
       players.set(key, r);
     }
   }
@@ -117,7 +122,8 @@ async function seasonStats(espn) {
       try { have.set(g.id, await fetchMatch(espn, g.id)); } catch (e) { console.warn('[football] temporada', espn, g.id, e.message); }
     }
   }));
-  const { teams, players } = aggregate([...have.values()]);
+  const dateOf = new Map(games.map(g => [g.id, g.date]));
+  const { teams, players } = aggregate([...have].map(([id, v]) => ({ ...v, date: dateOf.get(id) })));
   const v = { season: label, games: have.size, missing: games.length - have.size, teams, players };
   memo.set(espn, { t: Date.now(), v });
   return v;
@@ -144,4 +150,17 @@ async function fill(leagues, { pause = 1500, max = 400 } = {}) {
   } finally { filling = false; }
 }
 
-module.exports = { seasonStats, fill, compactMatch, aggregate };
+// Los partidos de la temporada ya guardados, con su fecha (para totals.js: córneres del partido en las recomendaciones). Sin pedir
+// nada a ESPN: lo que falte lo trae fill. Diez minutos en memoria
+const hist = new Map();
+async function history(espn) {
+  const hit = hist.get(espn);
+  if (hit && Date.now() - hit.t < 10 * 60e3) return hit.v;
+  const { games } = await gamesOf(espn);
+  const have = await cached(espn, games.map(g => g.id));
+  const v = games.filter(g => have.has(g.id)).map(g => ({ date: g.date, ...have.get(g.id) })).sort((a, b) => a.date.localeCompare(b.date));
+  hist.set(espn, { t: Date.now(), v });
+  return v;
+}
+
+module.exports = { history, seasonStats, fill, compactMatch, aggregate, gamesOf, cached, fetchMatch };
