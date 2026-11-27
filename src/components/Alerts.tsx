@@ -3,7 +3,7 @@
 // Un aviso nuevo llega en vivo (alerts:new) y, con la app cerrada, como notificación del sistema (src/lib/push.ts).
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Newspaper, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
+import { Bell, Newspaper, Scale, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { cn } from '@/lib/format';
 import { resyncPush } from '@/lib/push';
@@ -29,8 +29,8 @@ export function useAlerts() {
   return useQuery({ queryKey: ['alerts'], queryFn: () => window.api.alerts.list(), enabled: member, staleTime: 60e3, refetchInterval: 5 * 60e3 });
 }
 
-const ICON = { drop: TrendingDown, rise: TrendingUp, value: Sparkles, news: Newspaper } as const;
-const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amber-400', news: 'text-sky-300' } as const;
+const ICON = { drop: TrendingDown, rise: TrendingUp, value: Sparkles, news: Newspaper, sure: Scale } as const;
+const TONE = { drop: 'text-rose-300', rise: 'text-emerald-400', value: 'text-amber-400', news: 'text-sky-300', sure: 'text-emerald-400' } as const;
 
 // Avisos ya seguidos desde una notificación (compartido por las dos campanas)
 const followed = new Set<string>();
@@ -61,6 +61,8 @@ export function AlertsBell({ className }: { className?: string }) {
       const to = path && path.startsWith('/') && !path.startsWith('//') ? new URL(path, location.origin) : null;
       if (to && to.pathname !== '/') {
         const r = parseRoute(to.pathname, to.search, 'football');
+        // Surebet: a su pantalla (/surebets)
+        if (r.view === 'plan' && r.param === 'surebets') { go('plan', 'surebets'); markRead(id); return; }
         if (r.view === 'matches') {
           if (r.match) openGame(r.match, r.day, r.app);
           else openList(r.app, r.day);
@@ -94,6 +96,7 @@ export function AlertsBell({ className }: { className?: string }) {
   function openMatch(a: OddsAlert) {
     setOpen(false);
     if (!a.open) return;
+    if (a.open.surebets) { go('plan', 'surebets'); return; }
     // El partido se abre en su dirección (src/lib/route.ts), con el día de su lista; los de LoL necesitan el partido entero, así
     // que se va a su lista
     const sport = a.open.sport as Sport, day = a.open.date ? madridDay(a.open.date) : undefined;
@@ -114,7 +117,7 @@ export function AlertsBell({ className }: { className?: string }) {
           <Empty icon={<Bell size={20} />}>
             <p>
               Todavía no hay avisos. Te avisaremos cuando caiga o suba mucho una cuota de tus apuestas pendientes, de tu cupón o de los
-              partidos de tus favoritos, y cuando salga una recomendación nueva con valor. Elige cuáles en <b>Tu cuenta</b>.
+              partidos de tus favoritos, cuando salga una recomendación nueva con valor y cuando haya una surebet entre Winamax y Betway. Elige cuáles en <b>Tu cuenta</b>.
             </p>
           </Empty>
         ) : (

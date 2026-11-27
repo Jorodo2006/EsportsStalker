@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useCurrency, useWallet } from '@/lib/app-context';
+import { useApp, useCurrency, useWallet } from '@/lib/app-context';
 import { buildPlan, leagueKey, leaguesOf, parseEuros, parseOdds, poolStats, targetOf, veryReliable, VERY_RELIABLE, WINDOWS, type Join, type PlanMode, type PlanSport } from '@/lib/plan';
 import { money, odd, pct } from '@/lib/format';
 import { Empty, Loading, PageHeader, panelCls, PlayNotice, Tabs } from '@/components/ui';
@@ -50,9 +50,11 @@ function saved(): PlanInputs {
 // la apuesta más probable para llegar, otras opciones y su riesgo. Es una pantalla de cálculo: no apunta apuestas ni lee cuotas
 // (se pueden llevar al cupón, y allí se apuntan)
 export default function PlanView() {
-  // Plan o Surebets (components/plan/Surebets.tsx): las dos son pantallas de cálculo. Se recuerda la última
-  const [tab, setTabState] = useState<'plan' | 'sure'>(() => { try { return localStorage.getItem('plan-tab') === 'sure' ? 'sure' : 'plan'; } catch { return 'plan'; } });
-  const setTab = (v: 'plan' | 'sure') => { setTabState(v); try { localStorage.setItem('plan-tab', v); } catch { /* sin almacenamiento */ } };
+  // Plan o Surebets (components/plan/Surebets.tsx): las dos son pantallas de cálculo. Surebets tiene su dirección (/surebets, la
+  // de sus avisos), así que la pestaña sale de la ruta
+  const { viewParam, go } = useApp();
+  const tab: 'plan' | 'sure' = viewParam === 'surebets' ? 'sure' : 'plan';
+  const setTab = (v: 'plan' | 'sure') => go('plan', v === 'sure' ? 'surebets' : undefined);
   const tabs = <Tabs value={tab} onChange={setTab} items={[{ value: 'plan', label: 'Plan' }, { value: 'sure', label: 'Surebets' }]} />;
   if (tab === 'sure') return (
     <div className="flex flex-col gap-5">

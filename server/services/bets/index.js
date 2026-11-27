@@ -135,7 +135,9 @@ const routes = [
   // Los manda odds tras cada lectura (sólo por la red interna: el gateway no reparte /internal)
   ['POST', '/internal/alerts/odds', ({ body }) => alerts.fromOdds(body)],
   // Un jugador no juega, duda, está lesionado, sancionado o vuelve según una noticia nueva (football y basket, shared/news.js)
-  ['POST', '/internal/alerts/news', ({ body }) => alerts.fromNews(body)]
+  ['POST', '/internal/alerts/news', ({ body }) => alerts.fromNews(body)],
+  // Surebets nuevas: las manda odds (surebets.js) tras cada lectura y cada 15 minutos
+  ['POST', '/internal/alerts/surebets', ({ body }) => alerts.fromSurebets(body)]
 ];
 
 migrate('bets', path.join(__dirname, 'migrations'))

@@ -63,5 +63,6 @@ migrate('odds', path.join(__dirname, 'migrations'))
   .then(() => {
     start({ name: 'odds', port: Number(process.env.PORT) || 4002, routes, health: async () => (await query('SELECT 1'), true) });
     scheduler.start();
+    surebets.watch(odds.getMatchOdds, bridge.fresh); // cada 15 min, con aviso de las nuevas
   })
   .catch(e => { console.error(e); process.exit(1); });

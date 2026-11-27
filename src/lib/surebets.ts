@@ -1,4 +1,4 @@
-import type { SurebetLeg } from '@/lib/types';
+import type { Surebet, SurebetLeg, SurebetMatch } from '@/lib/types';
 
 // Reparto del dinero de una surebet: a cada selección lo justo para que cobre lo mismo salga la que salga (importe ∝ 1/cuota).
 // Redondeado a `step` (las casas no aceptan céntimos raros y un importe exacto como 47,62 € llama la atención): después de
@@ -32,4 +32,16 @@ export function bestStakes(legs: SurebetLeg[], total: number) {
 export function ageMinutes(read: Record<string, number>, books: string[], now = Date.now()) {
   const ts = books.map(b => read[b]).filter((x): x is number => typeof x === 'number');
   return ts.length ? Math.round((now - Math.min(...ts)) / 60e3) : null;
+}
+
+// Filtro por deporte de la pantalla de surebets: primero los tres que más tienen (baloncesto, tenis y fútbol)
+export const SUREBET_SPORTS = ['all', 'basket', 'tennis', 'football', 'mma', 'lol'] as const;
+export type SurebetSport = typeof SUREBET_SPORTS[number];
+// Las del deporte elegido, todas en una lista de más a menos beneficio, y cuántas hay de cada deporte (y en total, all)
+export function filterSurebets(list: SurebetMatch[], sport: SurebetSport) {
+  const all = list.flatMap(m => m.arbs.map(a => ({ m, a }))).sort((x, y) => y.a.edge - x.a.edge);
+  const counts: Partial<Record<SurebetSport, number>> = { all: all.length };
+  for (const { m } of all) { const k = m.match.sport as SurebetSport; counts[k] = (counts[k] ?? 0) + 1; }
+  const items: { m: SurebetMatch; a: Surebet }[] = sport === 'all' ? all : all.filter(x => x.m.match.sport === sport);
+  return { items, counts };
 }

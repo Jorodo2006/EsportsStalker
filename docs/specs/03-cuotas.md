@@ -199,18 +199,27 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 
 ## Surebets (`server/services/odds/surebets.js`, `src/components/plan/Surebets.tsx`)
 
-En *Plan → Surebets*. Mercados en los que, apostando a cada selección en la casa que mejor la paga, se cobra más de lo apostado
+En *Plan → Surebets* (dirección `/surebets`). Mercados en los que, apostando a cada selección en la casa que mejor la paga, se cobra más de lo apostado
 salga lo que salga: la suma de 1/cuota de las mejores es menor que 1.
 
 - `GET /api/odds/surebets` (pide cuenta, `gateway/public.js`): los partidos de las próximas 48 h con cuotas vigentes de las dos
   casas, cada uno con lo mismo que da el comparador (`getMatchOdds`), así que valen sus filtros (copias de periodo de Betway, totales
   imposibles). Caché de 2 min; `?fresh=1` la salta (tras «Volver a leer»). No lanza lecturas: sólo la del partido que se pida.
 - Sólo mercados que se pueden cubrir (`COVERABLE`: todas sus selecciones juntas son todo lo que puede pasar y sólo gana una). Ni la
-  doble oportunidad ni los mercados propios de una casa (`wmx|`, `winamax|`, `betway|`). Todas las selecciones con cuota y de las dos
+  doble oportunidad, ni el método de MMA (A por KO y B por KO pierden los dos si va a decisión), ni los mercados propios de una casa
+  (`wmx|`, `winamax|`, `betway|`). En baloncesto, tenis y fútbol entran el ganador, los hándicaps y los totales (y en fútbol, ambos
+  marcan, empate no válido, córneres y tarjetas), que son los que las dos casas guardan con la misma clave. Todas las selecciones con cuota y de las dos
   casas. Más de un 8 % se descarta (casi siempre es una línea o un periodo mal leídos); desde un 3 % se pide comprobarla.
 - El reparto (`src/lib/surebets.ts`, con pruebas): a cada selección en proporción a 1/cuota, redondeado a euros si no se come el
   beneficio (si no, a 0,50, 0,10 o céntimos). Enseña lo peor y lo mejor que se cobra tras redondear, y cuánto hace que se leyó la casa
   más antigua (más de 30 min: «puede haber cambiado»).
+- **Vigilancia y avisos:** `watch` repasa todos los partidos cada 15 minutos y `check` mira el partido recién leído tras cada
+  lectura de una casa (`afterImport`; espera 20 s a que llegue el resto de páginas de esa lectura). Las que encuentra van a
+  `bets` (`/internal/alerts/surebets`, `fromSurebets` y `sureItems` de `alerts.js`), que avisa a todos los que tienen activado
+  *Surebets* en *Tu cuenta* (tipo `sure`, migración 023 de `bets`): campana, aviso en vivo y notificación con la app cerrada, que
+  abre `/surebets`. El mismo mercado del mismo partido no se repite en 6 h y como mucho van 5 por tanda. Tampoco lee nada: usa
+  las lecturas del programador (`scheduler.js`), que no se hacen más seguidas por esto. La pantalla se recarga sola cada 5 min y
+  con cada aviso, y filtra por deporte (`filterSurebets`).
 - Avisos en la pantalla: comprobar las cuotas antes de apostar, que las casas limitan estas cuentas y que las reglas de anulación
   (partido suspendido, tenista retirado) no son iguales en las dos.
 

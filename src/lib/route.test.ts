@@ -53,6 +53,14 @@ describe('parseRoute y hrefOf', () => {
     expect(hrefOf({ app: 'tennis', view: 'account' })).toBe('/cuenta');
   });
 
+  it('surebets tiene su dirección dentro del plan (la de sus avisos)', () => {
+    roundTrip('/surebets');
+    expect(parse('/surebets', 'tennis')).toEqual({ app: 'tennis', view: 'plan', param: 'surebets' });
+    expect(titleOf({ app: 'lol', view: 'plan', param: 'surebets' })).toBe('Surebets · Sharpex');
+    // Otro param no cambia la dirección del plan
+    expect(hrefOf({ app: 'lol', view: 'plan', param: 'x' })).toBe('/plan');
+  });
+
   it('las páginas legales siguen en su dirección de siempre', () => {
     for (const s of ['/aviso-legal', '/privacidad', '/cookies']) roundTrip(s);
     expect(parse('/privacidad', 'basket')).toEqual({ app: 'basket', view: 'legal', param: 'privacidad' });

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { movesOf } = require('../services/odds/moves');
-const { targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue, urlOf } = require('../services/bets/alerts');
+const { targetsOf, moveText, mentionsTeam, cleanWatch, cleanPrefs, isValue, urlOf, sureItems } = require('../services/bets/alerts');
 const { cleanSub, failureOf } = require('../services/bets/push');
 
 const prev = new Map([
@@ -61,7 +61,7 @@ test('el texto dice cuánto ha cambiado y por qué te avisa', () => {
 test('cupón, preferencias y valor', () => {
   const w = cleanWatch([{ sport: 'basket', a: 'Utah Jazz', b: 'LA Clippers', key: 'moneyline|0||', out: 'a', id: 'g1', date: '2026-11-18T03:30:00Z' }, { sport: 'golf', a: 'x', b: 'y', key: 'k', out: 'a' }, { a: '', b: 'y' }]);
   assert.strictEqual(w.length, 1);
-  assert.deepStrictEqual(cleanPrefs({ drop: false }), { drop: false, rise: true, value: true, news: true });
+  assert.deepStrictEqual(cleanPrefs({ drop: false }), { drop: false, rise: true, value: true, news: true, sure: true });
   assert.ok(isValue({ ev: 0.05, rel: { score: 60 }, price: 2 }, 'tennis'));
   assert.ok(!isValue({ ev: 0.05, rel: 60, price: 2 }, 'basket')); // en baloncesto, sólo las fuertes
   assert.ok(isValue({ ev: 0.09, rel: 70, price: 2 }, 'basket'));
@@ -95,4 +95,21 @@ test('la notificación lleva a la dirección del partido (la de src/lib/route.ts
   assert.strictEqual(urlOf(10, null), '/?aviso=10');
   assert.strictEqual(urlOf(11, { sport: 'x', id: '1' }), '/?aviso=11');
   assert.strictEqual(urlOf(12, { sport: 'mma', id: 'ufc:1/../x' }), '/mma/partido/ufc:1%2F..%2Fx?aviso=12');
+});
+
+test('surebets: un aviso por mercado, de más a menos beneficio, con coma y la pantalla de surebets', () => {
+  const match = { a: { name: 'Real Madrid' }, b: { name: 'FC Barcelona' }, start: '2026-11-28T20:00:00Z', sport: 'football', league: 'LaLiga' };
+  const legs = [{ label: 'Más de 2.5', book: 'Winamax', price: 2.1 }, { label: 'Menos de 2.5', book: 'Betway', price: 2.05 }];
+  const list = sureItems([
+    { match, arbs: [{ key: 'total|0||2.5', market: 'Total de goles', edge: 0.0368, check: true, legs }] },
+    { match: { ...match, sport: 'tennis', league: '' }, arbs: [{ key: 'moneyline|0||', market: 'Ganador', edge: 0.012, check: false, legs }] },
+    { match: { ...match, sport: 'x' }, arbs: [{ key: 'k', market: 'm', edge: 0.05, legs }] }, // deporte que no existe
+    { match, arbs: [{ key: 'btts|0||', market: 'Ambos marcan', edge: 0.02, legs: [legs[0]] }] } // una sola selección
+  ]);
+  assert.strictEqual(list.length, 2);
+  assert.strictEqual(list[0].title, 'Surebet +3,7 %: Real Madrid - FC Barcelona');
+  assert.match(list[0].body, /^Fútbol · LaLiga · Total de goles: Más de 2,5 a 2,10 en Winamax, Menos de 2,5 a 2,05 en Betway\. Es mucho/);
+  assert.strictEqual(list[0].dedupe, 'sure|football|real madrid|fc barcelona|total|0||2.5');
+  assert.strictEqual(list[1].sport, 'tennis');
+  assert.strictEqual(urlOf(5, list[0].open), '/surebets?aviso=5');
 });

@@ -46,6 +46,8 @@ export function parseRoute(pathname: string, search: string, fallback: Sport): R
   const dia = q.get('dia');
   const day = dia && DAY.test(dia) ? dia : undefined;
   if (seg.length === 1 && (LEGAL_PATHS as string[]).includes(seg[0])) return { app: fallback, view: 'legal', param: seg[0] };
+  // Surebets va dentro del plan, con su propia dirección (la de los avisos de surebets)
+  if (seg.length === 1 && seg[0] === 'surebets') return { app: fallback, view: 'plan', param: 'surebets' };
   if (seg.length === 1 && VIEW_OF[seg[0]]) return { app: fallback, view: VIEW_OF[seg[0]] };
   const app = SPORT_OF[seg[0]];
   if (!app) return { app: fallback, view: 'matches' };
@@ -63,6 +65,7 @@ export function parseRoute(pathname: string, search: string, fallback: Sport): R
 // De la pantalla a la dirección (camino y ?búsqueda)
 export function hrefOf(r: Route): string {
   if (r.view === 'legal') return `/${r.param && (LEGAL_PATHS as string[]).includes(r.param) ? r.param : 'aviso-legal'}`;
+  if (r.view === 'plan' && r.param === 'surebets') return '/surebets';
   const global = GLOBAL[r.view];
   if (global) return `/${global}`;
   const base = `/${SPORT_SLUG[r.app]}`;
@@ -80,7 +83,7 @@ const LEGAL_NAME: Record<LegalPage, string> = { 'aviso-legal': 'Aviso legal', pr
 export function titleOf(r: Route): string {
   const page = r.view === 'legal' ? LEGAL_NAME[(r.param as LegalPage)] ?? LEGAL_NAME['aviso-legal']
     : r.view === 'friends' ? 'Amigos' : r.view === 'account' ? 'Tu cuenta' : r.view === 'settings' ? 'Ajustes'
-      : r.view === 'plan' ? 'Plan de apuestas' : r.view === 'admin' ? 'Administración'
+      : r.view === 'plan' ? (r.param === 'surebets' ? 'Surebets' : 'Plan de apuestas') : r.view === 'admin' ? 'Administración'
       : `${SPORT_NAME[r.app]} · ${r.view === 'players' ? SECOND_NAME[r.app] : r.view === 'bets' ? 'Mis apuestas' : r.match ? (r.app === 'mma' ? 'Combate' : 'Partido') : r.app === 'mma' ? 'Combates' : 'Partidos'}`;
   return `${page} · Sharpex`;
 }

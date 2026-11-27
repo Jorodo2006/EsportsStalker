@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ageMinutes, bestStakes, stakesFor } from '@/lib/surebets';
+import { ageMinutes, bestStakes, filterSurebets, stakesFor } from '@/lib/surebets';
+import type { SurebetMatch } from '@/lib/types';
 
 const legs = [{ id: 'over', label: 'Más', book: 'Winamax', price: 2.1 }, { id: 'under', label: 'Menos', book: 'Betway', price: 2.05 }];
 
@@ -36,5 +37,24 @@ describe('ageMinutes', () => {
     const now = 1e12;
     expect(ageMinutes({ Winamax: now - 5 * 60e3, Betway: now - 30 * 60e3 }, ['Winamax', 'Betway'], now)).toBe(30);
     expect(ageMinutes({}, ['Winamax'], now)).toBeNull();
+  });
+});
+
+describe('filterSurebets', () => {
+  const m = (sport: string, edges: number[]) => ({
+    match: { a: { name: 'A' }, b: { name: 'B' }, start: '', sport, league: '' }, read: {},
+    arbs: edges.map((edge, i) => ({ key: `k${i}`, market: '', legs, sum: 0, edge, check: false }))
+  }) as unknown as SurebetMatch;
+  const list = [m('basket', [0.01, 0.03]), m('tennis', [0.02]), m('football', [0.005])];
+  it('todas juntas, de más a menos beneficio, y cuántas de cada deporte', () => {
+    const r = filterSurebets(list, 'all');
+    expect(r.items.map(x => x.a.edge)).toEqual([0.03, 0.02, 0.01, 0.005]);
+    expect(r.counts).toEqual({ all: 4, basket: 2, tennis: 1, football: 1 });
+  });
+  it('sólo las del deporte elegido, con las cuentas de todos', () => {
+    const r = filterSurebets(list, 'basket');
+    expect(r.items.map(x => x.a.edge)).toEqual([0.03, 0.01]);
+    expect(r.counts.tennis).toBe(1);
+    expect(filterSurebets(list, 'mma').items).toEqual([]);
   });
 });

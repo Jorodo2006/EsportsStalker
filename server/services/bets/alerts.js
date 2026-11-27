@@ -2,7 +2,8 @@
 //  - caídas y subidas fuertes (odds/moves.js, 10 % o más entre dos lecturas) en lo de cada usuario: sus favoritos (el ganador),
 //    sus apuestas pendientes (su mercado) y su cupón (oddsWatch, lo manda la interfaz);
 //  - recomendaciones nuevas con valor: las de tenis, fútbol y MMA se piden a sus servicios cada 10 minutos; las de baloncesto
-//    se calculan en el navegador, así que salen de bets.predictions cuando alguien las ha visto.
+//    se calculan en el navegador, así que salen de bets.predictions cuando alguien las ha visto;
+//  - surebets entre Winamax y Betway (las manda odds/surebets.js al encontrarlas: tras cada lectura y cada 15 minutos).
 // Para saber de quién es una apuesta afectada se leen las apuestas pendientes de todos (como el resolvedor, settle.js): sólo para
 // avisar a su dueño. Nunca se expone en una ruta.
 const { query, notify } = require('../../shared/db');
@@ -10,12 +11,14 @@ const client = require('../../shared/client');
 const push = require('./push');
 const { norm, mentionsTeam } = require('../../shared/mentions');
 
-const PREF_KEYS = ['drop', 'rise', 'value', 'news'];
-const DEFAULT_PREFS = { drop: true, rise: true, value: true, news: true };
+const PREF_KEYS = ['drop', 'rise', 'value', 'news', 'sure'];
+const DEFAULT_PREFS = { drop: true, rise: true, value: true, news: true, sure: true };
 const REPEAT_MS = 3 * 3600e3; // lo mismo (partido, mercado, selección, sentido) no se repite antes de 3 h
 const KEEP_DAYS = 14;
 const PUSH_PER_DAY = 20; // notificaciones con la app cerrada por usuario y día; el resto queda en la campana
-const VALUE_PER_SCAN = 5; // recomendaciones con valor por usuario en cada pasada (las de más valor)
+const VALUE_PER_SCAN = 5;
+const SURE_PER_SCAN = 5; // surebets por usuario en cada envío (las de más beneficio)
+const SURE_REPEAT_MS = 6 * 3600e3; // el mismo mercado del mismo partido no se repite antes de 6 h aunque cambie un poco la cuota // recomendaciones con valor por usuario en cada pasada (las de más valor)
 const MAX_WATCH = 40;
 // Recomendación con valor: la regla de «apostar» de la app (BET_EV y BET_REL en src/lib/value.ts). En baloncesto se guardan
 // todas las líneas, así que sólo las fuertes (la regla de «Recomendaciones fuertes» de los avisos de la app)
@@ -32,6 +35,7 @@ const SPORT_NAME = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football
 // tardaban, se quedaba en la portada
 const SPORT_SLUG = { lol: 'lol', basket: 'baloncesto', tennis: 'tenis', football: 'futbol', mma: 'mma' };
 function urlOf(id, open) {
+  if (open?.surebets) return `/surebets?${new URLSearchParams({ aviso: String(id) })}`;
   const slug = SPORT_SLUG[open?.sport];
   if (!slug) return `/?aviso=${id}`;
   const day = open.date && !isNaN(Date.parse(open.date)) ? madridDay(new Date(open.date)) : null;
@@ -289,6 +293,48 @@ async function scanValue() {
   return { sent };
 }
 
+// ---------- Surebets (las manda odds/surebets.js) ----------
+// Las líneas llegan con punto ("Más de 2.5"): en el aviso, con coma, como en la app
+const decEs = t => String(t ?? '').replace(/(\d)\.(\d)/g, '$1,$2');
+// Las de una tanda, de más a menos beneficio, con lo que dice el aviso. Pura (pruebas en server/test/avisos.test.js)
+function sureItems(list) {
+  const out = [];
+  for (const x of Array.isArray(list) ? list.slice(0, 200) : []) {
+    const m = x?.match;
+    if (!m?.a?.name || !m?.b?.name || !SPORT_NAME[m.sport]) continue;
+    for (const a of Array.isArray(x.arbs) ? x.arbs : []) {
+      const legs = Array.isArray(a?.legs) ? a.legs.filter(l => l?.label && l.book && l.price > 1) : [];
+      if (!(a?.edge > 0) || legs.length < 2) continue;
+      const pct = `+${(a.edge * 100).toFixed(1).replace('.', ',')} %`;
+      out.push({
+        edge: a.edge, sport: m.sport,
+        dedupe: `sure|${m.sport}|${norm(m.a.name)}|${norm(m.b.name)}|${a.key}`,
+        title: `Surebet ${pct}: ${m.a.name} - ${m.b.name}`,
+        body: `${SPORT_NAME[m.sport]}${m.league ? ` · ${m.league}` : ''} · ${decEs(a.market)}: ${legs.map(l => `${decEs(l.label)} a ${odd(l.price)} en ${l.book}`).join(', ')}.`
+          + ` ${a.check ? 'Es mucho: comprueba las dos cuotas antes de apostar.' : 'Comprueba las cuotas antes de apostar: duran poco.'}`,
+        open: { sport: m.sport, surebets: true, date: m.start }
+      });
+    }
+  }
+  return out.sort((x, y) => y.edge - x.edge);
+}
+async function fromSurebets(body) {
+  const items = sureItems(body?.list);
+  if (!items.length) return { sent: 0 };
+  const { rows } = await query('SELECT id FROM bets.users');
+  const prefs = await prefsOf(rows.map(r => String(r.id)));
+  let sent = 0;
+  for (const [userId, p] of prefs) {
+    if (!p.sure) continue;
+    let n = 0;
+    for (const it of items) {
+      if (n >= SURE_PER_SCAN) break;
+      if (await deliver(userId, { kind: 'sure', sport: it.sport, dedupe: it.dedupe, title: it.title, body: it.body, open: it.open }, { repeatMs: SURE_REPEAT_MS })) { n++; sent++; }
+    }
+  }
+  return { sent };
+}
+
 // ---------- Lo que ve cada usuario ----------
 async function list(userId) {
   const { rows } = await query(`SELECT id, kind, sport, title, body, open, created_at, read_at FROM bets.alerts WHERE user_id = $1
@@ -313,4 +359,4 @@ function startAlerts() {
   setInterval(() => query(`DELETE FROM bets.alerts WHERE created_at < now() - interval '${KEEP_DAYS} days'`).catch(() => {}), 6 * 3600e3);
 }
 
-module.exports = { fromNews, newsTargets, newsText, fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, urlOf, cleanWatch, cleanPrefs, isValue };
+module.exports = { fromSurebets, sureItems, fromNews, newsTargets, newsText, fromOdds, scanValue, list, markRead, getPrefs, setPrefs, setWatch, startAlerts, targetsOf, moveText, mentionsTeam, urlOf, cleanWatch, cleanPrefs, isValue };

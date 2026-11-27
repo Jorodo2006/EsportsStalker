@@ -1,19 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useApp, useCurrency } from '@/lib/app-context';
 import { ageMinutes, bestStakes } from '@/lib/surebets';
 import { jobFailed, jobStage, waitJob } from '@/lib/odds-read';
 import { cn, decEs, fmtTime, money, odd, pct } from '@/lib/format';
-import { Badge, Button, Empty, ErrorBox, Field, Input, Loading, panelCls, PlayNotice } from '@/components/ui';
+import { Badge, Button, chip, Empty, ErrorBox, Field, Input, Loading, panelCls, PlayNotice } from '@/components/ui';
 import type { SurebetMatch, Surebet } from '@/lib/types';
+import { filterSurebets, SUREBET_SPORTS, type SurebetSport } from '@/lib/surebets';
 
 // Surebets entre Winamax y Betway (server/services/odds/surebets.js): apostar a cada selección en la casa que mejor la paga y
 // ganar salga lo que salga. Con las cuotas ya leídas: no lanza lecturas solas (las casas pueden bloquear), sólo la del partido que
-// se pida con «Volver a leer». Va en Plan porque, como el plan, es una pantalla de cálculo.
+// se pida con «Volver a leer». El servidor las busca solo tras cada lectura y cada 15 minutos y avisa de las nuevas (campana y
+// notificación); la pantalla se recarga con ese aviso. Va en Plan porque, como el plan, es una pantalla de cálculo.
 
 const SPORT: Record<string, string> = { lol: 'LoL', basket: 'Baloncesto', tennis: 'Tenis', football: 'Fútbol', mma: 'MMA' };
 const KEY = 'surebets-total';
+const SPORT_KEY = 'surebets-sport';
 // Las ligas de baloncesto se guardan con su código
 const LEAGUE: Record<string, string> = { EUROLEAGUE: 'Euroliga', EUROCUP: 'EuroCup' };
 const OLD_MIN = 30; // una lectura de más de media hora puede haber cambiado
@@ -27,11 +30,18 @@ export function Surebets() {
   const cur = useCurrency();
   const [total, setTotal] = useState(() => { try { return localStorage.getItem(KEY) || '100'; } catch { return '100'; } });
   const amount = Number(total.replace(',', '.')) || 0;
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['surebets'], queryFn: () => window.api.odds.surebets(), staleTime: 2 * 60e3
+  const [sport, setSportState] = useState<SurebetSport>(() => {
+    try { const v = localStorage.getItem(SPORT_KEY); return (SUREBET_SPORTS as readonly string[]).includes(v ?? '') ? v as SurebetSport : 'all'; } catch { return 'all'; }
   });
-  // Todas las de todos los partidos, de más a menos beneficio
-  const items = (data?.list ?? []).flatMap(m => m.arbs.map(a => ({ m, a }))).sort((x, y) => y.a.edge - x.a.edge);
+  const setSport = (v: SurebetSport) => { setSportState(v); try { localStorage.setItem(SPORT_KEY, v); } catch { /* sin almacenamiento */ } };
+  const qc = useQueryClient();
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['surebets'], queryFn: () => window.api.odds.surebets(), staleTime: 2 * 60e3, refetchInterval: 5 * 60e3
+  });
+  // Un aviso nuevo puede ser una surebet: se vuelve a mirar
+  useEffect(() => window.api.onAlert(() => qc.invalidateQueries({ queryKey: ['surebets'] })), [qc]);
+  // Las del deporte elegido, de más a menos beneficio, y cuántas hay de cada uno para los filtros
+  const { items, counts } = filterSurebets(data?.list ?? [], sport);
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,7 +49,17 @@ export function Surebets() {
         <p className="text-[13px] leading-5 text-zinc-300">
           Una surebet es un mercado en el que Winamax y Betway no están de acuerdo: apostando a cada opción en la casa que mejor la paga,
           con el reparto de abajo, se cobra más de lo apostado salga lo que salga. Salen pocas y duran poco.
+          Se buscan solas tras cada lectura de cuotas y cada 15 minutos, y si sale una nueva te llega el aviso al momento
+          (actívalo o quítalo en <b>Tu cuenta</b>).
         </p>
+        <div className="fade-r -mx-1 flex gap-2 overflow-x-auto px-1" role="group" aria-label="Deporte">
+          {SUREBET_SPORTS.filter(k => k === 'all' || ['basket', 'tennis', 'football'].includes(k) || counts[k]).map(k => (
+            <button key={k} type="button" className={chip(sport === k)} aria-pressed={sport === k} onClick={() => setSport(k)}>
+              {k === 'all' ? 'Todos' : SPORT[k]}
+              <span className="tnum text-zinc-500">{counts[k] ?? 0}</span>
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-40">
             <Field label="Dinero total">
@@ -62,8 +82,8 @@ export function Surebets() {
         : error ? <ErrorBox error={error} />
         : !items.length ? (
           <Empty>
-            <span>Ahora mismo no hay surebets entre Winamax y Betway.</span>
-            <span className="mt-1 block text-xs text-zinc-500">Se buscan en los partidos de las próximas 48 h con cuotas de las dos casas. Vuelve a mirar más tarde: cambian con cada lectura.</span>
+            <span>Ahora mismo no hay surebets{sport === 'all' ? '' : ` de ${SPORT[sport].toLowerCase()}`} entre Winamax y Betway.</span>
+            <span className="mt-1 block text-xs text-zinc-500">Se buscan en los partidos de las próximas 48 h con cuotas de las dos casas. Te avisamos en cuanto salga una.</span>
           </Empty>
         ) : items.map(({ m, a }) => <SurebetCard key={`${m.match.a.name}|${m.match.b.name}|${a.key}`} m={m} a={a} amount={amount} cur={cur} />)}
       <PlayNotice />

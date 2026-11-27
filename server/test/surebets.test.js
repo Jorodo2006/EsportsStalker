@@ -32,3 +32,7 @@ test('fútbol 1X2 con las tres', () => {
   assert.equal(r.length, 1);
   assert.equal(r[0].legs.length, 3);
 });
+
+test('el método de MMA no se cubre: A y B por KO pierden las dos si va a decisión', () => {
+  assert.deepEqual(arbsOf({ markets: [market('method|0|ko|', [['a', { Winamax: 2.6 }], ['b', { Betway: 2.6 }]])] }), []);
+});

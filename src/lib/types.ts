@@ -65,8 +65,8 @@ export interface Friend { id: string; username: string; since: string }
 export interface FriendRow extends Friend { unread: number; last: string | null; preview: string | null }
 // Avisos de cuotas (server/services/bets/alerts.js): caída o subida fuerte en lo tuyo, o recomendación nueva con valor.
 // open: el partido que abre el aviso (sin id, sólo el deporte y el día)
-export type OddsAlertKind = 'drop' | 'rise' | 'value' | 'news';
-export interface OddsAlert { id: string; kind: OddsAlertKind; sport: Sport | ''; title: string; body: string; open: { sport: Sport; id?: string; date?: string } | null; created: string; read: boolean }
+export type OddsAlertKind = 'drop' | 'rise' | 'value' | 'news' | 'sure';
+export interface OddsAlert { id: string; kind: OddsAlertKind; sport: Sport | ''; title: string; body: string; open: { sport: Sport; id?: string; date?: string; surebets?: boolean } | null; created: string; read: boolean }
 export interface AlertsList { list: OddsAlert[]; unread: number; push: { key: string | null; devices: number } }
 // status y reason: lo que respondió el servicio de push (Apple, Google…) si no lo aceptó; gone: dio el dispositivo por caducado
 export interface PushTestResult { ok: boolean; missing?: boolean; gone?: boolean; status?: number; reason?: string }
