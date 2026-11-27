@@ -15,7 +15,7 @@ import { Panel, panel, TvTabs } from '@/components/viz';
 type SportF = 'all' | Sport;
 type RangeF = '30' | '90' | 'all';
 type ScopeF = 'picks' | 'lines';
-type GroupF = 'league' | 'market' | 'price' | 'ev' | 'book' | 'sport';
+type GroupF = 'league' | 'market' | 'price' | 'ev' | 'lead' | 'book' | 'sport';
 
 // De baloncesto se guardan todas las líneas que calcula el modelo; recomendadas son las que la app enseña como de valor
 // (hasValue en basket-picks.ts). De tenis, fútbol y MMA sólo se guardan las que enseña
@@ -58,6 +58,12 @@ const brier = (rows: PredictionRow[], p: (r: PredictionRow) => number | null) =>
 };
 const PRICE_BANDS: [number, number, string][] = [[1, 1.5, 'Hasta 1,50'], [1.5, 2, '1,50-2'], [2, 3, '2-3'], [3, 5, '3-5'], [5, 8, '5-8'], [8, 1e9, 'Más de 8']];
 const EV_BANDS: [number, number, string][] = [[-99, 0, 'Valor negativo'], [0, 0.05, 'Hasta 5 %'], [0.05, 0.1, '5-10 %'], [0.1, 0.2, '10-20 %'], [0.2, 99, 'Más de 20 %']];
+// Antelación: cuántas horas antes del partido se recomendó por primera vez. Con el CLV dice si conviene apostar pronto (la
+// cuota de la primera vez bate al cierre) o esperar
+const LEAD_BANDS: [number, number, string][] = [[-1e9, 3, 'Menos de 3 h antes'], [3, 12, '3 a 12 h antes'], [12, 24, '12 a 24 h antes'], [24, 48, '24 a 48 h antes'], [48, 1e9, 'Más de 48 h antes']];
+const leadOf = (r: PredictionRow) => (r.firstAt ? (+new Date(r.start) - +new Date(r.firstAt)) / 3600e3 : NaN);
+// Casos con cuota de cierre por debajo de los cuales el CLV de un grupo no dice mucho
+const CLV_MIN = 30;
 const units = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2).replace('.', ',')} u`;
 const signedPct = (v: number) => `${v > 0 ? '+' : ''}${pct(v)}`;
 // Fuera del margen por azar: verde si acierta más de lo que decía, rojo si menos
@@ -160,6 +166,7 @@ export default function ModelTab() {
     market: { label: 'Mercado', rows: groupRows(rows, r => (sport === 'all' ? `${SPORT_NAME[r.sport] ?? r.sport} · ` : '') + r.group) },
     price: { label: 'Cuota', rows: bands(rows, PRICE_BANDS, r => r.price) },
     ev: { label: 'Valor que veía', rows: bands(rows, EV_BANDS, r => r.ev) },
+    lead: { label: 'Antelación', rows: bands(rows.filter(r => !Number.isNaN(leadOf(r))), LEAD_BANDS, leadOf) },
     book: { label: 'Casa', rows: groupRows(rows, r => r.book || 'Sin casa') },
     sport: { label: 'Deporte', rows: groupRows(rows, r => SPORT_NAME[r.sport] ?? r.sport) }
   };
@@ -346,12 +353,20 @@ function Breakdown({ groups, sportAll }: { groups: Record<GroupF, { label: strin
   const [by, setBy] = useState<GroupF>('league');
   const keys = (Object.keys(groups) as GroupF[]).filter(k => k !== 'sport' || sportAll);
   const cur = keys.includes(by) ? by : 'league';
-  const list = groups[cur].rows;
+  // Por CLV: dónde bate el modelo a la cuota de cierre (las ligas y mercados que las casas ajustan peor). Los tramos (cuota, valor,
+  // antelación) van siempre en su orden. Con menos de CLV_MIN casos con cierre, el CLV sale en gris y esos grupos van al final
+  const [order, setOrder] = useState<'n' | 'clv'>('n');
+  const banded = cur === 'price' || cur === 'ev' || cur === 'lead';
+  const list = order === 'clv' && !banded
+    ? [...groups[cur].rows].sort((a, b) => Number(b.clvN >= CLV_MIN) - Number(a.clvN >= CLV_MIN) || (b.clv ?? -9) - (a.clv ?? -9))
+    : groups[cur].rows;
   return (
     <Panel title="Desglose" aside={`${list.length} grupo${list.length === 1 ? '' : 's'}`} className="mb-4">
       <div className="flex flex-col gap-3 border-b border-zinc-800/70 px-4 py-3">
         <Lead>Las mismas cuentas por grupos, para ver dónde acierta y dónde pierde. La barra es lo que salió; la raya, lo que esperaba.</Lead>
         <TvTabs value={cur} onChange={setBy} items={keys.map(k => ({ value: k, label: groups[k].label }))} />
+        {!banded && <Tabs value={order} onChange={setOrder} items={[{ value: 'n', label: 'Más casos' }, { value: 'clv', label: 'Mejor CLV' }]} />}
+        {cur === 'lead' && <Lead>Si las recomendadas con más antelación baten más al cierre, conviene apostar en cuanto salen y no esperar al partido.</Lead>}
       </div>
       <div className="hidden grid-cols-[minmax(0,2fr)_64px_minmax(0,1.6fr)_88px_64px_64px] gap-4 px-4 pt-3 text-[11px] text-zinc-500 sm:grid">
         <span /><span className="text-right">Casos</span><span>Acierto · esperaba</span><span className="text-right">A 1 unidad</span><span className="text-right">ROI</span><span className="text-right" title="Cuota de la recomendación frente a la de cierre">CLV</span>
@@ -367,7 +382,7 @@ function Breakdown({ groups, sportAll }: { groups: Record<GroupF, { label: strin
             </div>
             <span className={cn('text-right text-[13px] font-semibold tnum', tone(r.pl))}>{units(r.pl)}<span className="font-normal text-zinc-500 sm:hidden"> · {r.n}</span></span>
             <span className={cn('hidden text-right text-[13px] tnum sm:block', tone(r.roi))}>{signedPct(r.roi)}</span>
-            <span className={cn('hidden text-right text-[13px] tnum sm:block', r.clv == null ? 'text-zinc-500' : tone(r.clv))} title={r.clvN ? `${r.clvN} con cuota de cierre` : 'Sin cuotas de cierre'}>{r.clv == null ? '–' : signedPct(r.clv)}</span>
+            <span className={cn('hidden text-right text-[13px] tnum sm:block', r.clv == null || r.clvN < CLV_MIN ? 'text-zinc-500' : tone(r.clv))} title={r.clvN ? `${r.clvN} con cuota de cierre` : 'Sin cuotas de cierre'}>{r.clv == null ? '–' : signedPct(r.clv)}</span>
           </li>
         ))}
       </ul>

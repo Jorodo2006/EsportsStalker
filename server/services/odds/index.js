@@ -7,6 +7,7 @@ const bridge = require('./bridge');
 const odds = require('./odds');
 const scheduler = require('./scheduler');
 const closing = require('./closing');
+const surebets = require('./surebets');
 const { AUTO_PAGE } = require('./auto-page');
 
 const matchOf = body => {
@@ -36,6 +37,8 @@ const routes = [
   ['POST', '/api/odds/paste', async ({ body }) => { if (body?.match) await bridge.noteMatch(body.match); return receive(body?.data); }],
   ['POST', '/api/odds/history', ({ body }) => bridge.priceHistory(matchOf(body))],
   ['GET', '/api/odds/auto/status', () => scheduler.status()],
+  // Surebets entre Winamax y Betway con las cuotas ya leídas (surebets.js). Pide cuenta (gateway/public.js)
+  ['GET', '/api/odds/surebets', ({ query: q }) => surebets.scan(odds.getMatchOdds, bridge.fresh, q.fresh === '1')],
   // Primer arranque con backend: direcciones aprendidas que había en casas-urls.json
   ['POST', '/api/odds/legacy-urls', ({ body }) => bridge.importUrls(body?.urls)],
 

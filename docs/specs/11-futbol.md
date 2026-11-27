@@ -20,6 +20,7 @@ gratuita y sin clave, la misma que usan la NBA y el tenis.
 | Conference League | `conference` | `uefa.europa.conf` |
 | Segunda División | `segunda` | `esp.2` |
 | Copa del Rey | `copa` | `esp.copa_del_rey` |
+| A-League (Australia) | `aleague` | `aus.1` |
 | Nations League | `nations` | `uefa.nations` |
 | Amistosos internacionales | `amistosos` | `fifa.friendly` |
 | Champions League Femenina | `wchampions` | `uefa.wchampions` |
@@ -28,6 +29,12 @@ gratuita y sin clave, la misma que usan la NBA y el tenis.
 
 El orden de la tabla es el de la lista de partidos. Para añadir una liga basta con una fila en `LEAGUES` (servicio), en
 `FootballLeagueId` (`src/lib/types.ts`) y, si tiene tabla, en `src/views/FootballStandings.tsx`.
+
+**A-League** (Australia, `aus.1`): se juega de octubre a mayo, de madrugada en hora de España. En el modelo va en su propio grupo
+(`aus` en `POOLS` de `history.js`), porque sus equipos nunca juegan contra los europeos, con los mismos parámetros que el masculino
+hasta medirlos con `backtest.js aus` (al añadirla, 191 partidos de octubre de 2025 a noviembre de 2026). En el lector, Winamax la
+busca como «A-League» y Betway en `australia/a-league` (`FOOTBALL_TOURS` y `FOOTBALL_LISTS` de `runner.js`, también hay que añadir
+ahí cada liga nueva). Ninguna de las dos se ha podido comprobar con la casa: si no encuentra el partido, mira las capturas.
 
 - **Marcadores**: `scoreboard?dates=AAAAMMDD` da un día; `dates=AAAAMM`, el mes entero de una liga en una sola
   petición. Cerca de hoy (de ayer a mañana) se pide cada día con 30 s de caché, para el directo; lejos, el mes (15 min,
@@ -166,7 +173,7 @@ Como en tenis: el modelo está en el servicio y la interfaz sólo enseña lo que
 
 - **Resultados** (`server/services/football/history.js`): el marcador de ESPN mes a mes de cada competición, 18 meses. Un
   mes pasado se guarda para siempre en `football.cache` (`hist:<liga>:<AAAAMM>`, la limpieza de 7 días no lo toca); el mes en
-  curso se pide cada media hora. Tres grupos que no se mezclan: hombres (las diez competiciones de clubes), mujeres
+  curso se pide cada media hora. Cuatro grupos que no se mezclan: hombres (las diez competiciones de clubes europeas), A-League, mujeres
   (Champions Femenina, Liga F y WSL) y selecciones (Nations League y amistosos, más Mundial y clasificación sólo como
   datos). Con prórroga, el partido cuenta como el empate de los 90 minutos.
 - **Modelo** (`model.js`): Poisson con ataque y defensa de cada equipo, el nivel de goles de cada liga y la ventaja de

@@ -1,5 +1,5 @@
 // Cuota de cierre de las apuestas y de las recomendaciones del modelo (tabla bets.closing y columnas close_* de bets.predictions,
-// migración 021), para el CLV. La da el servicio de cuotas (odds/closing.js) con su histórico; aquí se decide cuál vale para cada
+// migración 022), para el CLV. La da el servicio de cuotas (odds/closing.js) con su histórico; aquí se decide cuál vale para cada
 // una y se guarda. Corre al final de cada pasada del resolvedor (settle.js). Como el resolvedor, lee apuestas de todos: sólo para
 // esto, nunca en una ruta.
 const { query } = require('../../shared/db');

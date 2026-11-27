@@ -90,7 +90,7 @@ export default function FootballMatches() {
     ...byLeague.map(([, list]) => ({ id: sectionId(list[0].leagueName), label: list[0].leagueName, count: list.length, live: 0 }))
   ]);
   // Un id que no es de ninguna liga (dirección escrita a mano o de una liga que ya no se sigue) no se pide: a la lista
-  const known = !openId || /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa|nations|amistosos|wchampions|ligaf|wsl):\d+$/.test(openId);
+  const known = !openId || /^(laliga|champions|premier|seriea|bundesliga|ligue1|europa|conference|segunda|copa|aleague|nations|amistosos|wchampions|ligaf|wsl):\d+$/.test(openId);
   useLostMatch(!known);
   const nextDay = useNextDay('football', date, games.isSuccess && !all.length);
   // La columna de las recomendaciones del día sólo se guarda si hay alguna (o un anuncio, entre 1280 y 1400 px); sin cuenta

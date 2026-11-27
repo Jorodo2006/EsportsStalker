@@ -206,7 +206,8 @@ export const api: Api = {
     // Botón "Actualizar cuotas": crea el trabajo; lo recoge el lector de Docker en unos segundos
     auto: (m, focus) => call('POST', '/api/odds/jobs', { match: matchOf(m), ...(focus ? { focus } : {}) }),
     job: id => get(`/api/odds/jobs/${part(id)}`),
-    autoStatus: () => get('/api/odds/auto/status')
+    autoStatus: () => get('/api/odds/auto/status'),
+    surebets: force => get(`/api/odds/surebets${force ? '?fresh=1' : ''}`)
   },
   football: {
     leagues: () => get('/api/football/leagues'),

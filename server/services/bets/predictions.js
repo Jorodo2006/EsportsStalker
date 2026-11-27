@@ -81,7 +81,7 @@ const queueOf = r => ({ resolved: r.resolved, upcoming: r.upcoming, playing: r.p
 // Las resueltas (como mucho de un año), compactas: la interfaz las agrupa como quiera
 async function report() {
   const { rows } = await query(`
-    SELECT sport, grp, league, book, price::float, first_price::float, close_price::float, p::float, p_model::float, p_market::float, ev::float, rel, status, start, title, event, result
+    SELECT sport, grp, league, book, price::float, first_price::float, close_price::float, p::float, p_model::float, p_market::float, ev::float, rel, status, start, first_at, title, event, result
     FROM bets.predictions WHERE status IN ('won', 'lost', 'void') AND start > now() - interval '365 days'
     ORDER BY start DESC LIMIT 20000`);
   const { rows: [c] } = await query(`SELECT count(*) FILTER (WHERE status = 'pending')::int AS pending, ${QUEUE}, min(first_at) AS since FROM bets.predictions`);
@@ -91,7 +91,7 @@ async function report() {
     queue: { ...queueOf(c), bySport: Object.fromEntries(per.map(r => [r.sport, queueOf(r)])) },
     rows: rows.map(r => ({
       sport: r.sport, group: r.grp, league: r.league, book: r.book, price: r.price, firstPrice: r.first_price, closePrice: r.close_price, p: r.p, pModel: r.p_model,
-      pMarket: r.p_market, ev: r.ev, rel: r.rel, status: r.status, start: r.start, title: r.title, event: r.event, result: r.result
+      pMarket: r.p_market, ev: r.ev, rel: r.rel, status: r.status, start: r.start, firstAt: r.first_at, title: r.title, event: r.event, result: r.result
     }))
   };
 }

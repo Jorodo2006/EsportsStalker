@@ -4,11 +4,12 @@
 // a ESPN una vez; el mes en curso se vuelve a pedir cada media hora.
 const { query } = require('../../shared/db');
 
-// Tres grupos que no se mezclan: los equipos de uno casi nunca juegan contra los del otro. Las competiciones que no salen
+// Grupos que no se mezclan: los equipos de uno casi nunca juegan contra los del otro (la A-League, nunca contra los europeos). Las competiciones que no salen
 // en la app (Mundial, clasificación) están sólo para tener más partidos de las selecciones
 const POOLS = {
   men: ['esp.1', 'esp.2', 'eng.1', 'ita.1', 'ger.1', 'fra.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'esp.copa_del_rey'],
   women: ['uefa.wchampions', 'esp.w.1', 'eng.w.1'],
+  aus: ['aus.1'],
   national: ['uefa.nations', 'fifa.friendly', 'fifa.world', 'fifa.worldq.uefa']
 };
 // Las copas y los amistosos enfrentan a equipos que no se conocen y pesan menos (en los amistosos, además, se rota mucho)

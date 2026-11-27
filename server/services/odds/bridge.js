@@ -263,6 +263,7 @@ async function importUrls(urls) {
 }
 
 module.exports = {
+  fresh,
   BOOKS, keyOf, noteMatch, add, forMatch, lastJob, setMoneyline, moneylines, recordPrices, priceHistory, saveSnapshot,
   newJob, getJob, pickJob, nextJob, jobProgress, cleanup, importUrls, lastPoll: () => lastPoll
 };

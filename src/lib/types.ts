@@ -86,7 +86,7 @@ export type ChatItem =
   | ({ kind: 'bet'; id: string; shareId: string; mine: boolean; bet: SharedBetData; note: string; created: string; copied: boolean } & SharedState);
 export interface PredictionRow {
   // closePrice: la cuota de cierre de la casa (la última antes de empezar, del histórico; bets/closing.js); null si no se leyó cerca
-  sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; closePrice: number | null; p: number; pModel: number | null;
+  sport: Sport; group: string; league: string; book: string; price: number; firstPrice: number; closePrice: number | null; firstAt?: string; p: number; pModel: number | null;
   pMarket: number | null; ev: number; rel: number | null; status: 'won' | 'lost' | 'void'; start: string; title: string; event: string; result: string | null;
 }
 // Lo que falta por resolver, por lo que le pasa: por jugar, en juego (menos de 2 h), acabadas esperando resultado y sin poder
@@ -207,6 +207,17 @@ export interface MatchOdds {
 
 export interface TeamRef { name: string; code: string; alt?: string[] } // alt: otros nombres del equipo en las casas
 
+// Surebets entre Winamax y Betway (server/services/odds/surebets.js): cada selección del mercado con la casa que mejor la paga.
+// edge: lo que se gana sobre lo apostado si se reparte bien; check: 3 % o más, que conviene comprobar antes de apostar
+export interface SurebetLeg { id: string; label: string; book: string; price: number }
+export interface Surebet { key: string; market: string; legs: SurebetLeg[]; sum: number; edge: number; check: boolean }
+export interface SurebetMatch {
+  match: { a: TeamRef; b: TeamRef; start: string; sport: Sport; league: string };
+  read: Record<string, number>; // cuándo se leyó cada casa (ms)
+  arbs: Surebet[];
+}
+export interface SurebetScan { at: string; matches: number; list: SurebetMatch[] }
+
 // Trabajo del botón "Actualizar cuotas" (lo hace la extensión de Chrome)
 export interface AutoJob {
   id: string;
@@ -240,7 +251,7 @@ export interface AutoStatus {
 export type BackendStatus = { gateway: boolean; bets: boolean; esports: boolean; odds: boolean; basket?: boolean; tennis?: boolean; football?: boolean; mma?: boolean; challenger?: boolean };
 
 // ---------- Fútbol (servicio football: ESPN) ----------
-export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
+export type FootballLeagueId = 'laliga' | 'champions' | 'premier' | 'seriea' | 'bundesliga' | 'ligue1' | 'europa' | 'conference' | 'segunda' | 'copa' | 'aleague' | 'nations' | 'amistosos' | 'wchampions' | 'ligaf' | 'wsl';
 // Una noticia unida a los equipos de un partido (server/shared/news.js). seen_at: cuándo la vio Sharpex. teams: claves de los
 // equipos (fútbol: id de ESPN; baloncesto: «nba:19»).
 // tags: baja, duda, vuelve, sancion, rotacion, alineacion, entrenador
@@ -658,6 +669,8 @@ export interface Api {
     autoStatus(): Promise<AutoStatus>;
     // Histórico de cuotas del partido (odds.price_history): una fila cada vez que cambia una cuota de una casa
     history(m: { a: TeamRef; b: TeamRef; start?: string; sport?: Sport; league?: string }): Promise<PriceHistoryRow[]>;
+    // Surebets entre Winamax y Betway con las cuotas ya leídas (pide cuenta)
+    surebets(force?: boolean): Promise<SurebetScan>; // force: sin la caché de 2 min del servidor
   };
   football: {
     leagues(): Promise<FootballLeague[]>;

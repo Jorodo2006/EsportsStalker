@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useCurrency, useWallet } from '@/lib/app-context';
 import { buildPlan, leagueKey, leaguesOf, parseEuros, parseOdds, poolStats, targetOf, veryReliable, VERY_RELIABLE, WINDOWS, type Join, type PlanMode, type PlanSport } from '@/lib/plan';
 import { money, odd, pct } from '@/lib/format';
-import { Empty, Loading, PageHeader, panelCls, PlayNotice } from '@/components/ui';
+import { Empty, Loading, PageHeader, panelCls, PlayNotice, Tabs } from '@/components/ui';
+import { Surebets } from '@/components/plan/Surebets';
 import { usePlanPool } from '@/components/plan/usePlanPool';
 import { PlanSetup, PLAN_SPORTS, QUICK_ODDS, type PlanInputs } from '@/components/plan/PlanSetup';
 import { BestCard, OptionCard } from '@/components/plan/OptionCard';
@@ -49,6 +50,21 @@ function saved(): PlanInputs {
 // la apuesta más probable para llegar, otras opciones y su riesgo. Es una pantalla de cálculo: no apunta apuestas ni lee cuotas
 // (se pueden llevar al cupón, y allí se apuntan)
 export default function PlanView() {
+  // Plan o Surebets (components/plan/Surebets.tsx): las dos son pantallas de cálculo. Se recuerda la última
+  const [tab, setTabState] = useState<'plan' | 'sure'>(() => { try { return localStorage.getItem('plan-tab') === 'sure' ? 'sure' : 'plan'; } catch { return 'plan'; } });
+  const setTab = (v: 'plan' | 'sure') => { setTabState(v); try { localStorage.setItem('plan-tab', v); } catch { /* sin almacenamiento */ } };
+  const tabs = <Tabs value={tab} onChange={setTab} items={[{ value: 'plan', label: 'Plan' }, { value: 'sure', label: 'Surebets' }]} />;
+  if (tab === 'sure') return (
+    <div className="flex flex-col gap-5">
+      <PageHeader title="Surebets" subtitle="Winamax y Betway no están de acuerdo: apostando a todo, se gana salga lo que salga." />
+      <div className="-mt-3">{tabs}</div>
+      <Surebets />
+    </div>
+  );
+  return <PlanScreen tabs={tabs} />;
+}
+
+function PlanScreen({ tabs }: { tabs: ReactNode }) {
   const wallet = useWallet();
   const cur = useCurrency();
   const [inp, setInp] = useState(saved);
@@ -107,6 +123,7 @@ export default function PlanView() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Plan" subtitle="Elige cuánto, a qué cuota y cuándo: te damos la apuesta más probable para llegar." />
+      <div className="-mt-3">{tabs}</div>
       {best && (
         <button type="button" onClick={() => document.getElementById('plan-resultado')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           className={`${panelCls} -mt-2 flex cursor-pointer items-center gap-3 px-4 py-3 text-left transition hover:bg-zinc-900 xl:hidden`}>

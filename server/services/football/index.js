@@ -24,6 +24,8 @@ const LEAGUES = [
   { id: 'conference', espn: 'uefa.europa.conf', name: 'Conference League', country: 'Europa' },
   { id: 'segunda', espn: 'esp.2', name: 'Segunda División', country: 'España' },
   { id: 'copa', espn: 'esp.copa_del_rey', name: 'Copa del Rey', country: 'España' },
+  // Australia: se juega de octubre a mayo, de madrugada en España. Su propio grupo en el modelo (history.js)
+  { id: 'aleague', espn: 'aus.1', name: 'A-League', country: 'Australia' },
   // Selecciones (parones internacionales). national: ESPN da sus nombres en inglés; se piden en español (lang=es)
   { id: 'nations', espn: 'uefa.nations', name: 'Nations League', country: 'Selecciones', national: true },
   { id: 'amistosos', espn: 'fifa.friendly', name: 'Amistosos internacionales', country: 'Selecciones', national: true },

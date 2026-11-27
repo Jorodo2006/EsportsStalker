@@ -8,7 +8,7 @@ import { TvTabs } from '@/components/viz';
 
 const LEAGUES: { value: FootballLeagueId; label: string }[] = [
   { value: 'laliga', label: 'LaLiga' }, { value: 'premier', label: 'Premier' }, { value: 'seriea', label: 'Serie A' },
-  { value: 'bundesliga', label: 'Bundesliga' }, { value: 'ligue1', label: 'Ligue 1' }, { value: 'segunda', label: 'Segunda' }, { value: 'nations', label: 'Nations League' },
+  { value: 'bundesliga', label: 'Bundesliga' }, { value: 'ligue1', label: 'Ligue 1' }, { value: 'segunda', label: 'Segunda' }, { value: 'aleague', label: 'A-League' }, { value: 'nations', label: 'Nations League' },
   { value: 'champions', label: 'Champions' }, { value: 'europa', label: 'Europa League' }, { value: 'conference', label: 'Conference' },
   { value: 'ligaf', label: 'Liga F' }, { value: 'wsl', label: 'WSL' }, { value: 'wchampions', label: 'Champions Femenina' }
 ];

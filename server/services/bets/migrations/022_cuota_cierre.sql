@@ -1,3 +1,5 @@
+-- Antes 021_cuota_cierre.sql: se renombró porque coincidía con 021_ajuste_modelo.sql. Todo es IF NOT EXISTS, así que donde ya
+-- se aplicó con el nombre de antes no cambia nada.
 -- Cuota de cierre (la última de la casa antes de empezar el partido, del histórico de odds) de cada apuesta y de cada
 -- recomendación, para el CLV: apostar a mejor cuota que la de cierre es la mejor señal de que se gana a la larga.
 -- La escribe sólo el servidor (bets/closing.js): va en su tabla y no en el ref de la apuesta, que lo manda el navegador al guardar

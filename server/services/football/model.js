@@ -11,6 +11,8 @@ const { CUPS, FRIENDLY } = require('./history');
 const PARAMS = {
   men: { halfLife: 300, reg: 8, rho: -0.06 },
   women: { halfLife: 300, reg: 8, rho: -0.06 },
+  // A-League: los mismos que el masculino hasta medirlos con backtest.js aus (una sola liga de 12-13 equipos y unos 160 partidos por temporada)
+  aus: { halfLife: 300, reg: 8, rho: -0.06 },
   national: { halfLife: 365, reg: 8, rho: -0.06 }
 };
 const COMMON = { cupWeight: 0.7, friendlyWeight: 0.5, priorCup: { att: -0.45, def: 0.35 } };

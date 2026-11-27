@@ -63,7 +63,7 @@ Lo que dice si apostar sale a cuenta, más allá del beneficio. Lógica pura con
   esperar a cientos de resultados, y es la mejor señal de que se gana a la larga. Sale también en cada fila del historial
   («cierre 1,95 (+7,7 %)»). Combinadas: el producto de sus selecciones, sólo si todas tienen cierre.
 
-### Cuota de cierre (`server/services/bets/closing.js`, `server/services/odds/closing.js`; migración `bets/021`)
+### Cuota de cierre (`server/services/bets/closing.js`, `server/services/odds/closing.js`; migración `bets/022`)
 
 Al final de cada pasada del resolvedor, `bets` busca la cuota de cierre de las apuestas (de los últimos 10 días) y de las
 recomendaciones del modelo cuyo partido empezó hace más de 10 min. Se la pide a `odds` (`/internal/odds/closing`), que:
@@ -78,7 +78,9 @@ las 6 h, se apunta que no lo hay (`price` null) y no se busca más. Se guarda en
 simple) y no en el `ref`, que lo manda el navegador: así nadie puede poner la suya, y no viaja en las apuestas que se pasan a los
 amigos. Si se edita la apuesta y cambia la selección, el cierre guardado deja de valer y se vuelve a buscar. De las recomendaciones
 va en `close_price`, `close_book` y `close_at` de `bets.predictions`, y *Acierto del modelo* enseña el CLV de la primera cuota
-recomendada frente al cierre, en total y por grupo. Pruebas en `server/test/cierre.test.js`.
+recomendada frente al cierre, en total y por grupo. El desglose se puede ordenar por CLV (*Mejor CLV*: las ligas y mercados que las casas
+ajustan peor; con menos de 30 casos con cierre, en gris y al final) y tiene el grupo *Antelación* (cuántas horas antes del partido
+se recomendó por primera vez): si las de más antelación baten más al cierre, conviene apostar en cuanto salen. Pruebas en `server/test/cierre.test.js`.
 
 ## Partido y mercado escritos a mano
 

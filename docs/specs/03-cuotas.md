@@ -197,6 +197,23 @@ programadas, de LoL, baloncesto y tenis). Todo lo leído se guarda en PostgreSQL
 - **Clic en una cuota**: abre la apuesta ya rellena.
 - **Clic derecho o Mayús+clic**: añade la cuota al boleto de combinada (ver [05-apuestas.md](05-apuestas.md)).
 
+## Surebets (`server/services/odds/surebets.js`, `src/components/plan/Surebets.tsx`)
+
+En *Plan → Surebets*. Mercados en los que, apostando a cada selección en la casa que mejor la paga, se cobra más de lo apostado
+salga lo que salga: la suma de 1/cuota de las mejores es menor que 1.
+
+- `GET /api/odds/surebets` (pide cuenta, `gateway/public.js`): los partidos de las próximas 48 h con cuotas vigentes de las dos
+  casas, cada uno con lo mismo que da el comparador (`getMatchOdds`), así que valen sus filtros (copias de periodo de Betway, totales
+  imposibles). Caché de 2 min; `?fresh=1` la salta (tras «Volver a leer»). No lanza lecturas: sólo la del partido que se pida.
+- Sólo mercados que se pueden cubrir (`COVERABLE`: todas sus selecciones juntas son todo lo que puede pasar y sólo gana una). Ni la
+  doble oportunidad ni los mercados propios de una casa (`wmx|`, `winamax|`, `betway|`). Todas las selecciones con cuota y de las dos
+  casas. Más de un 8 % se descarta (casi siempre es una línea o un periodo mal leídos); desde un 3 % se pide comprobarla.
+- El reparto (`src/lib/surebets.ts`, con pruebas): a cada selección en proporción a 1/cuota, redondeado a euros si no se come el
+  beneficio (si no, a 0,50, 0,10 o céntimos). Enseña lo peor y lo mejor que se cobra tras redondear, y cuánto hace que se leyó la casa
+  más antigua (más de 30 min: «puede haber cambiado»).
+- Avisos en la pantalla: comprobar las cuotas antes de apostar, que las casas limitan estas cuentas y que las reglas de anulación
+  (partido suspendido, tenista retirado) no son iguales en las dos.
+
 ## Betway en tenis
 
 Desde noviembre de 2026 la portada de tenis de Betway (`cat/tennis`) sólo enseña tres «Eventos populares»; el resto de partidos

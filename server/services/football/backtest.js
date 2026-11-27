@@ -1,7 +1,7 @@
 'use strict';
 // Comprobación del modelo de goles con partidos pasados: cada semana se ajusta sólo con lo que se sabía ese día y se predicen
 // los partidos de esa semana. No es parte del servicio: se lanza a mano dentro del contenedor y no guarda nada en el repo.
-//   docker compose exec football node services/football/backtest.js [men|women|national] [desde AAAA-MM-DD] [hasta AAAA-MM-DD] [rejilla]
+//   docker compose exec football node services/football/backtest.js [men|women|national|aus] [desde AAAA-MM-DD] [hasta AAAA-MM-DD] [rejilla]
 // Con "rejilla" prueba varias combinaciones de parámetros (ajústalas con un periodo y compruébalas con otro).
 // No hay cuotas históricas gratuitas: dice si las probabilidades son correctas, no si se gana dinero.
 const H = require('./history');
