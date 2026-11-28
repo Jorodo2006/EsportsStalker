@@ -130,6 +130,8 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
     picks, considered,
     // Los que vuelven hoy de una baja, con todas sus líneas calculadas (también las que no pasan saneLine)
     returning,
+    // Todas las líneas calculadas, también las que no pasan saneLine: «Sin X» enseña el análisis de cualquier línea de la casa
+    lines,
     oddsLoading: oddsQ.some(q => q.isLoading),
     noOdds: games.filter((_, i) => oddsQ[i]?.data && !oddsQ[i].data!.markets.length),
     // Con una casa elegida: los partidos que tienen cuotas, pero no de ésa
@@ -410,7 +412,7 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
 
         <PickTabs lists={{ easy: A.easy, mid: A.mid, hard: A.hard }} {...props} />
 
-        <BasketWithout absents={absents} picks={withN.picks} oddsOf={q.oddsOf} onAdd={add} oneGame={oneGame} />
+        <BasketWithout absents={absents} picks={withN.picks} lines={q.lines} oddsOf={q.oddsOf} onAdd={add} onOpen={onOpen} oneGame={oneGame} />
         {oneGame && <BasketCupRotation game={games[0]} logsOf={q.logsOf} />}
 
         {(!!q.noOdds.length || !!q.stale.length || !!q.noBook.length) && (

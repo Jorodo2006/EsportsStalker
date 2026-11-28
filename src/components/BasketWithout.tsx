@@ -5,12 +5,13 @@ import { useState } from 'react';
 import { ChevronDown, Newspaper, Plus } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, playerOut } from '@/lib/basket-model';
-import { hasValue, type BasketPick } from '@/lib/basket-picks';
+import { hasValue, pickVerdict, type BasketPick } from '@/lib/basket-picks';
+import { VERDICT_LABEL } from '@/lib/value';
 import { keyAbsentee, withoutSplits, type WithoutRow } from '@/lib/basket-without';
 import { ageOf } from '@/lib/slip-live';
-import type { BasketGame, BasketInjury, BasketTeamLogs, MatchOdds } from '@/lib/types';
+import type { BasketGame, BasketInjury, BasketSide, BasketTeamLogs, MatchOdds } from '@/lib/types';
 import { Badge } from './ui';
-import { p0, signed } from './PickParts';
+import { OpenHint, PickAvatar, p0, signed } from './PickParts';
 
 const OPEN_KEY = 'basket-without-open';
 const dec1 = (v: number) => v.toFixed(1).replace('.', ',');
@@ -32,7 +33,7 @@ function bookLine(odds: MatchOdds | undefined, name: string, label: string) {
   return best;
 }
 
-interface Absent { game: BasketGame; teamName: string; name: string; injury: BasketInjury | null; rows: WithoutRow[] }
+interface Absent { game: BasketGame; team: BasketSide; teamName: string; name: string; injury: BasketInjury | null; rows: (WithoutRow & { headshot?: string })[] }
 const SHOWN = 4;
 
 // Las bajas importantes de los partidos (antes de empezar) con sus compañeros que cambian
@@ -53,15 +54,16 @@ export function absencesOf(games: BasketGame[], injuries: BasketInjury[], logsOf
         // Los que tampoco juegan hoy no cuentan como compañeros que ganan minutos
         const alsoOut = (id: string) => { const x = data.players.find(q => q.id === id); const i = g.league === 'nba' ? injuries.find(j => j.playerId === id) : null; return playerOut(i?.status ?? (g.league === 'nba' ? null : x?.injury), 0); };
         const rows = withoutSplits(data, p.id, g.date, alsoOut).slice(0, 12);
-        if (rows.length) out.push({ game: g, teamName: team.name, name: p.name, injury: inj, rows });
+        if (rows.length) out.push({ game: g, team, teamName: team.name, name: p.name, injury: inj, rows: rows.map(r => ({ ...r, headshot: data.players.find(q => q.id === r.playerId)?.headshot })) });
       }
     }
   }
   return out;
 }
 
-export function BasketWithout({ absents, picks, oddsOf, onAdd, oneGame }: {
-  absents: Absent[]; picks: BasketPick[]; oddsOf: (g: BasketGame) => MatchOdds | undefined; onAdd: (p: BasketPick) => void; oneGame: boolean;
+export function BasketWithout({ absents, picks, lines, oddsOf, onAdd, onOpen, oneGame }: {
+  absents: Absent[]; picks: BasketPick[]; lines: BasketPick[]; oddsOf: (g: BasketGame) => MatchOdds | undefined;
+  onAdd: (p: BasketPick) => void; onOpen: (p: BasketPick) => void; oneGame: boolean;
 }) {
   // En la pantalla de recomendaciones va plegado (con varios partidos ocupaba más que las recomendaciones); en la ficha de un partido,
   // abierto. Lo que se elija en la pantalla se recuerda
@@ -95,23 +97,34 @@ export function BasketWithout({ absents, picks, oddsOf, onAdd, oneGame }: {
                 const label = BASKET_MARKETS[r.market].label;
                 const line = bookLine(oddsOf(a.game), r.name, label);
                 const up = r.withoutAvg > r.withAvg;
-                // Lo que dice Sharpex del lado hacia el que cambia sin él (si sube, el «más»; si baja, el «menos»), en la línea principal
-                const side = up ? 'over' : 'under';
-                // Sólo la de la línea principal: otra («más de 12,5» a 6,00) no dice nada de este cambio. En la NBA, con una baja reciente
-                // el «menos» no se recomienda (noFreshUnder): entonces sale sólo la línea de la casa
-                const pick = line ? picks.find(p => p.who?.id === r.playerId && p.marketKey === r.market && p.side === side && p.line === line.line) : undefined;
+                // El análisis de Sharpex de la línea principal de la casa: primero el lado hacia el que cambia sin él (si sube, el «más»;
+                // si baja, el «menos») y, si ese no se calcula, el otro. En la NBA, con una baja reciente el «menos» no se recomienda
+                // (noFreshUnder) y sale el «más» de esa línea. Primero las recomendaciones (llevan la noticia en la fiabilidad), luego el
+                // resto de líneas calculadas: así toda cuota de la casa se puede llevar al cupón y abrir su análisis
+                const want = up ? 'over' : 'under', other = up ? 'under' : 'over';
+                const is = (x: BasketPick, s: string) => !!line && x.who?.id === r.playerId && x.marketKey === r.market && x.side === s && x.line === line.line;
+                const pick = line ? picks.find(x => is(x, want)) ?? lines.find(x => is(x, want)) ?? picks.find(x => is(x, other)) ?? lines.find(x => is(x, other)) : undefined;
+                const verdict = pick ? pickVerdict(pick) : null;
+                const face = <PickAvatar photo={r.headshot} name={r.name} badge={a.team.logo} />;
+                const who = (
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-score text-[15px] font-semibold leading-[18px] text-zinc-50 transition group-hover:text-amber-300">{r.name}</span>
+                    <span className="block text-[11px] text-zinc-500">{label} · <span className="text-zinc-300">{r.nWithout} partidos sin él</span></span>
+                    {pick && <OpenHint text="Pulsa para ver su análisis" />}
+                  </span>
+                );
                 return (
-                  <div key={`${r.playerId}|${r.market}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-zinc-800/60 py-2 first:border-0 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_auto]">
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold text-zinc-50">{r.name}</div>
-                      <div className="text-[11px] text-zinc-500">{label} · <span className="text-zinc-300">{r.nWithout} partidos sin él</span></div>
-                    </div>
-                    <div className="text-[13px] tabular-nums text-zinc-400" title={`Minutos: ${dec1(r.minWith)} con él, ${dec1(r.minWithout)} sin él (${r.nWith} y ${r.nWithout} partidos)`}>
+                  <div key={`${r.playerId}|${r.market}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-zinc-800/60 py-2.5 first:border-0 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto]">
+                    {pick ? <button type="button" onClick={() => onOpen(pick)} title="Ver su análisis" className="group flex min-w-0 cursor-pointer items-center gap-2.5 text-left">{face}{who}</button>
+                      : <div className="flex min-w-0 items-center gap-2.5">{face}{who}</div>}
+                    <div className="col-span-2 pl-[50px] text-[13px] tabular-nums text-zinc-400 sm:col-span-1 sm:pl-0" title={`Minutos: ${dec1(r.minWith)} con él, ${dec1(r.minWithout)} sin él (${r.nWith} y ${r.nWithout} partidos)`}>
                       {dec1(r.withAvg)} con él → <span className={cn('text-[15px] font-bold', up ? 'text-emerald-400' : 'text-rose-300')}>{dec1(r.withoutAvg)}</span> sin él
                     </div>
-                    <div className="col-span-2 text-xs text-zinc-400 sm:col-span-1">
-                      {pick ? <>Sharpex: <span className="text-zinc-200">{pick.side === 'over' ? 'más' : 'menos'} de {decLine(pick.line)}</span> · <span className="font-semibold text-zinc-100">{p0(pick.p)}</span> · <span className={cn('font-semibold', hasValue(pick) ? 'text-emerald-400' : pick.ev > 0 ? 'text-zinc-200' : 'text-rose-300')}>{signed(pick.ev)}</span></>
-                        : line ? <>Línea de la casa: más de <span className="text-zinc-200">{decLine(line.line)}</span></> : 'Las casas aún no tienen su línea'}
+                    <div className="col-span-2 min-w-0 pl-[50px] text-xs text-zinc-400 sm:col-span-1 sm:pl-0">
+                      {pick ? <>
+                        <span className="block">Sharpex: <span className="text-zinc-200">{pick.side === 'over' ? 'más' : 'menos'} de {decLine(pick.line)}</span> · <span className="font-semibold text-zinc-100">{p0(pick.p)}</span> · <span className={cn('font-semibold', hasValue(pick) ? 'text-emerald-400' : pick.ev > 0 ? 'text-zinc-200' : 'text-rose-300')}>{signed(pick.ev)}</span>{verdict && <> · <span className={verdict === 'BET' ? 'text-emerald-400' : 'text-zinc-300'}>{VERDICT_LABEL[verdict]}</span></>}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500" title={pick.why}>{pick.why}</span>
+                      </> : line ? <>Línea de la casa: más de <span className="text-zinc-200">{decLine(line.line)}</span></> : 'Las casas aún no tienen su línea'}
                     </div>
                     {pick ? (
                       <button type="button" onClick={() => onAdd(pick)} title="Añadir al cupón" aria-label={`Añadir ${pick.title} al cupón`}

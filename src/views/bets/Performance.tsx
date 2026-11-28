@@ -18,9 +18,9 @@ const TIP = {
 };
 // El acento de cada app (acc-400 de index.css): la línea de un deporte en la gráfica conjunta va con su color
 const SPORTS = [
-  { id: 'lol', label: 'LoL', color: '#55bfac' }, { id: 'basket', label: 'Baloncesto', color: '#e8955f' },
-  { id: 'tennis', label: 'Tenis', color: '#82c56f' }, { id: 'football', label: 'Fútbol', color: '#7d9bd9' },
-  { id: 'mma', label: 'MMA', color: '#d27a7a' }
+  { id: 'basket', label: 'Baloncesto', color: '#e8955f' }, { id: 'tennis', label: 'Tenis', color: '#82c56f' },
+  { id: 'football', label: 'Fútbol', color: '#7d9bd9' }, { id: 'mma', label: 'MMA', color: '#d27a7a' },
+  { id: 'lol', label: 'LoL', color: '#55bfac' }
 ];
 const pp = (v: number) => `${v > 0 ? '+' : ''}${decimal(v * 100, 1)} pts`;
 

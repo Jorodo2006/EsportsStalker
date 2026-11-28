@@ -70,11 +70,11 @@ function TennisBall({ size = 16 }: { size?: number }) {
 
 // color: el acento de cada app (el mismo que --acc-500 en index.css), para el punto del selector aunque no esté elegida
 const APPS: { id: AppId; label: string; long: string; color: string; icon: (p: { size?: number }) => ReactNode }[] = [
-  { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords },
   { id: 'basket', label: 'Basket', long: 'Baloncesto', color: '#dc7d41', icon: Dribbble },
   { id: 'tennis', label: 'Tenis', long: 'Tenis', color: '#67ad53', icon: TennisBall },
   { id: 'football', label: 'Fútbol', long: 'Fútbol', color: '#5f84cc', icon: FootballIcon },
-  { id: 'mma', label: 'MMA', long: 'MMA', color: '#bf5a5a', icon: MmaIcon }
+  { id: 'mma', label: 'MMA', long: 'MMA', color: '#bf5a5a', icon: MmaIcon },
+  { id: 'lol', label: 'LoL', long: 'League of Legends', color: '#3aa894', icon: Swords }
 ];
 
 // Un partido en juego para la lista de la columna derecha

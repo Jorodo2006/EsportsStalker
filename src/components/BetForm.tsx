@@ -192,7 +192,7 @@ export function BetFormDialog() {
             </div>
             <div className={segWrap}
               title={legs ? 'Deporte de las selecciones nuevas' : 'Deporte: separa las estadísticas de cada app'}>
-              {[{ v: 'lol', l: 'LoL' }, { v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }, { v: 'football', l: 'Fútbol' }, { v: 'mma', l: 'MMA' }].map(x => (
+              {[{ v: 'basket', l: 'Baloncesto' }, { v: 'tennis', l: 'Tenis' }, { v: 'football', l: 'Fútbol' }, { v: 'mma', l: 'MMA' }, { v: 'lol', l: 'LoL' }].map(x => (
                 <button key={x.v} type="button" onClick={() => setF(p => ({ ...p, sport: x.v, league: x.v === 'basket' ? (p.league || 'NBA') : p.league === 'NBA' ? '' : p.league }))}
                   className={seg((f.sport || 'lol') === x.v)}>{x.l}</button>
               ))}

@@ -7,7 +7,7 @@ import { useApp, useBets, useCurrency, type AppId } from '@/lib/app-context';
 import { useMember } from './AuthGate';
 import { Button, Dialog, Field, Input, seg, segWrap } from './ui';
 
-const SPORTS: [AppId, string][] = [['football', 'Fútbol'], ['basket', 'Baloncesto'], ['tennis', 'Tenis'], ['mma', 'MMA'], ['lol', 'LoL']];
+const SPORTS: [AppId, string][] = [['basket', 'Baloncesto'], ['tennis', 'Tenis'], ['football', 'Fútbol'], ['mma', 'MMA'], ['lol', 'LoL']];
 
 export function Welcome() {
   const member = useMember();
