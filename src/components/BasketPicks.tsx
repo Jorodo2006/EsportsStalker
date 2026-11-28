@@ -43,7 +43,7 @@ const MIN_ODDS = [1.3, 1.5, 1.7, 2, 2.5];
 const DEFAULT_MIN_ODDS = 1.5;
 const bookOf = (prefs: { book?: unknown }): PickBook => (PICK_BOOKS.some(b => b.value === prefs.book) ? prefs.book as PickBook : 'all');
 const STALE_MS = 6 * 3600e3;
-const PAGE = 5;
+const PAGE = 8;
 const ago = (ms: number) => { const m = Math.round(ms / 60e3); return m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`; };
 const eventOf = (g: BasketGame) => `${g.away.abbr} @ ${g.home.abbr}`;
 // Sólo se enseña: lo que se apunta en la apuesta sigue siendo eventOf (el resolvedor y los avisos leen ese texto)
@@ -188,43 +188,60 @@ const OpenHint = ({ pick, big }: { pick: BasketPick; big?: boolean }) => (
   </span>
 );
 
+// Una fila de la lista: entera se pulsa para abrir su análisis (la flecha lo dice) y la cuota la lleva al cupón. En el móvil, las cifras
+// van debajo, alineadas con el texto
 function PickRow({ pick, oneGame, onOpen, onAdd, newsOf }: { pick: BasketPick; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
   const good = hasValue(pick);
+  const news = newsOf?.(pick)?.player ? newsOf(pick) : null;
   return (
-    <div className="px-3 py-2.5 transition hover:bg-white/[.04]">
-      <button onClick={() => onOpen(pick)} title={tip(pick)} className="group flex w-full cursor-pointer items-start gap-2.5 text-left">
-        <PickFace pick={pick} />
-        <span className="min-w-0 flex-1">
-          <span className="block font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{pick.title}</span>
-          <span className="mt-0.5 line-clamp-2 text-[11px] leading-[14px] text-zinc-400">
-            {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}{cupTag(pick.game)}, {esTime(pick.game.date)} · </span>}
-            {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
-            {pick.why}
+    <div className="border-t border-white/10 px-3 py-2.5 transition first:border-0 hover:bg-white/[.04]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <button onClick={() => onOpen(pick)} title={tip(pick)} aria-label={`${pick.title}: ver su análisis`} className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left">
+          <PickFace pick={pick} />
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{pick.title}</span>
+            <span className="mt-0.5 block truncate text-[11px] leading-[14px] text-zinc-400">
+              {!oneGame && <span className="text-zinc-300">{eventOf(pick.game)}{cupTag(pick.game)}, {esTime(pick.game.date)} · </span>}
+              {pick.injury && <span className="text-amber-300">{injuryEs(pick.injury)} · </span>}
+              {pick.why}
+            </span>
           </span>
-          <OpenHint pick={pick} />
-        </span>
-      </button>
-      <div className="mt-2 flex items-center justify-between gap-2.5">
-        <span className="flex items-center gap-2.5"><PickNums p={pick.p} ev={pick.ev} good={good} /></span>
-        <span className="flex items-center gap-1.5">
+          <ChevronRight size={16} className="hidden shrink-0 text-zinc-600 transition group-hover:text-amber-400 sm:block" />
+        </button>
+        <div className="flex items-center justify-end gap-2.5 pl-[50px] sm:pl-0">
+          <PickNums p={pick.p} ev={pick.ev} good={good} />
           <RefreshOdds match={matchOfGame(pick.game)} focus={playerKeyOf(pick)} />
           <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
-        </span>
+        </div>
       </div>
-      {newsOf && <NewsHint k={newsOf(pick)?.player ? newsOf(pick) : null} className="mt-1.5" />}
-      <div className="mt-1.5 h-[2px] bg-white/15"><div className="h-full bg-[var(--tv-mark)]" style={{ width: `${pick.p * 100}%` }} /></div>
+      {news && <NewsHint k={news} className="mt-1.5 sm:pl-[50px]" />}
     </div>
   );
 }
 
-function PickList({ title, hint, list, oneGame, onOpen, onAdd, newsOf }: { title: string; hint: string; list: BasketPick[]; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
+// Las tres listas por perfil de riesgo, en pestañas: una columna ancha se lee mejor que tres estrechas. La elegida se recuerda
+type Tier = 'easy' | 'mid' | 'hard';
+const TIERS: { value: Tier; label: string; short: string; hint: string }[] = [
+  { value: 'easy', label: 'Más fáciles', short: 'Fáciles', hint: `Probabilidad de 58 % o más, de más a menos valor: ${EASY_HINT}` },
+  { value: 'mid', label: 'Equilibradas', short: 'Equilibradas', hint: 'Probabilidad de 42 a 58 %, de más a menos valor' },
+  { value: 'hard', label: 'Más complicadas', short: 'Complicadas', hint: 'Probabilidad de menos de 42 %, cuota alta' }
+];
+const TIER_KEY = 'basket-picks-tier';
+const loadTier = (): Tier => { try { const v = localStorage.getItem(TIER_KEY); return v === 'mid' || v === 'hard' ? v : 'easy'; } catch { return 'easy'; } };
+function PickTabs({ lists, ...props }: { lists: Record<Tier, BasketPick[]>; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void; newsOf?: NewsOf }) {
+  const [tier, setTier] = useState<Tier>(loadTier);
   const [all, setAll] = useState(false);
+  const pick = (t: Tier) => { setTier(t); setAll(false); try { localStorage.setItem(TIER_KEY, t); } catch { /* sin almacenamiento */ } };
+  const list = lists[tier];
   return (
-    <div className="min-w-0">
-      <TvBand aside={list.length || undefined}>{title}</TvBand>
-      <p className="px-3 pt-1 text-[11px] text-zinc-500">{hint}</p>
-      {!list.length ? <p className="px-3 py-2 text-[13px] text-zinc-400">Ninguna con estos filtros.</p> : (all ? list : list.slice(0, PAGE)).map(p => <PickRow key={p.id} pick={p} oneGame={oneGame} onOpen={onOpen} onAdd={onAdd} newsOf={newsOf} />)}
-      {list.length > PAGE && <button onClick={() => setAll(!all)} className="w-full cursor-pointer py-1.5 text-xs text-zinc-500 hover:text-zinc-200">{all ? `Ver sólo las ${PAGE} primeras` : `Ver las ${list.length}`}</button>}
+    <div className="border-t border-white/10">
+      <div className="flex flex-col gap-1.5 px-3 pb-2 pt-3">
+        <TvTabs tabs value={tier} onChange={pick} items={TIERS.map(t => ({ value: t.value, label: <><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.label}</span> <span className="tnum text-zinc-500">{lists[t.value].length}</span></> }))} />
+        <p className="text-[11px] text-zinc-500">{TIERS.find(t => t.value === tier)!.hint}</p>
+      </div>
+      {!list.length ? <p className="border-t border-white/10 px-3 py-3 text-[13px] text-zinc-400">Ninguna con estos filtros.</p>
+        : <div className="border-t border-white/10">{(all ? list : list.slice(0, PAGE)).map(p => <PickRow key={p.id} pick={p} {...props} />)}</div>}
+      {list.length > PAGE && <button onClick={() => setAll(!all)} className="w-full cursor-pointer border-t border-white/10 py-2 text-xs text-zinc-400 hover:text-zinc-100">{all ? `Ver sólo las ${PAGE} primeras` : `Ver las ${list.length}`}</button>}
     </div>
   );
 }
@@ -350,14 +367,10 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
           <p className="px-4 py-3 text-[13px] text-zinc-300">{!q.considered ? (q.loaded < q.total ? 'Calculando…' : 'Las casas todavía no tienen líneas de jugadores ni totales que el modelo sepa calcular.') : 'Ninguna sale rentable con estos filtros. Abajo tienes las que menos pierden; prueba a bajar la cuota mínima o a quitar filtros.'}</p>
         )}
 
+        <PickTabs lists={{ easy: A.easy, mid: A.mid, hard: A.hard }} {...props} />
+
         <BasketWithout absents={absents} picks={withN.picks} oddsOf={q.oddsOf} onAdd={add} oneGame={oneGame} />
         {oneGame && <BasketCupRotation game={games[0]} logsOf={q.logsOf} />}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x lg:divide-white/10">
-          <PickList title="Más fáciles" hint={`Probabilidad de 58 % o más, de más a menos valor: ${EASY_HINT}`} list={A.easy} {...props} />
-          <PickList title="Equilibradas" hint="Probabilidad de 42 a 58 %, de más a menos valor" list={A.mid} {...props} />
-          <PickList title="Más complicadas" hint="Probabilidad de menos de 42 %, cuota alta" list={A.hard} {...props} />
-        </div>
 
         {(!!q.noOdds.length || !!q.stale.length || !!q.noBook.length) && (
           <div className="flex flex-col gap-1 border-t border-white/10 px-3 py-1.5">

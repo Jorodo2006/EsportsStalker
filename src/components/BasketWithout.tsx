@@ -1,7 +1,8 @@
 // «Sin X»: cuando un habitual no juega (parte de ESPN o una noticia), qué han hecho sus compañeros esta temporada sin él, al lado
 // de la línea de las casas y de lo que dice Sharpex de esa línea (src/lib/basket-without.ts). Es un dato para leer: la probabilidad
 // sigue siendo la del modelo, que no sube por esto (no se ha medido que las bajas de compañeros mejoren la proyección)
-import { Newspaper, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Newspaper, Plus } from 'lucide-react';
 import { cn, odd } from '@/lib/format';
 import { BASKET_MARKETS, playerOut } from '@/lib/basket-model';
 import { hasValue, type BasketPick } from '@/lib/basket-picks';
@@ -9,9 +10,9 @@ import { keyAbsentee, withoutSplits, type WithoutRow } from '@/lib/basket-withou
 import { ageOf } from '@/lib/slip-live';
 import type { BasketGame, BasketInjury, BasketTeamLogs, MatchOdds } from '@/lib/types';
 import { Badge } from './ui';
-import { TvBand } from './viz';
 import { p0, signed } from './PickParts';
 
+const OPEN_KEY = 'basket-without-open';
 const dec1 = (v: number) => v.toFixed(1).replace('.', ',');
 const decLine = (v: number) => String(v).replace('.', ',');
 
@@ -62,10 +63,22 @@ export function absencesOf(games: BasketGame[], injuries: BasketInjury[], logsOf
 export function BasketWithout({ absents, picks, oddsOf, onAdd, oneGame }: {
   absents: Absent[]; picks: BasketPick[]; oddsOf: (g: BasketGame) => MatchOdds | undefined; onAdd: (p: BasketPick) => void; oneGame: boolean;
 }) {
+  // En la pantalla de recomendaciones va plegado (con varios partidos ocupaba más que las recomendaciones); en la ficha de un partido,
+  // abierto. Lo que se elija en la pantalla se recuerda
+  const [open, setOpen] = useState(() => { if (oneGame) return true; try { return localStorage.getItem(OPEN_KEY) === '1'; } catch { return false; } });
   if (!absents.length) return null;
+  const toggle = () => { const v = !open; setOpen(v); if (!oneGame) { try { localStorage.setItem(OPEN_KEY, v ? '1' : '0'); } catch { /* sin almacenamiento */ } } };
+  const mates = absents.reduce((n, a) => n + Math.min(SHOWN, a.rows.length), 0);
   return (
     <div className="border-t border-white/10">
-      <TvBand aside={absents.length > 1 ? absents.length : undefined}>Bajas: quién gana minutos</TvBand>
+      <button type="button" onClick={toggle} aria-expanded={open} className="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[.04]">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-zinc-100">Bajas: quién gana minutos <span className="font-normal tnum text-zinc-500">{absents.length}</span></span>
+          <span className="block truncate text-xs text-zinc-400">{absents.map(a => a.name.split(' ').at(-1)).join(', ')} no {absents.length === 1 ? 'juega' : 'juegan'} · {mates} {mates === 1 ? 'compañero' : 'compañeros'} con sus medias sin {absents.length === 1 ? 'él' : 'ellos'}</span>
+        </span>
+        <ChevronDown size={16} className={cn('shrink-0 text-zinc-500 transition', open && 'rotate-180')} />
+      </button>
+      {open && <>
       {absents.map(a => {
         const news = a.injury?.news;
         return (
@@ -120,6 +133,7 @@ export function BasketWithout({ absents, picks, oddsOf, onAdd, oneGame }: {
         Medias de esta temporada en los partidos que jugó sin él. Con pocos partidos sin él, el cambio puede ser en parte suerte: la probabilidad de
         Sharpex sigue siendo la del modelo con la casa, que no sube por esto.
       </p>
+      </>}
     </div>
   );
 }
