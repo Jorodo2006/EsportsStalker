@@ -22,6 +22,7 @@ export interface GameCtx {
   b2b?: boolean;
   back?: number; // 1, 2 o 3: es su 1.º, 2.º o 3.º partido tras perderse 3 o más seguidos de su equipo
   missed?: number; // cuántos se perdió
+  debut?: boolean; // la baja venía de la temporada pasada: es su vuelta en esta temporada
 }
 
 // prior: sus partidos anteriores; team: partidos de su equipo (vacío si no se sabe, p. ej. en la Euroliga)
@@ -41,6 +42,14 @@ export function gameCtx(prior: BasketLogGame[], team: { id: string; date: string
   let cur = t;
   for (let k = 1; k <= 3; k++) {
     const p = own[k - 1];
+    // Su partido anterior es de la temporada pasada, con este equipo: vuelve de una baja que viene de antes de empezar la
+    // temporada (Nurkic, noviembre de 2026: 19 partidos de Utah sin él y no salía como vuelta). Los partidos perdidos son los
+    // de su equipo en esta temporada hasta su vuelta
+    if (p && p.teamId === teamId && season(p.date) < season(date)) {
+      const missed = dates.filter(d => d < cur && season(new Date(d).toISOString()) === season(date)).length;
+      if (missed >= 3) { out.back = k; out.missed = missed; out.debut = true; }
+      break;
+    }
     if (!p || p.teamId !== teamId || season(p.date) !== season(date)) break;
     const pt = +new Date(p.date);
     const missed = dates.filter(d => d > pt && d < cur).length;

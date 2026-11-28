@@ -26,6 +26,8 @@ export interface BasketPick {
   period: PointPeriod | null; pointKind: PointKind | null; // para abrir los puntos del partido
   book?: string; price: number; p: number; pModel: number; pMarket: number | null; fair: number; ev: number; rel: Reliability;
   why: string; injury: string | null;
+  // Vuelve de baja: su 1.º, 2.º o 3.º partido tras perderse `missed` de su equipo (debut: la baja venía de la temporada pasada)
+  back?: { k: number; missed: number; debut: boolean } | null;
 }
 
 // Las cuotas de una sola casa. Con las dos juntas, cada línea cogía la mejor cuota de cualquiera y la probabilidad de la casa
@@ -62,7 +64,10 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
     const lines = playerLines(odds, p.name);
     if (!Object.keys(lines).length) continue;
     const injury = statusOf(p.id, p.injury) ?? null;
-    if (playerOut(injury, missed.get(p.id) ?? 0)) continue;
+    // En la NBA, quién no juega lo dicen el parte de ESPN y las noticias (statusOf): perderse los últimos partidos no lo deja fuera si
+    // las casas ya tienen sus líneas, porque es que vuelve (Nurkic, 27-11-2026: 19 partidos de baja, sus líneas no salían). En las
+    // demás ligas no hay parte y es la única señal de baja
+    if (playerOut(injury, game.league === 'nba' ? 0 : missed.get(p.id) ?? 0)) continue;
     const mates = fresh.filter(m => m.id !== p.id).map(m => m.name);
     const ctx = { currentSeason: data.currentSeason, ...gameExtras(game, side === 'home'), opp: opp.abbr, injury, matesOut: mates, ...gameCtx(p.games, sched, game.date, team.id) };
     for (const k of Object.keys(BASKET_MARKETS) as BasketMarket[]) {
@@ -82,7 +87,8 @@ export function playerPicks(game: BasketGame, side: 'home' | 'away', data: Baske
             market: `${M.label} · ${p.name}`, selection: `${SIDE_LABEL[s]} de ${l.line}`,
             who: { id: p.id, name: p.name, headshot: p.headshot, teamId: team.id }, marketKey: k, period: null, pointKind: null,
             book: s === 'over' ? l.overBook : l.underBook, price: v.price, p: v.p, pModel: v.pModel, pMarket: v.gap == null ? null : v.pModel - v.gap, fair: (1 - r.push) / v.p, ev: v.ev, rel: r.rel,
-            why: `Proyecta ${dec(r.mu)} · ${r.last10.won}/${r.last10.n} últimos · ${Math.round(r.projMin)} min`, injury
+            why: `${ctx.back === 1 ? `Vuelve tras ${ctx.missed} partidos · ` : ''}Proyecta ${dec(r.mu)} · ${r.last10.won}/${r.last10.n} últimos · ${Math.round(r.projMin)} min`, injury,
+            back: ctx.back ? { k: ctx.back, missed: ctx.missed ?? 0, debut: !!ctx.debut } : null
           });
         }
       }
@@ -177,3 +183,19 @@ export const bestPicks = (all: BasketPick[], minOdds: number, n: number) =>
 
 // La clave de mercado de una línea de jugador (la de odds.js y settle.js), para llevarla al cupón con su ref; las de equipo no la llevan
 export const playerKeyOf = (p: BasketPick) => (p.kind === 'player' && p.who && p.marketKey ? `player|${BASKET_MARKETS[p.marketKey].label}|${p.who.name.toLowerCase()}|${p.line}` : undefined);
+
+// Los que vuelven hoy de una baja (su primer partido tras perderse 3 o más): su línea con más valor, aunque el modelo se aleje
+// tanto de la casa que no sale en las listas (saneLine). Es justo donde la casa puede ir tarde con alguien que vuelve, y también
+// donde más se equivoca el modelo, que no sabe cuántos minutos jugará: se enseñan aparte, con ese aviso, no como recomendación
+export function returningPicks(lines: BasketPick[], max = 6) {
+  const by = new Map<string, BasketPick[]>();
+  for (const p of lines) {
+    if (p.back?.k !== 1 || !p.who || p.ev <= 0 || p.price < MIN_PRICE || p.price > MAX_PRICE) continue;
+    const k = `${p.game.id}|${p.who.id}`;
+    by.set(k, [...(by.get(k) ?? []), p]);
+  }
+  return [...by.values()].map(ps => {
+    const best = ps.slice().sort((a, b) => b.ev - a.ev)[0];
+    return { pick: best, more: ps.length - 1 };
+  }).sort((a, b) => b.pick.ev - a.pick.ev).slice(0, max);
+}

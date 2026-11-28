@@ -489,6 +489,36 @@ docker compose exec -T db psql -U lolet -d lolet -At -c "SELECT json_object_agg(
 npx esbuild scripts/backtest-basket.ts --bundle --platform=node --outfile=<temporal>/bt.cjs && node <temporal>/bt.cjs <temporal>/logs.json [notas.json]
 ```
 
+### Vuelta de una baja que viene de la temporada pasada (28-11-2026)
+
+Nurkic volvió con Utah tras perderse los 19 primeros partidos de la temporada y Sharpex no enseñó sus líneas (la casa daba
+«más de 2,5 asistencias» a 4,00; él dio 4,6 de media la temporada pasada). Había tres fallos:
+
+1. **Lo daba por baja.** `playerOut` cuenta como baja perderse los 3 últimos partidos del equipo. En la NBA manda el parte de
+   ESPN (y las noticias): `playerPicks` ya no usa esa regla en la NBA, porque si las casas tienen sus líneas es que vuelve. En las
+   demás ligas no hay parte y sigue siendo la única señal.
+2. **No salía como vuelta.** `gameCtx` sólo miraba dentro de la temporada; su partido anterior era de la temporada pasada (el
+   de octubre era de pretemporada). Ahora, si su último partido es de la temporada pasada con el mismo equipo y su equipo ya ha
+   jugado 3 o más, es su 1.º partido tras la baja (`debut`).
+3. **El filtro de «se aleja mucho de la casa»** (`tooFar`, 75 % frente a 24 %) la habría escondido igual.
+
+Prueba con partidos pasados (comprobación; en el ajuste no hay casos porque hace falta la temporada anterior):
+
+| Grupo | Minutos frente a lo proyectado | Asistencias | PRA | n |
+|---|---|---|---|---|
+| 1.º partido tras baja, dentro de la temporada | −15,7 % | −10,1 % | −12,7 % | 396 |
+| 1.º partido de la temporada tras una baja (debut) | **−37,9 %** ±20,8 | −32,3 % ±36,1 | −30,7 % ±24,1 | 21 |
+
+Aplicar a esos debuts el factor de «1.er partido tras baja» que ya había (medido en otro periodo) mejora la probabilidad:
+log-loss 0,67775 → 0,67382 (n 503). Eso entra. Un factor propio para el debut (−30 %) no: con 21 casos no se puede ajustar en un
+periodo y comprobar en otro. Lo que sí se hace es bajar 15 puntos la fiabilidad (`analyze`) y enseñar estas líneas aparte:
+
+- **«Vuelven hoy»** (`returningPicks` de `basket-picks.ts`, `Returning` en `BasketPicks.tsx`), arriba de las recomendaciones:
+  cada jugador en su 1.er partido tras una baja, con su línea de más valor aunque el modelo se aleje mucho de la casa, el modelo
+  frente a la casa y el aviso de los minutos. No es una recomendación: es donde la casa puede ir tarde y donde más se equivoca el
+  modelo. Esas líneas se guardan en `bets.predictions` como todas: cuando haya bastantes resueltas, se puede medir si en las vueltas
+  la casa o el modelo acertaba más y decidir si el filtro debe ser distinto ahí.
+
 ### NBA Cup y pista neutral (noviembre de 2026)
 
 ESPN marca los partidos de la NBA Cup en la nota del partido (`eventNote` del registro del jugador, `notes[].headline` del

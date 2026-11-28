@@ -39,7 +39,7 @@ for (const games of byPlayer.values()) for (const g of games) {
 const MARKETS: BasketMarket[] = ['pts', 'reb', 'ast', 'fg3m', 'pra', 'pr', 'pa', 'ra', 'stl', 'blk', 'tov'];
 const SPLIT = +new Date('2026-02-01'); // antes: para ajustar; después (y la temporada 26-27): para comprobar
 type Role = 'star' | 'starter' | 'rotation' | 'bench';
-type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; cup: 'group' | 'ko' | null; cupWeeks: boolean; muCtx: number; pBase: number; pCtx: number; line: number; role: Role; pAt?: (k: number) => number };
+type Row = { fit: boolean; m: BasketMarket; y: number; mu: number; min: number; projMin: number; b2b: boolean; away: boolean; rest: number; back: number; debut: boolean; cup: 'group' | 'ko' | null; cupWeeks: boolean; muCtx: number; pBase: number; pCtx: number; line: number; role: Role; pAt?: (k: number) => number };
 const rows: Row[] = [];
 // Papel en el equipo por sus minutos de esta temporada antes del partido (en la NBA Cup los entrenadores dan más minutos a los
 // primeros y menos a la rotación: ¿mejora la probabilidad si se tiene en cuenta?)
@@ -72,7 +72,7 @@ for (const games of byPlayer.values()) {
       const cup = cupOf(g);
       rows.push({
         fit: +new Date(g.date) < SPLIT && g.season === 2026, m, y: BASKET_MARKETS[m].f(g), mu: P.mu, min: g.min, projMin: P.projMin,
-        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, cup, cupWeeks: /-(11|12)-/.test(g.date.slice(4, 8)) && g.date.slice(5, 10) <= '12-20', muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line,
+        b2b: !!cx.b2b, away: g.home === false, rest: cx.rest ?? 9, back: cx.back ?? 0, debut: !!cx.debut, cup, cupWeeks: /-(11|12)-/.test(g.date.slice(4, 8)) && g.date.slice(5, 10) <= '12-20', muCtx: Pc.mu, pBase: A.pOver, pCtx: Ac.pOver, line,
         role: roleOf(prior, g.season),
         // Probabilidad de «Más» si la proyección se multiplica por k (se aproxima moviendo la línea: line / k)
         ...(cup ? { pAt: (k: number) => analyze(prior, m, line / k, {}, { ...base, ...cx })?.pOver ?? Ac.pOver } : {})
@@ -96,7 +96,7 @@ for (const part of [true, false]) {
   const groups: [string, (r: Row) => boolean][] = [
     ['todos', () => true], ['B2B', r => r.b2b], ['B2B fuera', r => r.b2b && r.away], ['B2B en casa', r => r.b2b && !r.away],
     ['1 día de descanso', r => r.rest === 1], ['2 días', r => r.rest === 2], ['3 o más', r => r.rest >= 3 && r.rest < 9],
-    ['vuelta: 1.º partido', r => r.back === 1], ['vuelta: 2.º', r => r.back === 2], ['vuelta: 3.º', r => r.back === 3],
+    ['vuelta: 1.º partido', r => r.back === 1 && !r.debut], ['vuelta: debut de temporada', r => r.back === 1 && r.debut], ['vuelta: 2.º y 3.º tras debut', r => r.back > 1 && r.debut], ['vuelta: 2.º', r => r.back === 2], ['vuelta: 3.º', r => r.back === 3],
     ['NBA Cup: grupos', r => r.cup === 'group'], ['NBA Cup: eliminatoria', r => r.cup === 'ko'], ['liga (sin Cup)', r => !r.cup]
   ];
   console.log('grupo'.padEnd(22), 'minutos'.padEnd(26), MARKETS.map(m => m.padEnd(26)).join(''));
@@ -112,7 +112,7 @@ for (const part of [true, false]) {
     return `Brier ${(b / rs.length).toFixed(5)} · log-loss ${(l / rs.length).toFixed(5)}`;
   };
   console.log('\nProbabilidad de "Más" (sin contexto → con contexto):');
-  for (const [name, f] of [['todos', () => true], ['B2B', (r: Row) => r.b2b], ['vuelta (1.º-3.º)', (r: Row) => r.back > 0], ['NBA Cup: grupos', (r: Row) => r.cup === 'group'], ['NBA Cup: eliminatoria', (r: Row) => r.cup === 'ko'],
+  for (const [name, f] of [['todos', () => true], ['B2B', (r: Row) => r.b2b], ['vuelta (1.º-3.º)', (r: Row) => r.back > 0 && !r.debut], ['vuelta: debut de temporada', (r: Row) => r.back > 0 && r.debut], ['NBA Cup: grupos', (r: Row) => r.cup === 'group'], ['NBA Cup: eliminatoria', (r: Row) => r.cup === 'ko'],
     ['liga, mismas semanas', (r: Row) => !r.cup && r.cupWeeks]] as [string, (r: Row) => boolean][]) {
     const rs = R.filter(f);
     console.log(`  ${name.padEnd(18)} ${score(rs, r => r.pBase)}  →  ${score(rs, r => r.pCtx)}  (n ${rs.length})`);

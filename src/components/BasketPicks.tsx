@@ -7,7 +7,7 @@ import { useApp } from '@/lib/app-context';
 import { cn, odd } from '@/lib/format';
 import { injuryEs } from '@/lib/basket-labels';
 import { parseLine } from '@/lib/basket-model';
-import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerKeyOf, playerPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
+import { PICK_BOOKS, PICK_GROUPS, arrangePicks, bestPicks, hasValue, onlyBook, pickVerdict, playerKeyOf, playerPicks, returningPicks, saneLine, teamPicks, type BasketPick, type PickBook, type PickFilters, type PickGroup } from '@/lib/basket-picks';
 import { VERDICT_LABEL } from '@/lib/value';
 import { teamOuts } from '@/lib/basket-absences';
 import { basketPrediction, logPredictions } from '@/lib/predictions';
@@ -123,10 +123,13 @@ export function useBasketPicks(games: BasketGame[], injuries: BasketInjury[], bo
     logPredictions(lines.map(basketPrediction).filter((x): x is NonNullable<typeof x> => !!x));
   }, [lines]);
 
+  const returning = useMemo(() => returningPicks(lines), [lines]);
   const now = Date.now();
   const stamps = games.map((_, i) => newest(oddsQ[i]?.data)).filter(Boolean);
   return {
     picks, considered,
+    // Los que vuelven hoy de una baja, con todas sus líneas calculadas (también las que no pasan saneLine)
+    returning,
     oddsLoading: oddsQ.some(q => q.isLoading),
     noOdds: games.filter((_, i) => oddsQ[i]?.data && !oddsQ[i].data!.markets.length),
     // Con una casa elegida: los partidos que tienen cuotas, pero no de ésa
@@ -283,6 +286,42 @@ function TopPick({ pick, oneGame, onOpen, onAdd, newsOf }: { pick: BasketPick; o
   );
 }
 
+// «Vuelven hoy»: arriba de todo, porque es donde la casa puede ir tarde. El modelo frente a la casa, sin esconder la diferencia, y
+// el riesgo de minutos (lo medido en basket-model.ts: en las vueltas largas juegan bastante menos de lo proyectado)
+function Returning({ list, oneGame, onOpen, onAdd }: { list: ReturnType<typeof returningPicks>; oneGame: boolean; onOpen: (p: BasketPick) => void; onAdd: (p: BasketPick) => void }) {
+  if (!list.length) return null;
+  return (
+    <div className="border-b border-white/10">
+      <TvBand aside={list.length > 1 ? list.length : undefined}>Vuelven hoy</TvBand>
+      {list.map(({ pick, more }) => (
+        <div key={pick.id} className="flex flex-col gap-2 border-t border-white/10 px-3 py-2.5 first:border-0 sm:flex-row sm:items-center sm:gap-3">
+          <button onClick={() => onOpen(pick)} title={tip(pick)} aria-label={`${pick.title}: ver su análisis`} className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left">
+            <PickFace pick={pick} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-semibold text-emerald-400">{pick.who!.name.split(' ').at(-1)} vuelve tras {pick.back!.missed} partidos{pick.back!.debut ? ', su primero esta temporada' : ''}</span>
+              <span className="line-clamp-2 font-score text-[15px] font-semibold leading-[18px] text-white transition group-hover:text-amber-300">{pick.title}</span>
+              <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{!oneGame && <>{eventOf(pick.game)}{cupTag(pick.game)}, {esTime(pick.game.date)} · </>}{more ? `y ${more} ${more === 1 ? 'línea más' : 'líneas más'} con valor` : 'su línea con más valor'}</span>
+            </span>
+          </button>
+          <div className="flex items-center justify-end gap-3 pl-[50px] sm:pl-0">
+            <span className="text-right" title="Lo que dice el modelo solo, con sus partidos, frente a la casa sin su margen">
+              <span className="block font-score text-[13px] tnum"><span className="font-bold text-zinc-50">{p0(pick.pModel)}</span>{pick.pMarket != null && <span className="text-zinc-400"> · casa {p0(pick.pMarket)}</span>}</span>
+              <span className="text-[10px] text-zinc-500">modelo · casa</span>
+            </span>
+            <RefreshOdds match={matchOfGame(pick.game)} focus={playerKeyOf(pick)} />
+            <PickOdd price={pick.price} book={pick.book} fair={pick.fair} onAdd={() => onAdd(pick)} />
+          </div>
+        </div>
+      ))}
+      <p className="border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-500">
+        Cuando alguien vuelve, la casa puede tardar en ajustar su línea, y ahí suele estar el valor. Pero el modelo proyecta con sus partidos de antes
+        y no sabe cuántos minutos le darán: en su primer partido tras una baja larga suelen jugar bastante menos. Por eso estas no salen como
+        recomendación: mira si tiene límite de minutos antes de apostar.
+      </p>
+    </div>
+  );
+}
+
 const Note = ({ children }: { children: ReactNode }) => <div className="flex items-start gap-2 text-xs text-amber-300"><AlertTriangle size={12} className="mt-0.5 shrink-0" /><span>{children}</span></div>;
 
 // games: un partido (pestaña de su ficha) o varios (pantalla de recomendaciones). onOdds: ir a las cuotas de ese partido
@@ -361,6 +400,8 @@ function BasketPicksBoardInner({ games, injuries, onOpen, onOdds }: { games: Bas
             {A.bestEv != null && <TvStat label="Mejor valor" value={signed(A.bestEv)} sub="por euro" />}
           </div>
         </TvHeader>
+
+        <Returning list={q.returning} oneGame={oneGame} onOpen={onOpen} onAdd={add} />
 
         <TvBand>La mejor opción</TvBand>
         {A.top ? <TopPick pick={A.top} {...props} /> : (

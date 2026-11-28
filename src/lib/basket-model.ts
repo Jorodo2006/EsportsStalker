@@ -202,6 +202,9 @@ export function analyze(games: G[], market: BasketMarket, line: number, odds: Li
   if (P.wMin > 0 && Math.abs(P.last5Min - P.wMin) / P.wMin > 0.18)
     penalties.push({ pts: 8, warning: `Cambio de rol: ${P.last5Min.toFixed(1)} min en los últimos 5 frente a ${P.wMin.toFixed(1)} de media` });
   if (P.usedPreseason) penalties.push({ pts: 15, warning: 'La muestra incluye partidos de pretemporada' });
+  // Vuelta de una baja que viene de antes de la temporada (debut): en la prueba con partidos pasados (21 casos de 26-27) jugaron un
+  // 38 % menos de minutos de lo proyectado. Sólo baja la fiabilidad: con tan pocos casos no se puede ajustar un factor y comprobarlo
+  if (ctx.debut && ctx.back === 1) penalties.push({ pts: 15, warning: `Vuelve tras ${ctx.missed ?? 'varios'} partidos de baja, su primero esta temporada: en estas vueltas suelen jugar bastante menos minutos de lo proyectado` });
   if (ctx.cup === 'ko') penalties.push({ pts: 10, warning: 'Eliminatoria de la NBA Cup: hay muy pocos partidos así para saber cómo rinden (la temporada pasada, algo menos de lo proyectado, sin confirmar)' });
   const far = sides.find(s => s.gap != null && tooFar(s.pModel, s.pModel - s.gap));
   if (far) penalties.push({ pts: 25, warning: `El modelo se aleja mucho de la casa (${Math.round(far.pModel * 100)} % frente a ${Math.round((far.pModel - far.gap!) * 100)} %): lo normal es que ella sepa algo que él no` });
